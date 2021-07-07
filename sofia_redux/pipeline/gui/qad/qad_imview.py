@@ -11,7 +11,6 @@ import warnings
 from astropy.io import fits
 from astropy import log, modeling, stats, table, wcs
 import numpy as np
-import regions as ar
 from scipy.stats import gmean
 
 from sofia_redux.pipeline.interface import set_log_level
@@ -45,6 +44,14 @@ except ImportError:
             pass
 else:
     HAS_PYQT5 = True
+
+try:
+    import regions as ar
+except ImportError:
+    HAS_REGIONS = False
+    ar = None
+else:
+    HAS_REGIONS = True
 
 
 class ViewerSignals(QtCore.QObject):
@@ -197,6 +204,8 @@ class QADImView(object):
 
     def _region_mask(self, cs, all_regions, xctr, yctr, hwcs):
         """Compute a region mask at a cursor position."""
+        if not HAS_REGIONS:
+            return None
         ctr_coord = ar.PixCoord(xctr, yctr)
         mask = None
         for reg_str in all_regions:

@@ -12,7 +12,7 @@ from astropy.wcs import WCS
 import numpy as np
 import pytest
 
-from sofia_redux.pipeline.gui.qad.qad_imview import QADImView
+from sofia_redux.pipeline.gui.qad.qad_imview import QADImView, HAS_REGIONS
 from sofia_redux.pipeline.gui.tests.test_qad_viewer import MockDS9
 
 
@@ -1293,6 +1293,7 @@ class TestQADImView(object):
         assert 'region load all' not in capt.out
         assert capt.out.count('region load') == 2
 
+    @pytest.mark.skipif(not HAS_REGIONS, reason='regions not installed')
     @pytest.mark.parametrize('x,y,match',
                              [(84, 62, 'circle'),
                               (98, 104, 'rectangle'),
@@ -1368,6 +1369,10 @@ class TestQADImView(object):
         capt = capsys.readouterr()
         assert 'Using the full image' in capt.out
         assert 'Total pixels: 2500' in capt.out
+
+        # remaining tests require regions
+        if not HAS_REGIONS:
+            return
 
         # add a region under the cursor
         log.setLevel('DEBUG')
@@ -1536,6 +1541,10 @@ class TestQADImView(object):
         assert len(imviewer.p2p_data) == 1
         capt = capsys.readouterr()
         assert 'Using the full image' in capt.out
+
+        # remaining tests require regions
+        if not HAS_REGIONS:
+            return
 
         # add a region under the cursor
         log.setLevel('DEBUG')

@@ -458,13 +458,16 @@ class TestPhotometry(object):
         assert np.allclose(cy2, cy1, atol=0.05, rtol=0.05)
 
         # different input position without recenter will be different
+        srcpos = (cx1[0] + 10, cx2[0] + 10)
         phot = ph.pipecal_photometry(image, variance, stampsize=50,
-                                     stamp_center=False, srcpos=(225, 225))
+                                     stamp_center=False,
+                                     srcpos=srcpos)
         dphot = self.phot_dict(phot)
         cx1, cy1 = dphot['STCENTX'], dphot['STCENTY']
 
         phot = ph.pipecal_photometry(image, variance, stampsize=50,
-                                     stamp_center=True, srcpos=(225, 225))
+                                     stamp_center=True,
+                                     srcpos=srcpos)
         dphot = self.phot_dict(phot)
         cx2, cy2 = dphot['STCENTX'], dphot['STCENTY']
         assert not np.allclose(cx2, cx1, atol=0.05, rtol=0.05)

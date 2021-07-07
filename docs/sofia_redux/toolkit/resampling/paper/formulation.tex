@@ -1,0 +1,244 @@
+\subsection{Polynomial Representation of K-Dimensional Data}
+\label{subsec:polynomial-representation-of-k-dimensional-data}
+
+We assume that the input data consist of $N$ measurements (samples) $y$
+distributed over $K$ dimensions and that the `true' (but unknown) generating
+function for the measured values is given by $f$ which can be adequately
+represented by a K-dimensional polynomial function whose order $o_k$ is allowed
+to vary in each dimension $k$.
+Then at the coordinate $\bm{x}$ we have,
+
+\begin{equation}
+    f(\bm{x}) = \sum_{p_1 = 0}^{o_1}
+                \sum_{p_2 = 0}^{o_2}
+                \cdots \sum_{p_K = 0}^{o_K}
+                \lambda_{(p_1, p_2,\cdots p_K)}
+                c_{(p_1, p_2,\cdots p_K)}
+                x_1^{p_1} x_1^{p_1} \cdots x_K^{p_K}\label{eq:equation}
+\end{equation}
+Here, $c$  are the coefficients of the polynomial and $p$ are the exponents of
+the coordinate variables $x$ for the $K$ dimensions, while
+$\lambda_{(p_1, p_2,\cdots p_K)}$ is defined as
+
+\begin{equation}
+    \lambda_{(p_1, p_2,\cdots p_K)} = \left\{
+        \begin{array}{rl}
+            1, & \textrm{if } \sum_{k = 0}^{K} ~ p_k \leq max(o) \\
+            0, & \textrm{otherwise.}
+        \end{array} \right.
+    \label{eq:equation2}
+\end{equation}
+
+We can then define a set $S$ containing all polynomial exponent combinations
+where $\lambda = 1$,
+
+\begin{equation}
+    S = \{ (p_1, p_2,\cdots p_K) | \lambda_{(p_1, p_2,\cdots p_K)} = 1 \}
+    \label{eq:equation3}
+\end{equation}
+
+and can then re-write equation~\ref{eq:equation} in the form
+
+\begin{equation}
+    f(\bm{x})  =  \sum_{s \in S} c_s \Phi_s\label{eq:equation4}
+\end{equation}
+
+where the polynomial terms of the equation are given as
+
+\begin{equation}
+    \Phi_s = \prod_{k = 1}^K x_k^{s_k}
+    \label{eq:equation5}
+\end{equation}
+
+The set $s$ is in lexographic order such that (for $K=3$) $\{0,1,1\}$ comes
+before $\{1, 0, 0\}$.
+As an example, when $K=2$ and $o_k = 2$ for all $k$ we have
+
+\begin{align}
+    s_{(p=2,K=2)} &= [(0,0), (0,1), (0,2), (1,0), (1,1), (2,0)] \nonumber \\
+    \Phi          &= [1, x_2, x_2^2, x_1, x_1 x_2, x_1^2] \nonumber \\
+    f(\bm{x})     &= c_1 + c_2 x_2 + c_3 x_2^2 + c_4 x_1 +
+                     c_5 x_1 x_2 + c_6 x_1^2. \nonumber
+\end{align}
+
+Similarly, for $K=3$ where $p_1 = 1$, $p_2 = 2$, and $p_3 = 3$ we have
+\begin{align}
+    s_{(p=[1,2,3],K=3)} &=&
+        &[(0,0,0), (0,0,1), (0,0,2), (0,0,3), (0,1,0), (0,1,1), (0,1,2), \nonumber \\
+        && &(0,2,0), (0,2,1), (1,0,1), (1,0,2), (1,1,0), (1,1,1), (1,2,0)] \nonumber \\
+    \Phi &=&
+        &[1, x_3, x_3^2, x_3^3, x_2, x_2 x_3, x_2 x_3^2, x_2^2, x_2^2 x_3,
+         x_1 x_3, x_1 x_3^2, x_1 x_2, x_1 x_2 x_3, x_1 x_2^2] \nonumber \\
+    f(\bm{x}) &=&
+        &c_1 + c_2 x_3 + c_3 x_3^2 + c_4 x_3^3 + c_5 x_2 +
+        c_6 x_2 x_3 + c_7 x_2 x_3^2 + c_8 x_2 + c_9 x_2^2 x_3 + \nonumber \\
+        &&&c_{10} x_1 x_3 + c_{11} x_1 x_3^2 + c_{12} x_1 x_2 +
+        c_{13} x_1 x_2 x_3 + c_{14} x_1 x_2^2 \nonumber
+\end{align}
+
+\subsection{Resampling Algorithm}\label{subsec:resampling-algorithm}
+
+With the above representation for $f$ we now wish to evaluate $f(\bm{x})$ at a
+point $\bm{x} = \bm{v}$.
+We assume that $f$ has been sampled at $N$ data (or measurement) points
+$\bm{y}_i$, $i = 1,\cdots,N$.
+Throughout, we refer to the measurement values $\bm{y}_i$ at coordinates
+$\bm{x}_i$ as samples, and the coordinates $\bm{v}$ as resampling points.
+To compute $f(\bm{v})$ we consider the $N$ data values within a window region
+set $\Omega$ centered on $\bm{v}$.
+This set comprises values within an ellipsoidal hyper-surface.
+We assume each measured value $\bm{y}_i$ has an associated noise $\epsilon_i$.
+In this case,
+
+\begin{equation}
+    f(\bm{x}_i) + \epsilon_i = y_i,\label{eq:equation6}
+\end{equation}
+
+and the task of determining $f(\bm{v})$ becomes one of estimating the $S$
+coefficients $c$ of $f$ from $N$ noisy measurements.
+Using the above notation we have
+
+\begin{equation}
+    \mathbf{c} \cdot \mathbf{\Phi} + \bm{\epsilon} = \mathbf{y}
+    \label{eq:equation7}
+\end{equation}
+
+which can be expressed in matrix notation as
+
+\begin{equation}
+    \begin{bmatrix}
+        1 & \Phi_{(2,1)} & \Phi_{(3,1)} & \cdots & \Phi_{(S,1)} \\
+        1 & \Phi_{(2,2)} & \Phi_{(3,2)} & \cdots & \Phi_{(S,2)} \\
+        1 & \Phi_{(2,3)} & \Phi_{(3,3)} & \cdots & \Phi_{(S,3)} \\
+        \vdots & \vdots & \vdots & \ddots & \vdots \\
+        1 & \Phi_{(2,N)} & \Phi_{(3,N)} & \cdots & \Phi_{(S,N)}
+    \end{bmatrix}
+    \quad
+    \begin{bmatrix}
+        c_1 \\
+        c_2 \\
+        \vdots \\
+        c_S
+    \end{bmatrix}
+    +
+    \begin{bmatrix}
+        \epsilon_1 \\
+        \epsilon_2 \\
+        \epsilon_3 \\
+        \vdots \\
+        \epsilon_N
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+        y_1 \\
+        y_2 \\
+        y_3 \\
+        \vdots \\
+        y_N
+    \end{bmatrix}
+    \label{eq:equation8}
+\end{equation}
+
+where $\Phi_{(m,i)}$ is the $m^{th}$ element of the set of $\Phi$ for sample point
+$i$.
+We now wish to solve for the set of $S$ coefficients $c$.
+The standard procedure is to use the least-squares formalism, by which the
+estimated values for the coefficients, $\hat{c}$, are given by~\citet{Fan96b}
+as
+
+\begin{equation}
+    \mathbf{\hat{c}} = (\mathbf{\Phi}^T\mathbf{\Phi})^{-1}
+                       \mathbf{\Phi}^T \mathbf{y}
+    \label{eq:equation9}
+\end{equation}
+
+or, in the case of a weighted fit,
+
+\begin{equation}
+    \mathbf{\hat{c}} = (\mathbf{\Phi}^T \mathbf{W} \mathbf{\Phi})^{-1}
+                       \mathbf{\Phi}^T \mathbf{W} \mathbf{y}
+    \label{eq:equation10}
+\end{equation}
+
+where $\mathbf{W}$ is an $N \textrm{x} N$ diagonal weight matrix in which the
+diagonal elements are the weights for each measurement point.
+Once the $\hat{c}$ values have been determined,  $f(v)$ can be evaluated:
+
+\begin{align}
+    \Phi_s(\bm{v}) &= \prod_{k=1}^K v_k^{s_k} \\
+    f(\bm{v}) &= \sum_{s \in S} \hat{c}_s \Phi_s(\bm{v})
+\end{align}
+
+The conditional bias and variance on $\hat{c}$ are given by~\citet{Fan96b} as
+
+\begin{align}
+    \text{Bias}(\hat{c} | \Phi) &= E(\hat{c} | \Phi) - c =
+        (\Phi^T W \Phi)^{-1} \Phi^T W r \label{eq:equation71} \\
+    \text{Var}(\hat{c} | \Phi) &= C_{\hat{c}} =
+        (\Phi^T W \Phi)^{-1} (\Phi^T \Sigma \Phi) (\Phi^T W \Phi)^{-1}
+        \label{eq:equation72}
+\end{align}
+
+where the residuals on the fit are given as
+
+\begin{equation}
+    r = \Phi \hat{c} - y
+    \label{eq:equation73}
+\end{equation}
+
+and
+
+\begin{equation}
+    \Sigma = {diag}({w_\delta^2}(x_{i,m}) \sigma_x^2(x_i))
+    \label{eq:equation74}
+\end{equation}
+
+$\sigma_x(x)$ is the conditional variance of $y$ given $x$, and
+${w_\delta}(x_{i,m})$ is the positional (distance) weighting for sample
+$i$ with respect to resampling point $m$ (equivalent to the $Wt$ function in
+equation~\ref{eq:equation70}).
+
+\subsection{Error Propagation and Estimation}\label{subsec:errors}
+
+The Mean Squared Error (MSE) of a fit at point $v$ is given by~\citet{Fan96b}
+as
+
+\begin{equation}
+    \text{MSE}\{f(v)\} = (\text{Bias}\{f(\bm{v})\, |\, \hat{c}_v \})^2 +
+                          \text{Var}\{f(\bm{v})\, |\, \hat{c}_v \}
+    \label{eq:equation20}
+\end{equation}
+
+and variance on the fit at $\Phi(v)$ may be propagated as
+
+\begin{equation}
+    \text{Var}\{f(\bm{v})\, |\, \hat{c}_v \} = \Phi(v)^T C_{\hat{c}} \Phi(v)
+    \label{eq:equation24}
+\end{equation}
+
+We also derive a data driven estimate of the variance-covariance matrix from
+the residuals on the fit $r$ using
+
+\begin{equation}
+    \text{Var}\{ \hat{c}\, |\, \Phi, r \} = R_{\hat{c}} =
+        \chi_r^2 (\Phi^T W \Phi)^{-1}
+    \label{eq:equation22}
+\end{equation}
+
+where $\chi_r^2$ is the reduced chi-squared statistic calculated as
+
+\begin{equation}
+    \chi_r^2 = \frac{|\Omega|}{tr(W)(|\Omega| - |S|)} r^T W r
+    \label{eq:equation75}
+\end{equation}
+
+Note that $|S|$ is the total number of parameters that are being estimated in
+for the fit, where $S$ is given in equation~\ref{eq:equation3}, and $|\Omega|$
+are the total number of samples in the ``local'' region of $v$, so the quantity
+$|\Omega| - |S|$ gives the degrees of freedom in our fit.
+The variance on a fit at $v$ according to residuals is then given as
+
+\begin{equation}
+    \text{Var}\{f(\bm{v})\, |\, r\} = \Phi(v)^T R_{\hat{c}} \Phi(v)
+    \label{eq:equation76}
+\end{equation}

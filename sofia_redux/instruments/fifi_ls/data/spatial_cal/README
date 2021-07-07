@@ -1,0 +1,49 @@
+The spatial calibration data are usually delivered as an Excel spreadsheet
+named P006DeltaVectors.xlsx.  The updates for new dates are added as
+separate tables below the existing data.
+
+The pipeline requires the linear coefficients of the x and y offset of the
+secondary array from the primary array (the red offset relative to the
+blue), as a function of the INDPOS, for each dichroic setting.  It gets
+used as:
+  primary_offset_x = bx + ax * indpos_pri - RxCx
+plus (if necessary):
+  secondary_offset_x = (s_bx - bx) + (s_ax * indpos_sec - ax * indpos_pri)
+and similar for the offsets in y.  The ax, bx, RxCx, ay, bx, and RxCy
+coefficients for each dichroic (D105 and D130) and camera (RED and BLUE)
+are stored in the notebook as a, b, U under the x column
+and a, b, V under the y column, respectively.
+
+To make something the pipeline understands:
+1. Save the spreadsheet to a new name in this directory (data/spatial_cal),
+   indicating the current date.  For example, P006DeltaVectors_20170221.xlsx
+   for a file received February 21, 2017.
+2. Open the Excel file and find the Data tab.
+3. Identify the a, b, and U/V numbers in the secion for the new data, at
+   the bottom of the sheet.
+4. Open the FIFI_LS_DeltaVector_Coeffs.txt file and add four lines for the new
+   data.  The lines should start with:
+      # yymm
+      99999999  b  105   
+      99999999  b  130   
+      99999999  r  105  
+      99999999  r  130  
+   where yymm is a comment with the new date provided in the Excel notebook,
+   b indicates the BLUE camera, r indicates the RED camera and 105/130
+   indicate the dichroic setting.
+5. Copy the relevant coefficients from the notebook into each of the new lines
+   in the text file, in the order b_x, a_x, U, b_y, a_y, V.
+6. In the text file, change the end date for the previous series from
+   99999999 to a date beyond the end of the previous series, and before the
+   beginning of the next series.  For example, if a series ended with a flight
+   on 20151104, and the next series does not start until February 2016, the date
+   can be set to 20151231.
+7. If you receive new pixel calibrations, save them in this directory
+   (data/spatial_cal).
+8. In poscal_defaults.txt, change the 99999999 date (current configuration)
+   to a date beyond the end of the previous series, and before the beginning
+   of the next series.
+9. Add the new poscal files to poscal_defaults.txt in a similar manner to
+   step 4, in the form:
+   # date 
+   99999999 r spatial_cal/pixel_pos_red_20150828.txt

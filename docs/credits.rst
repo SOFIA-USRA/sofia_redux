@@ -1,0 +1,65 @@
+*******************
+Authors and Credits
+*******************
+
+Current SOFIA DPS team
+======================
+
+* Melanie Clarke, development lead
+* Ed Chambers, science lead
+* Dan Perera, developer
+* Rachel Vander Vliet, developer
+* Bruce Clarke, systems engineer
+* John Fenwick, systems administrator
+
+
+SOFIA Pipeline Contributors
+===========================
+
+* Ed Chambers
+* Melanie Clarke
+* Sebastian Colditz
+* Dario Fadda
+* Christian Fischer
+* Nicole Karnath
+* Mark Langer
+* Robert Minchin
+* Dan Perera
+* Leslie Proudfit
+* James Radomski
+* Sachin Shenoy
+* William Vacca
+* Rachel Vander Vliet
+
+If you have contributed to the sofia_redux package code, reference data,
+or documentation and your name is missing, please send an email to the
+SOFIA DPS lead.
+
+Acknowledgements
+================
+
+The FORCAST and FIFI-LS pipelines distributed in sofia_redux were based in
+part on earlier packages developed in IDL for the SOFIA project, with the
+following primary contributors.
+
+* FSpextool
+   - Melanie Clarke
+   - Michael Cushing
+   - William Vacca
+* DRIP
+   - Marc Berthoud
+   - Miguel Charcos-Llorens
+   - Melanie Clarke
+   - Terry Herter
+   - Luke Keller
+   - William Vacca
+* fifi-ls
+   - Melanie Clarke
+   - Jennifer Holt
+   - Randolf Klein
+   - Kaori Nishikida
+   - William Vacca
+* pipecal
+   - Miguel Charcos-Llorens
+   - Melanie Clarke
+   - William Vacca

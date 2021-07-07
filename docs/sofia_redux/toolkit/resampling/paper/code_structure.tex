@@ -1,0 +1,84 @@
+\subsection{Language and packages}
+\label{subsec:packages}
+
+The resampling code is written in Python \footnote{Available from the
+\href{http://www.python.org}{Python Software Foundation}}
+(see~\citet{Python1995}) version 3.
+Python is a dynamic open source programming language supported by a vast
+ecosystem of specialized packages of which we rely on only a few:
+Data such as the sample values, errors, $\Phi$, etc., are stored as Numpy arrays
+(\citet{Numpy}) and processed using JIT (Just-In-Time) compiled Numba
+functions (\citet{Numba}).
+Numba was instrumental in performing multidimensional resampling in a
+reasonable time frame since Python is notoriously slow when compared to
+other languages, and allows for operations to be performed on a time scale
+comparable with the C language.
+The balltree algorithm (\citet{Balltree}) from the Scikit-learn package
+(\citet{sklearn}) is used to quickly determine which samples are inside the
+window region of a resampling point (see
+figure~\ref{fig:single_thread_reduction}).
+Finally, parallel processing is handled by the Joblib
+\footnote{Available from \href{https://joblib.readthedocs.io/en/latest/}
+{https://joblib.readthedocs.io/en/latest/}}.
+The resampling code exists as a submodule of the toolkit module in the SOFIA
+data reduction pipeline package (REDUX) that is not yet publicly available.
+However, efforts are being made to release the REDUX package within the year.
+
+\subsection{Classes and Structure}
+\label{subsec:class-structure}
+
+Figure~\ref{fig:software-flow} gives a high level representation of the
+various classes and process flow.
+The first step is to create an instance of the Resampler class, initialized
+with some parameters that must include the window defining the
+''local'' region ($\omega$), the polynomial fit order, and the data we wish to
+resample.
+The user may interact with the Resampler through some type of interface.
+Nearly all examples in this paper were generated from the Python command line
+and Jupyter notebooks, although some FIFI-LS images were created using the
+SOFIA data reduction pipeline (REDUX).
+
+During the instantiation of the Resampler object, the sample coordinates ($X$)
+are used to initialize a Tree object that allocates samples into blocks and
+their associated neighborhoods as described in
+section~\ref{subsec:search-problem} as a function of the window region $\omega$.
+The $\Phi(x)$ terms (see
+section~\ref{subsec:polynomial-representation-of-k-dimensional-data}) are also
+created at this stage and stored as a Tree attribute.
+
+Once the Resampler object has been created, a reduction may be started by
+supplying a set of reduction parameters (such as weighting schemes) and a set
+of coordinates (resampling points) containing the desired locations for the
+fitted output values.
+Another Tree object is created by the reduction manager from the resampling
+point coordinates ($V$), allocating blocks and creating a set of $\Phi(V)$
+terms.
+
+Each intersection of a reduction Tree block with a sample Tree neighborhood is
+than passed in parallel from the reduction manager to the main engine of the
+resampling algorithm (the box labelled ``Fit'' in
+figure~\ref{fig:software-flow}).
+For a single block of resampling points, the sample sets $\Omega$ for each
+point are derived simultaneously from the sample neighborhood using the
+balltree algorithm.
+A fit at each point is processed in series before being passed back to the
+reduction manager where they are aggregated.
+Once all parallel reductions are complete, the results become available to the
+Resampler where they are either used to update the reduction parameters when
+determining an adaptive solution (resulting in a second reduction) or passed
+back to the user.
+
+\begin{figure}[H]
+  \begin{center}
+  \includegraphics[width=\linewidth]{images/software_flow.png}
+  \caption{Main software objects and process flow for the full resampling
+           algorithm.  Data and variables are denoted by a green open circle.
+           Notes and actions are marked by a filled black circle.  Aggregate
+           objects (can exist independently of the parent object) are marked
+           with open diamond heads, while composite objects (cannot exist
+           without parent object) are marked with a filled diamond head.}
+  \label{fig:software-flow}
+  \end{center}
+\end{figure}
+
+

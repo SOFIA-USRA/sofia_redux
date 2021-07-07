@@ -1,0 +1,120 @@
+@startuml
+
+skinparam objectFontSize 12
+skinparam FontSize 12
+
+package "Inputs" {
+
+    object Resampler.Parameters {
+        + Order
+        + Window
+        + Other options
+    }
+
+    object Sample.Data {
+        + Measurement values
+        + Measurement errors
+        + Sample coordinates (X)
+    }
+
+    object Reduction.Data {
+        + Resampling point coordinates (V)
+    }
+
+    object Reduction.Parameters {
+        + Weighting
+        + Rejection thresholds
+        + Other options
+    }
+
+}
+
+object Sample.Tree {
+    + Sample coordinates = X
+    + Phi(x) = f(X, order)
+    + Neighborhoods = f(X, window)
+}
+
+object Reduction.Tree {
+    + Point coordinates = V
+    + Phi(v) = f(V, order)
+    + Blocks = f(V, window)
+}
+
+object Resampler {
+    * Once initialized may perform
+      multiple reductions using
+      supplied sample data and
+      parameters.
+}
+
+object Results {
+    + Fitted Values
+    + Error on the fit
+    + Reduced chi-squared
+    + Samples per fit
+    + Jacobian
+    + Weight sums
+}
+
+object Adaptive {
+    Determine adaptive kernel?
+    * Yes: analyze results and
+           update parameters
+    * No: end reduction
+}
+
+object Reduction.Manager {
+    * Distribute reduction and sample tree
+    intersections into parallel jobs.
+    * Form aggregate fit results.
+}
+
+object Fit {
+    * Blocks+neighborhoods
+      processed in parallel.
+    * Determine sample sets
+      for each point in block
+      from the sample
+      neighborhood.
+    * Fit each point in series.
+}
+
+
+object END {
+    User may retrieve results
+}
+
+object User.Interface {
+* Initialize with sample data
+  and resampling parameters.
+* Start reduction by supplying
+  resampling points and
+  reduction parameters.
+* Retrieve results.
+}
+
+User.Interface - Resampler
+Inputs -- User.Interface
+Resampler.Parameters --> Resampler: Initialize
+Sample.Data --> Resampler: Initialize
+Reduction.Parameters --> Reduction.Manager: Start
+Reduction.Data --> Reduction.Manager: Initialize
+Resampler -* Reduction.Manager
+Reduction.Manager --o Reduction.Tree
+Resampler --o Sample.Tree
+Reduction.Manager --> Fit: Parallel
+Reduction.Manager <-- Fit: Aggregate
+
+Resampler --o Results
+Reduction.Manager --> Results
+Results --* Adaptive
+Reduction.Parameters <-- Adaptive: Yes
+END <- Adaptive: No
+
+
+
+
+
+
+@enduml

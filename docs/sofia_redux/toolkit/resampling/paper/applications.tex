@@ -1,0 +1,400 @@
+\subsection{2-Dimensional Resampling of Regular Data}
+\label{subsec:example-2d}
+
+The following example uses a ($128 \times 128$ pixels) subset of the ``camera''
+test data set from the Python scikit-image package (\citet{skimage2014}),
+already displayed in figure~\ref{fig:adaptive-kernels} to show the effects of
+the resampling algorithm applied to regularly spaced 2-D samples onto a finer
+grid where $\Delta x = 0.2$ pixels.
+The FWHM of the observing device was estimated to be 1 pixel (by eye), and the
+error was estimated from the standard deviation of the blank sky region on the
+upper-right corner of the image ($\approx 0.7\%$ of the maximum sample value).
+The window radius is set to 12 pixels resulting in a median of 452 samples
+per 3rd order polynomial fit.
+
+Figure~\ref{fig:camera-fits} shows the sample image, and fits on a finer grid
+using standard distance weighting with
+$\alpha = 2 \left(\text{FWHM} / 2\sqrt{2 \ln 2}\right)^2$ and the results of
+the scaled and shaped adaptive distance weighting algorithm.
+In addition, different edge and order rejection algorithms were applied, the
+effects of which can be seen on the borders of each fitted image.
+The standard distance weighting algorithm rejected fits using the bounded
+order requirement, while the adaptive fits allowed for extrapolation in cases
+where enough unique samples are present.
+However, the ``scaled'' solution applied an edge rejection threshold of
+$\beta_{\text{edge}} = 1$.
+In this specific case, edge and order rejection options are applied for the sake
+of example only.
+Good fits are possible due to regularly spaced sampling, well-behaved data,
+and that we are not attempting any fits outside of the bounds of the sample
+region.
+
+\begin{figure}[H]
+  \begin{center}
+  \includegraphics[width=0.9\linewidth]{images/camera_fits.png}
+  \caption{Resampling an image (upper-left) onto a finer grid using the
+           standard distance weighting algorithm (upper-left), the ``scaled''
+           adaptive weighting algorithm (lower-left), and the ``shaped''
+           adaptive weighting algorithm (lower-right).  The red and green
+           squares on the upper-left image mark regions shown in
+           figure~\ref{fig:camera-samples}.}
+  \label{fig:camera-fits}
+  \end{center}
+\end{figure}
+
+At first glance, the standard and scaled solutions appear fairly similar to the
+original image, while a strong reduction in the pixelation effects can be
+seen in the shaped image.
+The similarity of the standard and scaled solutions is cosmetic only,
+and show notable differences when viewed on a smaller local scale.
+Figure~\ref{fig:camera-samples} show enhanced sections of the fit on a
+smaller scale which are marked for reference on the upper left image of
+figure~\ref{fig:camera-fits}.
+
+\begin{figure}[H]
+  \begin{center}
+  \includegraphics[width=0.8\linewidth]{images/camera_samples.png}
+  \caption{Subsections of the sample image and fits marked by the regions in
+           figure~\ref{fig:camera-fits}.  The upper row (``Feature''),
+           contains an area with strong features (green box in
+           figure~\ref{fig:camera-fits}), while the lower row (``Sky'') shows
+           a relatively smooth portion of the sample data (red box in
+           figure~\ref{fig:camera-fits}).  The columns from left to right
+           display the sample image, the standard distance weighted fit, the
+           scaled adaptive fit, and the shaped adaptive fit.}
+  \label{fig:camera-samples}
+  \end{center}
+\end{figure}
+
+\begin{figure}[H]
+  \begin{center}
+  \includegraphics[width=0.8\linewidth]{images/camera_chi2.png}
+  \caption{Histograms of $\log_{10}(\chi_r^2)$ for each of the distance
+           weighting algorithms.  The normalized count density is given as
+           $\rho(N) = N_i / \left(\Delta P \sum_{i}{N_i}\right)$ where
+           $\Delta P$ is the spacing between bins.}
+  \label{fig:camera-chi2}
+  \end{center}
+\end{figure}
+
+Finally, figure~\ref{fig:camera-chi2} displays histograms of the $\chi_r^2$
+distribution for all fits over the entire resampled images (409,600 pixels).
+On a ${\log}_{10}$ scale where $P = {\log}_{10}(\chi_r^2)$, the distribution can
+be approximated by a normal distribution
+$\mathcal{N}(\text{mean}(P), \text{variance}(P))$.
+For our example fits $\mathcal{N}_{\text{standard}} = (-3.126, 0.905)$,
+$\mathcal{N}_{\text{scaled}} = (0.198, 0.371)$, and
+$\mathcal{N}_{\text{shaped}} = (0.092, 0.442)$.
+In other words, the adaptive weighting algorithms produced fits where $\chi_r^2$
+is more closely centered around 1 with smaller variance.
+
+\subsection{3-Dimensional Resampling of Irregular Data}
+\label{subsec:example-fifi-ls}
+
+The following examples apply the new resampling algorithm to real data taken
+with the FIFI-LS instrument on board SOFIA (see
+section~\ref{subsec:motivation}).
+
+\subsubsection{M82: A comparison of weighting schemes on a high SNR source}
+
+Observations of M82 were taken over multiple SOFIA flights using the long
+wavelength spectrometer.
+Data are irregularly spaced in cross-elevation, elevation, and wavelength
+($x, y, \lambda$) centered on $\lambda=157.694\mu m$, and J2000 coordinates (09h55m55.38s
++69d40m53.4s) with $x$ and $y$ in units of arcseconds.
+The average spatial FWHM of the observations is
+$\text{fwhm}_x = \text{fwhm}_y = 15.8\arcsec$, and the average spectral FWHM is
+$\text{fwhm}_{\lambda} = 0.06689507\mu m$.
+Histograms of the sample measurement values and errors are shown in
+figure~\ref{fig:fifi-M82-sample-errors}.
+
+The sample distribution is shown in
+figure~\ref{fig:fifi-M82-sample-distribution}.
+Note that the spatial (x, y) distribution consists of a sparsely sampled region
+near the center bounded by two more densely sampled areas above and below, as
+shown on the left image.
+It can be seen from the right-most image that the wavelength sampling interval
+For a single cluster of spatial coordinates shown on the left image as a single
+blue dot, the median $\lambda$ sampling interval is $\Delta \lambda = 0.003482 \mu m \approx 19
+\text{ samples}/\text{fwhm}_{\lambda}$.
+
+\begin{figure}[H]
+  \begin{center}
+  \includegraphics[width=\linewidth]{images/fifi_M82_sample_errors.png}
+  \caption{Histograms of the sample measurement values (left) and
+  $1\sigma$ measurement errors (right).}
+  \label{fig:fifi-M82-sample-errors}
+  \end{center}
+\end{figure}
+
+\begin{figure}[H]
+  \begin{center}
+  \includegraphics[width=\linewidth]
+      {images/fifi_M82_sample_distribution.png}
+  \caption{Left: Spatial sample distribution in x (cross-elevation) and y
+           (elevation) coordinates.  Right: Sample distribution displayed in
+           x, y, and $\lambda$ (wavelength).}
+  \label{fig:fifi-M82-sample-distribution}
+  \end{center}
+\end{figure}
+
+Resampling was conducted to determine solutions for the standard, scaled, and
+shaped distance weighting algorithms on a regular spaced ($x, y$)
+($30 \times 72$) grid ($M=2,160$) with  spacing $\Delta x = \Delta y = 3\arcsec$
+at constant $\lambda=157.83418\mu m$.
+The window region was set to $\omega_{x,y}=\text{fwhm}_{x,y} \times 3$, and
+$\omega_{\lambda} =\text{fwhm}_{\lambda} / 2$ resulting in a median of
+4,200 samples per second order polynomial fit in a sample space containing
+$N=147,200$ samples.
+Fits were rejected according to the bounded order rejection algorithm, along
+with an edge rejection threshold of $\beta_{\text{edge}} = 0.7$ in the spatial
+dimensions, and 0.5 in $\lambda$.
+For the standard distance weighting reduction, the smoothing parameter was
+set to $\alpha_{x,y} = \text{fwhm}_{x,y}$, and
+$\alpha_{\lambda} = \text{fwhm}_{\lambda} / 4$.
+Adaptive weighting (scaled and shaped) was only applied to the spatial
+dimensions, and fixed at $\alpha_{\lambda}$ in the wavelength dimension.
+
+Figure~\ref{fig:fifi-M82-image} displays all three fits on the same scale,
+whereas figure~\ref{fig:fifi-M82-log-image} displays each fit normalized to
+within $10^{-3} \to 1$ on a log scale in order to better represent the
+dynamic range.
+
+Clear discontinuities can be seen from a visual inspection of the standard
+distance weighting reduction in figure~\ref{fig:fifi-M82-image} in areas
+where spatial sampling density appears to transition from one value to
+another as shown in the left image of
+figure~\ref{fig:fifi-M82-sample-distribution}.
+However, both adaptive weighting algorithms appear smooth and continuous
+in these density transition regions.
+
+Reduction times on a MacBook Pro with a 2.5 GHz Intel Core i7 processor using
+16 GB of memory is 0.6 seconds using the standard weighting algorithm, and
+22 and 20 seconds for the ``shaped'' and ``scaled'' weighting algorithms,
+respectively.
+
+This factor in increased reduction time represents the fact that kernels are
+calculated for each sample (in the neighborhoods of all resampling points)
+rather than at each resampling point, and that $M \ll N$.
+Generally, when $M \approx N$, the reduction time for an adaptive weighting
+algorithm is roughly 2 to 3 times that of the standard weighting algorithm.
+
+\begin{figure}[H]
+  \begin{center}
+  \includegraphics[width=0.8\linewidth]{images/fifi_M82_image.png}
+  \caption{Images generated for $\lambda=157.83418\mu m$ with each available
+           weighting algorithm.  Black dotted lines indicate regions centered
+           on constant $x=4.06\arcsec$ and $y=1.43\arcsec$ of
+           width $\text{fwhm}_{x,y}$.  The samples plotted in
+           figure~\ref{fig:fifi-M82-cross-sections} reside in these regions,
+           with the cross marking a line of constant $\lambda=157.83418\mu m$ through
+           the image.}
+  \label{fig:fifi-M82-image}
+  \end{center}
+\end{figure}
+
+\begin{figure}[H]
+  \begin{center}
+  \includegraphics[width=0.8\linewidth]{images/fifi_M82_log_image.png}
+  \caption{Images from figure~\ref{fig:fifi-M82-image} displayed on a log
+           scale.}
+  \label{fig:fifi-M82-log-image}
+  \end{center}
+\end{figure}
+
+\newpage
+
+Figure~\ref{fig:fifi-M82-cross-sections} displays fits in which the coordinates
+for two dimensions are held fixed, and resampling occurs along the remaining
+($x$, $y$, or $\lambda$) dimension as marked in the left image of
+figure~\ref{fig:fifi-M82-image} (over the peak).
+The scale of the Gaussian standard deviation of the weighting function is
+plotted for each dimension.
+In those dimensions in which adaptive weighting is enabled ($x, y$), the
+minimum and maximum standard deviations of the ``scaled'' weighting kernels are
+also drawn.
+For reference, all samples within $\pm \text{fwhm} / 2$ are plotted with color
+representing the Mahalanobis distance of a sample from the resampling point
+in the fixed dimensions.
+Color indicates the sample coordinate deviation of coordinates in the two
+fixed dimensions with respect to the resampling point coordinate.
+i.e., for the top plot in figure~\ref{fig:fifi-M82-cross-sections} along $x$,
+where $y=1.43\arcsec$ and $\lambda=157.83418 \mu m$
+
+\begin{equation}
+    \Delta \sigma(y, \lambda) =
+        \sqrt{\left( \frac{y - 1.43}{\sigma_y} \right)^2 +
+              \left( \frac{\lambda - 157.83418}{\sigma_{\lambda}} \right)^2
+        }
+    \nonumber \label{eq:equation68}
+\end{equation}
+
+\begin{figure}[H]
+  \begin{center}
+  \includegraphics[width=0.75\linewidth]{images/fifi_M82_cross_sections.png}
+  \caption{Cross sections of the fit along each dimension for each weighting
+           scheme.  Top: A fit along the $x$ dimension, with $y$ and $\lambda$
+           held constant.  Center: A fit along the $y$ dimension, with $x$ and
+           $\lambda$ held constant.  Bottom: A fit along the $\lambda$
+           dimension, with $x$ and $y$ held constant.  The intersection of all
+           fixed dimensions is marked by a cross in the left image of
+           figure~\ref{fig:fifi-M82-image}, and samples within the marked
+           regions are plotted for reference.  Samples are color coded according
+           to deviation of each sample to the resampling point in dimensions
+           that are held constant.}
+  \label{fig:fifi-M82-cross-sections}
+  \end{center}
+\end{figure}
+
+\newpage
+
+Figure~\ref{fig:fifi-M82-rchi2} shows the resulting $\chi_r^2$ distribution
+for the fit along each dimension.
+In all cases, $\chi_r^2 > 1$ indicating a poor fit.
+However, this is the result of attempting a fit on data samples that cannot be
+modelled within the expected $1\sigma$ noise limits supplied with the data.
+From figure~\ref{fig:fifi-M82-sample-errors}, the typical supplied sample
+measurement errors are $\epsilon=10 Jy$.
+A quick look at figure~\ref{fig:fifi-M82-cross-sections} shows that the range
+of values at a single coordinate can vary by approximately $\pm 200 Jy$ between
+samples that occupy close spatial/spectral coordinates.
+
+\begin{figure}[H]
+  \begin{center}
+  \includegraphics[width=0.9\linewidth]{images/fifi_M82_rchi2.png}
+  \caption{Histograms of the $\chi_r^2$ values for each cross-section in $x$,
+  $y$, and $\lambda$ at 5,000 regularly spaced resampling points
+  along each dimension into 100 bins.}
+  \label{fig:fifi-M82-rchi2}
+  \end{center}
+\end{figure}
+
+For reference, a fit generated using standard distance weighting with
+$\alpha = [\alpha_x, \alpha_y, \alpha_{\lambda}] / 12$ is shown in
+figure~\ref{fig:fifi-M82-rchi2-equal-1} resulting in a $\chi_r^2$ approximately
+centered around 1.
+The resulting fit is unusable with no discernible structure and must be placed
+on a $\log$ scale for visualization.
+
+\begin{figure}[H]
+  \begin{center}
+  \includegraphics[width=\linewidth]{images/fifi_M82_chi2_equal_1.png}
+  \caption{The result of fitting M82 sample data to $\approx \chi_r^2=1$.
+           Left: Histogram of $\log_{10}(\chi_r^2)$ into 50 bins.
+           Right: The image slice (also shown in
+           figure~\ref{fig:fifi-M82-image}) when fit approximating
+           $\chi_r^2=1$.  Colors represent flux (Jy) on a $\log_{10}$ scale
+           of the absolute value.}
+  \label{fig:fifi-M82-rchi2-equal-1}
+  \end{center}
+\end{figure}
+
+\clearpage
+\newpage
+
+\subsubsection{30 Doradus: A comparison of simultaneous vs. sequenced
+               dimensional resampling}
+
+The 30 Doradus data set is intended to highlight some differences between the
+old and new FIFI-LS data reduction pipelines, and the advantages of fitting
+multiple dimensions simultaneously.
+The initial pipeline sequentially resampled the data in wavelength (1 dimension)
+followed by spatial resampling in two dimensions onto a regular grid.
+
+Our example data set contains multiple observations of 30 Doradus
+totalling 481,600 (x, y, $\lambda$) FIFI-LS sample measurements which are
+resampled onto a ($327 \times 356 \times 50$) grid.
+Unlike the previous M82 example, the sampling density is relatively uniform
+near the area of interest, but the SNR ratio is much lower.
+The sample distribution is displayed in
+figure~\ref{fig:fifi-30DOR-sample-distribution}, and histograms of sample
+measurement values and errors are shown in
+figure~\ref{fig:fifi-30DOR-sample-errors}.
+
+The central wavelength of the observations was at $\lambda = 51.87619 \mu m$
+with $\text{FWHM}_{\lambda} = 0.056389 \mu m$, and
+$\text{FWHM}_{x,y} = 6.2\arcsec$.
+For both resampling algorithms, the window radius in the spectral dimension
+is set to $\omega_{\lambda} = \text{FWHM}_{\lambda} / 2$.
+When resampling in 3-dimensions simultaneously, the spatial window radius
+is set to $\omega_{x,y} = 3 \times \text{FWHM}_{x, y}$.
+Spectral resampling drastically reduces the number of samples available for
+spatial resampling.
+To allow for a smooth fit, the standard practice using the old pipeline was to
+increase the spatial window radius to
+$\omega_{x,y} = 6 \times \text{FWHM}_{x, y}$.
+In both cases, a second order polynomial fit is generated along the spectral and
+spatial dimensions using the standard distance weighting algorithm with a
+smoothing parameter of
+$\alpha_{\lambda} = \text{FWHM}_{\lambda} / 4$ and
+$\alpha_{x,y} = 2 \times \text{FWHM}_{x,y}$.
+
+\begin{figure}[H]
+  \begin{center}
+  \includegraphics[width=\linewidth]{images/fifi_30DOR_sample_distribution.png}
+  \caption{Left: The spatial distribution of samples in x (cross-elevation),
+           and y (elevation).  Right: The full 3D sampling distribution in
+           x, y, and $\lambda$ (wavelength).}
+  \label{fig:fifi-30DOR-sample-distribution}
+  \end{center}
+\end{figure}
+
+\begin{figure}[H]
+  \begin{center}
+  \includegraphics[width=0.75\linewidth]{images/fifi_30DOR_sample_errors.png}
+  \caption{Left: Histogram of the sample measurement values.  Right:
+           Histogram of the associated $1\sigma$ measurement errors.}
+  \label{fig:fifi-30DOR-sample-errors}
+  \end{center}
+\end{figure}
+
+
+Many properties of the reduction are hard to compare due to major differences in
+the way data are handled (for example, number of samples per fit or $\chi_r^2$).
+We do, however, present comparisons of both a spatial and spectral slice that
+intersect at the point of greatest emission.
+
+Figure~\ref{fig:fifi-30DOR-image-comparison} displays a spatial slice at
+$\lambda = 51.94550 \mu m$, and a spectral profile is shown in
+figure~\ref{fig:fifi-30DOR-line-comparison} at (RA, Dec) =
+(5h38m45.9046s, -69d05m06.2397s) which is also marked as a black cross on the
+left image of figure~\ref{fig:fifi-30DOR-image-comparison}.
+
+\begin{figure}[H]
+  \begin{center}
+  \includegraphics[width=\linewidth]{images/fifi_30DOR_image_comparison.png}
+  \caption{Spatial slices at $\lambda=51.94550\mu m$.  Left: The result of
+           first resampling in wavelength followed by the 2-dimensional spatial
+           interpolation.
+           Right: resampling in all dimensions simultaneously.
+           The spatial position of the spectral profile shown in
+           figure~\ref{fig:fifi-30DOR-line-comparison} is marked as a black
+           cross on the left image.  The red circle encloses a prominent
+           artifact.}
+  \label{fig:fifi-30DOR-image-comparison}
+  \end{center}
+\end{figure}
+
+\begin{figure}[H]
+  \begin{center}
+  \includegraphics[width=\linewidth]{images/fifi_30DOR_line_comparison.png}
+  \caption{The spectral profile at RA = 5h38m45.9046s, Dec = -69d05m06.2397s.
+           The red line shows the results of sequential resampling, while the
+           blue line shows the results of directly resampling onto a
+           3-dimensional grid.}
+  \label{fig:fifi-30DOR-line-comparison}
+  \end{center}
+\end{figure}
+
+It can easily be seen that resampling in all dimensions simultaneously using
+the new FIFI-LS pipeline has produced a smoother image with fewer artifacts
+than the older version, although peak fluxes are relatively equal.
+Additionally, the spectral profile produced by the 3-dimensional fit is smooth
+and continuous, whereas discontinuities are clearly visible when resampling
+occurs sequentially over spectral and spatial dimensions.
+In fact, the strong artifact shown by the red circle in
+figure~\ref{fig:fifi-30DOR-image-comparison} is not consistent with slices
+at neighboring wavelengths, and is colinear with many other artifacts that
+are on the boundary of a change in sampling density as shown in
+figure~\ref{fig:fifi-30DOR-sample-distribution}, indicating that it is not a
+valid structure.

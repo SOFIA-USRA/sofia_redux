@@ -1,0 +1,113 @@
+Irregularly sampled data are commonplace in astronomy and other scientific
+fields, where interpolation onto a regular spaced grid is almost always required
+for visualization and analysis.
+However, resampling data in three or more dimensions simultaneously is
+complicated and computationally expensive, so frequently one resorts to
+resampling multiple times in a series of steps for each dimension.
+This process can be time-consuming and prone to propagating errors, introduced
+in the interpolation procedure, from one dimension into others.
+It also does not account for the continuity requirements on adjacent values
+in the multiple dimensions imposed by the physical data collection process.
+In this paper, we outline a method to carry out simultaneous resampling
+(interpolation) in multiple dimensions.
+
+\subsection{Motivation}\label{subsec:motivation}
+
+The FIFI-LS instrument~\citep{Colditz18, Fischer18} used on SOFIA is an example
+of an integral field spectrograph that generates data cubes in which the
+original values are not evenly sampled on a regular three-dimensional grid.
+As described by~\citet{Fischer18}, FIFI-LS records flux values at an array of
+discrete 25 $x$ and $y$ positions on the sky (spaxels), and at an array of
+16 wavelengths $\lambda$.
+The spaxels are not regularly spaced on the sky.
+Furthermore, the set of sampled wavelength values varies from spaxel to spaxel,
+and some measurements are either missing or noisy.
+~\citet{Vacca20}
+\footnote{See also the \href{https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FIFI-LS_GO_Handbook_RevC.pdf}
+{FIFI-LS Observer's Handbook} and
+\href{https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FIFI-LSDataHandbookRevE.pdf}
+{The FIFI-LS Guest Observer (GO) Data Handbook}.}
+give a brief overview of the pipeline developed to convert instrumental values
+recorded by the instrument into flux estimates at regularly sampled spatial and
+wavelength coordinates.
+The initial version of this data processing pipeline dealt with the irregularly
+sampled cloud of data points in three dimensions by first interpolating the
+flux values in wavelength at each spatial point onto a regular array, so that
+each spaxel was assigned the identical wavelength array.
+Then at each wavelength, interpolation was performed again in the spatial
+dimension to compute fluxes on a regular spatial grid.
+In this way, a regularly sampled data cube in three dimensions (space and
+wavelength) was generated.
+Although this procedure is effective, it can be slow, and the wavelength
+interpolation ignores the coupling (due to physical continuity requirements) of
+data points that are spatially adjacent (and therefore within the instruments
+point spread function).
+
+\subsection{Local Polynomial Regression (LPR)}\label{subsec:LPR}
+
+One of the most employed and well understood methods of interpolating data is
+to model sample measurements as a smooth function of unknown parameters, and
+then estimate a set of parameters that best fit those data using regression.
+For the purposes of this paper, polynomials functions are used for their
+versatility and ease of use.
+
+One could choose to model the entire sample space with a single set of
+parameters that describe the ``True'' underlying function of the noisy sample
+measurements.
+However, as the complexity of the structure to be modelled increases, so too
+does the number of parameters required, leading to numerous difficulties.
+Numerical instability becomes more pronounced in higher dimensions and for
+higher polynomial orders (\citet{Noferini2016}).
+~\citet{Gelman19} show that for polynomials, high order fits have increased
+sensitivity to noise, and strong dependence on the order of polynomial fit.
+It is therefore preferable to derive numerous model from subsets of samples in
+the local vicinity of each point at which a fit is required.
+
+LPR is discussed in detail by~\citep{Fan96a}, with multivariate extensions
+provided by~\citep{Masry1996}, and expanded upon by~\citep{Gu15}.
+All methods essentially minimize the following problem via weighted least
+squares given by~\citep{Fan96b} as
+
+\begin{equation}
+       \underset{\hat{c}}{min} \sum_{i=1}^{N}{
+       \left( y_i - \sum_{j=0}^{p}{c_j (x_i - v)^j}\right)^2}
+       Wt(\frac{x_i - v}{h})
+       \label{eq:equation70}
+\end{equation}
+
+where $(x_1, y_1), \cdots,(x_N, y_N)$ form an i.i.d sample from a certain
+population, $Wt$ is a non-negative, symmetric, and bounded weighting function
+with smoothing parameter (or bandwidth) $h$, and $v$ is the point of interest.
+$h$ may be optimized globally or locally for each resampling point by balancing
+the bias and variance of $\hat{c}$ such that the optimal bandwidth minimizes
+the Mean Squared Error (MSE) of $\hat{c}(x) - c(x)$
+
+\begin{equation}
+       \hat{h} = arg\, \underset{h}{min}\, \hat{\text{MSE}}(f(\hat{c}, \bm{x}))
+       \label{eq:equation69}
+\end{equation}
+
+Unfortunately, this is not always effective when resampling irregular data
+taken from real observations.
+The optimal bandwidth given by~\citep{Gu15} assumes that $x$ are i.i.d, with
+a common density, and errors on the sample measurements ($\epsilon$) are likewise
+i.i.d with zero mean, and independent of $x$.
+These assumptions cannot always hold for FIFI-LS observations on SOFIA when
+data are combined over multiple flights over long periods of time, leading to
+uneven sampling density, and calibration errors that can vary substantially
+between samples.
+
+Additionally, little attention has been given to defining what constitutes the
+``local'' subset of samples in a fit.
+While the standard method of selecting the N-nearest neighbors is acceptable
+if $x$ is i.d.d, doing so for irregularly sampled data in which there is no such
+guarantee is a dangerous tactic to employ.
+For FIFI-LS observations, the spatial and spectral response of the telescope is
+known, it is scientifically irresponsible to perform regression on samples for
+which there is no coupling to the response function.
+In higher dimensions, the problem of determining local sample subsets using
+nearest-neighbors becomes increasingly severe as there is no accounting for
+sufficient sampling along a given dimension, potentially leading to unstable
+solutions and co-linearity.
+The following LPR implementation attempts to overcome many of these
+difficulties while remaining computationally viable.

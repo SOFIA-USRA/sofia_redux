@@ -1,0 +1,23 @@
+variables:
+  PIP_CACHE_DIR: "/opt/cache/pip"
+  QT_QPA_PLATFORM: "offscreen" # Fixes PyQT display error
+
+stages:
+  - public_run
+
+public_run:
+  image: continuumio/miniconda:latest
+  stage: public_run
+  before_script:
+    - apt-get update
+    - apt-get install -y build-essential
+    - apt-get install -y libgl1-mesa-glx
+    - conda env create -f environment.yml
+    - source activate sofia_redux
+    - pip install -e .
+  script:
+    - coverage run -m pytest ./sofia_redux
+    - coverage report -m
+    - sphinx-build -b html ./docs/ public
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "public" && $CI_MERGE_REQUEST_IID == null'

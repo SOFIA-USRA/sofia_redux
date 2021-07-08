@@ -63,9 +63,19 @@ and the package can then be installed as usual::
 Optional Requirements
 ---------------------
 
-Some optional visualization tools in the SOFIA Redux interface use the `pyds9`
-and `regions` packages to interface with the external SAOImage DS9 tool.
-To use these tools, install
+If the package is installed via pip, the PyQt5 package, required for
+the pipeline GUI interface, is not automatically installed as a dependency.
+To use the GUI tools, install PyQt5 via pip::
+
+  pip install "PyQt5<5.14"
+
+or conda::
+
+  conda install pyqt
+
+Some optional visualization tools in the SOFIA Redux interface also
+use the `pyds9` and `regions` packages to interface with the external
+SAOImage DS9 tool. To use these tools, install
 `DS9 <https://sites.google.com/cfa.harvard.edu/saoimageds9>`_, then
 install pyds9 and regions directly via pip::
 
@@ -77,4 +87,6 @@ or using the provided optional requirements file::
   pip install -r optional_requirements.txt
 
 Please note that pyds9 requires gcc to compile, and is not available
-on the Windows platform.
+on the Windows platform.  On MacOS, you will need to make a `ds9`
+executable available in your PATH environment variable; see the
+`DS9 FAQs <http://ds9.si.edu/doc/faq.html#MacOSX>`_ for more information.

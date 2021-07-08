@@ -64,15 +64,17 @@ Optional Requirements
 ---------------------
 
 Some optional visualization tools in the SOFIA Redux interface use the `pyds9`
-library to interface with the external SAOImage DS9 tool.  To use these tools,
-install `DS9 <https://sites.google.com/cfa.harvard.edu/saoimageds9>`_, then
-install pyds9 directly via pip::
+and `regions` packages to interface with the external SAOImage DS9 tool.
+To use these tools, install
+`DS9 <https://sites.google.com/cfa.harvard.edu/saoimageds9>`_, then
+install pyds9 and regions directly via pip::
 
   pip install pyds9
+  pip install regions
 
 or using the provided optional requirements file::
 
   pip install -r optional_requirements.txt
 
-Please note that this library requires gcc to compile, and is not available
+Please note that pyds9 requires gcc to compile, and is not available
 on the Windows platform.

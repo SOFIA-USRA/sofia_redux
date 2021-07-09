@@ -63,7 +63,10 @@ and the package can then be installed as usual::
 Optional Requirements
 ---------------------
 
-If the package is installed via pip, the PyQt5 package, required for
+PyQt5
+^^^^^
+
+If sofia_redux is installed via pip, the PyQt5 package, required for
 the pipeline GUI interface, is not automatically installed as a dependency.
 To use the GUI tools, install PyQt5 via pip::
 
@@ -72,6 +75,10 @@ To use the GUI tools, install PyQt5 via pip::
 or conda::
 
   conda install pyqt
+
+
+DS9
+^^^
 
 Some optional visualization tools in the SOFIA Redux interface also
 use the `pyds9` and `regions` packages to interface with the external
@@ -90,3 +97,49 @@ Please note that pyds9 requires gcc to compile, and is not available
 on the Windows platform.  On MacOS, you will need to make a `ds9`
 executable available in your PATH environment variable; see the
 `DS9 FAQs <http://ds9.si.edu/doc/faq.html#MacOSX>`_ for more information.
+
+Reference data
+^^^^^^^^^^^^^^
+
+Some pipeline modes require additional reference data for optimal data
+quality.  These files are too large to distribute with the pipeline code,
+so they are provided separately.
+
+Atmospheric models
+~~~~~~~~~~~~~~~~~~
+For optimal telluric correction, FORCAST and FIFI-LS spectroscopic
+reductions require a library of FITS files, containing model atmospheric
+transmission spectra, derived from the
+`ATRAN model <https://atran.arc.nasa.gov/cgi-bin/atran/atran.cgi>`.
+
+Two versions of the model libraries are available for each instrument:
+
+- FORCAST:
+
+  - `Approximate models <TBD>`_, not accounting for water vapor
+    variation (TBD GB)
+  - `More accurate models <TBD>`_, enabling programmatic optimization of
+    the telluric correction (TBD GB)
+
+- FIFI-LS:
+
+  - `Approximate models <TBD>`_, not accounting for water vapor
+    variation (TBD GB)
+  - `More accurate models <TBD>`_, enabling use of water vapor values
+    recorded in the FITS headers for more accurate telluric correction
+    (TBD GB)
+
+After downloading and unpacking the library, its location can be provided
+to the pipeline as an optional parameter in the telluric correction step.
+
+Standard flux models
+~~~~~~~~~~~~~~~~~~~~
+In addition to the ATRAN models, a library of standard flux models is
+required to reduce FORCAST standard spectra to instrumental response curves.
+This should be rarely needed for standard scientific reductions, since
+reference response curves are provided for most data.  If needed for
+re-deriving spectral flux calibrations, the standard model spectra are
+provided in the
+`source distribution <https://github.com/SOFIA-USRA/sofia_redux>`_ of
+this package, at sofia_redux/instruments/forcast/data/grism/standard_models.
+

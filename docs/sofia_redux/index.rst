@@ -55,6 +55,16 @@ to reduce on the command line.  Non-default parameters can also be provided by s
 a configuration file in INI format.  Type ``redux_pipe -h`` for a brief
 help message.
 
+Tutorials
+=========
+
+Tutorials are available for data reduction procedures, via the
+`SOFIA website <https://www.sofia.usra.edu/science/data/TBD>`_:
+
+- `FIFI-LS <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FIFI-LS_tutorial.pdf>`_
+- `FORCAST Imaging <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FORCAST_imaging_tutorial.pdf>`_
+- `FORCAST Spectroscopy <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FORCAST_spectroscopy_tutorial.docx>`_
+
 Manuals
 =======
 

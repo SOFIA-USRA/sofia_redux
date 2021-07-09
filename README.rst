@@ -5,6 +5,11 @@ SOFIA Data Reduction Pipelines
     :target: http://www.astropy.org
     :alt: Powered by Astropy Badge
 
+.. image:: https://zenodo.org/badge/311773000.svg
+    :target: https://zenodo.org/badge/latestdoi/311773000
+    :alt: DOI Badge
+
+
 SOFIA Redux (`sofia_redux`) contains data processing pipelines and algorithms
 for instruments on the Stratospheric Observatory for Infrared Astronomy
 (SOFIA).

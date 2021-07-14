@@ -727,7 +727,7 @@ class TestFORCASTSpectroscopyReduction(object):
         parset['atrandir']['value'] = str(tmpdir)
         with pytest.raises(ValueError):
             red.flux_calibrate()
-        assert 'No ATRAN file' in capsys.readouterr().err
+        assert 'No matching ATRAN files' in capsys.readouterr().err
 
         # set up atran directory for optimization
         data = np.vstack([np.arange(50, dtype=float),

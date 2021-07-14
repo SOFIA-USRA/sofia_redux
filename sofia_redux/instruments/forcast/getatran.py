@@ -274,7 +274,7 @@ def get_atran(header, resolution, filename=None,
             log.debug('Using nearest Alt/ZA')
 
     if not isinstance(filename, str):
-        log.error("No ATRAN file found")
+        log.debug("No ATRAN file found")
         return
     log.debug("Using ATRAN file %s" % filename)
 

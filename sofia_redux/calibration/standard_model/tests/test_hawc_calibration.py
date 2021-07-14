@@ -252,10 +252,16 @@ def test_model_minor_body(obs_file, atran, tmpdir):
 
 
 def test_model_major_body(obs_file, caldata, atran, tmpdir):
+    requests = pytest.importorskip('requests')
     with tmpdir.as_cwd():
         obs_times = hc.read_obstimes(obs_file)
         if obs_times['target'][0] == 'Neptune':
-            obs = hc.model_major_body(obs_times, caldata, atran)
+            try:
+                obs = hc.model_major_body(obs_times, caldata, atran)
+            except requests.exceptions.ConnectionError:
+                # sometimes internet hiccups happen; don't fail
+                # the test in this case
+                return
             assert obs.shape == (len(obs_times), 6)
         outputs = glob.glob('Neptune_*txt')
         model_outputs = glob.glob('Neptune_*model.out')

@@ -234,7 +234,7 @@ class TestGetAtran(object):
         result = get_atran(header, resolution, atran_dir=str(tmpdir))
         assert result is None
         capt = capsys.readouterr()
-        assert 'No ATRAN file found' in capt.err
+        assert 'No ATRAN file found' in capt.out
 
         # make a file that should match alt/za and
         # one that matches alt/za/wv

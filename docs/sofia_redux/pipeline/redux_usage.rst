@@ -187,16 +187,32 @@ several additional tools available.
 
 Clicking the **ImExam** button
 (scissors icon) launches an event loop in DS9.  After launching it,
-bring the DS9 window forward, then type 'a' over a source in the
-image to perform photometry at that location.  Typing 'c' will clear
-any previous results and 'q' will quit the ImExam loop.  The photometry
-settings (the image window considered, the model fit, the aperture
-sizes, etc.) may be customized in the **Photometry Settings**.
-After modifying these settings, they will take efffect only for new
-apertures (use 'c' to clear old ones first).  As for the display settings,
-**Reset Photometry Settings** will revert to the last saved values
-and **Restore Default Photometry Settings** will revert to default
-values.
+bring the DS9 window forward, then use the keyboard to perform interactive
+analysis tasks:
+
+- Type 'a' over a source in the image to perform photometry at the
+  cursor location.
+- Type 'p' to plot a pixel-to-pixel comparison of all frames at the
+  cursor location.
+- Type 's' to compute statistics and plot a histogram of the data
+  at the cursor location.
+- Type 'c' to clear any previous photometry results or active plots.
+- Type 'h' to print a help message.
+- Type 'q' to quit the ImExam loop.
+
+The photometry settings (the image window considered, the model fit,
+the aperture sizes, etc.) may be customized in the **Photometry Settings**.
+Plot settings (analysis window size, shared plot axes, etc.) may be
+customized in the **Plot Settings**.
+After modifying these settings, they will take effect only for new
+apertures or plots (use 'c' to clear old ones first).  As for the display
+settings, the reset button will revert to the last saved values
+and the restore button will revert to default values.
+For the pixel-to-pixel and histogram plots, if the cursor is contained within
+a previously defined DS9 region (and the `regions` package is installed),
+the plot will consider only pixels within the region.  Otherwise, a window
+around the cursor is used to generate the plot data.  Setting the window
+to a blank value in the plot settings will use the entire image.
 
 Clicking the **Header** button (magnifying glass icon) from the
 **QAD Tools** section opens a new window that displays headers

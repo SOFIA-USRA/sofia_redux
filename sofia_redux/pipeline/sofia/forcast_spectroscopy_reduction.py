@@ -1674,10 +1674,11 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
         else:
             # expand environment variables in path
             atrandir = os.path.expandvars(atrandir)
+            if not os.path.exists(atrandir):
+                atrandir = None
 
         # check optimize and atran dir parameters
-        if optimize and (atrandir is None
-                         or not os.path.exists(str(atrandir))):
+        if optimize and atrandir is None:
             log.warning('Cannot optimize without ATRAN directory. Using '
                         'default ATRAN file.')
             optimize = False
@@ -1772,17 +1773,22 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
                                 'ATRAN correction. '
                                 'Using default ATRAN file.'.format(s2n))
                     test_opt = False
-            if test_opt:
-                testdir = atrandir
-            else:
-                testdir = None
 
-            # get atran data
+            # get atran data, trying the specified directory first
             base_atran = get_atran(header, resolution, filename=atranfile,
-                                   atran_dir=testdir, use_wv=test_opt)
+                                   atran_dir=atrandir, use_wv=test_opt)
             if base_atran is None:
-                msg = 'No matching ATRAN files.'
-                raise ValueError(msg)
+                if atrandir is None:
+                    msg = 'No matching ATRAN files.'
+                    raise ValueError(msg)
+                else:
+                    # if not found, try the default directory
+                    base_atran = get_atran(header, resolution,
+                                           filename=atranfile,
+                                           atran_dir=None, use_wv=test_opt)
+                    if base_atran is None:
+                        msg = 'No matching ATRAN files.'
+                        raise ValueError(msg)
 
             if test_opt:
                 # read alt and za match from base file

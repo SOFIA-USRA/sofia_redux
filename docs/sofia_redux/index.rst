@@ -59,11 +59,11 @@ Tutorials
 =========
 
 Tutorials are available for data reduction procedures, via the
-`SOFIA website <https://www.sofia.usra.edu/science/data/TBD>`_:
+`SOFIA website <https://www.sofia.usra.edu/science/data/data-pipelines>`_:
 
 - `FIFI-LS <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FIFI-LS_tutorial.pdf>`_
 - `FORCAST Imaging <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FORCAST_imaging_tutorial.pdf>`_
-- `FORCAST Spectroscopy <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FORCAST_spectroscopy_tutorial.docx>`_
+- `FORCAST Spectroscopy <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FORCAST_spectroscopy_tutorial.pdf>`_
 
 Manuals
 =======

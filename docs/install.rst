@@ -7,7 +7,7 @@ Stable release
 
 The `sofia_redux` package is available via anaconda or pip::
 
-   conda install -c sofia-usra sofia_redux
+   conda install -c sofia-usra -c astropy sofia_redux
 
 or::
 
@@ -16,6 +16,10 @@ or::
 
 From source
 -----------
+
+Obtain the source code for this package from the `SOFIA Redux GitHub project
+<https://github.com/SOFIA-USRA/sofia_redux>`_, then install via one of the
+two methods below.
 
 Via Anaconda
 ^^^^^^^^^^^^
@@ -70,12 +74,16 @@ If sofia_redux is installed via pip, the PyQt5 package, required for
 the pipeline GUI interface, is not automatically installed as a dependency.
 To use the GUI tools, install PyQt5 via pip::
 
-  pip install "PyQt5<5.14"
+  pip install PyQt5
 
 or conda::
 
   conda install pyqt
 
+Please note that there may be some incompatibilities between some versions
+of PyQt5, some versions of the package dependencies, and some host OS versions.
+If you run into difficulty, we recommend using the Anaconda installation
+method.
 
 DS9
 ^^^
@@ -86,8 +94,7 @@ SAOImage DS9 tool. To use these tools, install
 `DS9 <https://sites.google.com/cfa.harvard.edu/saoimageds9>`_, then
 install pyds9 and regions directly via pip::
 
-  pip install pyds9
-  pip install regions
+  pip install pyds9 regions
 
 or using the provided optional requirements file::
 
@@ -116,21 +123,37 @@ Two versions of the model libraries are available for each instrument:
 
 - FORCAST:
 
-  - `Approximate models <TBD>`_, not accounting for water vapor
-    variation (TBD GB)
-  - `More accurate models <TBD>`_, enabling programmatic optimization of
-    the telluric correction (TBD GB)
+  - Approximate models, not accounting for water vapor variation
+
+    - Download: `atran_forcast_standard.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_forcast_standard.tgz>`_
+    - Size: 531.3 MB
+    - MD5 checksum: 61141843b245eea1fdfd45167a1a750b
+
+  - More accurate models, enabling programmatic optimization of
+    the telluric correction
+
+    - Download: `atran_forcast_wv.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_forcast_wv.tgz>`_
+    - Size: 37.5 GB
+    - MD5 checksum: 49264dfd6c3288af2553f73f8082ec97
 
 - FIFI-LS:
 
-  - `Approximate models <TBD>`_, not accounting for water vapor
-    variation (TBD GB)
-  - `More accurate models <TBD>`_, enabling use of water vapor values
+  - Approximate models, not accounting for water vapor variation
+
+    - Download: `atran_fifi-ls_standard.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_fifi-ls_standard.tgz>`_
+    - Size: 143.9 MB
+    - MD5 checksum: 9a6480d5967f4287388a3070e71e40e8
+
+  - More accurate models, enabling use of water vapor values
     recorded in the FITS headers for more accurate telluric correction
-    (TBD GB)
+
+    - Download: `atran_fifi-ls_wv.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_fifi-ls_wv.tgz>`_
+    - Size: 2.8 GB
+    - MD5 checksum: 486a34fd229b13d8e45768f3664fff64
 
 After downloading and unpacking the library, its location can be provided
-to the pipeline as an optional parameter in the telluric correction step.
+to the pipeline as an optional parameter in the *Calibrate Flux* step for
+FORCAST or the *Telluric Correct* step for FIFI-LS.
 
 Standard flux models
 ~~~~~~~~~~~~~~~~~~~~

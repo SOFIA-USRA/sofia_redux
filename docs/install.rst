@@ -117,7 +117,7 @@ Atmospheric models
 For optimal telluric correction, FORCAST and FIFI-LS spectroscopic
 reductions require a library of FITS files, containing model atmospheric
 transmission spectra, derived from the
-`ATRAN model <https://atran.arc.nasa.gov/cgi-bin/atran/atran.cgi>`.
+`ATRAN model <https://atran.arc.nasa.gov/cgi-bin/atran/atran.cgi>`_.
 
 Two versions of the model libraries are available for each instrument:
 

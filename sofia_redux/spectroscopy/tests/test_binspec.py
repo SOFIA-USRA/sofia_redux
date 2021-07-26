@@ -52,6 +52,7 @@ def test_delta_output():
     result = binspec(x, y, [9, 11])
     assert np.allclose(result, [[4.5], [40.5]])
 
+
 def test_spacing_output():
     x = np.arange(10)
     y = np.arange(10)

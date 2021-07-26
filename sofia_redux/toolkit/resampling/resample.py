@@ -1356,7 +1356,7 @@ class Resample(object):
 
         # This cannot be covered on tests as it occurs on other CPUs.
         load_args = False
-        if filename is not None:
+        if filename is not None:  # pragma: no cover
             if 'args' not in _global_resampling_values:
                 load_args = True
             elif 'iteration' not in _global_resampling_values:

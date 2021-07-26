@@ -1014,8 +1014,9 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
             results.append(hdul)
 
         if len(fit_fwhm) > 0:
-            log.info('Mean fit FWHM: '
-                     '{:.2f} {}'.format(np.mean(fit_fwhm), yunit))
+            log.info(f'Mean fit FWHM: '
+                     f'{np.mean(fit_fwhm):.2f} '
+                     f'+/- {np.std(fit_fwhm):.2f} {yunit}')
 
         self.input = results
         self.set_display_data()
@@ -1764,15 +1765,21 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
                 log.warning('Response DETBIAS: {}'.format(detbias))
                 log.warning('Input DETBIAS: {}'.format(db))
 
-            # check s/n for optimization
+            # check s/n for optimization, auto shift
             test_opt = optimize
-            if test_opt:
+            test_auto = auto_shift
+            if test_opt or test_auto:
                 s2n = np.nanmedian(spec_flux / spec_err)
                 if s2n < snthresh:
-                    log.warning('S/N {:.1f} too low to optimize '
-                                'ATRAN correction. '
-                                'Using default ATRAN file.'.format(s2n))
-                    test_opt = False
+                    if test_opt:
+                        log.warning(f'S/N {s2n:.1f} too low to optimize '
+                                    f'ATRAN correction. '
+                                    f'Using default ATRAN file.')
+                        test_opt = False
+                    if test_auto:
+                        log.warning(f'S/N {s2n:.1f} too low to auto-shift '
+                                    f'wavelengths. Disabling auto-shift.')
+                        test_auto = False
 
             # get atran data, trying the specified directory first
             base_atran = get_atran(header, resolution, filename=atranfile,
@@ -1835,7 +1842,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
                             'wave_shift': waveshift}]}
 
             result = fluxcal(spectra, atran, response,
-                             auto_shift=auto_shift,
+                             auto_shift=test_auto,
                              shift_limit=shift_limit,
                              model_order=model_order)
             if result is None:

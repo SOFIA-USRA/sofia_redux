@@ -185,7 +185,9 @@ def _joblib_parallel(jobs, func, args, kwargs, iterable, skip=None):
         log.warning("joblib is not installed: will process serially")
         return _serial(func, args, kwargs, iterable, skip=skip)
 
-    if jobs in [0, 1]:
+    if jobs in [0, 1]:  # pragma: no cover
+        # this should be unreachable, since multitask directly
+        # calls _serial for this case
         return _serial(func, args, kwargs, iterable, skip=skip)
 
     mfunc = _wrap_function(func, args, kwargs)
@@ -207,7 +209,7 @@ def _joblib_parallel(jobs, func, args, kwargs, iterable, skip=None):
 
     if threading.current_thread() == threading.main_thread():
         require = None
-    else:
+    else:  # pragma: no cover
         require = 'sharedmem'
 
     executor = Parallel(n_jobs=jobs, mmap_mode='r+', require=require)

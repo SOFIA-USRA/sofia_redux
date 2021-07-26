@@ -34,3 +34,15 @@ def test_missing():
     result = nansum(a, missing=0)
     assert result == 0
     assert isinstance(result, np.float)  # Check casting ok
+
+
+def test_non_array():
+    # non-arrays should also be directly handled
+    a = [1, 2, 3]
+    assert nansum(a) == 6
+
+    a = [1, 2, 3, np.nan]
+    assert nansum(a) == 6
+
+    a = [np.nan, np.nan, np.nan]
+    assert np.isnan(nansum(a))

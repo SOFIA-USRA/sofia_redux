@@ -5,6 +5,7 @@ import astropy.constants as const
 from astropy.io import fits
 from astropy.time import Time
 import astropy.units as u
+from astropy.units import imperial
 
 from sofia_redux.spectroscopy.earthvelocity import earthvelocity
 
@@ -51,7 +52,7 @@ def radvel(header, equinox='J2000'):
 
     ra = header['TELRA'] * u.hourangle
     dec = header['TELDEC'] * u.deg
-    height = header['ALTI_STA'] * u.imperial.ft
+    height = header['ALTI_STA'] * imperial.ft
     lat = header['LAT_STA'] * u.deg
     lon = header['LON_STA'] * u.deg
 

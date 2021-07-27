@@ -306,7 +306,7 @@ class FIFILSReduction(Reduction):
             for datafile in self.raw_files:
                 try:
                     hdr = fits.getheader(datafile)
-                except (IndexError, ValueError, TypeError):
+                except (IndexError, ValueError, TypeError, OSError):
                     log.warning('Header could not be read '
                                 'from {}'.format(os.path.basename(datafile)))
                     hdr = fits.Header()

@@ -26,7 +26,7 @@ Via Anaconda
 
 We recommend Anaconda for managing your Python environment.  A conda
 environment specification is included with this package, as
-`environment.yml <https://github.com/SOFIA-USRA/sofia_redux/blob/main/environment.yml>`_.
+`environment.yml <https://raw.githubusercontent.com/SOFIA-USRA/sofia_redux/main/environment.yml>`_.
 
 To install a ``sofia_redux`` environment with Anaconda::
 

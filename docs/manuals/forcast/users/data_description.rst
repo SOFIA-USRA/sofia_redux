@@ -43,6 +43,9 @@ is known as the chop amplitude and is equal to half the chop throw
 
 .. figure:: images/sym_chop.png
    :name: symmetric_chop
+   :alt: Sky position for symmetric chop. Telescope
+         position in the middle, chop 1 to the left,
+         chop 2 to the right.
 
    Symmetric Chop
 
@@ -53,6 +56,8 @@ throw in this case (see :numref:`asymmetric_chop`).
 
 .. figure:: images/asym_chop.png
    :name: asymmetric_chop
+   :alt: Sky positions for asymmetric chop.
+         Boresight co-located with chop 1 on the left, chop 2 to the right.
 
    Asymmetric Chop
 
@@ -139,6 +144,8 @@ negative, with the positive being twice as bright as the negatives.
 
 .. figure:: images/nmc.png
    :name: nmc
+   :alt: Sky positions for NMC.  Nod throw is
+         centered on the source; chop throw is centered on the boresight.
 
    Nod Match Chop mode
 
@@ -149,12 +156,17 @@ orthogonal (perpendicular; :numref:`nmc_perp`) to the slit. Dithers should be do
 
 .. figure:: images/nmc_spec_parallel.png
    :name: nmc_para
+   :alt: Sky positions for NMC parallel mode. Chop and
+         nod throw fall along a single line, aligned with the slit.
 
    Nod Match Chop Parallel to Slit
 
 .. figure:: images/nmc_spec_perp.png
    :width: 400px
    :name: nmc_perp
+   :alt: Sky positions for NMC perpendicular.
+         Chop/nod throw are parallel to each other, perpendicular
+         to the slit.
 
    Nod Match Chop Perpendicular to Slit
 
@@ -174,6 +186,9 @@ values alternating positive and negative.
 
 .. figure:: images/npc.png
    :name: npc
+   :alt: Sky positions for NPC mode.  Nod throw
+         and chop throw centered on the source, perpendicular
+         to each other.
 
    Nod Perpendicular to Chop mode
 
@@ -190,16 +205,20 @@ object. The nod throw is oriented such that both nod positions are
 aligned with the angle of the slit on the sky.
 
 .. figure:: images/c2n_chop_along_slit.png
-   :width: 500px
    :name: npc_cas
+   :width: 500px
+   :alt: Sky positions for NPC-CAS mode. Chop
+         throw is along the slit; nod throw is perpendicular to it.
 
-   Nod Perpedicular to Chop, Chop Along Slit
+   Nod Perpendicular to Chop, Chop Along Slit
 
 .. figure:: images/c2n_nod_along_slit.png
-   :width: 500px
    :name: npc_nas
+   :width: 500px
+   :alt: Sky positions for NPC-NAS mode. Nod
+         throw is along the slit; chop throw is perpendicular to it.
 
-   Nod Perpedicular to Chop, Nod Along Slit
+   Nod Perpendicular to Chop, Nod Along Slit
 
 Asymmetrical chopping modes: C2NC2 and NXCAC
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -207,7 +226,7 @@ Asymmetrical chopping modes: C2NC2 and NXCAC
 FORCAST also has an asymmetrical chop mode, known as C2NC2. In this
 mode, the telescope is first pointed at the target (position A). In this
 first position, the secondary is aligned with the boresight for one
-observation and then is tilted some amount (often 180-480 arc seconds)
+observation and then is tilted some amount (often 180-480 arcseconds)
 for the second (asymmetrically chopped) observation. This is an
 asymmetric C2 mode observation. The telescope is then slewed some
 distance from the target, to a sky region without sources (position
@@ -216,6 +235,8 @@ is typically 30 seconds.
 
 .. figure:: images/c2nc2.png
    :name: c2nc2
+   :alt: Sky positions for C2NC2 mode.  Chop throws
+         at source and sky positions, connected by a telescope slew.
 
    C2NC2 mode
 
@@ -231,8 +252,11 @@ our large chops and nods in ERF (equatorial reference frame), and dither
 in SIRF (science instrument reference frame) along the slit.
 
 .. figure:: images/nxcac_spec.png
-   :width: 500px
    :name: nxcac
+   :width: 500px
+   :alt: Sky positions for NXCAC mode. Chop throws
+         at source and sky positions, perpendicular
+         to the slit.
 
    NXCAC mode
 
@@ -275,14 +299,18 @@ flowcharts of the processing steps used by the imaging and grism pipelines.
 .. figure:: images/flowchart_img.png
    :name: flowchart_img
    :height: 800
+   :alt: Flowchart of processing steps for imaging data with cartoon
+         versions of each step.
 
-   Processing steps for imaging and grism data.
+   Processing steps for imaging data.
 
 .. figure:: images/flowchart_grism.png
    :name: flowchart_grism
    :height: 800
+   :alt: Flowchart of processing steps for grism data with cartoon
+         versions of each step.
 
-   Processing steps for imaging and grism data.
+   Processing steps for grism data.
 
 Reduction algorithms
 --------------------
@@ -374,12 +402,16 @@ bright, as in :numref:`droop`.
 
 .. figure:: images/droop.png
    :name: droop
+   :alt: Left: bright source with irregular negative blob and ringing artifacts.
+         Right: corrected image with no blob.
 
    Background-subtracted FORCAST images of a bright star with droop
    effect (left) and with the droop correction applied (right).
 
 .. figure:: images/droop_overcor.png
    :name: droop_overcor
+   :alt: Droop effect after over-correction. Contours show an
+         elongated PSF on the left side of the source.
 
    Overcorrected droop effect, appearing as an elongated smear on
    the bright central source.
@@ -438,6 +470,8 @@ image.
 
 .. figure:: images/stack.png
    :name: stack
+   :alt: Background subtraction stages: raw frames, chop corrected
+         images, and chop-nod corrected image.
 
    Images at two stages of background subtraction in imaging NMC mode:
    raw frames (upper row), chop-subtracted (middle row),
@@ -504,6 +538,7 @@ corrected). The jailbar pattern is located by subtracting a
 
 .. figure:: images/jailbar.png
    :name: jailbar
+   :alt: Images with regular vertical striping due to the jailbar effect.
 
    Crosstalk correction for a bright point source (left), and
    faint source (right). Images on the top are before correction; images
@@ -520,7 +555,7 @@ barrel distortion in the images. The distortion correction uses pixel
 coordinate offsets for a grid of pinholes imaged in the lab and a 2D
 polynomial warping function to resample the 256x256 pixels to an
 undistorted grid. The resulting image is 262x247 pixels with image scale
-of 0.768"/pixel for a corrected field of view of 3.4x3.2 arc minutes.
+of 0.768"/pixel for a corrected field of view of 3.4x3.2 arcminutes.
 Pixels outside of the detector area are set to NaN to distinguish them
 from real data values.
 
@@ -569,6 +604,9 @@ sources on top of the positive one, and then subtracts them
 
 .. figure:: images/merge.png
    :name: merge
+   :alt: After merging, 1 central positive source, 2
+         negative sources, and 2 fainter positive sources
+         to the sides.
 
    The NMC observation of :numref:`stack`, after merging. Only the
    central source should be used for science; the other images are
@@ -657,8 +695,9 @@ observations of the same source with the same instrument configuration
 and observation mode. Each image is projected into the coordinate system
 of the first image, using its WCS to transform input coordinates into output
 coordinates.  An additional offset may be applied for non-sidereal targets
-in order to correct for the motion of the target across the sky.  The
-projection is performed with a bilinear interpolation, then individual
+in order to correct for the motion of the target across the sky, provided
+that the target position is recorded in the FITS headers (TGTRA and TGTDEC).
+The projection is performed with a bilinear interpolation, then individual
 images are mean- or median-combined, with optional error weighting and robust
 outlier rejection.
 
@@ -715,10 +754,11 @@ corrected for by defining calibration images that assign a wavelength
 coordinate (in :math:`\mu m`) and a spatial coordinate (in *arcsec*) to each
 detector pixel, for each grism available.  Each 2D spectral image in
 an observation is resampled into a rectified spatial-spectral grid, using
-these coordinates to define the output grid.  If appropriate calibration
-data is available, the output from this step is an image in which wavelength
-values are constant along the columns, and spatial values are constant along
-the rows, correcting for any curvature in the spectral trace.
+these coordinates to define the output grid.
+If appropriate calibration data is available, the output from this step is an
+image in which wavelength values are constant along the columns, and spatial
+values are constant along the rows, correcting for any curvature in the
+spectral trace (:numref:`forcast_rectified`).
 
 These calibration maps are generated from identifications of sky emission
 and telluric absorption lines and a polynomial fit to centroids of those
@@ -752,6 +792,8 @@ on the slit.
 
 .. figure:: images/rectified.png
    :name: forcast_rectified
+   :alt: Central positive trace and two negative
+         traces.  Left: spatial curvature.  Right: straigter trace.
 
    A NMC spectral image, before (left) and after (right) rectification. The
    black spots indicate bad pixels, identified with NaN values.  Bad pixel
@@ -806,6 +848,9 @@ along the wavelength axis generates the median spatial profile, :math:`P_j`
 
 .. figure:: images/profile.png
    :name: forcast_profile
+   :alt: Left: 3D surface in slit position vs. wavelength
+         vs. flux.  Right: 1D plot of slit position vs.
+         flux.
 
    Spatial model and median spatial profile, for the image in
    :numref:`forcast_rectified`.  The spatial model image here
@@ -823,7 +868,7 @@ spectra with chopping or nodding on-slit, as in :numref:`forcast_rectified`).
 The true position of the aperture center may vary somewhat
 with wavelength, as a result of small optical effects or atmospheric
 dispersion. To account for this variation, the pipeline attempts to
-traces the spectrum across the array. It fits a Gaussian in the spatial
+trace the spectrum across the array. It fits a Gaussian in the spatial
 direction, centered at the specified position, at regular intervals in
 wavelength. The centers of these fits are themselves fitted with a
 low-order polynomial; the coefficients of these fits give the trace
@@ -939,16 +984,6 @@ is suitable for custom extractions of extended fields: a sum over any number of
 rows in the image produces a flux-calibrated spectrum of that region,
 in the same units as the spectrum produced directly by the pipeline.
 
-After telluric correction, it is possible to apply a correction to the
-calibrated wavelengths for the motion of the Earth relative to the solar
-system barycenter at the time of the observation.  For FORCAST resolutions,
-we expect this wavelength shift to be a small fraction of a pixel, well within
-the wavelength calibration error, so we do not directly apply it to the data.
-The shift (as :math:`d\lambda / \lambda`) is calculated and stored in the
-header in the BARYSHFT keyword.  An additional wavelength correction to the
-local standard of rest (LSR) from the barycentric velocity is also stored in
-the header, in the LSRSHFT keyword.
-
 Note that the FITS header for the primary extension for this product
 (PRODTYPE = 'calibrated_spectrum') [#fn_calrectimg]_
 contains a full spatial and spectral WCS that can be used to identify
@@ -958,6 +993,7 @@ with key = 'A' identifies the RA, Dec, and wavelength of every pixel
 in the image.  Either can be extracted and used for pixel identification
 with standard WCS manipulation packages, such as the
 `astropy WCS package <http://docs.astropy.org/en/stable/wcs/>`__\ .
+
 
 .. [#fn_calrectimg]
    In early versions of the pipeline (before v1.4.0), the calibrated
@@ -969,6 +1005,15 @@ with standard WCS manipulation packages, such as the
    the calibrated extracted spectra and reference atmospheric transmission
    and response spectra.
 
+After telluric correction, it is possible to apply a correction to the
+calibrated wavelengths for the motion of the Earth relative to the solar
+system barycenter at the time of the observation.  For FORCAST resolutions,
+we expect this wavelength shift to be a small fraction of a pixel, well within
+the wavelength calibration error, so we do not directly apply it to the data.
+The shift (as :math:`d\lambda / \lambda`) is calculated and stored in the
+header in the BARYSHFT keyword.  An additional wavelength correction to the
+local standard of rest (LSR) from the barycentric velocity is also stored in
+the header, in the LSRSHFT keyword.
 
 Combine multiple observations
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1459,7 +1504,7 @@ separately from the FITS file products.
 .. table:: Intermediate data products for spectroscopy reduction
    :name: spec_data_prod
    :class: longtable
-   :widths: 20 14 18 18 10 12 26
+   :widths: 20 14 18 18 10 12 27
 
    +------------------------+-----------------+------------------+----------------+------------+-------------+-----------------------+
    || **Step**              || **Data type**  || **PRODTYPE**    || **PROCSTAT**  || **Code**  || **Saved**  || **Extensions**       |
@@ -1513,7 +1558,8 @@ separately from the FITS file products.
    |                        |                 |                  |                |            |             || APERTURE_TRACE,      |
    |                        |                 |                  |                |            |             || APERTURE_MASK,       |
    |                        |                 |                  |                |            |             || SPECTRAL_FLUX,       |
-   |                        |                 |                  |                |            |             || SPECTRAL_ERROR       |
+   |                        |                 |                  |                |            |             || SPECTRAL_ERROR,      |
+   |                        |                 |                  |                |            |             || TRANSMISSION         |
    +------------------------+-----------------+------------------+----------------+------------+-------------+-----------------------+
    || Merge Apertures       || 2D spectral    || merged\_        || LEVEL\_2      || MGM       || Y          || FLUX, ERROR, BADMASK,|
    |                        || image;         || spectrum        |                |            |             || WAVEPOS, SLITPOS,    |
@@ -1522,7 +1568,8 @@ separately from the FITS file products.
    |                        |                 |                  |                |            |             || APERTURE_TRACE,      |
    |                        |                 |                  |                |            |             || APERTURE_MASK,       |
    |                        |                 |                  |                |            |             || SPECTRAL_FLUX,       |
-   |                        |                 |                  |                |            |             || SPECTRAL_ERROR       |
+   |                        |                 |                  |                |            |             || SPECTRAL_ERROR,      |
+   |                        |                 |                  |                |            |             || TRANSMISSION         |
    +------------------------+-----------------+------------------+----------------+------------+-------------+-----------------------+
    || Calibrate Flux        || 2D spectral    || calibrated\_    || LEVEL\_3      || CRM       || Y          || FLUX, ERROR, BADMASK,|
    |                        || image;         || spectrum        |                |            |             || WAVEPOS, SLITPOS,    |
@@ -1683,7 +1730,7 @@ may have the following values:
 The keyword WCSQUAL refers to the quality of the World Coordinate System
 (WCS) for astrometry. In very early FORCAST cycles, there were many issues
 with astrometry, as described in the
-`Known Issues <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/DCS_Known_Issues.pdf>`_
+`Known Issues <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/DCS_Known_Issues.pdf>`__
 document. Astrometry could, in the worst cases, be off by a full chop- or
 nod-throw distance (up to hundreds of pixels/arcseconds). These issues
 were resolved in Cycle 3 and 4. However, there still appears to be a slight

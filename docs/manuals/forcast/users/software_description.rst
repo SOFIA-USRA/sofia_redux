@@ -1,4 +1,3 @@
-
 Grouping LEVEL\_1 data for processing
 =====================================
 
@@ -90,8 +89,8 @@ Configuration and execution
 Installation
 ------------
 
-The FORCAST pipeline is written entirely in Python.  The pipeline is
-platform independent, but has been tested only on Linux and Mac OS X
+The FORCAST pipeline is written entirely in Python.  TThe pipeline is
+platform independent and has been tested on Linux, Mac OS X, and Windows
 operating systems.  Running the pipeline requires a minimum of 16GB RAM,
 or equivalent-sized swap file.
 
@@ -109,19 +108,20 @@ External Requirements
 To run the pipeline for any mode, Python 3.7 or
 higher is required, as well as the following packages: numpy, scipy,
 matplotlib, pandas, astropy, configobj, numba, bottleneck, joblib,
-astropy-helpers, and photutils.
+and photutils.
 Some display functions for the graphical user interface (GUI)
-additionally require the PyQt5, pyds9, and dill packages.
+additionally require the PyQt5, pyds9, and regions packages.
 All required external packages are available to install via the
 pip or conda package managers.  See the Anaconda environment file
 (environment.yml), or the pip requirements file (requirements.txt)
-distributed with `sofia_redux` for specific version requirements.
+distributed with `sofia_redux` for up-to-date version requirements.
 
 Running the pipeline interactively also requires an installation of
 SAO DS9 for FITS image display. See http://ds9.si.edu/ for download
 and installation instructions.  The *ds9* executable
 must be available in the PATH environment variable for the pyds9
-interface to be able to find and control it.
+interface to be able to find and control it.  Please note that pyds9
+is not available on the Windows platform
 
 Source Code Installation
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -133,7 +133,7 @@ This repository contains all needed configuration
 files, auxiliary files, and Python code to run the pipeline on FORCAST
 data in any observation mode.
 
-After obtaining the source code, install each Python library with
+After obtaining the source code, install the package with
 the command::
 
     python setup.py install
@@ -175,7 +175,7 @@ Input data
 Redux takes as input raw FORCAST FITS data files, which contain image
 cubes composed of 256x256 pixel image arrays. The number of frames per
 raw data cube depends on the chop/nod mode used to acquire the data (see
-:numref:`raw_format`). FITS headers contain data acquisition and observation
+:numref:`raw_format`). The FITS headers contain data acquisition and observation
 parameters and, combined with the pipeline configuration files, comprise
 the information necessary to complete all steps of the data reduction
 process. Some critical keywords are required to be present in the raw
@@ -264,14 +264,81 @@ chooses the appropriate calibrations for that date.
    | (e.g. G063\_LS24\_slitfn\_OC2.fits)           |               |                                                                                                                      |
    +-----------------------------------------------+---------------+----------------------------------------------------------------------------------------------------------------------+
 
-Redux Usage
------------
+.. redux usage section
 
-Redux usage is documented in the `sofia_redux.pipeline` package.
+.. |ref_startup| replace:: :numref:`forcast_startup`
 
-.. toctree::
+.. |ref_open_new| replace:: :numref:`forcast_open_new`
 
-   redux_doc
+.. |ref_reduction_steps| replace:: :numref:`forcast_reduction_steps`
+
+.. |ref_parameters| replace:: :numref:`forcast_parameters`
+
+.. |ref_file_info| replace:: :numref:`forcast_file_info`
+
+.. |ref_data_view| replace:: :numref:`forcast_data_view`
+
+.. |ref_headers| replace:: :numref:`forcast_headers`
+
+.. include:: ../../../sofia_redux/pipeline/usage/startup.rst
+
+.. figure:: images/startup.png
+   :name: forcast_startup
+   :alt: Startup screen showing an outline of an airplane with an open
+         telescope door on a blue background showing faint spiral arms
+         and stylized stars.
+
+   Redux GUI startup.
+
+.. include:: ../../../sofia_redux/pipeline/usage/open.rst
+
+.. figure:: images/open_new.png
+   :name: forcast_open_new
+   :alt: File system dialog window showing selected filenames.
+
+   Open new reduction.
+
+.. figure:: images/reduction_steps.png
+   :name: forcast_reduction_steps
+   :alt: GUI window showing reduction steps with Edit and Run buttons.
+         A log window is displayed with text messages from a reduction.
+
+   Sample reduction steps. Log output from the pipeline is
+   displayed in the **Log** tab.
+
+.. include:: ../../../sofia_redux/pipeline/usage/params.rst
+
+.. figure:: images/parameters.png
+   :name: forcast_parameters
+   :alt: An Edit Parameters dialog window, showing various selection
+         widgets.
+
+   Sample parameter editor for a pipeline step.
+
+.. include:: ../../../sofia_redux/pipeline/usage/info.rst
+
+.. figure:: images/file_info.png
+   :name: forcast_file_info
+   :alt: A table display showing filenames and FITS keyword values.
+
+   File information table.
+
+.. include:: ../../../sofia_redux/pipeline/usage/view.rst
+
+.. figure:: images/data_view.png
+   :name: forcast_data_view
+   :alt: Data viewer settings with various widgets and buttons to control
+         display parameters and analysis tools.
+
+   Data viewer settings and tools.
+
+.. include:: ../../../sofia_redux/pipeline/usage/headers.rst
+
+.. figure:: images/headers.png
+   :name: forcast_headers
+   :alt: A dialog window showing a sample FITS header in plain text.
+
+   QAD FITS header viewer.
 
 FORCAST Reduction
 -----------------
@@ -501,52 +568,17 @@ be optionally saved by selecting the 'save' parameter.
 Grism Reduction
 ~~~~~~~~~~~~~~~
 
-FORCAST grism reduction with Redux is slightly more complicated than for
-imaging. The GUI breaks down the spectral extraction algorithms into seven
-separate reduction steps to give more control over the extraction
-process. These steps are:
+.. |ref_profile| replace:: :numref:`forcast_profile_plot`
 
--  Make Profiles: Generate a smoothed model of the relative distribution
-   of the flux across the slit (the spatial profile). After this step is
-   run, a separate display window showing a plot of the spatial profile
-   appears.
+.. |ref_spectral| replace:: :numref:`forcast_spectral_plot`
 
--  Locate Apertures: Use the spatial profile to identify spectra to extract.
-   By default, Redux attempts to automatically identify sources, but
-   they can also be manually identified by entering a guess position to
-   fit near, or a fixed position, in the parameters. Aperture locations
-   are plotted in the profile window.
+.. |ref_eye_controls| replace:: :numref:`forcast_eye_controls_image`
 
--  Trace Continuum: Identify the location of the spectrum across the
-   array, by either fitting the continuum or fixing the location to the
-   aperture center.  The aperture trace is displayed as a region
-   overlay in DS9.
-
--  Set Apertures: Identify the data to extract from the spatial profile.
-   This is done automatically by default, but all aperture
-   parameters can be overridden manually in the parameters for this
-   step.  Aperture radii and background regions are plotted in the
-   profile window (see :numref:`profile_plot`).
-
--  Subtract Background: Residual background is fit and removed for
-   each column in the 2D image, using background regions specified
-   in the Set Apertures step.
-
--  Extract Spectra: Extract one-dimensional spectra from the
-   identified apertures. By default, Redux will perform standard
-   extraction observations that are marked as extended sources
-   (SRCTYPE=EXTENDED\_SOURCE) and will attempt optimal extraction for
-   any other value. The method can be overridden in the parameters for
-   this step.
-
--  Merge Spectra: All apertures are scaled to the brightest spectrum,
-   then merged into a single spectrum.
-
-Extracted spectra are displayed in an interactive plot window, for
-data analysis and visualization (see :numref:`spectral_plot`).
+.. include::  spectral_extraction.rst
 
 .. figure:: images/profile_plot.png
-   :name: profile_plot
+   :name: forcast_profile_plot
+   :alt: A display window with a profile plot and lines marking the aperture.
 
    Aperture location automatically identified and over-plotted
    on the spatial profile.  The cyan line indicates the aperture center.
@@ -555,114 +587,20 @@ data analysis and visualization (see :numref:`spectral_plot`).
    goes to zero), and red lines indicate background regions.
 
 .. figure:: images/spectral_plot.png
-   :name: spectral_plot
+   :name: forcast_spectral_plot
+   :alt: A GUI window showing a spectral trace plot, in Wavepos (um)
+         vs. Spectral_flux (Jy).
 
    Final extracted spectrum, displayed in an interactive plot window.
 
-The spectral display tool has a number of useful features and controls.
-See :numref:`eye_controls_image` and :numref:`eye_controls_table` for
-a quick summary.
-
-
 .. figure:: images/eye_controls.png
-   :name: eye_controls_image
+   :name: forcast_eye_controls_image
+   :alt: A GUI window showing a spectral plot and various buttons and
+         widgets to control the plot display.
 
    Control panels for the spectral viewer are located to the left and
    below the plot window.  Click the arrow icons to show or collapse
    them.
-
-.. table:: Spectral Viewer controls
-   :name: eye_controls_table
-   :widths: 30 30 40
-
-   +-----------------------------------+---------------------------+------------------------+
-   | **Feature**                       | **Control**               | **Keyboard shortcut**  |
-   +===================================+===========================+========================+
-   | Load new FITS file                | *File Choice -> Add File* |  --                    |
-   +-----------------------------------+---------------------------+------------------------+
-   | Remove loaded FITS file           | *File Choice ->*          |  Press *delete* in the |
-   |                                   | *Remove File*             |  *File Choice* panel   |
-   +-----------------------------------+---------------------------+------------------------+
-   | Plot selected file                | *File Choice ->*          |  --                    |
-   |                                   | *(double-click)*          |                        |
-   +-----------------------------------+---------------------------+------------------------+
-   | Add a new plot window (pane)      | *Panes ->*                |  --                    |
-   |                                   | *Add Pane*                |                        |
-   +-----------------------------------+---------------------------+------------------------+
-   | Remove a pane                     | *Panes ->*                |  Press *delete* in the |
-   |                                   | *Remove Pane*             |  *Panes* panel, or in  |
-   |                                   |                           |  the plot window       |
-   +-----------------------------------+---------------------------+------------------------+
-   | Show or hide a plot               | *Panes -> Pane # ->*      |  --                    |
-   |                                   | *File name -> Enabled*,   |                        |
-   |                                   | or click the *Hide all*/  |                        |
-   |                                   | *Show all* button         |                        |
-   +-----------------------------------+---------------------------+------------------------+
-   | Display a different X or Y        | *Axis ->*                 |  --                    |
-   | field (e.g. spectral error,       | *X Property* or           |                        |
-   | transmission, or response)        | *Y Property*              |                        |
-   +-----------------------------------+---------------------------+------------------------+
-   | Overplot a different Y axis       | *Axis ->*                 |  --                    |
-   | field (e.g. spectral error,       | *Overplot -> Enabled*     |                        |
-   | transmission, or response)        |                           |                        |
-   +-----------------------------------+---------------------------+------------------------+
-   | Change X or Y units               | *Axis ->*                 |  --                    |
-   |                                   | *X Unit* or               |                        |
-   |                                   | *Y Unit*                  |                        |
-   +-----------------------------------+---------------------------+------------------------+
-   | Change X or Y scale               | *Axis ->*                 |  --                    |
-   |                                   | *X Scale* or *Y Scale*    |                        |
-   |                                   | *-> Linear* or *Log*      |                        |
-   +-----------------------------------+---------------------------+------------------------+
-   | Interactive zoom                  | *Axis -> Zoom*:           |  In the plot window,   |
-   |                                   | *X*, *Y*, *Box*,          |  press *x*, *y*, or    |
-   |                                   | then click in the plot    |  *z* to start zoom mode|
-   |                                   | to set the limits; or     |  in x-direction,       |
-   |                                   | *Reset* to reset the      |  y-direction, or box   |
-   |                                   | limits to default.        |  mode, respectively.   |
-   |                                   |                           |  Click twice on the    |
-   |                                   |                           |  plot to set the new   |
-   |                                   |                           |  limits.  Press *w*    |
-   |                                   |                           |  to reset the plot     |
-   |                                   |                           |  limits to defaults.   |
-   +-----------------------------------+---------------------------+------------------------+
-   | Fit a spectral feature            | --                        |  In the plot window,   |
-   |                                   |                           |  press *f* to start    |
-   |                                   |                           |  the fitting mode.     |
-   |                                   |                           |  Click twice on the    |
-   |                                   |                           |  plot to set the data  |
-   |                                   |                           |  limits to fit.        |
-   +-----------------------------------+---------------------------+------------------------+
-   | Change the feature or baseline    | *Analysis -> Feature,*    |  --                    |
-   | fit model                         | *Background*              |                        |
-   +-----------------------------------+---------------------------+------------------------+
-   | Clear zoom or fit mode            | --                        |  In the plot window,   |
-   |                                   |                           |  press *c* to clear    |
-   |                                   |                           |  guides and return to  |
-   |                                   |                           |  default display mode. |
-   +-----------------------------------+---------------------------+------------------------+
-   | Change the plot color cycle       | *Plot ->                  |  --                    |
-   |                                   | Color cycle ->            |                        |
-   |                                   | Accessible*, *Spectral*   |                        |
-   |                                   | or *Tableau*              |                        |
-   +-----------------------------------+---------------------------+------------------------+
-   | Change the plot type              | *Plot -> Plot type ->     |  --                    |
-   |                                   | Step*, *Line*, or         |                        |
-   |                                   | *Scatter*                 |                        |
-   +-----------------------------------+---------------------------+------------------------+
-   | Change the plot display options   | *Plot ->                  |  --                    |
-   |                                   | Show markers*,            |                        |
-   |                                   | *Show errors*,            |                        |
-   |                                   | *Show grid*, or           |                        |
-   |                                   | *Dark mode*               |                        |
-   +-----------------------------------+---------------------------+------------------------+
-   | Display the cursor position       | *Cursor panel* ->         |  --                    |
-   |                                   | Check *Cursor Location*   |                        |
-   |                                   | for a quick display or    |                        |
-   |                                   | press *Popout* for full   |                        |
-   |                                   | information               |                        |
-   +-----------------------------------+---------------------------+------------------------+
-
 
 Useful Parameters
 ^^^^^^^^^^^^^^^^^
@@ -678,6 +616,9 @@ be optionally saved by selecting the 'save' parameter.
    -  *Skip dither stacking*: If set, common dither positions will not be
       stacked.  This is the default: dither stacking is only recommended
       for faint spectra that cannot otherwise be automatically extracted.
+
+   -  *Ignore dither information from header*: If set, all input files are
+      stacked regardless of dither position.
 
    -  *Combination method*: Mean is the default; median may also be useful
       for some input data.
@@ -719,6 +660,10 @@ be optionally saved by selecting the 'save' parameter.
    -  *Atmospheric transmission threshold*: Transmission values below this
       threshold are not considered when making the spatial profile.
       Values are 0-1.
+
+   -  *Simulate calibrations*: Simulate calibration values instead of using
+      the wave/space calibration file.  This option is primarily used for
+      testing.
 
 -  **Locate Apertures**
 
@@ -884,19 +829,19 @@ be optionally saved by selecting the 'save' parameter.
          FOR\_G111 grism, or for spectra with mean S/N less than the specified
          threshold.
 
-      -  *ATRAN directory*: If the *Optimize ATRAN correction*
-         parameter is set, this parameter specifies the location of the
-         library of ATRAN FITS files to use.  If the directory is invalid,
-         optimization will be disabled.
+      -  *ATRAN directory*: This parameter specifies the location of the
+         library of ATRAN FITS files to use.  If blank, the default files
+         provided with the pipeline will be used.  If optimization is desired,
+         this library must contain files parameterized by PWV.
 
-      -  *ATRAN file*: If the *Optimize ATRAN correction* parameter is
-         not set, this parameter will be used to determine the ATRAN file
+      -  *ATRAN file*: This parameter is used to override the ATRAN file
          to use for telluric correction. If blank, the default ATRAN
          file on disk will be used. Set to a valid FITS file path to override the
          default ATRAN file with a new one.
 
       -  *S/N threshold for optimization*: If the median S/N for a spectrum
-         is below this threshold, optimization will not be attempted.
+         is below this threshold, optimization will not be attempted.  Automatic
+         wavelength shifts will also not be attempted.
 
    -  Wavelength Shift Parameters
 
@@ -940,8 +885,8 @@ be optionally saved by selecting the 'save' parameter.
          the input data will be resampled into a 3D spatial/spectral cube
          instead of coadding 1D spectra and 2D images.
 
-      -  *Use weighted mean*: If set, the average of the data will be
-         weighted by the variance. Ignored for method=median.
+      -  *Weight by errors*: If set, the average of the data will be
+         weighted by the errors. Ignored for method=median.
 
 
    -  1-2D Combination Parameters
@@ -971,15 +916,10 @@ be optionally saved by selecting the 'save' parameter.
          much of the image edge is set to NaN.  Set higher to set more pixels
          to NaN.
 
-      -  *Adaptive smoothing threshold*: A float value 0 or higher that determines
-         how aggressively the smoothing kernel is adapted near sharp peaks.
-         Set to 0 to turn off (default); 1 is optimal, values between 0 and 1 may
-         produce a smoother fit.
-
--  **Make Response**
-
-   -  *Standard model file*: If blank, a model file will be searched for
-      in the default data directory.  Set to a valid FITS file to override.
+      -  *Adaptive smoothing algorithm*: If 'scaled', the size of the smoothing
+         kernel is allowed to vary, in order to optimize reconstruction of
+         sharply peaked sources. If 'shaped', the kernel shape and rotation
+         may also vary. If 'none', the kernel will not vary.
 
 -  **Make Spectral Map**
 
@@ -1020,6 +960,11 @@ be optionally saved by selecting the 'save' parameter.
    -  *Override spatial point for spectral cube*: Manually specify the
       spatial index for the spectrum, as 'x,y', zero-indexed.  Otherwise, the
       peak voxel in the cube is used to identify the spatial point.
+
+-  **Make Response**
+
+   -  *Standard model file*: If blank, a model file will be searched for
+      in the default data directory.  Set to a valid FITS file to override.
 
 
 Data Quality Assessment
@@ -1250,536 +1195,39 @@ calibration files, listed in :numref:`auxiliary`.  Some of these are produced
 by tools packaged with the pipeline.  This section describes the procedures
 used to produce these auxiliary files.
 
-Instrumental Response Curve
----------------------------
+.. |ref_wavecal_plots| replace:: :numref:`forcast_wavecal_plots`
 
-As described above, in the section on :ref:`response`, instrumental response
-curves are automatically produced for each spectrum with
-OBSTYPE = STANDARD_TELLURIC.  For use in calibrating science spectra,
-response curves from multiple observations must be combined together.
+.. |ref_spatcal_plots| replace:: :numref:`forcast_spatcal_plots`
 
-For appropriate combination, input response curves must share the same
-grism, slit, and detector bias setting.
+.. |ref_wavecal_residuals| replace:: :numref:`forcast_wavecal_residuals`
 
-Matching response curves may be scaled, to account for variations in slit
-loss or model accuracy, then are generally combined together with a robust
-weighted mean statistic.  The combined curve is smoothed with a Gaussian
-of width 2 pixels, to reduce artificial artifacts.  Averaged response curves
-for each grism and slit combination are usually produced for each
-flight series, and stored for pipeline use in the standard location
-(*sofia_redux/instruments/forcast/data/grism/response*).
+.. |ref_spatcal_residuals| replace:: :numref:`forcast_spatcal_residuals`
 
-The scaling, combination, and smoothing of instrument response curves is
-implemented as a final step in the pipeline for FORCAST grism standards.
-After individual *response_spectrum* files (\*RSP\*.fits) are grouped
-appropriately, the final step in the pipeline can be run on each group to
-produce the average *instrument_response* file (\*IRS\*.fits).
+.. include::  spectral_calibration.rst
 
-Useful Parameters
-~~~~~~~~~~~~~~~~~
-
-Below are some useful parameters for combining response spectra.
-
-- **Combine Response**
-
-   - Scaling Parameters
-
-      - *Scaling method*: If 'median', all spectra are scaled to the median
-        of the flux stack.  If 'highest', all spectra are scaled to the
-        spectrum with the highest median value.  If 'lowest', all spectra
-        are scaled to the spectrum with the lowest median value.  If
-        'index', all spectra are scaled to the spectrum indicated in the
-        *Index* parameter, below.  If 'none', no scaling is applied before
-        combination.
-
-      - *Index of spectrum to scale to*: If *Scaling method* is 'index', set
-        this value to the index of the spectrum to scale.  Indices start
-        at zero and refer to the position in the input file list.
-
-   - Combination Parameters
-
-      - *Combination method*: Mean is default; median may also be useful
-        for some input data.
-
-      - *Weight by errors*: If set, the average of the data will be
-        weighted by the variance. Ignored for method=median.
-
-      - *Robust combination*: If set, data will be sigma-clipped before
-        combination for mean or median methods.
-
-      - *Outlier rejection threshold (sigma)*: The sigma-clipping threshold
-        for robust combination methods, in units of sigma (standard deviation).
-
-   - Smoothing Parameters
-
-     - *Smoothing Gaussian FWHM*: Full-width-half-max for the Gaussian
-       kernel used for smoothing the final response spectrum, specified
-       in pixels.
-
-Wavelength Calibration Map
---------------------------
-
-Calibration Principles
-~~~~~~~~~~~~~~~~~~~~~~
-
-FORCAST grism wavelength and spatial calibrations are stored together in a
-single image extension in a FITS file, where the first plane is the wavelength
-calibration and the second is the spatial calibration.  The images should each
-be 256 x 256, assigning a wavelength value in um and a slit position
-in arcsec to every raw FORCAST pixel.
-
-These calibration files are generally derived from specialized calibration
-data.  Wavelength calibration is best derived from images for which strong
-emission or absorption lines fill the whole image, from top to bottom, and
-evenly spaced from left to right.  Sky data may be used for this purpose
-for some of the FORCAST grisms; lab data may be more appropriate for others.
-Raw data should be cleaned and averaged or summed to produce an image with as
-high a signal-to-noise ratio in the spectroscopic lines as possible.
-
-After preprocessing, the spectroscopic lines must be identified with specific
-wavelengths from a priori knowledge, then they must be re-identified with a
-centroiding algorithm at as many places across the array as possible.  The
-identified positions can then be fit with a smooth 2D surface, which provides
-the wavelength value in microns at any pixel, accounting for any optical
-distortions as needed.
-
-In principle, the spatial calibration proceeds similarly.  Spatial
-calibrations are best derived from identifiable spectral continuua that
-fill the whole array from left to right, evenly spaced from top to bottom.
-Most commonly, special observations of a spectroscopic standard are taken,
-placing the source at multiple locations in the slit.  These spectroscopic
-traces are identified then re-fit across the array.  The identified positions
-are again fit with a smooth 2D surface to provide the spatial position in
-arcseconds up the slit at any pixel.  This calibration can then be used to
-correct for spatial distortions, in the same way that the wavelength
-calibration is used to rectify distortions along the wavelength axis.
-
-Pipeline Interface
-~~~~~~~~~~~~~~~~~~
-
-The input data for calibration tasks is generally raw FORCAST FITS
-files, containing spectroscopic data.  In order to perform calibration steps
-instead of the standard spectroscopic pipeline, the pipeline interface
-requires a user-provided flag, either in an input configuration file, or
-on the command line, as for example::
-
-    redux_pipe -c wavecal=True /path/to/fits/files
-
-for a wavelength calibration reduction or::
-
-    redux_pipe -c spatcal=True /path/to/fits/files
-
-for a spatial calibration reduction.
-
-The first steps in either reduction mode are the same pre-processing steps
-used in the standard pipeline reduction: identify/clean bad pixels, correct
-for droop, nonlinearity, and crosstalk effects, stack chops and nods, and
-stack dithers.  The stacking steps have optional parameters that allow for
-the input data to be summed instead of subtracted (for calibration from
-sky lines), or to be summed instead of averaged (for combining multiple
-spectral traces into a single image).
-
-Thereafter, the *wavecal* reduction performs the following steps.  Each step
-has a number of tunable parameters; see below for parameter descriptions.
-
-    - **Make Profiles**: a spatial profile is generated from the
-      unrectified input image.
-
-    - **Extract First Spectrum**: an initial spectrum is extracted from
-      a single aperture, via a simple sum over a specified number of rows.
-
-    - **Identify Lines**: spectrosopic lines specified in an input list are
-      identified in the extracted spectrum, via Gaussian fits near guess
-      positions derived from user input or previous wavelength calibrations.
-
-    - **Reidentify Lines**: new spectra are extracted from the image at
-      locations across the array, and lines successfully identified in the
-      initial spectrum are attempted to be re-identified in each new spectrum.
-
-    - **Fit Lines**: all input line positions and their assumed wavelength
-      values are fit with a low-order polynomial surface.  The fit surface
-      is saved to disk as the wavelength calibration file.
-
-    - **Verify Rectification**: the derived wavelength calibration is applied
-      to the input image, to verify that correctly rectifies the spectral
-      image.
-
-After preprocessing, the *spatcal* reduction performs similar steps:
-
-    - **Make Profiles**: a spatial profile is generated from the
-      unrectified input image.
-
-    - **Locate Apertures**: spectral apertures are identified from the spatial
-      profile, either manually or automatically.
-
-    - **Trace Continuum**: spectrosopic continuuum positions are fit in
-      steps across the array, for each identified aperture.
-
-    - **Fit Traces**: all aperture trace positions are fit with a low-order
-      polynomial surface.  The fit surface is saved to disk as the spatial
-      calibration file.
-
-    - **Verify Rectification**: the derived spatial calibration is applied
-      to the input image, to verify that correctly rectifies the spectral
-      image.
-
-Intermediate data can also be saved after any of these steps, and can be
-later loaded and used as a starting point for subsequent steps, just as in
-the standard spectroscopic pipeline.  Parameter settings can also be saved
-in a configuration file, for later re-use or batch processing.
-
-Wavelength and spatial calibrations generally require different pre-processing
-steps, or different input data altogether, so they cannot be generated at the
-same time.  The pipeline interface will allow a previously generated wavelength
-or spatial calibration file to be combined together with the new one in the
-final input.  Optional previous spatial calibration input is provided to the
-*wavecal* process in the **Fit Lines** step; optional previous wavelength
-calibration input is provided to the  *spatcal* process in the **Fit Traces**
-step.  If a previously generated file is not provided, the output file will
-contain simulated data in the spatial or wavelength plane, as appropriate.
-
-Reference Data
-~~~~~~~~~~~~~~
-
-Line lists for wavelength calibration are stored in the standard reference
-data directory for the FORCAST pipeline
-(*sofia_redux/instruments/forcast/data/grism/line_lists*).  In these lists,
-commented lines (beginning with '#') are used for display only; uncommented
-lines are attempted to be fit.  Initial guesses for the pixel position of
-the line may be taken from a previous wavelength calibration, or from a
-low-order fit to wavelength/position pairs input by the user.  Default
-wavelength calibration files and line lists may be set by date, in the usual
-way for the FORCAST pipeline (see
-*sofia_redux/instruments/forcast/data/grism/caldefault.txt*).
-
-Spatial calibration uses only the assumed slit height in pixels and arcsec
-as input data, as stored in the reference files in
-*sofia_redux/instruments/forcast/data/grism/order_mask*.  These values are not
-expected to change over time.
-
-Display Tools
-~~~~~~~~~~~~~
-
-The pipeline incorporates several display tools for diagnostic purposes.
-In addition to the DS9 display of the input and intermediate FITS files,
-spatial profiles and extracted spectra are displayed in separate windows,
-as in the standard spectroscopic pipeline. Identified lines for *wavecal*
-are marked in the spectral display window (:numref:`forcast_wavecal_plots`);
-identified apertures for *spatcal* are marked in the spatial profile window
-(:numref:`forcast_spatcal_plots`).  Fit positions
-and lines of constant wavelength or spatial position are displayed as
-DS9 regions.  These region files are
-also saved to disk, for later analysis.  Finally, after the line or trace
-positions have been fit, a plot of the residuals, against X and Y position
-is displayed in a separate window (:numref:`forcast_wavecal_residuals`
-and :numref:`forcast_spatcal_residuals`). This plot is also saved to disk,
-as a PNG file.
-
-
-.. figure:: images/forcast_wavecal_plots.png
+.. figure:: images/wavecal_plots.png
    :name: forcast_wavecal_plots
+   :alt: The Redux GUI window, several spectral plot displays with lines marked,
+         and a DS9 window showing a spectral image.
 
-   FORCAST wavecal mode reduction and diagnostic plots.
+   Wavecal mode reduction and diagnostic plots.
 
-.. figure:: images/forcast_spatcal_plots.png
+.. figure:: images/spatcal_plots.png
    :name: forcast_spatcal_plots
+   :alt: GUI window, spatial profile plot display, and a DS9 window with a spectral image.
 
-   FORCAST spatcal mode reduction and diagnostic plots.
+   Spatcal mode reduction and diagnostic plots.
 
-.. figure:: images/forcast_wavecal_residuals.png
+.. figure:: images/wavecal_residuals.png
    :name: forcast_wavecal_residuals
+   :alt: An image marked with positions and vertical fit lines and a plot window
+         showing fit residuals in X and Y.
 
-   FORCAST wavecal mode fit surface and residuals.
+   Wavecal mode fit surface and residuals.
 
-.. figure:: images/forcast_spatcal_residuals.png
+.. figure:: images/spatcal_residuals.png
    :name: forcast_spatcal_residuals
+   :alt: An image marked with positions and horizontal fit lines and a plot window
+         showing fit residuals in X and Y.
 
-   FORCAST spatcal mode fit surface and residuals.
-
-Useful Parameters
-~~~~~~~~~~~~~~~~~
-
-Some key parameters used specifically for the calibration modes are listed
-below.  See above for descriptions of parameters for the steps shared with
-the standard pipeline.
-
-Wavecal Mode
-^^^^^^^^^^^^
-
--  **Stack Chops/Nods**
-
-   -  *Add all frames instead of subtracting*: This option may be useful for
-      generating a sky frame for wavelength calibration.  If set, the
-      instrument mode will be ignored and all chops and nods will be
-      added.
-
-- **Stack Dithers**
-
-   - *Ignore dither information from header*: This option allows all
-     input dithers to be combined together, regardless of the dither
-     information in the header.  This option may be useful in generating
-     a high signal-to-noise image for wavelength identification.
-
-- **Extract First Spectrum**
-
-   - *Save extracted 1D spectra*: If set, a 1D spectrum is saved to disk
-     in Spextool format.  This may be useful for identifying line locations
-     in external interactive tools like xvspec (in the IDL Spextool package).
-
-   - *Aperture location method*: If 'auto', the most significant peak
-     in the spatial profile is selected as the initial spectrum region,
-     and the aperture radius is determined from the FWHM of the peak.
-     If 'fix to center', the center pixel of the slit is used as the
-     aperture location.  If 'fix to input', the value specified as the
-     aperture position is used as the aperture location.
-
-   - *Polynomial order for spectrum detrend*: If set to an integer 0
-     or higher, the extracted spectrum will be fit with a low order
-     polynomial, and this fit will be subtracted from the spectrum.  This
-     option may be useful to flatten a spectrum with a a strong trend,
-     which can otherwise interfere with line fits.
-
-- **Identify Lines**
-
-   - *Wave/space calibration file*: A previously generated wavelength
-     calibration file, to use for generating initial guesses of line
-     positions.  If a significant shift is expected from the last wavelength
-     calibration, the 'Guess' parameters below should be used instead.
-
-   - *Line list*: List of wavelengths to fit in the extracted spectrum.
-     Wavelengths should be listed, one per line, in microns.  If commented
-     out with a '#', the line will be displayed in the spectrum as a dotted
-     line, but a fit to it will not be attempted.
-
-   - *Line type*: If 'absorption', only concave lines will be expected.  If
-     'emission', only convex lines are expected.  If 'either', concave and
-     convex lines may be fit.  Fit results for faint lines are generally
-     better if either 'absorption' or 'emission' can be specified.
-
-   - *Fit window*: Window (in pixels) around the guess position used as the
-     fitting data.  Smaller windows may result in more robust fits for faint
-     lines, if the guess positions are sufficiently accurate.
-
-   - *Expected line width (pixel)*: FWHM expected for the fit lines.
-
-   - *Guess wavelengths*: Comma-separated list of wavelengths for known
-     lines in the extracted spectrum.  If specified, must match the list
-     provided for *Guess wavelength position*, and the *Wave/space calibration
-     file* will be ignored.  If two values are provided, they will be fit with
-     a first-order polynomial to provide wavelength position guesses for
-     fitting. Three or more values will be fit with a second-order polynomial.
-
-   - *Guess wavelength position*: Comma-separated list of pixel positions for
-     known lines in the image.  Must match the provided *Guess wavelengths*.
-
-- **Reidentify Lines**
-
-   - *Save extracted 1D spectra*: If set, all extracted spectra are saved to
-     disk in Spextool format, for more detailed inspection and analysis.
-
-   - *Aperture location method*: If 'step up slit', apertures will be placed
-     at regular intervals up the slit, with step size specified in *Step size*
-     and radius specified in *Aperture radius*.  If 'fix to input', then
-     apertures will be at the locations specified by *Aperture position*
-     and radius specified in *Aperture radius*.  If 'auto', apertures will
-     be automatically determined from the spatial profile.
-
-   - *Number of auto apertures*: If *Aperture location method* is 'auto',
-     this many apertures will be automatically located.
-
-   - *Aperture position*: Comma-separated list of aperture positions in pixels.
-     Apertures in multiple input files may also be specified, using
-     semi-colons to separate file input.
-     If *Aperture location method* is 'auto', these will be used as starting
-     points.  If 'fix to input', they will be used directly.
-
-   - *Aperture radius*: Width of the extracted aperture, in pixels.  The
-     radius may be larger than the step, allowing for overlapping spectra.
-     This may help get higher S/N for extracted spectra in sky frames.
-
-   - *Polynomial order for spectrum detrend*: As for the Extract First Spectrum
-     step, setting this parameter to an integer 0 or higher will detrend
-     it.  If detrending is used for the earlier step, it is recommended
-     for this one as well.
-
-   - *Fit window*: Window (in pixels) around the guess position used as the
-     fitting data.  The guess position used is the position in the initial
-     spectrum, so this window must be wide enough to allow for any curvature
-     in the line.
-
-   - *Signal-to-noise requirement*: Spectral S/N value in sigma, below
-     which a fit will not be attempted at that line position in that
-     extracted spectrum.
-
-- **Fit Lines**
-
-   - *Fit order for X*: Polynomial surface fit order in the X direction.
-     Orders 2-4 are recommended.
-
-   - *Fit order for Y*: Polynomial surface fit order in the Y direction.
-     Orders 2-4 are recommended.
-
-   - *Weight by line height*: If set, the surface fit will be weighted
-     by the height of the line at the fit position.  This can be useful
-     if there is a good mix of strong and weak lines across the array.
-     If there is an imbalance of strong and weak lines across the array,
-     this option may throw the fit off at the edges.
-
-   - *Spatial calibration file*: If provided, the spatial calibration plane
-     in the specified file will be combined with the wavelength fit to
-     produce the output calibration file (\*WCL\*.fits).  The default is the
-     wavelength calibration file from the previous series.  If not provided,
-     a simulated flat spatial calibration will be produced and attached to
-     the output calibration file.
-
-Spatcal Mode
-^^^^^^^^^^^^
-
-Aperture location and continuum tracing follow the standard spectroscopic
-method, with the exception that units are all in pixels rather than
-arcseconds.  See above for descriptions of the parameters for the
-Locate Apertures and Trace Continuum steps.
-
-See the *wavecal* mode descriptions, above, for useful parameters for
-the Stack and Stack Dithers steps.
-
-- **Fit Trace Positions**
-
-   - *Fit order for X*: Polynomial surface fit order in the X direction.
-     Orders 2-4 are recommended.
-
-   - *Fit order for Y*: Polynomial surface fit order in the Y direction.
-     Orders 2-4 are recommended.
-
-   - *Weight by profile height*: If set, the surface fit will be weighted
-     by the height of the aperture in the spatial map at the fit position.
-
-   - *Wavelength calibration file*: If provided, the wavelength calibration
-     plane in the specified file will be combined with the spatial fit to
-     produce the output calibration file (\*SCL\*.fits).  The default is the
-     wavelength calibration file from the previous series.  If not provided,
-     pixel positions will be stored in the wavelength calibration plane in
-     the output file.
-
-Slit Correction Image
----------------------
-
-The response spectra used to flux-calibrate FORCAST spectroscopy
-data encode variations in instrument response in the spectral dimension,
-but do not account for variations in response in the spatial dimension. For
-compact sources, spatial response variations have minimal impact on the
-extracted 1D spectrum, but for extended targets or SLITSCAN observations, they
-should be corrected for.
-
-To do so, the pipeline divides out a flat field, called a slit correction
-image, that contains normalized variations in response in the spatial
-dimension only.
-
-These slit correction images can be derived from wavelength-rectified
-sky frames, as follows:
-
-    1. Median spectra are extracted at regular positions across the frame.
-    #. All spectra are divided by the spectrum nearest the center of
-       the slit.
-    #. The normalized spectra are fit with a low-order polynomial to derive
-       smooth average response variations across the full array.
-
-The fit surface is the slit correction image.  It is stored as a single
-extension FITS image, and can be provided to the standard spectroscopic
-pipeline at the Make Profiles step.  These images should be regenerated
-whenever the wavelength and spatial calibrations are updated, since the slit
-correction image matches the rectified dimensions of the spectral data,
-not the raw dimensions.
-
-Pipeline Interface
-~~~~~~~~~~~~~~~~~~
-
-Similar to the *wavecal* and *spatcal* modes described above, the pipeline
-provides a *slitcorr* mode to produce slit correction images starting from
-raw FORCAST FITS files.  This mode can be invoked with a configuration flag::
-
-    redux_pipe -c slitcorr=True /path/to/fits/files
-
-
-The pre-processing steps in *slitcorr* reduction mode are the same as in the
-standard pipeline reduction, except that the default for the stacking steps
-is to add all chop/nod frames and average all input files, to produce a
-high-quality sky frame.  Rectification and spatial profile generation also
-proceeds as usual, using the latest available wavelength calibration file.
-
-Thereafter, the *slitcorr* reduction performs the following steps.  Each step
-has a number of tunable parameters; see below for parameter descriptions.
-
-    - **Locate Apertures**: a number of apertures are spaced evenly
-      across the slit.
-
-    - **Extract Median Spectra**: flux data is median-combined at each
-      wavelength position for each aperture.
-
-    - **Normalize Response**: median spectra are divided by the spectrum
-      nearest the center of the slit.  The 2D flux image is similarly
-      normalized, for reference.
-
-    - **Make Slit Correction**: the normalized spectra are fit with a
-      low-order polynomial to produce a smooth slit correction surface
-      that matches the rectified data dimensions.
-
-Intermediate data can also be saved after any of these steps, and can be
-later loaded and used as a starting point for subsequent steps, just as in
-the standard spectroscopic pipeline.  Parameter settings can also be saved
-in a configuration file, for later re-use or batch processing.
-
-Useful Parameters
-~~~~~~~~~~~~~~~~~
-
-Some key parameters used specifically for the *slitcorr* mode are listed
-below.  See above for descriptions of parameters for the steps shared with
-the standard pipeline.
-
--  **Locate Apertures**
-
-   -  *Number of apertures*: For this mode, apertures are evenly spaced
-      across the array.  Specify the desired number of apertures. The
-      radius for each aperture is automatically assigned to not overlap
-      with its neighbors.
-
-- **Extract Median Spectra**
-
-   - *Save extracted 1D spectra*: If set, all extracted spectra are saved to
-     disk in a FITS file in Spextool format, for inspection.
-
-- **Normalize Response**
-
-   - *Save extracted 1D spectra*: Save normalized spectra to disk in
-     Spextool format.
-
-- **Make Slit Correction**
-
-   - General Parameters
-
-      - *Fit method*: If '2D', a single surface is fit to all the normalized
-        spectral data, producing a smooth low-order polynomial surface.  If
-        '1D', polynomial fits are performed in the y-direction only, at
-        each wavelength position, then are smoothed in the x-direction
-        with a uniform (boxcar) filter.  The 1D option may preserve
-        higher-order response variations in the x-direction; the 2D option
-        will produce a smoother surface.
-
-      - *Weight by spectral error*: If set, the polynomial fits will be
-        weighted by the error propagated for the normalized median spectra.
-
-   - Parameters for 2D fit
-
-      - *Fit order for X*: Polynomial surface fit order in the X direction.
-        Orders 2-4 are recommended.
-
-      - *Fit order for Y*: Polynomial surface fit order in the Y direction.
-        Orders 2-4 are recommended.
-
-   - Parameters for 1D fit
-
-      - *Fit order for Y*: Polynomial fit order in the Y direction.
-        Orders 2-4 are recommended.
-
-      - *Smoothing window for X*: Boxcar width for smoothing in X direction,
-        in pixels.
+   Spatcal mode fit surface and residuals.

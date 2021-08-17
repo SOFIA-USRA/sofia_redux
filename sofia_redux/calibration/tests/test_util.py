@@ -507,8 +507,9 @@ class TestUtil(object):
         # raises error if alt/za not available
         del test['ZA_START']
         del test['ZA_END']
-        with pytest.raises(PipeCalError):
+        with pytest.raises(PipeCalError) as err:
             util.apply_tellcor(image, test, config)
+        assert 'Response data not found' in str(err)
 
     def test_run_phot(self, capsys, mocker):
         hdul = resources.forcast_data()

@@ -13,7 +13,7 @@ This guide describes the data produced by the SOFIA/FORCAST data reduction
 pipeline (Redux) for guest investigators. The FORCAST observing modes for
 both imaging and spectroscopic observations are described in the SOFIA
 Observer’s Handbook, available from the
-`Proposing and Observing <https://www.sofia.usra.edu/science/proposing-and-observing>`_
+`Proposing and Observing <https://www.sofia.usra.edu/science/proposing-and-observing>`__
 page on the SOFIA website.
 
 This handbook applies to FORCAST Redux version 2.3.0.

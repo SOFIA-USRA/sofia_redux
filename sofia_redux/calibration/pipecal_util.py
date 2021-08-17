@@ -667,10 +667,20 @@ def apply_tellcor(data, header, config, variance=None, covariance=None):
         If covariance is provided, the return value is
         (data, variance, covariance); if the variance was not provided,
         it will be set to None.
+
+    Raises
+    ------
+    PipeCalError
+        If no valid telluric correction factor is found.
     """
 
     # correction factor to reference Alt/ZA
-    corr_fac = get_tellcor_factor(header, config, update=True)
+    try:
+        corr_fac = get_tellcor_factor(header, config, update=True)
+    except (KeyError, AttributeError, ValueError, TypeError) as err:
+        log.debug(str(err))
+        raise PipeCalError('Response data not found; cannot apply '
+                           'telluric correction') from None
 
     # correct data and variance
     corrdata = data * corr_fac

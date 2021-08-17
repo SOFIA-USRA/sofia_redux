@@ -19,6 +19,9 @@ class TestCoadd(object):
             test['header']['CRVAL1A'] = test['header']['CRVAL1']
             test['header']['CRVAL2A'] = test['header']['CRVAL2']
             test['header']['CRVAL3A'] = 1
+            test['header']['CDELT1A'] = test['header']['CDELT1']
+            test['header']['CDELT2A'] = test['header']['CDELT2']
+            test['header']['CDELT3A'] = 1
         for i in range(nfiles):
             h0 = test['header'].copy()
             if spec_style:
@@ -143,6 +146,10 @@ class TestCoadd(object):
     def test_target_xy(self, capsys):
         h, d, v, e = self.make_test_data(nfiles=2, spec_style=True)
 
+        # make sure pixel scale is 1
+        h[0]['CDELT1'] = 1
+        h[0]['CDELT1A'] = 1
+
         outwcs_img = WCS(h[0], key=' ')
         outwcs_spc = WCS(h[0], key='A')
 
@@ -236,12 +243,11 @@ class TestCoadd(object):
         assert np.allclose(np.nanmean(result2[1]), 1.5)
         assert 'No good data in test3.fits' in capsys.readouterr().err
 
-        # all data bad in second and third file: throws error since
-        # there is only 1 remaining
-        d[0] *= np.nan
-        with pytest.raises(ValueError) as err:
-            coadd(h, d, v, e, weighted=False, robust=False)
-        assert 'Only one image provided' in str(err)
+        # all data bad in second and third file:
+        # only one image remaining, but allows output anyway
+        d[1] *= np.nan
+        result = coadd(h, d, v, e, weighted=False, robust=False)
+        assert np.allclose(np.nanmean(result[1]), 1)
 
     def test_rotate_keys(self):
         h, d, v, e = self.make_test_data(nfiles=2, spec_style=False)
@@ -254,6 +260,11 @@ class TestCoadd(object):
         # rotate: crota2 out is 0
         rot = coadd(h, d, v, e, rotate=True)
         assert np.allclose(rot[0]['CROTA2'], 0.0)
+
+        # rotate: cdelt1 out is negative
+        h[0]['CDELT1'] = np.abs(h[0]['CDELT1'])
+        rot = coadd(h, d, v, e, rotate=True)
+        assert rot[0]['CDELT1'] < 0.0
 
         # make spectral style data
         h, d, v, e = self.make_test_data(nfiles=2, spec_style=True)

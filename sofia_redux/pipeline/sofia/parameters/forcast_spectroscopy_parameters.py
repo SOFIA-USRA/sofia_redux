@@ -392,8 +392,7 @@ SPECTRAL_DEFAULT = {
         {'key': 'atrandir',
          'name': 'ATRAN directory',
          'value': '$DPS_SHARE/calibrations/ATRAN/fits',
-         'description': 'Directory containing ATRAN data by WV, '
-                        'for use in optimization.',
+         'description': 'Directory containing ATRAN data.',
          'dtype': 'str',
          'wtype': 'pick_directory'},
         {'key': 'atranfile',

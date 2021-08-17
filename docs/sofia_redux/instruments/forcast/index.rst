@@ -28,8 +28,8 @@ Reference/API
 .. automodapi:: sofia_redux.instruments.forcast.getmodel
 .. automodapi:: sofia_redux.instruments.forcast.getpar
 .. automodapi:: sofia_redux.instruments.forcast.hdcheck
+.. automodapi:: sofia_redux.instruments.forcast.hdmerge
 .. automodapi:: sofia_redux.instruments.forcast.hdrequirements
-.. automodapi:: sofia_redux.instruments.forcast.header
 .. automodapi:: sofia_redux.instruments.forcast.imgnonlin
 .. automodapi:: sofia_redux.instruments.forcast.imgshift_header
 .. automodapi:: sofia_redux.instruments.forcast.jbclean

@@ -221,7 +221,13 @@ class QADImView(object):
             for fr in frame_regions:
                 if cs == 'wcs':
                     # convert to a pixel region first
-                    fr = fr.to_pixel(hwcs)
+                    try:
+                        fr = fr.to_pixel(hwcs)
+                    except Exception as err:  # pragma: no cover
+                        # error could be anything, since regions package
+                        # is in early development state
+                        log.debug(f'Region WCS conversion error: {err}')
+                        continue
 
                 # check if cursor is contained in a region
                 # in any frame
@@ -381,7 +387,8 @@ class QADImView(object):
                     short_reg_name = 'full'
                     hist_data = fulldata
                 else:
-                    log.info(f'Using the analysis window (width: {wdw} pixels)')
+                    log.info(f'Using the analysis window '
+                             f'(width: {wdw} pixels)')
                     reg_name = f'{wdw} pixel window'
                     short_reg_name = f'x={xctr:.0f} y={yctr:.0f} {wdw}pix'
                     hist_data = data
@@ -436,7 +443,8 @@ class QADImView(object):
                 for vdata, vlabel, vstyle in zip(vlines, vlabels, vstyles):
                     overplots.append({'plot_type': 'vline',
                                       'args': [vdata],
-                                      'kwargs': {'label': vlabel, 'color': 'gray',
+                                      'kwargs': {'label': vlabel,
+                                                 'color': 'gray',
                                                  'linewidth': 1,
                                                  'linestyle': vstyle}})
                 overplots.append({'plot_type': 'legend', 'args': []})
@@ -1588,7 +1596,8 @@ class QADImView(object):
                     short_reg_name = 'full'
                     p2p_data = fulldata
                 else:
-                    log.info(f'Using the analysis window (width: {wdw} pixels)')
+                    log.info(f'Using the analysis window '
+                             f'(width: {wdw} pixels)')
                     reg_name[frame] = f'{wdw} pixel window'
                     short_reg_name = f'x={xctr:.0f} y={yctr:.0f} {wdw}pix'
                     p2p_data = data
@@ -1634,7 +1643,8 @@ class QADImView(object):
                     f'{reg_name[ref_frame]}'
             legend = {'plot_type': 'legend', 'args': []}
             line = {'plot_type': 'line', 'args': [mp],
-                    'kwargs': {'linestyle': ':', 'color': 'gray', 'slope': 1.0}}
+                    'kwargs': {'linestyle': ':', 'color': 'gray',
+                               'slope': 1.0}}
             if param['separate_plots'] or len(self.p2p_data) < 1:
                 overplots.extend([line, legend])
                 plot_data = {'args': [],

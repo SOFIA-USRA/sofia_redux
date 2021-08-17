@@ -323,6 +323,7 @@ data is additionally displayed by the `MatplotlibViewer` class.
 
 .. figure:: images/redux_classes.png
    :name: forcast_redux_class
+   :alt: UML diagram showing inheritance of FORCAST reduction classes.
 
    FORCAST Redux class diagram.
 
@@ -366,9 +367,9 @@ sofia_redux.instruments.forcast
    :headings: ~^
 .. automodapi:: sofia_redux.instruments.forcast.hdcheck
    :headings: ~^
-.. automodapi:: sofia_redux.instruments.forcast.hdrequirements
+.. automodapi:: sofia_redux.instruments.forcast.hdmerge
    :headings: ~^
-.. automodapi:: sofia_redux.instruments.forcast.header
+.. automodapi:: sofia_redux.instruments.forcast.hdrequirements
    :headings: ~^
 .. automodapi:: sofia_redux.instruments.forcast.imgnonlin
    :headings: ~^

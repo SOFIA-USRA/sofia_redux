@@ -457,7 +457,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
         The combination method may be configured in parameters,
         or skipped entirely.
         """
-        from sofia_redux.instruments.forcast.header import hdmerge
+        from sofia_redux.instruments.forcast.hdmerge import hdmerge
         from sofia_redux.toolkit.image.combine import combine_images
 
         # get parameters
@@ -615,7 +615,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
 
             # if a waveshift is specified in configuration, apply
             # it directly
-            if 'waveshift' in self.calres and self.calres['waveshift'] !=0:
+            if 'waveshift' in self.calres and self.calres['waveshift'] != 0:
                 waveshift = self.calres['waveshift']
                 log.info(f'Applying default waveshift of {waveshift} '
                          f'for {mode}')
@@ -1461,7 +1461,9 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
             # update flux, error, and mask planes -- they may have had
             # bad pixels corrected in the extraction process
             hdul['FLUX'].data = rectimg[1]['image']
-            hdul['ERROR'].data = np.sqrt(rectimg[1]['variance'])
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', RuntimeWarning)
+                hdul['ERROR'].data = np.sqrt(rectimg[1]['variance'])
             boolmask = rectimg[1]['mask']
             mask = np.zeros(boolmask.shape, dtype=int)
             mask[~boolmask] = 1
@@ -1483,11 +1485,18 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
                      header.get('BUNIT', 'UNKNOWN'), 'Data units')
 
             # attach an approximate transmission
-            atran = get_atran(hdul[0].header, self.calres['resolution'])
+            atran_dir = os.path.join(self.calres['pathcal'],
+                                     'grism', 'atran')
+            atran = get_atran(hdul[0].header, self.calres['resolution'],
+                              atran_dir=atran_dir,
+                              wmin=self.calres['wmin'],
+                              wmax=self.calres['wmax'])
             outtrans = np.interp(hdul['WAVEPOS'].data, atran[0], atran[1],
                                  left=np.nan, right=np.nan)
+            tdata = np.full_like(spectra[:, 1, :], np.nan)
+            tdata[:] = outtrans
             exthead = hdul['SPECTRAL_FLUX'].header.copy()
-            hdul.append(fits.ImageHDU(outtrans, exthead,
+            hdul.append(fits.ImageHDU(tdata, exthead,
                                       name='TRANSMISSION'))
             hdinsert(hdul['TRANSMISSION'].header, 'BUNIT', '', 'Data units')
 
@@ -1533,14 +1542,17 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
             header = hdul[0].header
             spec_flux = hdul['SPECTRAL_FLUX'].data
             spec_err = hdul['SPECTRAL_ERROR'].data
+            spec_trans = hdul['TRANSMISSION'].data
 
             # if only 1 aperture, just reshape to 1D
             if spec_flux.ndim < 2 or spec_flux.shape[0] < 2:
                 log.info('Only one aperture; no merge to perform.')
                 spec_flux = spec_flux.reshape(spec_flux.size)
                 spec_err = spec_err.reshape(spec_err.size)
+                spec_trans = spec_trans.reshape(spec_err.size)
             else:
                 n_aps = spec_flux.shape[0]
+                spec_trans = spec_trans[0]
 
                 # scale to highest flux spectrum
                 medflux = np.nanmedian(spec_flux, axis=1)
@@ -1579,6 +1591,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
             # update data
             hdul['SPECTRAL_FLUX'].data = spec_flux
             hdul['SPECTRAL_ERROR'].data = spec_err
+            hdul['TRANSMISSION'].data = spec_trans
 
             # update output name
             outname = self.update_output(hdul, self.filenum[i],
@@ -2003,7 +2016,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
         else:
             hdinsert(spechdr, 'XUNITS', 'pixels', 'Spectral wavelength units')
         hdinsert(spechdr, 'YUNITS',
-                 hdul['SPECTRAL_FLUX'].header['BUNIT'],
+                 hdul['SPECTRAL_FLUX'].header.get('BUNIT', 'UNKNOWN'),
                  'Spectral flux units')
         if hdul['SPECTRAL_FLUX'].data.ndim > 1:
             naps = hdul['SPECTRAL_FLUX'].data.shape[0]
@@ -2064,7 +2077,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
         for coaddition. The combination method may be configured in
         parameters.
         """
-        from sofia_redux.instruments.forcast.header import hdmerge
+        from sofia_redux.instruments.forcast.hdmerge import hdmerge
         from sofia_redux.instruments.forcast.coadd import coadd
         from sofia_redux.instruments.forcast.register_datasets \
             import get_shifts
@@ -2142,6 +2155,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
                 specresp = hdul['RESPONSE'].data
             else:
                 specresp = None
+
             if specflux.ndim > 1:
                 n_ap = specflux.shape[0]
                 if n_ap == 1:
@@ -2168,7 +2182,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
                     resp_list.append(specresp)
 
             exp_list.append(np.full_like(hdul['FLUX'].data,
-                                         hdul[0].header['EXPTIME']))
+                                         hdul[0].header.get('EXPTIME', 0.0)))
 
         reference = 'first'
         if 'header' in registration.lower():
@@ -2279,7 +2293,8 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
         template = self.input[0]
         primary = fits.PrimaryHDU(data=outdata, header=outhdr)
         hdul = fits.HDUList(primary)
-        hdinsert(errhead, 'BUNIT', outhdr['BUNIT'], 'Data units')
+        hdinsert(errhead, 'BUNIT', outhdr.get('BUNIT', 'UNKNOWN'),
+                 'Data units')
         hdul.append(fits.ImageHDU(data=np.sqrt(outvar),
                                   header=errhead,
                                   name='ERROR'))
@@ -2445,7 +2460,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
 
     def combine_response(self):
         """Scale, combine, and smooth instrument response."""
-        from sofia_redux.instruments.forcast.header import hdmerge
+        from sofia_redux.instruments.forcast.hdmerge import hdmerge
         from sofia_redux.spectroscopy.getspecscale import getspecscale
         from sofia_redux.toolkit.image.combine import combine_images
 
@@ -2481,7 +2496,10 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
                 spec_var = hdul[0].data[2] ** 2
                 spec_tran = hdul[0].data[3]
             if i == 0:
-                test_wave = spec_wave
+                if combine_aps and n_ap > 1:
+                    test_wave = spec_wave[0]
+                else:
+                    test_wave = spec_wave
             else:
                 if not np.allclose(spec_wave, test_wave):
                     msg = 'Mismatched wavelengths. Spectra cannot be combined.'

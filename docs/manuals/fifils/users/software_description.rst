@@ -191,14 +191,81 @@ files.
    +------------------------+------------+-----------------------------+-----------------------------------------------------------------------------+
 
 
-Redux Usage
------------
+.. redux usage section
 
-Redux usage is documented in the `sofia_redux.pipeline` package.
+.. |ref_startup| replace:: :numref:`fifi_ls_startup`
 
-.. toctree::
+.. |ref_open_new| replace:: :numref:`fifi_ls_open_new`
 
-   redux_doc
+.. |ref_reduction_steps| replace:: :numref:`fifi_ls_reduction_steps`
+
+.. |ref_parameters| replace:: :numref:`fifi_ls_parameters`
+
+.. |ref_file_info| replace:: :numref:`fifi_ls_file_info`
+
+.. |ref_data_view| replace:: :numref:`fifi_ls_data_view`
+
+.. |ref_headers| replace:: :numref:`fifi_ls_headers`
+
+.. include:: ../../../sofia_redux/pipeline/usage/startup.rst
+
+.. figure:: images/startup.png
+   :name: fifi_ls_startup
+   :alt: Startup screen showing an outline of an airplane with an open
+         telescope door on a blue background showing faint spiral arms
+         and stylized stars.
+
+   Redux GUI startup.
+
+.. include:: ../../../sofia_redux/pipeline/usage/open.rst
+
+.. figure:: images/open_new.png
+   :name: fifi_ls_open_new
+   :alt: File system dialog window showing selected filenames.
+
+   Open new reduction.
+
+.. figure:: images/reduction_steps.png
+   :name: fifi_ls_reduction_steps
+   :alt: GUI window showing reduction steps with Edit and Run buttons.
+         A log window is displayed with text messages from a reduction.
+
+   Sample reduction steps. Log output from the pipeline is
+   displayed in the **Log** tab.
+
+.. include:: ../../../sofia_redux/pipeline/usage/params.rst
+
+.. figure:: images/parameters.png
+   :name: fifi_ls_parameters
+   :alt: An Edit Parameters dialog window, showing various selection
+         widgets.
+
+   Sample parameter editor for a pipeline step.
+
+.. include:: ../../../sofia_redux/pipeline/usage/info.rst
+
+.. figure:: images/file_info.png
+   :name: fifi_ls_file_info
+   :alt: A table display showing filenames and FITS keyword values.
+
+   File information table.
+
+.. include:: ../../../sofia_redux/pipeline/usage/view.rst
+
+.. figure:: images/data_view.png
+   :name: fifi_ls_data_view
+   :alt: Data viewer settings with various widgets and buttons to control
+         display parameters and analysis tools.
+
+   Data viewer settings and tools.
+
+.. include:: ../../../sofia_redux/pipeline/usage/headers.rst
+
+.. figure:: images/headers.png
+   :name: fifi_ls_headers
+   :alt: A dialog window showing a sample FITS header in plain text.
+
+   QAD FITS header viewer.
 
 FIFI-LS Reduction
 -----------------
@@ -389,7 +456,8 @@ Some key parameters to note are listed below.
          pixels to NaN.  Set lower to block fewer pixels.
 
       -  *Adaptive smoothing algorithm*: If 'scaled', the size of the smoothing
-         kernel is allowed to vary. If 'shaped', the kernel shape and rotation
+         kernel is allowed to vary, in order to optimize reconstruction of
+         sharply peaked sources. If 'shaped', the kernel shape and rotation
          may also vary. If 'none', the kernel will not vary.
 
    - Spectral resampling parameters

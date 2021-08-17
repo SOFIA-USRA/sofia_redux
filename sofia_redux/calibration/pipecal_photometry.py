@@ -314,8 +314,13 @@ def pipecal_photometry(image, variance, srcpos=None,
             sigma[key] = 0.
         fitpars['col_mean'] = col_cen
         fitpars['row_mean'] = row_cen
-        fitpars['dpeak'] = subim[int(np.round(row_cen)),
-                                 int(np.round(col_cen))]
+        try:
+            fitpars['dpeak'] = subim[int(np.round(row_cen)),
+                                     int(np.round(col_cen))]
+        except IndexError:  # pragma: no cover
+            # catch for bad center definition
+            pass
+
         factor = 1.
         factor_err = 0.
         pfactor = 1.

@@ -79,13 +79,16 @@ Architecture
 Usage
 =====
 
-.. toctree::
-   redux_usage.rst
+.. include:: redux_usage.rst
 
 Reference/API
 =============
 
 .. automodapi:: sofia_redux.pipeline
+   :headings: -~^
 .. automodapi:: sofia_redux.pipeline.gui
+   :headings: -~^
 .. automodapi:: sofia_redux.pipeline.gui.qad
+   :headings: -~^
 .. automodapi:: sofia_redux.pipeline.sofia
+   :headings: -~^

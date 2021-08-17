@@ -92,13 +92,13 @@ class TestConfig(object):
         with pytest.raises(PipeCalError):
             read_respfile(str(badfile), spectel)
 
-        # check no matching spectel
+        # check no matching spectel: returns empty, no error
         badfile = tmpdir.join('badfile5.txt')
         badfile.write('# ALTMIN=35.0 ALTMAX=45.0 ALTREF=41.0\n'
                       '# ZAMIN=30.0 ZAMAX=70.0 ZAREF=45.0\n'
                       '1 2 3 4 5 6')
-        with pytest.raises(PipeCalError):
-            read_respfile(str(badfile), spectel)
+        result = read_respfile(str(badfile), spectel)
+        assert len(result) == 0
 
         # check bad response reference
         badfile = tmpdir.join('badfile6.txt')

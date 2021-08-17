@@ -4,7 +4,7 @@ from astropy.io import fits
 import numpy as np
 import pytest
 
-from sofia_redux.instruments.forcast.background import background
+from sofia_redux.instruments.forcast.background import background, mode
 from sofia_redux.instruments.forcast.tests.resources import nmc_testdata
 
 
@@ -56,3 +56,25 @@ class TestBackground(object):
         section = [1, 2, 3, 4]
         result = background(data, section)
         assert result is None
+
+    def test_mode(self):
+        # test array, not sorted
+        a = np.arange(10, -1, -1)
+
+        # all unique: return minimum
+        assert mode(a) == 0
+
+        # one most common value: return it
+        a = np.append(a, 1)
+        assert mode(a) == 1
+
+        # two most common values: return the smallest
+        a = np.append(a, 2)
+        assert mode(a) == 1
+
+        # non-array okay
+        assert mode([1, 2, 3, 3]) == 3
+
+        # empty
+        with pytest.raises(ValueError):
+            mode(np.array([]))

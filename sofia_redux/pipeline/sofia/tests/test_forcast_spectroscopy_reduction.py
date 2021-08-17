@@ -10,10 +10,11 @@ from matplotlib.testing.compare import compare_images
 import numpy as np
 import pytest
 
-from sofia_redux.pipeline.interface import set_log_level
-from sofia_redux.pipeline.reduction import Reduction
 from sofia_redux.pipeline.gui.qad_viewer import QADViewer
 from sofia_redux.pipeline.gui.matplotlib_viewer import MatplotlibViewer
+from sofia_redux.pipeline.interface import set_log_level
+from sofia_redux.pipeline.reduction import Reduction
+import sofia_redux.pipeline.sofia.parameters as srp
 try:
     from sofia_redux.pipeline.sofia.forcast_spectroscopy_reduction \
         import FORCASTSpectroscopyReduction
@@ -28,6 +29,13 @@ except ImportError:
 
 @pytest.mark.skipif('not HAS_DRIP')
 class TestFORCASTSpectroscopyReduction(object):
+
+    @pytest.fixture(autouse=True, scope='function')
+    def mock_param(self, qapp):
+        # set defaults to faster options to speed up tests
+        default = srp.forcast_spectroscopy_parameters.SPECTRAL_DEFAULT
+        default['trace_continuum'][2]['option_index'] = 0
+        default['flux_calibrate'][8]['value'] = False
 
     def make_file(self, tmpdir, fname='bFT001_0001.fits'):
         """Retrieve a basic test FITS file for FORCAST."""
@@ -78,24 +86,36 @@ class TestFORCASTSpectroscopyReduction(object):
         hdul.close()
         return ffile
 
-    def make_crm(self, tmpdir):
+    def make_crm(self, tmpdir, return_hdul=False, n_ap=None):
         fname = 'F0001_FO_GRI_12345_FORF123_CRM_001.fits'
         header = fits.Header({'INSTRUME': 'FORCAST',
                               'PRODTYPE': 'calibrated_spectrum',
                               'FILENAME': fname,
-                              'EXTNAME': 'FLUX'})
-        hdul = fits.HDUList([fits.PrimaryHDU(data=np.zeros((10, 10)),
-                                             header=header),
-                             fits.ImageHDU(data=np.zeros((10, 10)),
-                                           name='ERROR'),
-                             fits.ImageHDU(data=np.arange(10),
-                                           name='WAVEPOS'),
-                             fits.ImageHDU(data=np.zeros(10),
-                                           name='SPECTRAL_FLUX'),
-                             fits.ImageHDU(data=np.zeros(10),
+                              'EXTNAME': 'FLUX',
+                              'CDELT1': 1, 'CDELT2': 1,
+                              'CRPIX1': 1, 'CRPIX2': 1,
+                              'CDELT1A': 1, 'CDELT2A': 1, 'CDELT3A': 1,
+                              'CRPIX1A': 1, 'CRPIX2A': 1, 'CRPIX3A': 1})
+
+        darr = np.zeros((10, 10))
+        warr = np.arange(10)
+        if n_ap is None:
+            sarr = np.zeros(10)
+        else:
+            sarr = np.zeros((n_ap, 10))
+        hdul = fits.HDUList([fits.PrimaryHDU(data=darr, header=header),
+                             fits.ImageHDU(data=darr.copy(), name='ERROR'),
+                             fits.ImageHDU(data=warr, name='WAVEPOS'),
+                             fits.ImageHDU(data=sarr, name='SPECTRAL_FLUX'),
+                             fits.ImageHDU(data=sarr.copy(),
                                            name='SPECTRAL_ERROR'),
-                             fits.ImageHDU(data=np.arange(10),
-                                           name='TRANSMISSION')])
+                             fits.ImageHDU(data=sarr.copy(),
+                                           name='TRANSMISSION'),
+                             fits.ImageHDU(data=sarr.copy(),
+                                           name='RESPONSE')])
+        if return_hdul:
+            return hdul
+
         ffile = os.path.join(tmpdir, fname)
         hdul.writeto(ffile, overwrite=True)
         hdul.close()
@@ -360,6 +380,7 @@ class TestFORCASTSpectroscopyReduction(object):
         red.make_profiles()
         assert 'Missing slit correction' in capsys.readouterr().err
         assert red.input[0][0].header['SLITFILE'] == 'NONE'
+        wcal = red.input[0]['WAVEPOS'].data
 
         # mismatched slit correction file -- raises error
         red = pickle.loads(red_copy)
@@ -395,6 +416,13 @@ class TestFORCASTSpectroscopyReduction(object):
         with set_log_level('DEBUG'):
             red.make_profiles()
         assert 'Using ATRAN' in capsys.readouterr().out
+
+        # set a waveshift: should be directly applied
+        red = pickle.loads(red_copy)
+        red.calres['waveshift'] = 0.5
+        red.make_profiles()
+        assert 'Applying default waveshift of 0.5' in capsys.readouterr().out
+        assert np.allclose(red.input[0]['WAVEPOS'].data, wcal + 0.5)
 
         # problem in rectification -- raises error
         mocker.patch('sofia_redux.spectroscopy.rectify.rectify',
@@ -523,6 +551,10 @@ class TestFORCASTSpectroscopyReduction(object):
         ffile, red, idx = self.standard_setup(tmpdir, 'trace_continuum')
         parset = red.parameters.current[idx]
         parset['method']['value'] = 'fit'
+
+        # run with defaults: should work
+        red.trace_continuum()
+        assert 'Trace fit failed' not in capsys.readouterr().err
 
         # mock failure in trace
         def bad_trace(*args, info=None, **kwargs):
@@ -721,6 +753,13 @@ class TestFORCASTSpectroscopyReduction(object):
         test_noopt(red)
         assert 'pwv' not in red.input[0][0].header['ATRNFILE']
 
+        # same for bad directory
+        parset['atrandir']['value'] = 'bad_directory'
+        red.flux_calibrate()
+        assert 'Cannot optimize without ATRAN' in capsys.readouterr().err
+        test_noopt(red)
+        assert 'pwv' not in red.input[0][0].header['ATRNFILE']
+
         # try with empty directory - raises error
         red = pickle.loads(red_copy)
         parset = red.parameters.current[idx]
@@ -757,10 +796,14 @@ class TestFORCASTSpectroscopyReduction(object):
         parset = red.parameters.current[idx]
         parset['atrandir']['value'] = str(tmpdir)
         parset['sn_threshold']['value'] = 5000
+        parset['auto_shift']['value'] = True
         red.flux_calibrate()
-        assert 'too low to optimize' in capsys.readouterr().err
+        capt = capsys.readouterr()
+        assert 'too low to optimize' in capt.err
+        assert 'too low to auto-shift' in capt.err
         test_noopt(red)
         assert 'pwv' not in red.input[0][0].header['ATRNFILE']
+        assert red.input[0][0].header['WAVSHIFT'] == 0
 
         # now just add directory with appropriate files - should optimize and
         # use the least noisy pwv file
@@ -788,9 +831,51 @@ class TestFORCASTSpectroscopyReduction(object):
         red = pickle.loads(red_copy)
         parset = red.parameters.current[idx]
         parset['atrandir']['value'] = str(tmpdir2)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError) as err:
             red.flux_calibrate()
-        assert 'No matching ATRAN files' in capsys.readouterr().err
+        assert 'No matching ATRAN files' in str(err)
+
+    def test_atran_dir(self, tmpdir, capsys, mocker):
+        ffile, red, idx = self.standard_setup(tmpdir, 'flux_calibrate')
+        parset = red.parameters.current[idx]
+        parset['optimize_atran']['value'] = False
+        red_copy = pickle.dumps(red)
+
+        # mock smoothres for working with synthetic data
+        def mock_smooth(x, y, r, siglim=5):
+            return y
+
+        mocker.patch('sofia_redux.instruments.forcast.getatran.smoothres',
+                     mock_smooth)
+
+        # without optimize set, specify an empty atran directory:
+        # should get the default file
+        red = pickle.loads(red_copy)
+        parset = red.parameters.current[idx]
+        parset['atrandir']['value'] = str(tmpdir)
+        red.flux_calibrate()
+        afile = 'atran_40K_45deg_4-50mum.fits'
+        assert red.input[0][0].header['ATRNFILE'] == afile
+
+        # mock the default directory to be empty too: should raise an error
+        red = pickle.loads(red_copy)
+        parset = red.parameters.current[idx]
+        parset['atrandir']['value'] = str(tmpdir)
+        mocker.patch('sofia_redux.instruments.forcast.getatran.get_atran',
+                     return_value=None)
+        with pytest.raises(ValueError) as err:
+            red.flux_calibrate()
+        assert 'No matching ATRAN files' in str(err)
+
+        # same if no initial directory is specified
+        red = pickle.loads(red_copy)
+        parset = red.parameters.current[idx]
+        parset['atrandir']['value'] = ''
+        mocker.patch('sofia_redux.instruments.forcast.getatran.get_atran',
+                     return_value=None)
+        with pytest.raises(ValueError) as err:
+            red.flux_calibrate()
+        assert 'No matching ATRAN files' in str(err)
 
     def test_fluxcal(self, tmpdir, capsys, mocker):
         ffile, red, idx = self.standard_setup(tmpdir, 'flux_calibrate')
@@ -1017,6 +1102,60 @@ class TestFORCASTSpectroscopyReduction(object):
         assert r4[0].data.shape == (20, 18, 11)
         assert np.allclose(r4[0].data, r1[0].data, equal_nan=True)
 
+    def test_combine_multi_ap(self, tmpdir, capsys, mocker):
+        # minimal setup to run the step
+        red = FORCASTSpectroscopyReduction()
+        red.output_directory = tmpdir
+        red.parameters = FORCASTSpectroscopyParameters()
+        red.parameters.add_current_parameters('combine_spectra')
+        red.calres = {'spectel': 'UNKNOWN', 'gmode': 0}
+
+        # one aperture, standard dim
+        inp = []
+        for i in range(3):
+            hdul = self.make_crm(tmpdir, return_hdul=True)
+            inp.append(hdul)
+            red.filenum.append(i)
+        red.input = inp
+        red.combine_spectra()
+        assert len(red.input) == 1
+        assert red.input[0]['SPECTRAL_FLUX'].shape == (10,)
+
+        # one apertures, stacked dimension
+        inp = []
+        for i in range(3):
+            hdul = self.make_crm(tmpdir, return_hdul=True, n_ap=1)
+            inp.append(hdul)
+            red.filenum.append(i)
+        red.input = inp
+        red.combine_spectra()
+        assert len(red.input) == 1
+        assert red.input[0]['SPECTRAL_FLUX'].shape == (10,)
+
+        # two apertures, combined
+        inp = []
+        for i in range(3):
+            hdul = self.make_crm(tmpdir, return_hdul=True, n_ap=2)
+            inp.append(hdul)
+            red.filenum.append(i)
+        red.input = inp
+        red.parameters.current[0].set_value('combine_aps', True)
+        red.combine_spectra()
+        assert len(red.input) == 1
+        assert red.input[0]['SPECTRAL_FLUX'].shape == (10,)
+
+        # two apertures, not combined
+        inp = []
+        for i in range(3):
+            hdul = self.make_crm(tmpdir, return_hdul=True, n_ap=2)
+            inp.append(hdul)
+            red.filenum.append(i)
+        red.input = inp
+        red.parameters.current[0].set_value('combine_aps', False)
+        red.combine_spectra()
+        assert len(red.input) == 1
+        assert red.input[0]['SPECTRAL_FLUX'].shape == (2, 10)
+
     def test_make_response(self, tmpdir, capsys, mocker):
         # standard input data is not marked for response recipe, so
         # modify type and set up for make_response
@@ -1107,7 +1246,6 @@ class TestFORCASTSpectroscopyReduction(object):
                     assert hdu.header['BUNIT'] == bunit
 
     def test_combine_response(self, tmpdir):
-        # run through all steps, checking for appropriate BUNIT keys
         red = FORCASTSpectroscopyReduction()
 
         # make a set of 1D response spectra
@@ -1249,6 +1387,55 @@ class TestFORCASTSpectroscopyReduction(object):
         red.step()
         assert np.allclose(red.input[0][0].data[1], flux_data[0])
 
+    def test_combine_response_multi_ap(self, tmpdir):
+        red = FORCASTSpectroscopyReduction()
+
+        # make a set of 1D response spectra with 2 aps
+        rfiles = []
+        for i in range(4):
+            rfile = str(tmpdir.join(
+                f'F0001_FO_GRI_9000000_FORG063_RSP_000{i}.fits'))
+            hdr = fits.Header({'OBSTYPE': 'STANDARD_TELLURIC',
+                               'PRODTYPE': 'response_spectrum',
+                               'SPECTEL1': 'FOR_G063',
+                               'SPECTEL2': 'OPEN',
+                               'SLIT': 'FOR_LS24',
+                               'DETCHAN': 0,
+                               'AOR_ID': '9000000',
+                               'MISSN-ID': '2020-01-01_FO_F001',
+                               'FILENAME': os.path.basename(rfile)})
+            darr = np.arange(2 * 4 * 50, dtype=float).reshape(2, 4, 50)
+            hdul = fits.HDUList(fits.PrimaryHDU(darr, header=hdr))
+            hdul.writeto(rfile)
+            rfiles.append(rfile)
+
+        red.load(rfiles)
+        red.output_directory = str(tmpdir)
+        red.load_parameters()
+        red_copy = pickle.dumps(red)
+
+        # combine apertures: mismatched wavelengths error
+        red.parameters.current[0]['combine_aps']['value'] = True
+        with pytest.raises(ValueError) as err:
+            red.step()
+        assert 'Mismatched wavelengths' in str(err)
+
+        # don't combine: mismatch is okay
+        red = pickle.loads(red_copy)
+        red.parameters.current[0]['combine_aps']['value'] = False
+        red.step()
+        assert len(red.input) == 1
+        assert red.input[0][0].data.shape == (2, 4, 50)
+
+        # fix mismatch and combine
+        red = pickle.loads(red_copy)
+        red.parameters.current[0]['combine_aps']['value'] = True
+        for inp in red.input:
+            inp[0].data[:, 0, :] = inp[0].data[0, 0, :]
+        red.step()
+        assert len(red.input) == 1
+        assert red.input[0][0].data.shape == (4, 50)
+
     def test_specmap(self, tmpdir):
         # make some minimal spectrum-like data
         ffile = self.make_combspec(tmpdir, n_ap=1)
@@ -1285,6 +1472,14 @@ class TestFORCASTSpectroscopyReduction(object):
         # recipe is last two steps
         assert red.recipe == ['combine_spectra', 'specmap']
         # but overriding and just mapping it should work
+        red.recipe = ['specmap']
+        red.load_parameters()
+        red.step()
+        assert os.path.isfile(ffile.replace('.fits', '.png'))
+
+        # including with multi-ap new style data
+        ffile = self.make_crm(tmpdir, n_ap=2)
+        red.load(ffile)
         red.recipe = ['specmap']
         red.load_parameters()
         red.step()

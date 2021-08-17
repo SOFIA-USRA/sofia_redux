@@ -37,8 +37,7 @@ class TestGetAtran(object):
         wave = unsmoothed = smoothed = np.arange(10)
 
         filename = 'ATRNFILE_header_value'
-        wv_scale = 1.0
-        store = atranfile, res, filename, wv_scale, wave, unsmoothed, smoothed
+        store = atranfile, res, filename, wave, unsmoothed, smoothed
 
         clear_atran_cache()
         assert get_atran_from_cache(atranfile, res) is None
@@ -47,9 +46,8 @@ class TestGetAtran(object):
         # It should be in there now
         result = get_atran_from_cache(atranfile, res)
         assert result[0] == filename
-        assert result[1] == wv_scale
 
-        for r in result[2:]:
+        for r in result[1:]:
             assert np.allclose(r, wave)
 
         # Check it's still in there

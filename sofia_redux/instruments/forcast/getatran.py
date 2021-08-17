@@ -44,11 +44,9 @@ def get_atran_from_cache(atranfile, resolution):
 
     Returns
     -------
-    filename,  wv_scale
+    tuple
         filename : str
             Used to update ATRNFILE in FITS headers.
-        wv_scale : float
-            Used to update WVSCALE in FITS headers and apply WV correction.
         wave : numpy.ndarray
             (nwave,) array of wavelengths.
         unsmoothed : numpy.ndarray
@@ -75,11 +73,12 @@ def get_atran_from_cache(atranfile, resolution):
     if modtime not in __atran_cache.get(key, {}):
         return
 
-    log.debug("Retrieving ATRAN data from cache (%s, resolution %s) " % key)
+    log.debug(f'Retrieving ATRAN data from cache '
+              f'({key[0]}, resolution {key[1]})')
     return __atran_cache.get(key, {}).get(modtime)
 
 
-def store_atran_in_cache(atranfile, resolution, filename, wv_scale, wave,
+def store_atran_in_cache(atranfile, resolution, filename, wave,
                          unsmoothed, smoothed):
     """
     Store atran data in the atran cache.
@@ -92,8 +91,6 @@ def store_atran_in_cache(atranfile, resolution, filename, wv_scale, wave,
         Spectral resolution used for smoothing.
     filename : str
         Used to update ATRNFILE in FITS headers.
-    wv_scale : float
-        Used to update WVSCALE in FITS headers and apply WV correction.
     wave : numpy.ndarray
         (nwave,) array of wavelengths.
     unsmoothed : numpy.ndarray
@@ -104,11 +101,12 @@ def store_atran_in_cache(atranfile, resolution, filename, wv_scale, wave,
     """
     global __atran_cache
     key = atranfile, int(resolution)
-    log.debug("Storing ATRAN data in cache (%s, resolution %s)" % key)
+    log.debug(f'Storing ATRAN data in cache '
+              f'({key[0]}, resolution {key[1]})')
     __atran_cache[key] = {}
     modtime = str(os.path.getmtime(atranfile))
     __atran_cache[key][modtime] = (
-        filename, wv_scale, wave, unsmoothed, smoothed)
+        filename, wave, unsmoothed, smoothed)
 
 
 def get_atran(header, resolution, filename=None,
@@ -179,11 +177,10 @@ def get_atran(header, resolution, filename=None,
         A (2, nw) array containing wavelengths and unsmoothed
         transmission data, returned only if get_unsmoothed is set.
     """
-    wv_scale = 1.0
     if filename is not None:
         if not goodfile(filename, verbose=True):
-            log.warning('File {} not found; '
-                        'retrieving default'.format(filename))
+            log.warning(f'File {filename} not found; '
+                        f'retrieving default')
             filename = None
     if filename is None:
         if not isinstance(header, fits.header.Header):
@@ -220,17 +217,18 @@ def get_atran(header, resolution, filename=None,
                 wv = wv_end
             else:
                 wv = 0.5 * (wv_start + wv_end)
-        if use_wv and wv < 2:
+        if use_wv and (wv < 2 or wv > 50):
             # wv values aren't really used for forcast -- just pick one
-            log.debug('Bad WV value: %f' % wv)
+            log.debug(f'Bad WV value: {wv}')
             log.debug('Using default value 6.0 um.')
             wv = 6.0
 
-        log.debug('Alt, ZA, WV: %.2f %.2f %.2f' % (alt, za, wv))
+        log.info(f'Alt, ZA, WV: {alt:.2f} {za:.2f} {wv:.2f}')
+        true_value = [alt, za, wv]
 
         if atran_dir is not None:
             if not os.path.isdir(str(atran_dir)):
-                log.warning('Cannot find ATRAN directory: %s' % atran_dir)
+                log.warning(f'Cannot find ATRAN directory: {atran_dir}')
                 log.warning('Using default ATRAN set.')
                 atran_dir = None
         if atran_dir is None:
@@ -243,64 +241,76 @@ def get_atran(header, resolution, filename=None,
         regex2 = re.compile(rf'^atran_([0-9]+)K_([0-9]+)deg_'
                             rf'([0-9]+)pwv_{wmin}-{wmax}mum\.fits$')
 
-        filename, minval = None, None
-        wvfilename, wvminval = None, None
+        # set up some values for tracking best atran match
+        wv_overall_val = np.inf
+        wv_best_file = None
+        overall_val = np.inf
+        best_file = None
+
         for f in atran_files:
+            # check for WV match
             match = regex2.match(os.path.basename(f))
-            if match is not None:
-                val = abs(float(match.group(1)) - alt) / float(match.group(1))
-                val += abs(float(match.group(2)) - za) / float(match.group(2))
-                val += abs(float(match.group(3)) - wv) / float(match.group(3))
-                if wvminval is None or val < wvminval:
-                    wvminval, wvfilename = val, f
+            if use_wv and match is not None:
+                match_val = 0
+                for i in range(3):
+                    # file alt, za, or wv
+                    file_val = float(match.group(i + 1))
+                    # check difference from true value
+                    d_val = abs(file_val - true_value[i]) / true_value[i]
+                    match_val += d_val
+                if match_val < wv_overall_val:
+                    wv_overall_val = match_val
+                    wv_best_file = f
             else:
+                # otherwise, check for non-WV match
                 match = regex1.match(os.path.basename(f))
                 if match is not None:
-                    val = abs(float(match.group(1)) - alt) \
-                        / float(match.group(1))
-                    val += abs(float(match.group(2)) - za) \
-                        / float(match.group(2))
-                    if minval is None or val < minval:
-                        minval, filename = val, f
+                    match_val = 0
+                    for i in range(2):
+                        # file alt or za
+                        file_val = float(match.group(i + 1))
+                        # check difference from true value
+                        d_val = abs(file_val - true_value[i]) / true_value[i]
+                        match_val += d_val
+                    if match_val < overall_val:
+                        overall_val = match_val
+                        best_file = f
 
-        if use_wv and isinstance(wvfilename, str):
-            log.debug('Using nearest Alt/ZA/WV')
-            filename = wvfilename
-        elif use_wv:
-            # placeholder for scaling standard file by WV value
-            wv_scale = 1.0
-            log.debug('Using nearest Alt/ZA and scale factor %f' % wv_scale)
+        if use_wv and wv_best_file is not None:
+            log.info('Using nearest Alt/ZA/WV')
+            filename = wv_best_file
         else:
-            log.debug('Using nearest Alt/ZA')
+            log.info('Using nearest Alt/ZA')
+            filename = best_file
 
-    if not isinstance(filename, str):
-        log.debug("No ATRAN file found")
+    if filename is None:
+        log.debug('No ATRAN file found')
         return
-    log.debug("Using ATRAN file %s" % filename)
 
     # Read the atran data from cache if possible
+    log.info(f'Using ATRAN file: {filename}')
     atrandata = get_atran_from_cache(filename, resolution)
     if atrandata is not None:
-        atranfile, wv_scale, wave, unsmoothed, smoothed = atrandata
+        atranfile, wave, unsmoothed, smoothed = atrandata
     else:
         hdul = gethdul(filename, verbose=True)
         if hdul is None or hdul[0].data is None:
-            log.error("Invalid data in ATRAN file %s" % filename)
+            log.error(f'Invalid data in ATRAN file {filename}')
             return
         data = hdul[0].data
         hdul.close()
-        data[1] *= wv_scale
+
+        atranfile = os.path.basename(filename)
         wave = data[0]
         unsmoothed = data[1]
         smoothed = smoothres(data[0], data[1], resolution)
-        atranfile = os.path.basename(filename)
-        store_atran_in_cache(filename, resolution, atranfile, wv_scale,
+
+        store_atran_in_cache(filename, resolution, atranfile,
                              data[0], data[1], smoothed)
 
-    hdinsert(header, 'WVSCALE', wv_scale)
     hdinsert(header, 'ATRNFILE', atranfile)
-
     if not get_unsmoothed:
         return np.vstack((wave, smoothed))
     else:
-        return np.vstack((wave, smoothed)), np.vstack((wave, unsmoothed))
+        return (np.vstack((wave, smoothed)),
+                np.vstack((wave, unsmoothed)))

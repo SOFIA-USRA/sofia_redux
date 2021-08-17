@@ -25,7 +25,7 @@ class PeakFinder(object):
                  silent=False, maxiter=1000,
                  epsilon=5, eps=1e-7, ncut=30,
                  chopnoddist=None, refine=True,
-                 positive=False):
+                 positive=False, smooth=True):
         self.image = image
         self.reference = reference
         self.npeaks = npeaks
@@ -42,6 +42,7 @@ class PeakFinder(object):
         self.eps = eps
         self.ncut = ncut
         self.positive = positive
+        self.smooth = smooth
         self.refine = refine
         self.silent = silent
         self.image_table = Table()
@@ -110,11 +111,14 @@ class PeakFinder(object):
         table = Table()
         if not isinstance(image, np.ndarray):
             return table
-        with catch_warnings():
-            simplefilter('ignore')
-            search_image = convolve_fft(
-                image, Gaussian2DKernel(self.sigma),
-                normalize_kernel=True, preserve_nan=True)
+
+        search_image = image
+        if self.smooth:
+            with catch_warnings():
+                simplefilter('ignore')
+                search_image = convolve_fft(
+                    search_image, Gaussian2DKernel(self.sigma),
+                    normalize_kernel=True, preserve_nan=True)
 
         # always take absolute value for fitting purposes
         search_image = abs(search_image)
@@ -296,6 +300,7 @@ def peakfind(coadded, newimage=None,
              epsilon=5, eps=1e-7, ncut=30,
              chopnoddist=None,
              positive=False,
+             smooth=True,
              return_object=False,
              coordinates=False):
     """
@@ -376,7 +381,7 @@ def peakfind(coadded, newimage=None,
                           silent=silent, maxiter=maxiter,
                           epsilon=epsilon, eps=eps, ncut=ncut,
                           chopnoddist=chopnoddist, refine=refine,
-                          positive=positive)
+                          positive=positive, smooth=smooth)
     findpeak.findpeaks()
     if return_object:
         return findpeak

@@ -550,3 +550,22 @@ class TestFORCASTWavecalReduction(object):
         # min is at bottom edge, max is at top edge
         assert np.min(np.nanargmin(spatcal, axis=0)) == 0
         assert np.max(np.nanargmax(spatcal, axis=0)) == 255
+
+    def test_sim_spatcal_badflat(self):
+        red = FORCASTWavecalReduction()
+
+        # missing calres
+        with pytest.raises(AttributeError):
+            red._sim_spatcal((10, 10))
+
+        # missing flat file
+        red.calres = {}
+        with pytest.raises(ValueError) as err:
+            red._sim_spatcal((10, 10))
+        assert 'Missing order mask' in str(err)
+
+        # bad flat file
+        red.calres = {'maskfile': 'badfile.fits'}
+        with pytest.raises(ValueError) as err:
+            red._sim_spatcal((10, 10))
+        assert 'Missing order mask' in str(err)

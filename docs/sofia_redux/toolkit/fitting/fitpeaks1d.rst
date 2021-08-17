@@ -154,7 +154,6 @@ without the boxing function.
     ax[1].set_xlabel("x")
     ax[1].set_ylabel("$y^{\prime}$")
     ax[1].set_xlim(3, 6)
-    plt.show()
 
 There are a couple of things to note above.  Firstly, the fit on the right
 (without a box function) has fit both peaks present in the data with a
@@ -240,7 +239,6 @@ were supplied by the user, peaks will be fit in the supplied order.
     plt.ylabel('$y^{\prime}$')
     plt.title('Second peak initial parameterization')
     plt.legend()
-    plt.show()
 
 Initial Baseline Fitting
 ------------------------
@@ -317,7 +315,6 @@ argument.
     ax[2].set_xlabel('x')
     ax[2].set_ylabel('y')
     ax[2].set_title("Residual of the Initial Fit")
-    plt.show()
 
 
 The above plot shows an initial baseline fit on the residual of the data
@@ -366,7 +363,6 @@ steps.  The code below runs all steps using the :func:`fitpeaks1d` function.
     ax[1].set_xlabel('x')
     ax[1].set_ylabel('y')
     ax[1].set_title("Residual")
-    plt.show()
 
 Note that in the above example, `search_kwargs={'stddev_0': 0.1}` is used to
 set an initial value for the fwhm of each peak to 0.1 as if not specified,
@@ -472,7 +468,6 @@ on models (or components) to create new manipulations:
                label='baseline + 2nd peak', color='red')
     ax[1].set_title("Adding Model Components")
     ax[1].legend()
-    plt.show()
 
 .. plot::
 
@@ -501,7 +496,6 @@ on models (or components) to create new manipulations:
                label='baseline + 2nd peak', color='red')
     ax[1].set_title("Adding Model Components")
     ax[1].legend()
-    plt.show()
 
 
 Further Examples

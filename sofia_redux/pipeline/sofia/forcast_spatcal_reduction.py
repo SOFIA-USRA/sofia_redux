@@ -15,7 +15,7 @@ try:
 except ImportError:
     raise SOFIAImportError('FORCAST modules not installed')
 
-from sofia_redux.instruments.forcast.header import hdmerge
+from sofia_redux.instruments.forcast.hdmerge import hdmerge
 from sofia_redux.pipeline.sofia.forcast_reduction import FORCASTReduction
 from sofia_redux.pipeline.sofia.parameters.forcast_spatcal_parameters \
     import FORCASTSpatcalParameters
@@ -219,7 +219,8 @@ class FORCASTSpatcalReduction(FORCASTWavecalReduction):
         for xval in idx:
             aptab = []
             for line in slines:
-                aptab.append(tabinv(sfit_full[:, int(xval)], line, missing=np.nan))
+                aptab.append(tabinv(sfit_full[:, int(xval)],
+                                    line, missing=np.nan))
             trace_fit.append(aptab)
         trace_fit = np.array(trace_fit).T
 

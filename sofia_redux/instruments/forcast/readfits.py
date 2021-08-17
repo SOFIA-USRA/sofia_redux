@@ -8,11 +8,59 @@ from astropy.wcs import WCS
 import numpy as np
 
 from sofia_redux.instruments.forcast.calcvar import calcvar
-from sofia_redux.instruments.forcast.header import addparent
 from sofia_redux.toolkit.utilities.fits \
     import hdinsert, href, kref, robust_read
 
-__all__ = ['readfits']
+__all__ = ['addparent', 'readfits']
+
+
+def addparent(name, header,
+              comment="id or name of file used in the processing"):
+    """
+    Add an id or file name to a header as PARENTn
+
+    Adds the ID or filename of an input file to a specified header array,
+    under the keyword PARENTn, where n is some integer greater than 0.
+    If a previous PARENTn keyword exists, n will be incremented to
+    produce the new keyword.
+
+    If no PARENTn keyword exists, a new card will be appended to the end
+    of the header.  Otherwise, the card will be inserted after PARENT(n-1).
+
+    Parameters
+    ----------
+    name : str
+        Name or id of the file to be recorded in the header
+    header : astropy.io.fits.header.Header
+        Input header to be updated
+    comment : str
+        Comment for PARENTn
+
+    Returns
+    -------
+    None
+    """
+    parents = header.cards['PARENT*']
+    value = os.path.basename(name)
+    if len(parents) == 0:
+        hdinsert(header, 'PARENT1', value, comment=comment, refkey=kref)
+
+    existing_values = [x[1] for x in parents]
+    if value in existing_values:
+        return
+
+    existing_keys = [x[0] for x in parents]
+    parentn = 1
+    last_parent = kref
+    while True:
+        key = 'PARENT' + str(parentn)
+        if key in existing_keys:
+            last_parent = key
+            parentn += 1
+        else:  # pragma: no cover
+            break
+    hdinsert(header, key, value,
+             refkey=last_parent, comment=comment, after=True)
 
 
 def readfits(filename, update_header=None, key=None, variance=False,

@@ -460,10 +460,13 @@ def coadd(hdr_list, data_list, var_list, exp_list,
                 order=1, interpolation_order=0)
             expmap += exp_out
 
-        log.info('{}-combining images.'.format(method.title()))
-        flux, var = combine_images(
-            flx, variance=vr, method=method, weighted=weighted,
-            robust=robust, sigma=sigma, maxiters=maxiters)
+        if len(flx) > 1:
+            log.info('{}-combining images.'.format(method.title()))
+            flux, var = combine_images(
+                flx, variance=vr, method=method, weighted=weighted,
+                robust=robust, sigma=sigma, maxiters=maxiters)
+        else:
+            flux, var = flx[0], vr[0]
 
     if cube:
         # reconstruct as primary wcs

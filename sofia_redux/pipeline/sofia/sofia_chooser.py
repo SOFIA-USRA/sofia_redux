@@ -25,20 +25,14 @@ try:
         FORCASTSlitcorrReduction
     from sofia_redux.pipeline.sofia.exes_quicklook_reduction import \
         EXESQuicklookReduction
-    from sofia_redux.pipeline.sofia.flitecam_imgmap_reduction import \
-        FLITECAMImgmapReduction
-    from sofia_redux.pipeline.sofia.flitecam_specmap_reduction import \
-        FLITECAMSpecmapReduction
 except SOFIAImportError:  # pragma: no cover
-    FORCAST_ERROR = None
     FORCASTImagingReduction = Reduction
     FORCASTSpectroscopyReduction = Reduction
     FORCASTWavecalReduction = Reduction
     FORCASTSpatcalReduction = Reduction
     FORCASTSlitcorrReduction = Reduction
     EXESQuicklookReduction = Reduction
-    FLITECAMImgmapReduction = Reduction
-    FLITECAMSpecmapReduction = Reduction
+    FORCAST_ERROR = None
 except ImportError as err:  # pragma: no cover
     FORCASTImagingReduction = None
     FORCASTSpectroscopyReduction = None
@@ -46,8 +40,6 @@ except ImportError as err:  # pragma: no cover
     FORCASTSpatcalReduction = None
     FORCASTSlitcorrReduction = None
     EXESQuicklookReduction = None
-    FLITECAMImgmapReduction = None
-    FLITECAMSpecmapReduction = None
     FORCAST_ERROR = err
 else:
     FORCAST_ERROR = None
@@ -74,13 +66,41 @@ except ImportError as err:  # pragma: no cover
 else:
     FIFILS_ERROR = None
 
+try:
+    from sofia_redux.pipeline.sofia.flitecam_imaging_reduction import \
+        FLITECAMImagingReduction
+    from sofia_redux.pipeline.sofia.flitecam_spectroscopy_reduction import \
+        FLITECAMSpectroscopyReduction
+    from sofia_redux.pipeline.sofia.flitecam_wavecal_reduction import \
+        FLITECAMWavecalReduction
+    from sofia_redux.pipeline.sofia.flitecam_spatcal_reduction import \
+        FLITECAMSpatcalReduction
+    from sofia_redux.pipeline.sofia.flitecam_slitcorr_reduction import \
+        FLITECAMSlitcorrReduction
+except SOFIAImportError:  # pragma: no cover
+    FLITECAMImagingReduction = Reduction
+    FLITECAMSpectroscopyReduction = Reduction
+    FLITECAMWavecalReduction = Reduction
+    FLITECAMSpatcalReduction = Reduction
+    FLITECAMSlitcorrReduction = Reduction
+    FLITECAM_ERROR = None
+except ImportError as err:  # pragma: no cover
+    FLITECAMImagingReduction = None
+    FLITECAMSpectroscopyReduction = None
+    FLITECAMWavecalReduction = None
+    FLITECAMSpatcalReduction = None
+    FLITECAMSlitcorrReduction = None
+    FLITECAM_ERROR = err
+else:
+    FLITECAM_ERROR = None
+
 
 class SOFIAChooser(Chooser):
     """
     Choose SOFIA Redux reduction objects.
 
-    Currently, HAWC+, FORCAST, and FIFI-LS instrument modes are
-    supported.
+    Currently, HAWC+, FORCAST, FIFI-LS, and FLITECAM instruments
+    are fully supported.
 
     Input data that cannot be read as a FITS file by `astropy.io.fits`
     is ignored.  If there is no good data to reduce, a null value
@@ -101,13 +121,14 @@ class SOFIAChooser(Chooser):
     FIFI-LS data has keyword INSTRUME = 'FIFI-LS'.  A FIFILSReduction
     object is returned for all FIFI-LS data.
 
+    FLITECAM data has keyword INSTRUME = 'FLITECAM'.  Imaging and
+    spectroscopy types are distinguished via the INSTCFG keyword,
+    and a FLITECAMImagingReduction or FLITECAMSpectroscopyReduction
+    object is returned, as appropriate.
+
     Final EXES data products are supported for quicklook products only.
     These data have keyword INSTRUME = 'EXES' and should be either
     combined or merged spectral products (CMB, MRD).
-
-    Likewise, FLITECAM data products for quicklook only are identified
-    by INSTRUME = 'FLITECAM' and should be either final images (COA, CAL)
-    or final spectra (CAL, CMB).
 
     If input data types do not match, or if no more specific
     reduction object was found, a generic Reduction object is returned.
@@ -116,10 +137,14 @@ class SOFIAChooser(Chooser):
         """Initialize the chooser."""
         super().__init__()
 
-        self.supported = {'FORCAST Imaging': FORCASTImagingReduction,
-                          'FORCAST Spectroscopy': FORCASTSpectroscopyReduction,
-                          'HAWC': HAWCReduction,
-                          'FIFI-LS': FIFILSReduction}
+        self.supported = {
+            'FORCAST Imaging': FORCASTImagingReduction,
+            'FORCAST Spectroscopy': FORCASTSpectroscopyReduction,
+            'HAWC': HAWCReduction,
+            'FIFI-LS': FIFILSReduction,
+            'FLITECAM Imaging': FLITECAMImagingReduction,
+            'FLITECAM Spectroscopy': FLITECAMSpectroscopyReduction,
+        }
 
         # check for any failed imports
         for instrument in self.supported:
@@ -243,10 +268,8 @@ class SOFIAChooser(Chooser):
                 # ignore product type mismatch for quicklook
                 param = [instrume]
             elif instrume == 'FLITECAM':
-                # ignore product type mismatch for quicklook,
-                # but imaging/spectroscopy has to match
                 instcfg = self.get_key_value(header, 'INSTCFG')
-                param = [instrume, instcfg]
+                param = [instrume, prodtype, instcfg]
             else:
                 param = [instrume, prodtype]
 
@@ -307,12 +330,25 @@ class SOFIAChooser(Chooser):
             reduction = EXESQuicklookReduction()
 
         elif instrume == 'FLITECAM':
-            # quicklook is borrowed from the forcast pipeline
+            # some functionality is borrowed from the
+            # forcast pipeline
             if FORCAST_ERROR:  # pragma: no cover
                 raise FORCAST_ERROR
+            if FLITECAM_ERROR:  # pragma: no cover
+                raise FLITECAM_ERROR
+            prodtype, instcfg = test_params[1:]
             if instcfg == 'IMAGING':
-                reduction = FLITECAMImgmapReduction()
+                reduction = FLITECAMImagingReduction()
             else:
-                reduction = FLITECAMSpecmapReduction()
+                reduction = FLITECAMSpectroscopyReduction()
+
+                # check for specialized mode
+                if config is not None:
+                    if 'wavecal' in config and config['wavecal']:
+                        reduction = FLITECAMWavecalReduction()
+                    elif 'spatcal' in config and config['spatcal']:
+                        reduction = FLITECAMSpatcalReduction()
+                    elif 'slitcorr' in config and config['slitcorr']:
+                        reduction = FLITECAMSlitcorrReduction()
 
         return reduction

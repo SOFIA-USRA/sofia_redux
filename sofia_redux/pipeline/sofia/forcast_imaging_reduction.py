@@ -17,6 +17,7 @@ except ImportError:
     raise SOFIAImportError('FORCAST modules not installed')
 
 from sofia_redux.calibration.pipecal_config import pipecal_config
+from sofia_redux.calibration.pipecal_error import PipeCalError
 import sofia_redux.instruments.forcast.configuration as dripconfig
 from sofia_redux.instruments.forcast.getcalpath import getcalpath
 from sofia_redux.instruments.forcast.getpar import getpar
@@ -248,7 +249,7 @@ class FORCASTImagingReduction(FORCASTReduction):
         function for old-style data, so that all further steps
         may be run in the same way as for the new-style data.
         """
-        from sofia_redux.instruments.forcast.header import hdmerge
+        from sofia_redux.instruments.forcast.hdmerge import hdmerge
 
         log.info('Reorganizing old-style C2NC2 to new-style A/B files')
 
@@ -759,7 +760,13 @@ class FORCASTImagingReduction(FORCASTReduction):
 
             # run photometry for standards
             if self.calres['obstype'] == 'STANDARD_FLUX':
-                run_photometry(outimg, header, outvar, config)
+                log.info('')
+                try:
+                    run_photometry(outimg, header, outvar, config,
+                                   allow_badfit=True)
+                except PipeCalError:  # pragma: no cover
+                    log.warning('Photometry failed.')
+                log.info('')
 
             # update hdul with result
             hdul[0].header = header
@@ -788,21 +795,21 @@ class FORCASTImagingReduction(FORCASTReduction):
         the coadded image with
         `sofia_redux.calibration.pipecal_util.run_photometry`.
         Input headers are merged with
-        `sofia_redux.instruments.forcast.header.hdmerge`.
+        `sofia_redux.instruments.forcast.hdmerge.hdmerge`.
 
         The combination method may be configured in parameters,
         or coadd may be skipped entirely if desired.  In this case,
         a COA file is written to disk for each input file.
         """
         from sofia_redux.calibration.pipecal_util import run_photometry
-        from sofia_redux.instruments.forcast.header import hdmerge
+        from sofia_redux.instruments.forcast.hdmerge import hdmerge
         from sofia_redux.instruments.forcast.coadd import coadd
 
         # get parameters
         param = self.get_parameter_set()
         do_coadd = not param.get_value('skip_coadd')
 
-        if not do_coadd or len(self.input) == 1:
+        if not do_coadd:
             # just write COA files to disk for each input
             if param.get_value('save'):
                 display_files = []
@@ -875,7 +882,13 @@ class FORCASTImagingReduction(FORCASTReduction):
         # re-run photometry for standards
         # use the basehead calibration config
         if self.calres['obstype'] == 'STANDARD_FLUX':
-            run_photometry(outdata, outhdr, outvar, self.cal_conf)
+            log.info('')
+            try:
+                run_photometry(outdata, outhdr, outvar, self.cal_conf,
+                               allow_badfit=True)
+            except PipeCalError:  # pragma: no cover
+                log.warning('Photometry failed.')
+            log.info('')
 
         # check if data should be marked as a level 4 mosaic
         # (i.e. input is already calibrated)

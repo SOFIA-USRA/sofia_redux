@@ -376,7 +376,7 @@ def make_spectral_plot(axis, wavelength, spectral_flux,
     """
 
     # number of spectra to plot
-    if spectral_flux.ndim > 1:
+    if spectral_flux.ndim > 1 and spectral_flux.shape[0] > 1:
         nspec = spectral_flux.shape[0]
         color_index = np.arange(nspec) / (nspec - 1)
     else:

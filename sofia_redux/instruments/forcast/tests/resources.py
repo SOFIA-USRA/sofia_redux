@@ -96,6 +96,8 @@ def nmc_testdata():
     header['CRPIX2'] = ny // 2
     header['CRVAL1'] = 50.0
     header['CRVAL2'] = 50.0
+    header['CDELT1'] = -1
+    header['CDELT2'] = 1
     header['ANGLCONV'] = 'negative'
     header['SKY_ANGL'] = angle
     header['CROTA2'] = 180 - angle

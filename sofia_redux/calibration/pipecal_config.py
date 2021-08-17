@@ -110,7 +110,7 @@ def read_respfile(fname, spectel):
     for line in respfile:
 
         # If line is empty or starts with #, skip it
-        if line and not line.startswith('#'):
+        if line.strip() != '' and not line.startswith('#'):
             # Split the line by whitespace.
             # If there are less than 4 fields, raise an error
             splitline = line.split()
@@ -148,7 +148,7 @@ def read_respfile(fname, spectel):
                        'zarange': zarange,
                        'coeff': coeff}
     else:
-        raise ParseConfigError(fname)
+        resp_config = {}
 
     return resp_config
 

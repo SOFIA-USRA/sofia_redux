@@ -1,6 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from collections import Counter
 import statistics
 
 import numpy as np
@@ -27,14 +26,11 @@ def mode(data):
 
     Raises
     ------
-    TypeError
-        If data is not iterable
+    ValueError
+        If data is empty
     """
-    d = data.ravel()
-    try:
-        result = statistics.mode(d)
-    except statistics.StatisticsError:
-        result = Counter(list(sorted(d))).most_common(n=1)[0][0]
+    d = np.array(data).ravel()
+    result = min(statistics.multimode(d))
     return result
 
 

@@ -8,6 +8,9 @@ from astropy.io import fits
 import numpy as np
 import pytest
 
+from sofia_redux.pipeline.gui.qad_viewer import QADViewer
+from sofia_redux.pipeline.gui.matplotlib_viewer import MatplotlibViewer
+
 try:
     from sofia_redux.pipeline.sofia.forcast_slitcorr_reduction \
         import FORCASTSlitcorrReduction
@@ -138,6 +141,18 @@ class TestFORCASTSlitcorrReduction(object):
         assert cfg['wavecal'] is False
         assert cfg['spatcal'] is False
         assert cfg['slitcorr'] is True
+
+    def test_register_viewers(self, mocker):
+        mocker.patch.object(QADViewer, '__init__', return_value=None)
+        mocker.patch.object(MatplotlibViewer, '__init__', return_value=None)
+
+        red = FORCASTSlitcorrReduction()
+        vz = red.register_viewers()
+        # 3 viewers -- QAD, profile, spectra
+        assert len(vz) == 3
+        assert isinstance(vz[0], QADViewer)
+        assert isinstance(vz[1], MatplotlibViewer)
+        assert isinstance(vz[2], MatplotlibViewer)
 
     def test_extract_median_spectra(self, tmpdir, capsys):
         ffile, red, idx = self.standard_setup(tmpdir,

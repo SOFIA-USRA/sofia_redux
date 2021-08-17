@@ -162,6 +162,10 @@ class TestFORCASTImagingReduction(object):
         fn = [['1', '2'], [3, 4]]
         assert red._catfilenum(fn) == '1-4'
 
+        # test if list of list of list
+        fn = [[[1, 2], [3, 4]], [5, 6], 7]
+        assert red._catfilenum(fn) == '1-7'
+
     def test_filename(self, tmpdir):
         red = FORCASTImagingReduction()
         ffile = self.make_file(tmpdir)
@@ -907,3 +911,22 @@ class TestFORCASTImagingReduction(object):
         shutil.move(outfile, tmpdir.join('tmp2.png'))
         assert compare_images(tmpdir.join('tmp0.png'),
                               tmpdir.join('tmp2.png'), 0) is not None
+
+    def test_coadd_slitimage(self):
+        # parameter config has to include cal flags
+        param = FORCASTImagingParameters()
+
+        # exercise some non-default parameters for coadd
+        param.add_current_parameters('coadd')
+        param.add_current_parameters('coadd')
+        param.drip_config = {}
+
+        # with slit boresight: coadd off by default
+        param.drip_cal_config = {'boresight': 'LONGSLIT'}
+        param.coadd(0)
+        assert param.current[0].get_value('skip_coadd') is True
+
+        # without: coadd on by default
+        param.drip_cal_config = {'boresight': 'OTHER'}
+        param.coadd(1)
+        assert param.current[1].get_value('skip_coadd') is False

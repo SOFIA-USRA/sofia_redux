@@ -110,7 +110,7 @@ coordinate mappings with all other sets.
 
     resampler = Resample(coordinates, data, window=10, order=2)
     good = resampler(xout, yout, smoothing=0.1, relative_smooth=True,
-                     jobs=-1, order_algorithm='extrapolate')
+                     order_algorithm='extrapolate')
 
     # get it b1ack into the correct shape and RGB format for plotting
     good = np.clip(np.moveaxis(good, 0, -1).astype(int), 0, 255)
@@ -174,11 +174,11 @@ has been used to preserve detail.
     yout = np.linspace(0, 63, 64 * 5)
 
     # Default uses "bounded" order algorithm
-    bounded_mode = resampler(xout, yout, jobs=-1, smoothing=0.05,
+    bounded_mode = resampler(xout, yout, smoothing=0.05,
                              relative_smooth=True, order_algorithm='bounded')
-    extrap_mode = resampler(xout, yout, jobs=-1, smoothing=0.05,
+    extrap_mode = resampler(xout, yout, smoothing=0.05,
                             relative_smooth=True, order_algorithm='extrapolate')
-    com_edges = resampler(xout, yout, jobs=-1, smoothing=0.05,
+    com_edges = resampler(xout, yout, smoothing=0.05,
                           order_algorithm='extrapolate',
                           edge_threshold=0.8, relative_smooth=True)
 
@@ -246,16 +246,16 @@ dimensions for a second order polynomial (requires `order` + 1).
 
     sigma = gaussian_fwhm_to_sigma * 3
 
-    low, low_weights = resampler(xout, yout, jobs=-1,
+    low, low_weights = resampler(xout, yout,
                                  smoothing=3 * sigma,
                                  get_distance_weights=True,
                                  order_algorithm='extrapolate')
 
-    high, high_weights = resampler(xout, yout, jobs=-1, smoothing=sigma / 3,
+    high, high_weights = resampler(xout, yout, smoothing=sigma / 3,
                                    get_distance_weights=True,
                                    order_algorithm='extrapolate')
 
-    adaptive, adaptive_weights = resampler(xout, yout, jobs=-1,
+    adaptive, adaptive_weights = resampler(xout, yout,
                                            smoothing=sigma,
                                            adaptive_threshold=1,
                                            get_distance_weights=True,

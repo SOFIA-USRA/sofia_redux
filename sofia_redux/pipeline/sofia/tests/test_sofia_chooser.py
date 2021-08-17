@@ -20,10 +20,6 @@ try:
         import FORCASTSlitcorrReduction
     from sofia_redux.pipeline.sofia.exes_quicklook_reduction import \
         EXESQuicklookReduction
-    from sofia_redux.pipeline.sofia.flitecam_imgmap_reduction import \
-        FLITECAMImgmapReduction
-    from sofia_redux.pipeline.sofia.flitecam_specmap_reduction import \
-        FLITECAMSpecmapReduction
     HAS_DRIP = True
 except ImportError:
     FORCASTImagingReduction = Reduction
@@ -32,8 +28,6 @@ except ImportError:
     FORCASTSpatcalReduction = Reduction
     FORCASTSlitcorrReduction = Reduction
     EXESQuicklookReduction = Reduction
-    FLITECAMImgmapReduction = Reduction
-    FLITECAMSpecmapReduction = Reduction
     HAS_DRIP = False
 
 try:
@@ -49,6 +43,26 @@ try:
 except ImportError:
     FIFILSReduction = Reduction
     HAS_FIFI = False
+
+try:
+    from sofia_redux.pipeline.sofia.flitecam_imaging_reduction \
+        import FLITECAMImagingReduction
+    from sofia_redux.pipeline.sofia.flitecam_spectroscopy_reduction \
+        import FLITECAMSpectroscopyReduction
+    from sofia_redux.pipeline.sofia.flitecam_wavecal_reduction \
+        import FLITECAMWavecalReduction
+    from sofia_redux.pipeline.sofia.flitecam_spatcal_reduction \
+        import FLITECAMSpatcalReduction
+    from sofia_redux.pipeline.sofia.flitecam_slitcorr_reduction \
+        import FLITECAMSlitcorrReduction
+    HAS_FLITECAM = True
+except ImportError:
+    FLITECAMImagingReduction = Reduction
+    FLITECAMSpectroscopyReduction = Reduction
+    FLITECAMWavecalReduction = Reduction
+    FLITECAMSpatcalReduction = Reduction
+    FLITECAMSlitcorrReduction = Reduction
+    HAS_FLITECAM = False
 
 
 class TestSOFIAChooser(object):
@@ -144,16 +158,6 @@ class TestSOFIAChooser(object):
             ro = chz.choose_reduction(ffile3, cfg)
             assert type(ro) == EXESQuicklookReduction
 
-            # flitecam imaging data for quicklook
-            fits.setval(ffile3, 'INSTRUME', value='FLITECAM')
-            ro = chz.choose_reduction(ffile3, cfg)
-            assert type(ro) == FLITECAMSpecmapReduction
-
-            # flitecam imaging data for quicklook
-            fits.setval(ffile3, 'INSTCFG', value='IMAGING')
-            ro = chz.choose_reduction(ffile3, cfg)
-            assert type(ro) == FLITECAMImgmapReduction
-
             # mismatched data
             ro = chz.choose_reduction([ffile1, ffile3])
             assert type(ro) == Reduction
@@ -165,6 +169,37 @@ class TestSOFIAChooser(object):
             ffile4 = self.make_fifi_file()
             ro = chz.choose_reduction(ffile4)
             assert type(ro) == FIFILSReduction
+
+        # flitecam data
+        if HAS_FLITECAM:
+            ffile5 = self.make_forcast_file()
+
+            # flitecam spec data
+            fits.setval(ffile5, 'INSTRUME', value='FLITECAM')
+            fits.setval(ffile5, 'INSTCFG', value='SPECTROSCOPY')
+
+            # standard mode
+            cfg = {}
+            ro = chz.choose_reduction(ffile5, cfg)
+            assert type(ro) == FLITECAMSpectroscopyReduction
+
+            # calibration modes
+            cfg = {'wavecal': True}
+            ro = chz.choose_reduction(ffile5, cfg)
+            assert type(ro) == FLITECAMWavecalReduction
+
+            cfg = {'spatcal': True}
+            ro = chz.choose_reduction(ffile5, cfg)
+            assert type(ro) == FLITECAMSpatcalReduction
+
+            cfg = {'slitcorr': True}
+            ro = chz.choose_reduction(ffile5, cfg)
+            assert type(ro) == FLITECAMSlitcorrReduction
+
+            # flitecam imaging data
+            fits.setval(ffile5, 'INSTCFG', value='IMAGING')
+            ro = chz.choose_reduction(ffile5)
+            assert type(ro) == FLITECAMImagingReduction
 
     def test_choose_reduction_errors(self, capsys, tmpdir):
         chz = SOFIAChooser()

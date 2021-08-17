@@ -30,6 +30,7 @@ def gaussian_data():
                          / fwhm ** 2)
     return data, size, fwhm, peak, x0, y0
 
+
 @pytest.fixture(scope='function')
 def ds9_regions_wcs():
     reg = '# Region file format: DS9 version 4.1\n' \
@@ -1293,6 +1294,16 @@ class TestQADImView(object):
         assert 'region load all' not in capt.out
         assert capt.out.count('region load') == 2
 
+    def test_no_regions(self, mocker):
+        mocker.patch('sofia_redux.pipeline.gui.qad.'
+                     'qad_imview.HAS_REGIONS', False)
+        self.mock_ds9(mocker)
+        imviewer = self.make_imview()
+
+        # this would fail if attempted; without HAS_REGIONS, just
+        # returns None regardless
+        assert imviewer._region_mask(None, None, None, None, None) is None
+
     @pytest.mark.skipif(not HAS_REGIONS, reason='regions not installed')
     @pytest.mark.parametrize('x,y,match',
                              [(84, 62, 'circle'),
@@ -1430,7 +1441,8 @@ class TestQADImView(object):
 
         # mock an error in retrieving data: warns only
         MockDS9.get_test['fits size'] = '50 50'
-        mocker.patch.object(imviewer, 'retrieve_data', side_effect=ValueError())
+        mocker.patch.object(imviewer, 'retrieve_data',
+                            side_effect=ValueError())
         imviewer.histogram(x0 + 1, y0 + 1)
         assert len(imviewer.histogram_data) == 0
         capt = capsys.readouterr()
@@ -1599,7 +1611,8 @@ class TestQADImView(object):
 
         # mock an error in retrieving data: warns only
         MockDS9.get_test['fits size'] = '50 50'
-        mocker.patch.object(imviewer, 'retrieve_data', side_effect=ValueError())
+        mocker.patch.object(imviewer, 'retrieve_data',
+                            side_effect=ValueError())
         imviewer.pix2pix(x0 + 1, y0 + 1)
         assert len(imviewer.p2p_data) == 0
         capt = capsys.readouterr()

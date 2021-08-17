@@ -16,7 +16,7 @@ try:
 except ImportError:
     raise SOFIAImportError('FORCAST modules not installed')
 
-from sofia_redux.instruments.forcast.header import hdmerge
+from sofia_redux.instruments.forcast.hdmerge import hdmerge
 
 from sofia_redux.pipeline.gui.matplotlib_viewer import MatplotlibViewer
 from sofia_redux.pipeline.gui.qad_viewer import QADViewer

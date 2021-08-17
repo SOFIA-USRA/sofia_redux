@@ -62,7 +62,8 @@ def fluxes(wavelengths):
 
 @pytest.fixture(scope='module')
 def shuffled_data(wavelengths, fluxes):
-    p = np.random.permutation(len(wavelengths))
+    rand = np.random.RandomState(42)
+    p = rand.permutation(len(wavelengths))
     return wavelengths[p], fluxes[p]
 
 

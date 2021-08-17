@@ -325,7 +325,8 @@ class PhotSettingsDialog(QtWidgets.QDialog,
         # window units list
         if 'window_units' in fromdict:
             units = fromdict['window_units'].lower()
-            idx = self.windowUnitsBox.findText(units, QtCore.Qt.MatchFixedString)
+            idx = self.windowUnitsBox.findText(units,
+                                               QtCore.Qt.MatchFixedString)
             if idx != -1:
                 self.windowUnitsBox.setCurrentIndex(idx)
 

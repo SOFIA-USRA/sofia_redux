@@ -15,4 +15,5 @@ Submodules
     :maxdepth: 2
 
     fifi_ls/index.rst
+    flitecam/index.rst
     forcast/index.rst

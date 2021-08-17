@@ -1,3 +1,10 @@
+1.1.0 (2021-09)
+===============
+
+- Added FLITECAM support (FLITECAM Redux v2.0.0) for all observation
+  modes.
+
+
 1.0.0 (2021-07-15)
 ==================
 

@@ -18,7 +18,7 @@ From source
 -----------
 
 Obtain the source code for this package from the `SOFIA Redux GitHub project
-<https://github.com/SOFIA-USRA/sofia_redux>`_, then install via one of the
+<https://github.com/SOFIA-USRA/sofia_redux>`__, then install via one of the
 two methods below.
 
 Via Anaconda
@@ -26,7 +26,7 @@ Via Anaconda
 
 We recommend Anaconda for managing your Python environment.  A conda
 environment specification is included with this package, as
-`environment.yml <https://raw.githubusercontent.com/SOFIA-USRA/sofia_redux/main/environment.yml>`_.
+`environment.yml <https://raw.githubusercontent.com/SOFIA-USRA/sofia_redux/main/environment.yml>`__.
 
 To install a ``sofia_redux`` environment with Anaconda::
 
@@ -92,7 +92,7 @@ DS9
 Some optional visualization tools in the SOFIA Redux interface also
 use the `pyds9` and `regions` packages to interface with the external
 SAOImage DS9 tool. To use these tools, install
-`DS9 <https://sites.google.com/cfa.harvard.edu/saoimageds9>`_, then
+`DS9 <https://sites.google.com/cfa.harvard.edu/saoimageds9>`__, then
 install pyds9 and regions directly via pip::
 
   pip install pyds9 regions
@@ -104,7 +104,7 @@ or using the provided optional requirements file::
 Please note that pyds9 requires gcc to compile, and is not available
 on the Windows platform.  On MacOS, you will need to make a `ds9`
 executable available in your PATH environment variable; see the
-`DS9 FAQs <http://ds9.si.edu/doc/faq.html#MacOSX>`_ for more information.
+`DS9 FAQs <http://ds9.si.edu/doc/faq.html#MacOSX>`__ for more information.
 
 Reference data
 ^^^^^^^^^^^^^^
@@ -115,25 +115,27 @@ so they are provided separately.
 
 Atmospheric models
 ~~~~~~~~~~~~~~~~~~
-For optimal telluric correction, FORCAST and FIFI-LS spectroscopic
+For optimal telluric correction, FORCAST, FLITECAM, and FIFI-LS spectroscopic
 reductions require a library of FITS files, containing model atmospheric
 transmission spectra, derived from the
-`ATRAN model <https://atran.arc.nasa.gov/cgi-bin/atran/atran.cgi>`_.
+`ATRAN model <https://atran.arc.nasa.gov/cgi-bin/atran/atran.cgi>`__.
 
-Two versions of the model libraries are available for each instrument:
+Two versions of the model libraries are available for each instrument, except
+FLITECAM.  ATRAN files parameterized by water vapor are not available for
+FLITECAM.
 
 - FORCAST:
 
   - Approximate models, not accounting for water vapor variation
 
-    - Download: `atran_forcast_standard.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_forcast_standard.tgz>`_
+    - Download: `atran_forcast_standard.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_forcast_standard.tgz>`__
     - Size: 531.3 MB
     - MD5 checksum: 61141843b245eea1fdfd45167a1a750b
 
   - More accurate models, enabling programmatic optimization of
     the telluric correction
 
-    - Download: `atran_forcast_wv.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_forcast_wv.tgz>`_
+    - Download: `atran_forcast_wv.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_forcast_wv.tgz>`__
     - Size: 37.5 GB
     - MD5 checksum: 49264dfd6c3288af2553f73f8082ec97
 
@@ -141,29 +143,39 @@ Two versions of the model libraries are available for each instrument:
 
   - Approximate models, not accounting for water vapor variation
 
-    - Download: `atran_fifi-ls_standard.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_fifi-ls_standard.tgz>`_
+    - Download: `atran_fifi-ls_standard.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_fifi-ls_standard.tgz>`__
     - Size: 143.9 MB
     - MD5 checksum: 9a6480d5967f4287388a3070e71e40e8
 
   - More accurate models, enabling use of water vapor values
     recorded in the FITS headers for more accurate telluric correction
 
-    - Download: `atran_fifi-ls_wv.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_fifi-ls_wv.tgz>`_
+    - Download: `atran_fifi-ls_wv.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_fifi-ls_wv.tgz>`__
     - Size: 2.8 GB
     - MD5 checksum: 486a34fd229b13d8e45768f3664fff64
 
+- FLITECAM:
+
+  - Approximate models, not accounting for water vapor variation
+
+    - Download: `atran_flitecam_standard.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_flitecam_standard.tgz>`__
+    - Size: 875 MB
+    - MD5 checksum: 6576883144bcc381eacdfe16688ad4d2
+
+
 After downloading and unpacking the library, its location can be provided
 to the pipeline as an optional parameter in the *Calibrate Flux* step for
-FORCAST or the *Telluric Correct* step for FIFI-LS.
+FORCAST or FLITECAM or the *Telluric Correct* step for FIFI-LS.
 
 Standard flux models
 ~~~~~~~~~~~~~~~~~~~~
 In addition to the ATRAN models, a library of standard flux models is
-required to reduce FORCAST standard spectra to instrumental response curves.
-This should be rarely needed for standard scientific reductions, since
-reference response curves are provided for most data.  If needed for
+required to reduce FORCAST or FLITECAM standard spectra to instrumental
+response curves. This should be rarely needed for standard scientific reductions,
+since reference response curves are provided for most data.  If needed for
 re-deriving spectral flux calibrations, the standard model spectra are
 provided in the
-`source distribution <https://github.com/SOFIA-USRA/sofia_redux>`_ of
-this package, at sofia_redux/instruments/forcast/data/grism/standard_models.
+`source distribution <https://github.com/SOFIA-USRA/sofia_redux>`__ of
+this package, at sofia_redux/instruments/forcast/data/grism/standard_models
+or sofia_redux/instruments/flitecam/data/grism/standard_models.
 

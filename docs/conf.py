@@ -59,18 +59,20 @@ highlight_language = 'none'
 # directories to ignore when looking for source files.
 exclude_patterns.append('_templates')
 
-# Ignore files from the manuals that are intended to be included in
-# the latexpdf output, but not in the html.  These are references
-# back to the Redux API, for inclusion in developer's manuals.  They
-# will cause 'duplicate object description' errors if not ignored.
-exclude_patterns.append('manuals/*/*/redux_doc.rst')
+# exclude some things intended for direct inclusion or for latex/html
+# specific support
+exclude_patterns.append('sofia_redux/pipeline/redux_usage.rst')
+exclude_patterns.append('sofia_redux/pipeline/usage/*.rst')
 exclude_patterns.append('manuals/*/*/index.rst')
-
-# also exclude any api docs explicitly built for the manuals
+exclude_patterns.append('manuals/*/*/redux_doc.rst')
+exclude_patterns.append('manuals/*/users/data_description.rst')
+exclude_patterns.append('manuals/*/users/software_description.rst')
+exclude_patterns.append('manuals/*/users/spectral_extraction.rst')
+exclude_patterns.append('manuals/*/users/spectral_calibration.rst')
+exclude_patterns.append('manuals/*/data_handbook')
 exclude_patterns.append('manuals/*/*/api')
 
-# also exclude hawc and flitecam for now
-exclude_patterns.append('manuals/flitecam/*')
+# also exclude hawc for now
 exclude_patterns.append('manuals/hawc/*')
 
 # This is added to the end of RST files - a good place to put substitutions to

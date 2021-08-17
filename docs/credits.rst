@@ -38,9 +38,9 @@ SOFIA DPS lead.
 Acknowledgements
 ================
 
-The FORCAST and FIFI-LS pipelines distributed in sofia_redux were based in
-part on earlier packages developed in IDL for the SOFIA project, with the
-following primary contributors.
+The FORCAST, FLITECAM, and FIFI-LS pipelines distributed in sofia_redux
+were based in part on earlier packages developed in IDL for the SOFIA project,
+with the following primary contributors.
 
 * FSpextool
    - Melanie Clarke
@@ -59,6 +59,9 @@ following primary contributors.
    - Randolf Klein
    - Kaori Nishikida
    - William Vacca
+* FDRP
+   - Sachin Shenoy
+   - Ralph Shuping
 * pipecal
    - Miguel Charcos-Llorens
    - Melanie Clarke

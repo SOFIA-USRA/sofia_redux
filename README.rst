@@ -15,28 +15,28 @@ for instruments on the Stratospheric Observatory for Infrared Astronomy
 (SOFIA).
 
 Currently, the SOFIA instruments supported by this package are the FORCAST
-imaging and spectroscopic instrument and the FIFI-LS integral field
-spectrometer. Python pipelines for the FLITECAM imaging and spectroscopic
-instrument and the HAWC+ imaging and polarimetric instrument are still
-under development, and will be added to this package when available.
+and FLITECAM imaging and spectroscopic instruments and the FIFI-LS integral
+field spectrometer. A Python pipeline for the HAWC+ imaging and polarimetric
+instrument is still under development, and will be added to this package
+when available.
 
 SOFIA raw and processed data can be accessed from the
-`SOFIA archive <https://irsa.ipac.caltech.edu/applications/sofia/>`_.
+`SOFIA archive <https://irsa.ipac.caltech.edu/applications/sofia/>`__.
 Archived data may not match the results of data processed
 with this pipeline software.  Questions specific to particular data sets
-should be directed to the `SOFIA helpdesk <sofia_help@sofia.usra.edu>`_.
+should be directed to the `SOFIA helpdesk <sofia_help@sofia.usra.edu>`__.
 
 SOFIA pipelines are developed internally by the USRA/SOFIA data processing
 software team, then are published publicly at the
 `SOFIA Redux GitHub project
-<https://github.com/SOFIA-USRA/sofia_redux>`_.
+<https://github.com/SOFIA-USRA/sofia_redux>`__.
 Contributions and feedback are welcome via the GitHub project, but
 merge requests cannot be directly accepted.  They will be internally reviewed,
 and pushed to the public site as needed.
 
 For more information about installing and using this package, see
-the `online documentation <https://SOFIA-USRA.github.io/sofia_redux/>`_,
-or `docs/install.rst <docs/install.rst>`_ in the source distribution.
+the `online documentation <https://SOFIA-USRA.github.io/sofia_redux/>`__,
+or `docs/install.rst <docs/install.rst>`__ in the source distribution.
 
 License
 -------

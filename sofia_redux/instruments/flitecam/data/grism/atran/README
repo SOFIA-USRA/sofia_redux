@@ -1,0 +1,26 @@
+These files have been down-sampled to 1e6 points each, from
+the default ATRAN resolution.  After binning to FLITECAM
+resolution, there is no difference between using the full-resolution
+files and these smaller ones.
+
+To down-sample a raw ATRAN file in FITS format:
+Loop over the files, generate a 1e6 element wavelength array with
+the same range as the original, use mc_interpspec to linearly interpolate
+onto the new wavelengths.
+
+npts=1e6
+files=file_search('atran*fits')
+foreach f,files do begin 
+   print, f
+   a = readfits(f,h)
+   w = a[*,0]
+   t = a[*,1]
+   s = findgen(npts) * (w[-1]-w[0]) / npts + w[0]
+   mc_interpspec, w, t, s, st
+   writefits, f, [[s], [st]], h
+endforeach
+
+In two lines:
+npts=1e6 & files=file_search('atran*fits')
+foreach f,files do begin print,f & a=readfits(f,h) & w=a[*,0] & t=a[*,1] & s=findgen(npts)*(w[-1]-w[0])/npts+w[0] & mc_interpspec,w,t,s,st & writefits,f,[[s],[st]],h
+

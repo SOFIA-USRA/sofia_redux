@@ -15,7 +15,7 @@ from sofia_redux.instruments.flitecam.tests.resources import raw_testdata
 def linfile():
     pth = os.path.join(os.path.dirname(fdrp.__file__),
                        'data', 'linearity_files')
-    linfile = os.path.join(pth, 'lc_coeffs_20140325.fits')
+    linfile = os.path.join(pth, 'flitecam_lc_coeffs.fits')
     return linfile
 
 

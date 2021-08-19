@@ -25,7 +25,7 @@ def test_ordermask(flat_info_file):
     assert flat.edgecoeffs.shape == (norders, 2, flat.edgedeg + 1)
     assert flat.xranges.shape == (norders, 2)
     assert not np.allclose(flat.xranges, flat.guesspos)
-    assert np.allclose(flat.omask, flat.generate_order_mask())
+    assert np.allclose(flat.omask, flat.generate_order_mask(offset=1298))
 
 
 def test_adjust_guesspos(flat_info_file):
@@ -50,9 +50,9 @@ def test_adjust_guesspos(flat_info_file):
     # test error in order specification
     flat.orders = [311, 312, 313]
     with pytest.raises(ValueError) as err:
-        flat.adjust_guess_position(shifted, order=333,
+        flat.adjust_guess_position(shifted, order=314,
                                    ybuffer=100000000000)
-    assert 'Order 333 not present in orders' in str(err)
+    assert 'Order 314 not present in orders' in str(err)
 
 
 def test_flat_class(flat_info_file):

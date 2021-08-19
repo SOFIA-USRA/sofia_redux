@@ -4,11 +4,15 @@ from collections import OrderedDict
 import os
 
 from astropy import log
+from astropy.utils.data import download_file
 import pandas
 
 from sofia_redux.instruments import flitecam as fdrp
 
 __all__ = ['getcalpath']
+
+# back up download URL for non-source installs
+DATA_URL = 'https://sofia-flitecam-reference.s3-us-gov-west-1.amazonaws.com/'
 
 
 def getcalpath(header):
@@ -138,7 +142,15 @@ def getcalpath(header):
     row = table[table.index == table.index.min()].sort_index().iloc[0]
     for f in calcols:
         if f.endswith('file') and f in row and row[f] != '.':
-            result[f] = os.path.join(path, row[f])
+            # for source distributions, the file should be in
+            # the standard calpath
+            expected = os.path.join(path, row[f])
+            if os.path.isfile(expected):
+                result[f] = expected
+            else:
+                # for public pip/conda distributions, it may need
+                # to be downloaded from S3
+                result[f] = _download_cache_file(row[f])
 
     # Read additional grism defaults into result
     if result['gmode'] > 0:
@@ -196,7 +208,15 @@ def _get_grism_cal(pathcal, result):
     row = table[table.index == table.index.min()].sort_index().iloc[0]
     for f in calcols:
         if f.endswith('file') and f in row and row[f] != '.':
-            result[f] = os.path.join(pathcal, row[f])
+            # for source distributions, the file should be in
+            # the standard calpath
+            expected = os.path.join(pathcal, row[f])
+            if os.path.isfile(expected):
+                result[f] = expected
+            else:
+                # for public pip/conda distributions, it may need
+                # to be downloaded from S3
+                result[f] = _download_cache_file(row[f])
         elif f in ['waveshift', 'resolution'] and f in row and row[f] != '.':
             try:
                 result[f] = float(row[f])
@@ -205,3 +225,18 @@ def _get_grism_cal(pathcal, result):
                       f'on date {dateobs} from {calfile_default}'
                 log.warning(msg)
                 result['error'] = True
+
+
+def _download_cache_file(filename):
+    basename = os.path.basename(filename)
+    url = f'{DATA_URL}{basename}'
+
+    try:
+        cache_file = download_file(url, cache=True, pkgname='sofia_redux')
+    except (OSError, KeyError):
+        # return basename only if file can't be downloaded;
+        # pipeline will issue clearer errors later
+        cache_file = basename
+        log.warning(f'File {cache_file} could not be downloaded from {url}')
+
+    return cache_file

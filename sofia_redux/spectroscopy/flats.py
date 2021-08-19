@@ -97,13 +97,22 @@ class FlatBase:
     def parse_info(self):  # pragma: no cover
         pass
 
-    def generate_order_mask(self):
-        """Generate an order mask based on xranges and edge coefficients
+    def generate_order_mask(self, offset=0):
+        """
+        Generate an order mask based on xranges and edge coefficients
 
         Notes
         -----
         No rotation is applied if we're generating the order mask.  The
         parameters required for order mask generation are already correct.
+
+        Parameters
+        ----------
+        offset : int, optional
+            If provided, will be added to the x coordinate before
+            generating the edge coefficient polynomials.  This is intended
+            to allow reusing edge coordinates for a shifted array in
+            the x-direction.
         """
         nrow, ncol = self.shape
         yy, xx = np.mgrid[:nrow, :ncol]
@@ -111,7 +120,7 @@ class FlatBase:
         omask = np.zeros(self.shape, dtype=int)
         for i, order in enumerate(self.orders):
             fillmask[...] = False
-            x = np.arange(self.xranges[i, 0], self.xranges[i, 1] + 1)
+            x = np.arange(self.xranges[i, 0], self.xranges[i, 1] + 1) + offset
             botedge = poly1d(x, self.edgecoeffs[i, 0])
             topedge = poly1d(x, self.edgecoeffs[i, 1])
             column_ok = topedge <= nrow - 0.5

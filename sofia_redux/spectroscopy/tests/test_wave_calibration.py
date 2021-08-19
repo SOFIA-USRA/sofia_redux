@@ -123,7 +123,7 @@ def test_guess_lines(wcal_info_file, lines_file):
     assert wcal.lines.table is not None
     assert 'wavelength' in wcal.lines.table
     assert 'xguess' not in wcal.lines.table
-    assert len(wcal.lines.table) == 175
+    assert len(wcal.lines.table) == 27
 
     # guess lines
     wcal.guess_lines()

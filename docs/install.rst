@@ -179,3 +179,14 @@ provided in the
 this package, at sofia_redux/instruments/forcast/data/grism/standard_models
 or sofia_redux/instruments/flitecam/data/grism/standard_models.
 
+FLITECAM auxiliary data
+~~~~~~~~~~~~~~~~~~~~~~~
+FLITECAM's default auxiliary calibration and reference data, including
+nonlinearity correction coefficients, spectroscopic order masks,
+and wavelength calibration files are provided in full in the
+`source distribution <https://github.com/SOFIA-USRA/sofia_redux>`__ of
+this package.  Since they are required for most FLITECAM data reductions,
+they are automatically downloaded as needed for non-source installations
+(i.e. via pip or conda).  Downloaded calibration files are cached for
+later use in a '.sofia_redux' directory in the user's home directory.
+For offline pipeline reductions, the source installation is recommended.

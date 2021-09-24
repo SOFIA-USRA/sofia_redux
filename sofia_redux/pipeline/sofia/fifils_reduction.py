@@ -969,6 +969,7 @@ class FIFILSReduction(Reduction):
         watermark = param.get_value('watermark')
         ignore_outer = param.get_value('ignore_outer')
         atran_plot = param.get_value('atran_plot')
+        error_plot = param.get_value('error_plot')
         spec_scale = param.get_value('spec_scale')
 
         # format override parameters
@@ -1193,6 +1194,9 @@ class FIFILSReduction(Reduction):
             ax1 = fig.axes[0]
             ax1.scatter(x, y, c=contour_color, marker='x', s=20,
                         alpha=0.8)
+
+            if not error_plot:
+                spec_err = None
 
             # add a spectral plot
             ax = fig.add_subplot(2, 1, 2)

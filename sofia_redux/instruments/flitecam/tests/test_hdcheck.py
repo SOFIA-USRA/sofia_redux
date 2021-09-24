@@ -17,6 +17,7 @@ def kwfile():
     kwfile = os.path.join(pth, 'header_req_ima.cfg')
     return kwfile
 
+
 @pytest.fixture(scope='function')
 def gri_kwfile():
     pth = os.path.join(os.path.dirname(fdrp.__file__), 'data', 'keyword_files')

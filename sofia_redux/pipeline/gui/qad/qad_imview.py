@@ -13,8 +13,8 @@ from astropy import log, modeling, stats, table, wcs
 import numpy as np
 from scipy.stats import gmean
 
-from sofia_redux.pipeline.interface import set_log_level
 from sofia_redux.pipeline.gui.matplotlib_viewer import MatplotlibPlot
+from sofia_redux.toolkit.utilities.fits import set_log_level
 
 try:
     from sofia_redux.calibration.pipecal_photometry import pipecal_photometry
@@ -212,17 +212,16 @@ class QADImView(object):
             # read ds9 string into a region class
             try:
                 with set_log_level('CRITICAL'):
-                    parser = ar.DS9Parser(reg_str, errors='ignore')
-                    frame_regions = parser.shapes.to_regions()
-            except (ar.DS9RegionParserError, AttributeError,
-                    ValueError) as err:
+                    frame_regions = ar.Regions.parse(reg_str, format='ds9')
+            except Exception as err:
                 log.debug(f'Region parser error: {err}')
                 continue
             for fr in frame_regions:
                 if cs == 'wcs':
                     # convert to a pixel region first
                     try:
-                        fr = fr.to_pixel(hwcs)
+                        with set_log_level('CRITICAL'):
+                            fr = fr.to_pixel(hwcs)
                     except Exception as err:  # pragma: no cover
                         # error could be anything, since regions package
                         # is in early development state
@@ -231,7 +230,8 @@ class QADImView(object):
 
                 # check if cursor is contained in a region
                 # in any frame
-                contained = fr.contains(ctr_coord)
+                with set_log_level('CRITICAL'):
+                    contained = fr.contains(ctr_coord)
                 if hasattr(contained, '__len__'):
                     # PolygonPixelRegion returns an array, currently
                     # (regions v0.4)
@@ -240,7 +240,8 @@ class QADImView(object):
                 if contained:
                     # get mask from first matching region
                     try:
-                        mask = fr.to_mask()
+                        with set_log_level('CRITICAL'):
+                            mask = fr.to_mask()
                     except Exception as err:  # pragma: no cover
                         # error could be anything, since regions package
                         # is in early development state
@@ -409,9 +410,9 @@ class QADImView(object):
             hist_stats = (np.nanmean(hist_data),
                           np.nanmedian(hist_data),
                           np.nanstd(hist_data))
-            with set_log_level('CRITICAL'):
-                clip_stats = stats.sigma_clipped_stats(hist_data)
-            text_stats = [f'Total pixels: {np.sum(~np.isnan(hist_data))}',
+            nnan = np.isfinite(hist_data)
+            clip_stats = stats.sigma_clipped_stats(hist_data[nnan])
+            text_stats = [f'Total pixels: {np.sum(nnan)}',
                           f'Min, max, sum: '
                           f'{hist_minmax[0]:.5g}, {hist_minmax[1]:.5g}, '
                           f'{hist_minmax[2]:.5g}',

@@ -1,7 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from astropy.io import fits
-
 __all__ = ['clipimg']
 
 
@@ -46,7 +44,7 @@ def clipimg(hdul, datasec):
             header['CRPIX1'] -= datasec[0]
             header['CRPIX2'] -= datasec[2]
         except (ValueError, KeyError, TypeError):
-            raise ValueError(f'Invalid CRPIX header keywords')
+            raise ValueError('Invalid CRPIX header keywords')
         clipped[i].header = header
 
     return clipped

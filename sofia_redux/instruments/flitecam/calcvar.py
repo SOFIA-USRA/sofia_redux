@@ -55,8 +55,8 @@ def calcvar(data, header):
     readtime /= 1000.
     datavar = np.abs(data) / (gain * ndr * coadds**2 * itime**2)
     crtn = 1. - (readtime * (ndr**2 - 1.) / (3. * itime * ndr))
-    readnoise_var = (2. * rms_readnoise**2) / (ndr * coadds *
-                                               gain**2 * itime**2.)
+    readnoise_var = (2. * rms_readnoise**2) / (ndr * coadds
+                                               * gain**2 * itime**2.)
 
     var = datavar * crtn + readnoise_var
 

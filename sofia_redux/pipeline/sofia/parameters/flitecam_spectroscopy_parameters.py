@@ -676,6 +676,13 @@ SPECTRAL_DEFAULT = {
                         'be displayed in the spectral plot.',
          'dtype': 'bool',
          'wtype': 'check_box'},
+        {'key': 'error_plot',
+         'name': 'Overplot error range',
+         'value': True,
+         'description': 'If set, the error range will\n '
+                        'be overlaid on the spectral plot.',
+         'dtype': 'bool',
+         'wtype': 'check_box'},
         {'key': 'spec_scale',
          'name': 'Flux scale for spectral plot',
          'value': [0.25, 99.75],

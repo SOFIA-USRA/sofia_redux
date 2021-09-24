@@ -24,7 +24,6 @@ except ImportError:
 
 from sofia_redux.instruments.forcast.getpar import getpar
 import sofia_redux.instruments.forcast.configuration as dripconfig
-from sofia_redux.pipeline.interface import set_log_level
 from sofia_redux.pipeline.gui.qad_viewer import QADViewer
 from sofia_redux.pipeline.gui.matplotlib_viewer import MatplotlibViewer
 from sofia_redux.pipeline.reduction import Reduction
@@ -32,7 +31,7 @@ from sofia_redux.pipeline.sofia.forcast_reduction import FORCASTReduction
 from sofia_redux.pipeline.sofia.parameters.forcast_spectroscopy_parameters \
     import FORCASTSpectroscopyParameters
 from sofia_redux.toolkit.utilities.fits \
-    import hdinsert, getheader, gethdul
+    import hdinsert, getheader, gethdul, set_log_level
 from sofia_redux.visualization.redux_viewer import EyeViewer
 
 # these imports are not used here, but are needed to avoid
@@ -2649,6 +2648,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
         override_point = param.get_value('override_point')
         ignore_outer = param.get_value('ignore_outer')
         atran_plot = param.get_value('atran_plot')
+        error_plot = param.get_value('error_plot')
         spec_scale = param.get_value('spec_scale')
 
         # format override parameters
@@ -2832,6 +2832,9 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
                     aplot = [wave.T, atran.T]
                 else:
                     aplot = [wave, atran]
+
+            if not error_plot:
+                spec_err = None
 
             # plot spectral flux
             make_spectral_plot(ax, wave, spec_flux, spectral_error=spec_err,

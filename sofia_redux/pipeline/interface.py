@@ -1,7 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """Interface to Redux reduction objects."""
 
-from contextlib import contextmanager
 import logging
 import mimetypes
 import os
@@ -28,24 +27,6 @@ class TidyLogHandler(logging.StreamHandler):
            The log record.
         """
         print(record.msg)
-
-
-@contextmanager
-def set_log_level(level):
-    """
-    Context manager to temporarily set the log level.
-
-    Parameters
-    ----------
-    level : str or int
-        Logging level as defined in the `logging` module.
-    """
-    orig_level = log.level
-    log.setLevel(level)
-    try:
-        yield
-    finally:
-        log.setLevel(orig_level)
 
 
 class Interface(object):

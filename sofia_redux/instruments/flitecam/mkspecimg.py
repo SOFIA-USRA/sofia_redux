@@ -1,7 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from astropy import log
-from astropy.io import fits
 import numpy as np
 
 from sofia_redux.instruments.forcast.hdmerge import hdmerge
@@ -55,7 +54,7 @@ def mkspecimg(infiles, pair_subtract=True, flatfile=None, filenum=None):
         input file numbers.
     """
     # read flat data
-    flat, flat_var = None, None
+    flat = None
     if flatfile is not None:
         flatdata = readflat(flatfile)
         if flatdata is None:

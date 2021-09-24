@@ -428,7 +428,6 @@ class TestFLITECAMImagingReduction(object):
             red.correct_linearity()
         assert 'No linearity file' in str(err)
 
-
     def test_clip_image(self, tmpdir, capsys):
         ffile, red, idx = self.standard_setup(tmpdir, 'clip_image',
                                               nfiles=1)

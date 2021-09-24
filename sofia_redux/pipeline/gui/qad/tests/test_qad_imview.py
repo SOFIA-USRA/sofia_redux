@@ -1330,7 +1330,7 @@ class TestQADImView(object):
 
         # trigger an error in the parser
         log.setLevel('DEBUG')
-        mocker.patch('sofia_redux.pipeline.gui.qad.qad_imview.ar.DS9Parser',
+        mocker.patch('sofia_redux.pipeline.gui.qad.qad_imview.ar.Regions.parse',
                      side_effect=ValueError())
         bad_mask = imviewer._region_mask('image', [ds9_regions_image], x, y,
                                          header_wcs)

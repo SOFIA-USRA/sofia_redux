@@ -12,9 +12,9 @@ import pytest
 
 from sofia_redux.pipeline.gui.qad_viewer import QADViewer
 from sofia_redux.pipeline.gui.matplotlib_viewer import MatplotlibViewer
-from sofia_redux.pipeline.interface import set_log_level
 from sofia_redux.pipeline.reduction import Reduction
 import sofia_redux.pipeline.sofia.parameters as srp
+from sofia_redux.toolkit.utilities.fits import set_log_level
 try:
     from sofia_redux.pipeline.sofia.forcast_spectroscopy_reduction \
         import FORCASTSpectroscopyReduction

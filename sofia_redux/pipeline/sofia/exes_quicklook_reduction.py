@@ -58,6 +58,7 @@ class EXESQuicklookReduction(FORCASTSpectroscopyReduction):
         scale = param.get_value('scale')
         ignore_outer = param.get_value('ignore_outer')
         atran_plot = param.get_value('atran_plot')
+        error_plot = param.get_value('error_plot')
         colormap = param.get_value('colormap')
         overplot_color = param.get_value('overplot_color')
         watermark = param.get_value('watermark')
@@ -140,6 +141,9 @@ class EXESQuicklookReduction(FORCASTSpectroscopyReduction):
                     aplot = [wave.T, atran.T]
                 else:
                     aplot = [wave, atran]
+
+            if not error_plot:
+                spec_err = None
 
             # plot spectral flux
             make_spectral_plot(ax, wave, spec_flux, spectral_error=spec_err,

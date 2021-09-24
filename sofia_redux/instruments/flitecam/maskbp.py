@@ -100,7 +100,7 @@ def fixpix(data, max_iter=5):
         # if it's source-like or bad pixel-like
         idx = np.where(corrected_image == hot)
         for y, x in zip(idx[0], idx[1]):
-            stamp = padded[y:y+5, x:x+5].copy()
+            stamp = padded[y:y + 5, x:x + 5].copy()
             mark_bad, replace = _test_stamp(stamp, medimg, test_limit)
             if mark_bad:
                 log.debug(f'Replace hot x,y={x},{y} value '
@@ -113,7 +113,7 @@ def fixpix(data, max_iter=5):
         # same for cold pixel
         idx = np.where(corrected_image == cold)
         for y, x in zip(idx[0], idx[1]):
-            stamp = padded[y:y+5, x:x+5].copy()
+            stamp = padded[y:y + 5, x:x + 5].copy()
             mark_bad, replace = _test_stamp(stamp, medimg, test_limit,
                                             sign=-1)
             if mark_bad:

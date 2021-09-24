@@ -78,7 +78,8 @@ def mkflat(infiles, method='median', weighted=True, robust=True,
     else:
         draft_method = 'median'
         draft_flat, draft_flat_var = combine_images(
-            data_list, variance=var_list, method=draft_method, weighted=weighted,
+            data_list, variance=var_list,
+            method=draft_method, weighted=weighted,
             robust=robust, sigma=obj_sigma, maxiters=maxiters)
         draft_flat /= np.nanmedian(draft_flat)
 

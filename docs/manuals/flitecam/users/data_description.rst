@@ -1130,7 +1130,7 @@ FLITECAM output files from Redux are named according to the convention:
 
 where flight is the SOFIA flight number, FC is the instrument
 identifier, IMA or GRI specifies that it is an imaging or grism file,
-AOR-ID is the 8 digit AOR identifier for the observation, SPECTEL1 is the
+AOR-ID is the AOR identifier for the observation, SPECTEL1 is the
 keywords specifying the filter or grism used,
 Type is three letters identifying the product type (listed in
 :numref:`flitecam_img_prod` and :numref:`flitecam_gri_prod` below),
@@ -1165,7 +1165,7 @@ separately from the FITS file products.
     sets of default products.  Refer to earlier revisions of this manual
     for complete information.
 
-.. table:: Intermediate data products for imaging reductions
+.. table:: Intermediate and final data products for imaging reductions
    :name: flitecam_img_prod
    :class: longtable
    :widths: 20 14 18 18 10 12 26
@@ -1205,7 +1205,7 @@ separately from the FITS file products.
 
 
 
-.. table:: Intermediate data products for spectroscopy reduction
+.. table:: Intermediate and final data products for spectroscopy reduction
    :name: flitecam_gri_prod
    :class: longtable
    :widths: 20 14 18 18 10 12 27

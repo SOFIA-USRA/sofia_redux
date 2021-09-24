@@ -14,7 +14,6 @@ try:
 except ImportError:
     raise SOFIAImportError('FLITECAM modules not installed')
 
-from sofia_redux.pipeline.interface import set_log_level
 from sofia_redux.pipeline.reduction import Reduction
 from sofia_redux.pipeline.sofia.flitecam_reduction \
     import FLITECAMReduction
@@ -22,7 +21,7 @@ from sofia_redux.pipeline.sofia.parameters.flitecam_spectroscopy_parameters \
     import FLITECAMSpectroscopyParameters
 from sofia_redux.pipeline.sofia.forcast_spectroscopy_reduction \
     import FORCASTSpectroscopyReduction
-from sofia_redux.toolkit.utilities.fits import hdinsert
+from sofia_redux.toolkit.utilities.fits import hdinsert, set_log_level
 
 
 class FLITECAMSpectroscopyReduction(FLITECAMReduction,

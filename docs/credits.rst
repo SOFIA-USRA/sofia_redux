@@ -9,6 +9,8 @@ Current SOFIA DPS team
 * Ed Chambers, science lead
 * Dan Perera, developer
 * Rachel Vander Vliet, developer
+* Karishma Bansal, developer
+* Arpan Das, developer
 * Bruce Clarke, systems engineer
 * John Fenwick, systems administrator
 

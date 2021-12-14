@@ -1388,7 +1388,6 @@ class QADImView(object):
                 ellip = np.nan
                 pa = np.nan
             else:
-                log.warning((xfwhm, yfwhm))
                 # calculate ellipticity and fix PA
                 if xfwhm >= yfwhm:
                     ellip = 1 - yfwhm / xfwhm
@@ -1831,7 +1830,13 @@ class QADImView(object):
         yctr -= 1
 
         # retrieve data from current slice from viewer
-        pdata = self.ds9.get_arr2np()
+        try:
+            pdata = self.ds9.get_arr2np()
+        except ValueError:
+            log.warning('Displayed data cannot be retrieved as an array.')
+            log.warning('Try turning off cube display for '
+                        'multi-extension files.')
+            raise
         dim = pdata.shape
         if len(dim) > 2:
             zdim, ydim, xdim = dim

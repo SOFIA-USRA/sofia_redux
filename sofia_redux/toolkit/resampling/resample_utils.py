@@ -3,10 +3,11 @@
 import math
 import sys
 import warnings
-
 import numpy as np
 import numba as nb
 from numba import njit
+from numba.typed import List, Dict
+from numba.core import boxing
 from scipy.integrate import nquad
 from scipy.special import gamma
 from types import ModuleType, FunctionType
@@ -14,7 +15,12 @@ from gc import get_referents
 
 from sofia_redux.toolkit.utilities.func import taylor
 
-_condition_limit = 1 / np.finfo(np.float).eps
+nb.config.THREADING_LAYER = 'threadsafe'
+assert List
+assert Dict
+assert boxing
+
+_condition_limit = 1 / np.finfo(float).eps
 _fast_flags = {'nsz', 'nnan', 'ninf'}
 _fast_flags_all = {'nnan',  # no NaNs
                    'ninf',  # no infinities
@@ -184,7 +190,7 @@ def polynomial_exponents(order, ndim=None, use_max_order=False):
     return exponents
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def polynomial_derivative_map(exponents):  # pragma: no cover
     r"""
     Creates a mapping from polynomial exponents to derivatives.
@@ -318,7 +324,7 @@ def polynomial_derivative_map(exponents):  # pragma: no cover
     return derivative_map[:, :, :max_found]
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def evaluate_derivative(coefficients, phi_point, derivative_map
                         ):  # pragma: no cover
     r"""
@@ -390,7 +396,7 @@ def evaluate_derivative(coefficients, phi_point, derivative_map
     return gradients
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def evaluate_derivatives(coefficients, phi_points, derivative_map
                          ):  # pragma: no cover
     r"""
@@ -465,7 +471,7 @@ def evaluate_derivatives(coefficients, phi_points, derivative_map
     return gradients
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def derivative_mscp(coefficients, phi_samples, derivative_map,
                     sample_weights):  # pragma: no cover
     r"""
@@ -586,7 +592,7 @@ def scale_coordinates(coordinates, scale, offset, reverse=False):
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def scale_forward_scalar(coordinate, scale, offset):  # pragma: no cover
     r"""
     Applies the function `f(x) = (x - offset) / scale` to a single coordinate.
@@ -615,7 +621,7 @@ def scale_forward_scalar(coordinate, scale, offset):  # pragma: no cover
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def scale_forward_vector(coordinates, scale, offset):  # pragma: no cover
     r"""
     Applies the function `f(x) = (x - offset) / scale` to a coordinate array.
@@ -646,7 +652,7 @@ def scale_forward_vector(coordinates, scale, offset):  # pragma: no cover
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def scale_reverse_vector(coordinates, scale, offset):  # pragma: no cover
     r"""
     Applies the function `f(x) = (x * scale) + offset` to a coordinate array.
@@ -677,7 +683,7 @@ def scale_reverse_vector(coordinates, scale, offset):  # pragma: no cover
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def scale_reverse_scalar(coordinate, scale, offset):  # pragma: no cover
     r"""
     Applies the function `f(x) = (x * scale) + offset` to a single coordinate.
@@ -740,7 +746,7 @@ def polynomial_terms(coordinates, exponents):
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def single_polynomial_terms(coordinate, exponents):  # pragma: no cover
     r"""
     Derive polynomial terms for a single coordinate given polynomial exponents.
@@ -782,7 +788,7 @@ def single_polynomial_terms(coordinate, exponents):  # pragma: no cover
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def multiple_polynomial_terms(coordinates, exponents):  # pragma: no cover
     r"""
     Derive polynomial terms for a coordinate set given polynomial exponents.
@@ -828,7 +834,7 @@ def multiple_polynomial_terms(coordinates, exponents):  # pragma: no cover
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def sscp(matrix, weight=None, normalize=False):  # pragma: no cover
     r"""
     Calculate the sum-of-squares-and-cross-products of a matrix.
@@ -904,7 +910,7 @@ def sscp(matrix, weight=None, normalize=False):  # pragma: no cover
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def scaled_matrix_inverse(matrix, n=None, rank=None):  # pragma: no cover
     """
     Returns the inverse of a matrix scaled by N / (N - rank(matrix)).
@@ -948,7 +954,7 @@ def scaled_matrix_inverse(matrix, n=None, rank=None):  # pragma: no cover
     return scale * np.linalg.pinv(matrix)
 
 
-@njit(fastmath=True, nogil=False, cache=True)
+@njit(fastmath=True, nogil=False, cache=True, parallel=False)
 def solve_coefficients(amat, beta):  # pragma: no cover
     r"""
     Find least squares solution of Ax=B and rank of A.
@@ -972,7 +978,7 @@ def solve_coefficients(amat, beta):  # pragma: no cover
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def solve_amat_beta(phi, data, weights):  # pragma: no cover
     r"""
     Convenience function returning matrices suitable for linear algebra.
@@ -1149,7 +1155,7 @@ def relative_density(sigma, counts, weight_sum, tolerance=None,
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def calculate_windowed_distance_weight(
         coordinate, center, alpha):  # pragma: no cover
     r"""
@@ -1185,7 +1191,7 @@ def calculate_windowed_distance_weight(
     return math.exp(-weight)
 
 
-@njit(fastmath=True, nogil=False, cache=True)
+@njit(fastmath=True, nogil=False, cache=True, parallel=False)
 def fit_residual(data, phi, coefficients):  # pragma: no cover
     r"""
     Calculates the residual of a polynomial fit to data.
@@ -1215,7 +1221,7 @@ def fit_residual(data, phi, coefficients):  # pragma: no cover
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def weighted_mean(data, weights, weightsum=None):  # pragma: no cover
     r"""
     Calculate the weighted mean of a data set.
@@ -1258,7 +1264,7 @@ def weighted_mean(data, weights, weightsum=None):  # pragma: no cover
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def weighted_variance(
         error, weights, weightsum=None):   # pragma: no cover
     r"""
@@ -1301,7 +1307,7 @@ def weighted_variance(
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def weighted_mean_variance(
         variance, weights, weightsum=None):  # pragma: no cover
     r"""
@@ -1344,7 +1350,7 @@ def weighted_mean_variance(
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def weighted_fit_variance(
         residuals, weights, weightsum=None, rank=1):  # pragma: no cover
     r"""
@@ -1401,7 +1407,7 @@ def weighted_fit_variance(
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def fit_phi_value(phi, coefficients):  # pragma: no cover
     r"""
     Returns the dot product of phi and coefficients.
@@ -1459,7 +1465,7 @@ def fit_phi_value(phi, coefficients):  # pragma: no cover
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def fit_phi_variance(phi, inv_covariance):  # pragma: no cover
     r"""
     Calculates variance given the polynomial terms of a coordinate.
@@ -1514,7 +1520,7 @@ def fit_phi_variance(phi, inv_covariance):  # pragma: no cover
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def solve_inverse_covariance_matrices(phi, error, residuals, weights,
                                       error_weighted_amat=None,
                                       rank=None,
@@ -1606,7 +1612,7 @@ def solve_inverse_covariance_matrices(phi, error, residuals, weights,
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def covariance_matrix_inverse(amat, phi, error, weights, rank=None
                               ):  # pragma: no cover
     r"""
@@ -1688,7 +1694,7 @@ def covariance_matrix_inverse(amat, phi, error, weights, rank=None
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def estimated_covariance_matrix_inverse(phi, error, weights, rank=None
                                         ):  # pragma: no cover
     r"""
@@ -1749,7 +1755,7 @@ def estimated_covariance_matrix_inverse(phi, error, weights, rank=None
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def solve_rchi2_from_error(residuals, weights, errors,
                            weightsum=None, rank=1):  # pragma: no cover
     r"""
@@ -1808,7 +1814,7 @@ def solve_rchi2_from_error(residuals, weights, errors,
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def solve_rchi2_from_variance(residuals, weights, variance,
                               weightsum=None, rank=1):  # pragma: no cover
     r"""
@@ -1868,7 +1874,7 @@ def solve_rchi2_from_variance(residuals, weights, variance,
     return rchi2
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def solve_mean_fit(data, error, weight, weightsum=None,
                    calculate_variance=True,
                    calculate_rchi2=True):  # pragma: no cover
@@ -1939,7 +1945,6 @@ def solve_mean_fit(data, error, weight, weightsum=None,
         residuals = data  # dummy for Numba compilation success
 
     use_error = error.size != 0
-
     if calculate_variance:
         if use_error:
             variance = weighted_variance(error, weight, weightsum=weightsum)
@@ -1954,10 +1959,6 @@ def solve_mean_fit(data, error, weight, weightsum=None,
             rchi2 = solve_rchi2_from_error(
                 residuals, weight, error, weightsum=weightsum, rank=1)
         else:
-            # The code below also returned 1 in tests, but is just here to
-            # show this is valid.
-            # rchi2 = solve_rchi2_from_variance(
-            #     residuals, weight, variance, weightsum=weightsum, rank=1)
             rchi2 = 1.0
     else:
         rchi2 = 0.0
@@ -1966,7 +1967,7 @@ def solve_mean_fit(data, error, weight, weightsum=None,
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def calculate_fitting_weights(errors, weights, error_weighting=True
                               ):  # pragma: no cover
     r"""
@@ -2015,7 +2016,7 @@ def calculate_fitting_weights(errors, weights, error_weighting=True
     return fit_weighting
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def array_sum(mask):  # pragma: no cover
     r"""
     Return the sum of an array.
@@ -2040,7 +2041,7 @@ def array_sum(mask):  # pragma: no cover
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def calculate_distance_weights(coordinates, reference, alpha
                                ):  # pragma: no cover
     r"""
@@ -2107,7 +2108,7 @@ def calculate_distance_weights(coordinates, reference, alpha
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def calculate_distance_weights_from_matrix(
         coordinates, reference, alpha_matrix):  # pragma: no cover
     r"""
@@ -2164,7 +2165,7 @@ def calculate_distance_weights_from_matrix(
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def calculate_adaptive_distance_weights_scaled(
         coordinates, reference, adaptive_alpha):  # pragma: no cover
     r"""
@@ -2233,7 +2234,7 @@ def calculate_adaptive_distance_weights_scaled(
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def calculate_adaptive_distance_weights_shaped(
         coordinates, reference, shape_matrices):  # pragma: no cover
     r"""
@@ -2305,7 +2306,7 @@ def calculate_adaptive_distance_weights_shaped(
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def update_mask(weights, mask):  # pragma: no cover
     r"""
     Updates a mask, setting False values where weights are zero or non-finite.
@@ -2338,7 +2339,7 @@ def update_mask(weights, mask):  # pragma: no cover
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def coordinate_mean(coordinates, mask=None):  # pragma: no cover
     r"""
     Returns the mean coordinate of a distribution.
@@ -2389,7 +2390,7 @@ def coordinate_mean(coordinates, mask=None):  # pragma: no cover
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def coordinate_covariance(coordinates, mean=None, mask=None, dof=1
                           ):  # pragma: no cover
     r"""
@@ -2481,7 +2482,7 @@ def coordinate_covariance(coordinates, mean=None, mask=None, dof=1
     return covariance
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def offset_variance(coordinates, reference, mask=None, mean=None,
                     sigma_inv=None, scale=1.0, dof=1):  # pragma: no cover
     r"""
@@ -2560,7 +2561,7 @@ def offset_variance(coordinates, reference, mask=None, mean=None,
     return variance_from_offsets(offset, covariance, sigma_inv=sigma_inv)
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def variance_from_offsets(offsets, covariance, sigma_inv=None
                           ):  # pragma: no cover
     r"""
@@ -2611,7 +2612,7 @@ def variance_from_offsets(offsets, covariance, sigma_inv=None
     return relative_variance
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def distribution_variances(coordinates, mean=None, covariance=None, mask=None,
                            sigma_inv=None, dof=1):  # pragma: no cover
     r"""
@@ -2691,7 +2692,7 @@ def distribution_variances(coordinates, mean=None, covariance=None, mask=None,
     return variance
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def check_edges(coordinates, reference, mask, threshold,
                 algorithm=1):  # pragma: no cover
     """
@@ -2792,7 +2793,7 @@ def check_edges(coordinates, reference, mask, threshold,
         return True
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def check_edge_with_distribution(
         coordinates, reference, mask, threshold):  # pragma: no cover
     r"""
@@ -2844,7 +2845,7 @@ def check_edge_with_distribution(
         coordinates, reference, mask=mask, scale=threshold) <= 1
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def check_edge_with_ellipsoid(coordinates, reference, mask, threshold
                               ):  # pragma: no cover
     r"""
@@ -2920,7 +2921,7 @@ def check_edge_with_ellipsoid(coordinates, reference, mask, threshold
         return True
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def check_edge_with_box(coordinates, reference, mask, threshold
                         ):  # pragma: no cover
     r"""
@@ -2993,7 +2994,7 @@ def check_edge_with_box(coordinates, reference, mask, threshold
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def check_edge_with_range(coordinates, reference, mask, threshold
                           ):  # pragma: no cover
     r"""
@@ -3072,7 +3073,7 @@ def check_edge_with_range(coordinates, reference, mask, threshold
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def check_orders(orders, coordinates, reference, algorithm=1, mask=None,
                  minimum_points=None, required=False, counts=-1
                  ):  # pragma: no cover
@@ -3195,7 +3196,7 @@ def check_orders(orders, coordinates, reference, algorithm=1, mask=None,
         return np.full(orders.size, -1, dtype=nb.i8)
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def check_orders_with_bounds(orders, coordinates, reference, mask=None,
                              required=False):  # pragma: no cover
     r"""
@@ -3291,7 +3292,7 @@ def check_orders_with_bounds(orders, coordinates, reference, mask=None,
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def check_orders_with_bounds_1d(order, coordinates, reference, mask=None,
                                 required=False):  # pragma: no cover
     r"""
@@ -3379,7 +3380,7 @@ def check_orders_with_bounds_1d(order, coordinates, reference, mask=None,
             return right
 
 
-@njit(nogil=False, cache=True, fastmath=_fast_flags)
+@njit(nogil=False, cache=True, fastmath=_fast_flags, parallel=False)
 def check_orders_without_bounds(orders, coordinates,
                                 mask=None, required=False):  # pragma: no cover
     r"""
@@ -3472,7 +3473,7 @@ def check_orders_without_bounds(orders, coordinates,
     return order_out
 
 
-@njit(nogil=False, cache=True, fastmath=_fast_flags)
+@njit(nogil=False, cache=True, fastmath=_fast_flags, parallel=False)
 def check_orders_without_bounds_1d(order, coordinates, mask=None,
                                    required=False):  # pragma: no cover
     r"""
@@ -3527,7 +3528,7 @@ def check_orders_without_bounds_1d(order, coordinates, mask=None,
             return max_order
 
 
-@njit(nogil=False, cache=True, fastmath=_fast_flags)
+@njit(nogil=False, cache=True, fastmath=_fast_flags, parallel=False)
 def check_orders_with_counts(orders, counts, mask=None, minimum_points=None,
                              n_dimensions=None, required=False
                              ):  # pragma: no cover
@@ -3641,7 +3642,7 @@ def check_orders_with_counts(orders, counts, mask=None, minimum_points=None,
     return order_out
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def apply_mask_to_set_arrays(mask, data, phi, error, weights,
                              counts=None):  # pragma: no cover
     """
@@ -3714,7 +3715,7 @@ def apply_mask_to_set_arrays(mask, data, phi, error, weights,
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def no_fit_solution(set_index, point_index,
                     fit_out, error_out, counts_out, weights_out,
                     distance_weights_out, rchi2_out, offset_variance_out,
@@ -3790,7 +3791,7 @@ def no_fit_solution(set_index, point_index,
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def solve_polynomial_fit(phi_samples, phi_point,
                          data, error, distance_weight, weight,
                          derivative_term_map=None,
@@ -3938,7 +3939,7 @@ def solve_polynomial_fit(phi_samples, phi_point,
     return fit_value, variance, rchi2, gradient_mscp
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def multivariate_gaussian(covariance, coordinates, center=None,
                           normalize=False):  # pragma: no cover
     r"""
@@ -4021,7 +4022,7 @@ def multivariate_gaussian(covariance, coordinates, center=None,
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def scaled_adaptive_weight_matrix(sigma, rchi2, fixed=None
                                   ):  # pragma: no cover
     r"""
@@ -4174,7 +4175,7 @@ def scaled_adaptive_weight_matrix(sigma, rchi2, fixed=None
     return scaled_inverse_alpha
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def scaled_adaptive_weight_matrices(sigma, rchi2_values, fixed=None
                                     ):  # pragma: no cover
     r"""
@@ -4225,7 +4226,7 @@ def scaled_adaptive_weight_matrices(sigma, rchi2_values, fixed=None
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def shaped_adaptive_weight_matrix(sigma, rchi2, gradient_mscp,
                                   density=1.0,
                                   variance_offset=0.0,
@@ -4551,7 +4552,7 @@ def shaped_adaptive_weight_matrix(sigma, rchi2, gradient_mscp,
     return shape_matrix
 
 
-@njit(nogil=False, cache=True, fastmath=True)
+@njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def shaped_adaptive_weight_matrices(sigma, rchi2_values, gradient_mscp,
                                     density=None, variance_offsets=None,
                                     fixed=None):  # pragma: no cover
@@ -4629,8 +4630,7 @@ def shaped_adaptive_weight_matrices(sigma, rchi2_values, gradient_mscp,
     return shape_matrices.reshape(shape)
 
 
-@njit(fastmath=False,
-      nogil=False, cache=True)
+@njit(fastmath=False, nogil=False, cache=True, parallel=False)
 def stretch_correction(rchi2, density, variance_offset):  # pragma: no cover
     r"""
     A sigmoid function used by the "shaped" adaptive resampling algorithm.
@@ -4734,7 +4734,7 @@ def stretch_correction(rchi2, density, variance_offset):  # pragma: no cover
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def sigmoid(x, factor=1.0, offset=0.0):  # pragma: no cover
     r"""
     Evaluate a scaled and shifted logistic function.
@@ -4769,7 +4769,7 @@ def sigmoid(x, factor=1.0, offset=0.0):  # pragma: no cover
     return 1.0 / (1.0 + np.exp(-xx))
 
 
-@njit(fastmath=False, nogil=False, cache=True)
+@njit(fastmath=False, nogil=False, cache=True, parallel=False)
 def logistic_curve(x, x0=0.0, k=1.0, a=0.0, c=1.0, q=1.0, b=1.0, v=1.0
                    ):  # pragma: no cover
     r"""
@@ -4819,7 +4819,7 @@ def logistic_curve(x, x0=0.0, k=1.0, a=0.0, c=1.0, q=1.0, b=1.0, v=1.0
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def richards_curve(x, q=1.0, a=0.0, k=1.0, b=1.0, x0=0.0):  # pragma: no cover
     r"""
     Evaluate a Richards' curve.
@@ -4856,7 +4856,7 @@ def richards_curve(x, q=1.0, a=0.0, k=1.0, b=1.0, x0=0.0):  # pragma: no cover
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def half_max_sigmoid(x, x_half=0.0, k=1.0, a=0.0, c=1.0, q=1.0, b=1.0, v=1.0
                      ):  # pragma: no cover
     r"""
@@ -4917,7 +4917,7 @@ def half_max_sigmoid(x, x_half=0.0, k=1.0, a=0.0, c=1.0, q=1.0, b=1.0, v=1.0
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=True, cache=True, parallel=False)
+      nogil=False, cache=True, parallel=False)
 def solve_fits(sample_indices, sample_coordinates, sample_phi_terms,
                sample_data, sample_error, sample_mask,
                fit_coordinates, fit_phi_terms, order, alpha, adaptive_alpha,
@@ -5252,7 +5252,7 @@ def solve_fits(sample_indices, sample_coordinates, sample_phi_terms,
 
 
 @njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True)
+      nogil=False, cache=True, parallel=False)
 def solve_fit(window_coordinates, window_phi, window_values, window_error,
               window_mask, window_distance_weights,
               fit_coordinate, fit_phi, order,
@@ -5675,7 +5675,7 @@ def solve_fit(window_coordinates, window_phi, window_values, window_error,
             variance_offset)
 
 
-@nb.njit(fastmath=True, cache=True, nogil=False)
+@nb.njit(fastmath=True, cache=True, nogil=False, parallel=False)
 def fasttrapz(y, x):  # pragma: no cover
     r"""
     Fast 1-D integration using Trapezium method.
@@ -5728,6 +5728,24 @@ def convert_to_numba_list(thing):
     numba.typed.List()
     """
     new_list = nb.typed.List()
+    for x in thing:
+        new_list.append(x)
+    return new_list
+
+
+def convert_to_list(thing):
+    r"""
+    Converts a Python iterable to a standard list suitable for jit functions.
+
+    Parameters
+    ----------
+    thing : iterable
+
+    Returns
+    -------
+    list
+    """
+    new_list = []
     for x in thing:
         new_list.append(x)
     return new_list

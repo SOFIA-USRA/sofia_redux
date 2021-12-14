@@ -17,6 +17,7 @@ Submodules
   image/index.rst
   interpolate/index.rst
   resampling/index.rst
+  splines/index.rst
   stats/index.rst
   utilities/index.rst
 
@@ -39,6 +40,7 @@ Reference/API
 .. automodapi:: sofia_redux.toolkit.interpolate
 .. automodapi:: sofia_redux.toolkit.interpolate.interpolate
 .. automodapi:: sofia_redux.toolkit.resampling
+.. automodapi:: sofia_redux.toolkit.splines
 .. automodapi:: sofia_redux.toolkit.stats
 .. automodapi:: sofia_redux.toolkit.stats.stats
 .. automodapi:: sofia_redux.toolkit.utilities

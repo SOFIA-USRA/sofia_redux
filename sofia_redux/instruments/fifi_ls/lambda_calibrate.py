@@ -6,9 +6,8 @@ import astropy.constants as const
 from astropy.io import fits
 from astropy import log
 from astropy import units
-import bottleneck as bn
 import numpy as np
-import pandas
+import pandas as pd
 
 from sofia_redux.instruments import fifi_ls
 from sofia_redux.toolkit.utilities \
@@ -45,7 +44,7 @@ def get_wavecal_from_cache(wavecalfile):
 
     Returns
     -------
-    wavecal : pandas.DataFrame
+    wavecal : pd.DataFrame
         Wavelength calibration table
     """
     global __wavecal_cache
@@ -76,50 +75,34 @@ def store_wavecal_in_cache(wavecalfile, wavecal):
     ----------
     wavecalfile : str
         File path to the wavecal file
-    wavecal : pandas.DataFrame
+    wavecal : pd.DataFrame
         Wave calibration table
     """
     global __wavecal_cache
-    log.debug("Storing wavecal data (%s) in cache" % wavecalfile)
+    log.debug(f"Storing wavecal data ({wavecalfile}) in cache")
     __wavecal_cache[wavecalfile] = {}
     modtime = str(os.path.getmtime(wavecalfile))
     __wavecal_cache[wavecalfile][modtime] = wavecal
 
 
-def column_level1_mapper(name):
-    s = name.lower()
-    if 'red' in s:
-        if '105' in s:
-            return 'r_105'
-        elif '130' in s:
-            return 'r_130'
-    elif 'blue' in s:
-        if '1st' in s:
-            return 'b1'
-        elif '2nd' in s:
-            return 'b2'
-
-    raise ValueError("Bad column name in dataframe: %s" % name)
-
-
 def read_wavecal(calfile=None):
     """
-    Read and return the data from CalibrationResults.csv.
+    Read and return the data from the wavecal file.
 
     Parameters
     ----------
     calfile : str, optional
-       Path to the calibration results CSV file.  If not specified,
-       it will be read from fifi_ls/data/wave_cal/CalibrationResults.csv.
+       Path to the calibration results text file.  If not specified,
+       it will be read from fifi_ls/data/wave_cal/FIFI_LS_WaveCal_Coeffs.txt.
 
     Returns
     -------
-    pandas.DataFrame
+    pd.DataFrame
     """
     if calfile is None:
         calfile = os.path.join(
             os.path.dirname(fifi_ls.__file__),
-            'data', 'wave_cal', 'CalibrationResults.csv')
+            'data', 'wave_cal', 'FIFI_LS_WaveCal_Coeffs.txt')
 
     wavecal = get_wavecal_from_cache(calfile)
     if wavecal is not None:
@@ -127,26 +110,17 @@ def read_wavecal(calfile=None):
 
     if not goodfile(calfile, verbose=True):
         raise ValueError(
-            "Cannot read wavelength calibration file: %s" % calfile)
+            f"Cannot read wavelength calibration file: {calfile}")
     try:
-        df = pandas.read_csv(calfile, header=[0, 1], index_col=[0, 1])
-        col0 = list(df.columns.get_level_values(0))
-        newcol0 = [np.nan if x.startswith('Unnamed') else float(x)
-                   for x in col0]
-        newcol0 = bn.push(newcol0).astype(int)
-
-        df.rename(level=0, inplace=True, columns=dict(zip(col0, newcol0)))
-        df.rename(level=1, inplace=True, columns=column_level1_mapper)
-        df.rename(lambda x: 'isoff' if not isinstance(x, str) else x.lower(),
-                  inplace=True, level=0)
-        df.rename(lambda x: int(x) if not np.isnan(x) else -1,
-                  inplace=True, level=1)
-    except Exception as err:
-        raise ValueError("Cannot parse %s to dataframe: %s" %
-                         (calfile, str(err)))
+        colnames = ['Date', 'ch', 'g0', 'NP', 'a', 'PS', 'QOFF', 'QS']
+        colnames += [f'ISOFF{i + 1}' for i in range(25)]
+        df = pd.read_csv(calfile, comment='#',
+                         delim_whitespace=True, names=colnames)
+    except Exception as err:  # pragma: no cover
+        raise ValueError(f"Cannot parse {calfile} to dataframe: {str(err)}")
     df.calfile = calfile
 
-    log.debug("Loaded wavelength calibration file: %s" % calfile)
+    log.debug(f"Loaded wavelength calibration file: {calfile}")
 
     store_wavecal_in_cache(calfile, df)
 
@@ -157,15 +131,14 @@ def wave(ind, date, dichroic, blue=None, wavecal=None):
     """
     Calculate wavelengths for each spectral pixel.
 
-    Requires CalibrationResults.csv file, in fifi_ls/data/wave_cal/,
+    Requires FIFI_LS_WaveCal_Coeffs.txt file, in fifi_ls/data/wave_cal/,
     as provided by FIFI-LS team.
 
     The procedure is:
 
-        1. Read wavelength calibration file.  This file is stored in CSV
-           format, as generated from an Excel spreadsheet provided by the
-           FIFI-LS instrument team.  The FIFI-LS team also provides the
-           wavelength equation.
+        1. Read wavelength calibration file.  This file is stored in a
+           text table format, provided by the FIFI-LS instrument team.
+           The FIFI-LS team also provides the wavelength equation.
         2. Loop over spaxels, calculating the wavelength and spectral
            width for each spexel, from the parameters specified in the
            calibration file.
@@ -183,9 +156,9 @@ def wave(ind, date, dichroic, blue=None, wavecal=None):
         Either 'B1' to indicate first BLUE order of 'B2' to indicate
         second BLUE order.  If not provided, data is assumed to be
         RED channel
-    wavecal : pandas.DataFrame, optional
+    wavecal : pd.DataFrame, optional
         DataFrame containing wave calibration data.  May be supplied in
-        order to remove the overhead of reading CalibrationResults.csv
+        order to remove the overhead of reading the file
         every iteration of this function.
 
     Returns
@@ -218,52 +191,60 @@ def wave(ind, date, dichroic, blue=None, wavecal=None):
         log.error("DATE must be an array of length 3")
         return
 
-    if not isinstance(wavecal, pandas.DataFrame) or len(wavecal) == 0:
+    if not isinstance(wavecal, pd.DataFrame) or len(wavecal) == 0:
         wavecal = read_wavecal()
 
-    # Get date in YYMM format
-    obsdate = int(''.join([str(x).zfill(4)[-2:] for x in date[:2]]))
-    wavecal_dates = np.array(wavecal.columns.levels[0])
+    # Get date in YYYYMMDD format
+    obsdate = int(''.join([str(x).zfill(2) for x in date]))
+    wavecal_dates = np.array(pd.unique(wavecal['Date']))
     wavecal_dates = wavecal_dates[wavecal_dates <= obsdate]
     if len(wavecal_dates) == 0:
-        log.error("No calibration data found for date %s" % obsdate)
+        log.error(f"No calibration data found for date {obsdate}")
         return
     last_date = wavecal_dates.max()
-    if 'b' in channel.lower():
+    if 'B' in channel:
         # no dichroic difference for blue
-        config = ('%s' % channel).lower()
+        config = channel
     else:
-        config = ('%s_%s' % (channel, dichroic)).lower()
-    column = last_date, config
-    if column not in wavecal.columns:
-        log.error('%s column not in wavecal data' % repr(column))
-        return
+        config = f'{channel}{dichroic}'
 
-    cal = wavecal[column]
+    rows = wavecal[(wavecal['Date'] == last_date)
+                   & (wavecal['ch'] == config)]
+    if len(rows) == 0:
+        log.error(f'{last_date} {config} wavecal data not found')
+        return
+    cal = rows.iloc[0]
+
+    # fixed parameter by channel
+    if 'B' in config:
+        gamma = 8.90080e-03
+    else:
+        gamma = 1.67200e-02
 
     # axis 0
     pix = np.arange(1, 17)
-    sign = 2 * (((pix - cal['qoff', -1]) > 0) - 0.5)
-    delta = ((pix - 8.5) * cal['ps', -1])
-    delta += sign * cal['qs', -1] * (pix - cal['qoff', -1]) ** 2
+    sign = 2 * (((pix - cal['QOFF']) > 0) - 0.5)
+    delta = ((pix - 8.5) * cal['PS'])
+    delta += sign * cal['QS'] * (pix - cal['QOFF']) ** 2
 
     # axis 1
-    isoff = cal['isoff'].values
-    modules = cal['isoff'].index.values - 1
+    isf = 1.0
+    isoff = np.array([cal[f'ISOFF{i + 1}'] for i in range(25)])
+    modules = np.arange(25)
     slitpos = 25 - (6 * (modules // 5)) + (modules % 5)
-    g = cal['g0', -1]
-    g *= np.cos(np.arctan((slitpos - cal['np', -1]) / cal['a', -1]))
-    phi = 2 * np.pi * cal['isf', -1] * (ind + isoff) / (2 ** 24)
+    g = cal['g0']
+    g *= np.cos(np.arctan((slitpos - cal['NP']) / cal['a']))
+    phi = 2 * np.pi * isf * (ind + isoff) / (2 ** 24)
 
     # cross terms for wavelength
-    w = np.sin(np.add.outer(delta + cal['gamma', -1], phi))
-    w += np.sin(phi - cal['gamma', -1])[None]
+    w = np.sin(np.add.outer(delta + gamma, phi))
+    w += np.sin(phi - gamma)[None]
     w *= 1000 * g[None]
 
     # cross terms for pixel width
-    p = np.cos(np.add.outer(delta + cal['gamma', -1], phi))
-    p *= (cal['ps', -1] + 2 * sign
-          * cal['qs', -1] * (pix - cal['qoff', -1]))[..., None]
+    p = np.cos(np.add.outer(delta + gamma, phi))
+    p *= (cal['PS'] + 2 * sign
+          * cal['QS'] * (pix - cal['QOFF']))[..., None]
     p *= 1000 * g[None]
 
     if channel.lower() == 'b2':
@@ -309,10 +290,10 @@ def lambda_calibrate(filename, obsdate=None, outdir=None, write=False,
         If True, write to disk and return the path to the output
         file.  If False, return the HDUList.  The output directory
         is the same as the directory of the input file.
-    wavecal : pandas.DataFrame, optional
+    wavecal : pd.DataFrame, optional
         DataFrame containing wave calibration data.  May be supplied in
-        order to remove the overhead of reading CalibrationResults.csv
-        every iteration of this function.
+        order to remove the overhead of reading the
+        FIFI_LS_WaveCal_Coeffs.txt file every iteration of this function.
 
     Returns
     -------
@@ -333,7 +314,7 @@ def lambda_calibrate(filename, obsdate=None, outdir=None, write=False,
     if not isinstance(outdir, str):
         outdir = os.path.dirname(filename)
 
-    if not isinstance(wavecal, pandas.DataFrame) or len(wavecal) == 0:
+    if not isinstance(wavecal, pd.DataFrame) or len(wavecal) == 0:
         wavecal = read_wavecal()
         if wavecal is None:
             log.warning("Unable to read wave calibration data")

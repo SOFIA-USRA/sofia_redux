@@ -2,15 +2,18 @@
 
 from collections.abc import Mapping
 from datetime import datetime
+import gc
 import math
 import os
 import re
+import sys
 import time
 
 from astropy import log
 from astropy.stats import gaussian_fwhm_to_sigma
 import numpy as np
 from numpy.lib.nanfunctions import _replace_nan, _copyto
+from sofia_redux import toolkit as toolkit_module
 
 __all__ = ['robust_bool', 'valid_num', 'natural_sort', 'goodfile',
            'date2seconds', 'str_to_value', 'slicer',
@@ -359,10 +362,10 @@ def recursive_dict_update(original, new):
 def stack(*samples, copy=True):
     values = np.asarray(samples[0], dtype=float)
     shape = values.shape
-    nstack = len(samples)
-    v = np.zeros((nstack, values.size))
+    n_stack = len(samples)
+    v = np.empty((n_stack, values.size), dtype=float)
     v[0] = values.ravel()
-    for dim in range(1, nstack):
+    for dim in range(1, n_stack):
         iv = np.asarray(samples[dim], dtype=float)
         if iv.shape != shape:
             raise ValueError(
@@ -698,3 +701,88 @@ def nansum(a, axis=None, dtype=None, out=None, keepdims=0, missing=np.nan):
     if np.any(mask):
         tot = _copyto(tot, missing, mask)
     return tot
+
+
+def remove_files(folder):  # pragma: no cover
+    """
+    Delete all files in a given folder.
+
+    Parameters
+    ----------
+    folder : str
+        The file path to the folder.
+
+    Returns
+    -------
+    None
+    """
+    for the_file in os.listdir(folder):
+        file_path = os.path.join(folder, the_file)
+        try:
+            if os.path.isfile(file_path):
+                os.unlink(file_path)
+        except Exception as err:
+            print(f"remove_files: Failed on filepath {file_path}: {err}")
+
+
+def clear_numba_cache(module=None):  # pragma: no cover
+    """
+    Delete the Numba cache for the sofia_redux toolkit.
+
+    Sometimes Numba refuses to acknowledge that an update has been made to a
+    function and will continue to reference a previously cached version.  This
+    function clears the cache so that the next time any Numba function is
+    called, the new version will be used.
+
+    Returns
+    -------
+    None
+    """
+    if module is None:
+        module = toolkit_module
+    root_folder = os.path.realpath(os.path.dirname(module.__file__))
+
+    for root, dirnames, filenames in os.walk(root_folder):
+        for dirname in dirnames:
+            if dirname == "__pycache__":
+                try:
+                    remove_files(os.path.join(root, dirname))
+                except Exception as err:
+                    print(f"clear_numba_cache: Failed on {root}: {err}")
+
+
+def byte_size_of_object(obj):
+    """
+    Return the size of a Python object in bytes.
+
+    Parameters
+    ----------
+    obj : object
+
+    Returns
+    -------
+    byte_size : int
+    """
+    marked = {id(obj)}
+    obj_q = [obj]
+    sz = 0
+
+    while obj_q:
+        sz += sum(map(sys.getsizeof, obj_q))
+
+        # Lookup all the object referred to by the object in obj_q.
+        # See: https://docs.python.org/3.7/library/gc.html#gc.get_referents
+        all_refr = ((id(o), o) for o in gc.get_referents(*obj_q))
+
+        # Filter object that are already marked.
+        # Using dict notation will prevent repeated objects.
+        new_refr = {o_id: o for o_id, o in all_refr
+                    if o_id not in marked and not isinstance(o, type)}
+
+        # The new obj_q will be the ones that were not marked,
+        # and we will update marked with their ids so we will
+        # not traverse them again.
+        obj_q = new_refr.values()
+        marked.update(new_refr.keys())
+
+    return sz

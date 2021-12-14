@@ -475,6 +475,8 @@ def pipecal_photometry(image, variance, srcpos=None,
         sky_std = 0.0
 
     # subtract background from source flux
+    if not np.isfinite(float(bg_sum)):
+        bg_sum = 0.0
     final_sum = raw_table['aperture_sum'] - bg_sum
 
     # variance is summed over the aperture

@@ -8,7 +8,7 @@ Basic Usage Example
 .. code-block:: python
 
     import numpy as np
-    from sofia_redux.toolkit.resampling.resample import Resample, resample
+    from sofia_redux.toolkit.resampling import Resample, resample
 
     x = np.arange(10)
     y = x + 100
@@ -42,7 +42,7 @@ true sine function.
 
     import numpy as np
     import matplotlib.pyplot as plt
-    from sofia_redux.toolkit.resampling.resample import Resample
+    from sofia_redux.toolkit.resampling import Resample
 
     rand = np.random.RandomState(100)
     noise = rand.rand(100) - 0.5
@@ -69,6 +69,7 @@ true sine function.
     plt.plot(x, ytrue, '--', label='Truth')
     plt.legend()
     plt.title("Fit using wide window with distance weighting")
+    plt.show()
 
 
 Multiple data-sets
@@ -86,7 +87,7 @@ coordinate mappings with all other sets.
 .. plot::
     :include-source:
 
-    from sofia_redux.toolkit.resampling.resample import Resample
+    from sofia_redux.toolkit.resampling import Resample
     from skimage.data import chelsea
     import numpy as np
 
@@ -128,6 +129,7 @@ coordinate mappings with all other sets.
     plt.axis('off')
     plt.imshow(good)
     plt.title("Reconstructed image")
+    plt.show()
 
 
 .. _edge_clipping_example:
@@ -155,7 +157,7 @@ has been used to preserve detail.
 .. plot::
     :include-source:
 
-    from sofia_redux.toolkit.resampling.resample import Resample
+    from sofia_redux.toolkit.resampling import Resample
     from skimage.data import coins
     import numpy as np
 
@@ -195,6 +197,7 @@ has been used to preserve detail.
     plt.subplot(224)
     plt.imshow(com_edges, cmap='copper')
     plt.title("'com_distance' edge mode")
+    plt.show()
 
 
 .. _adaptive_weighting_example:
@@ -224,7 +227,7 @@ dimensions for a second order polynomial (requires `order` + 1).
 .. plot::
     :include-source:
 
-    from sofia_redux.toolkit.resampling.resample import Resample
+    from sofia_redux.toolkit.resampling import Resample
     from astropy.stats import gaussian_fwhm_to_sigma
     from skimage.data import hubble_deep_field
     import matplotlib.pyplot as plt
@@ -295,6 +298,7 @@ dimensions for a second order polynomial (requires `order` + 1).
     axs[1, 2].title.set_text("Adaptive Fitting Weights")
     fig.colorbar(wadapt_img, ax=axs[1, 2], fraction=0.046, pad=0.04,
                  format='%.3f')
+    plt.show()
 
 
 The left-most images display the result and associated weight map using these

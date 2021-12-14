@@ -4,12 +4,15 @@ import os
 import time
 
 from astropy.io import fits
+import bottleneck as bn
 import numpy as np
+import pandas as pd
 import pytest
 
+from sofia_redux.instruments import fifi_ls
 from sofia_redux.instruments.fifi_ls.lambda_calibrate \
-    import (column_level1_mapper, read_wavecal, wave,
-            lambda_calibrate, wrap_lambda_calibrate, clear_wavecal_cache,
+    import (read_wavecal, wave, lambda_calibrate,
+            wrap_lambda_calibrate, clear_wavecal_cache,
             get_wavecal_from_cache, store_wavecal_in_cache)
 from sofia_redux.instruments.fifi_ls.tests.resources \
     import FIFITestCase, get_ncm_files
@@ -17,52 +20,26 @@ from sofia_redux.instruments.fifi_ls.tests.resources \
 
 class TestLambdaCalibrate(FIFITestCase):
 
-    def test_column_level1_mapper(self):
-
-        assert column_level1_mapper('Red D105') == 'r_105'
-        assert column_level1_mapper('Red D130') == 'r_130'
-        assert column_level1_mapper('Blue 1st Order') == 'b1'
-        assert column_level1_mapper('Blue 2nd Order') == 'b2'
-        assert column_level1_mapper('Blue 2nd Order D105') == 'b2'
-        with pytest.raises(ValueError) as err:
-            column_level1_mapper('')
-        assert "bad column name in dataframe" in str(err.value).lower()
-
     def test_read_wavecal(self, tmpdir):
-
+        # non-existent file
         with pytest.raises(ValueError) as err:
             read_wavecal(calfile='__does_not_exist__')
         assert "cannot read wavelength " \
                "calibration file" in str(err.value).lower()
 
-        badfile = str(tmpdir.mkdir('test_lambda_calibrate').join('test_01'))
-        with open(badfile, 'w') as f:
-            print('foo', file=f)
-        with pytest.raises(ValueError) as err:
-            read_wavecal(calfile=badfile)
-        assert "cannot parse" in str(err.value).lower()
+        # badly formatted file: not an error for most text files
+        badfile = tmpdir.join('badfile')
+        badfile.write('bad\n')
+        read_wavecal(calfile=str(badfile))
 
         df = read_wavecal()
-        col0 = list(df.columns.get_level_values(0))
-        for c in col0:
-            assert isinstance(c, int)
-
-        col1 = list(df.columns.get_level_values(1))
-        required_col1 = ['r_105', 'r_130', 'b1', 'b2']
-        assert set(col1) == set(required_col1)
-
-        row0 = list(df.index.get_level_values(0))
-        required_row0 = ['g0', 'np', 'a', 'isf', 'gamma',
-                         'ps', 'qoff', 'qs', 'isoff']
-        assert set(row0) == set(required_row0)
-
-        for index in df.index:
-            count = 0
-            if index[0] != 'isoff':
-                assert index[1] == -1
-            else:
-                assert index[1] > count
-                count += 1
+        required = ['Date', 'ch', 'g0', 'NP', 'a', 'PS', 'QOFF', 'QS',
+                    'ISOFF1', 'ISOFF2', 'ISOFF3', 'ISOFF4', 'ISOFF5',
+                    'ISOFF6', 'ISOFF7', 'ISOFF8', 'ISOFF9', 'ISOFF10',
+                    'ISOFF11', 'ISOFF12', 'ISOFF13', 'ISOFF14', 'ISOFF15',
+                    'ISOFF16', 'ISOFF17', 'ISOFF18', 'ISOFF19', 'ISOFF20',
+                    'ISOFF21', 'ISOFF22', 'ISOFF23', 'ISOFF24', 'ISOFF25']
+        assert np.all(df.columns == required)
 
     def test_wave(self, capsys):
         # okay result
@@ -105,7 +82,7 @@ class TestLambdaCalibrate(FIFITestCase):
         result = wave(10000, [2018, 12, 1], 200)
         assert result is None
         capt = capsys.readouterr()
-        assert 'column not in wavecal data' in capt.err
+        assert 'R200 wavecal data not found' in capt.err
 
     def test_success(self):
         # red 105 file
@@ -357,3 +334,93 @@ class TestLambdaCalibrate(FIFITestCase):
             assert f'SCANPOS_G{i}' in result
             assert np.allclose(result[f'SCANPOS_G{i}'].data,
                                hdul[f'SCANPOS_G{i}'].data)
+
+    def test_wavecal_format_update(self):
+        """
+        Test new wavecal format against old format.
+
+        This test checks a wavelength calibration format update,
+        introduced in FIFI-LS Redux v2.6.0.  The old format is a complex
+        CSV file; the new space is a simpler whitespace-delimited text
+        file.  This test reads in both and verifies the new content is
+        the same as the old.
+        """
+        # old format file
+        # Contains wavecal data up through May 2021
+        old_calfile = os.path.join(
+            os.path.dirname(fifi_ls.__file__),
+            'data', 'wave_cal', 'CalibrationResults.csv')
+
+        # column name mapping function
+        def column_level1_mapper(name):
+            s = name.lower()
+            if 'red' in s:
+                if '105' in s:
+                    return 'r_105'
+                elif '130' in s:
+                    return 'r_130'
+            elif 'blue' in s:
+                if '1st' in s:
+                    return 'b1'
+                elif '2nd' in s:
+                    return 'b2'
+            raise ValueError("Bad column name in dataframe: %s" % name)
+
+        odf = pd.read_csv(old_calfile, header=[0, 1], index_col=[0, 1])
+        col0 = list(odf.columns.get_level_values(0))
+        newcol0 = [np.nan if x.startswith('Unnamed') else float(x)
+                   for x in col0]
+        newcol0 = bn.push(newcol0).astype(int)
+
+        odf.rename(level=0, inplace=True, columns=dict(zip(col0, newcol0)))
+        odf.rename(level=1, inplace=True, columns=column_level1_mapper)
+        odf.rename(lambda x: 'isoff' if not isinstance(x, str) else x.lower(),
+                   inplace=True, level=0)
+        odf.rename(lambda x: int(x) if not np.isnan(x) else -1,
+                   inplace=True, level=1)
+
+        # old columns are multi-indexed with
+        # (YYMM date, channel/dichroic), eg. (1402, 'r_105')
+        assert len(odf.columns) == 76
+        wavecal_dates = np.array(odf.columns.levels[0])
+        assert len(wavecal_dates) == 19
+
+        # new format file, contains all old data, plus updates
+        # beyond May 2021
+        new_calfile = os.path.join(
+            os.path.dirname(fifi_ls.__file__),
+            'data', 'wave_cal', 'FIFI_LS_WaveCal_Coeffs.txt')
+        colnames = ['Date', 'ch', 'g0', 'NP', 'a', 'PS', 'QOFF', 'QS']
+        colnames += [f'ISOFF{i + 1}' for i in range(25)]
+        ndf = pd.read_csv(new_calfile, comment='#',
+                          delim_whitespace=True, names=colnames)
+        assert len(ndf.columns) == 33
+        assert len(pd.unique(ndf['Date'])) >= 19
+
+        # compare old and new values: should match exactly
+        for wdate in wavecal_dates:
+            for config in ['r_105', 'r_130', 'b1', 'b2']:
+                key = wdate, config
+                old_cal = odf[key]
+
+                # 4 config rows per date in new format
+                ndate = int(f'20{wdate}01')
+                nconf = config.replace('_', '').upper()
+                date_rows = ndf[ndf['Date'] == ndate]
+                assert len(date_rows) == 4
+
+                config_row = date_rows[date_rows['ch'] == nconf]
+                assert len(config_row) == 1
+
+                new_cal = config_row.iloc[0]
+
+                assert new_cal['g0'] == old_cal['g0', -1]
+                assert new_cal['NP'] == old_cal['np', -1]
+                assert new_cal['a'] == old_cal['a', -1]
+                assert new_cal['PS'] == old_cal['ps', -1]
+                assert new_cal['QOFF'] == old_cal['qoff', -1]
+                assert new_cal['QS'] == old_cal['qs', -1]
+
+                for i in range(25):
+                    assert new_cal[f'ISOFF{i + 1}'] \
+                           == old_cal['isoff'].values[i]

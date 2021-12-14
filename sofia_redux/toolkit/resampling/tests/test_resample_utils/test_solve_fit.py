@@ -4,7 +4,7 @@ from sofia_redux.toolkit.resampling.resample_utils import (
     solve_fit, polynomial_exponents, polynomial_terms,
     polynomial_derivative_map)
 
-from sofia_redux.toolkit.resampling.tree import Rtree
+from sofia_redux.toolkit.resampling.tree.polynomial_tree import PolynomialTree
 
 import numpy as np
 import pytest
@@ -105,7 +105,7 @@ def test_variable_order(sample_data):
      window_mask, order, noise, error_level, exponents,
      derivative_term_map, coefficients) = sample_data
 
-    tree = Rtree(window_coordinates)
+    tree = PolynomialTree(window_coordinates)
     tree.set_order(2, fix_order=False)
     tree.precalculate_phi_terms()
     term_indices = tree.term_indices
@@ -113,7 +113,7 @@ def test_variable_order(sample_data):
     window_phi = tree.phi_terms
 
     fit_coordinates = np.zeros((2, 1))
-    fit_tree = Rtree(fit_coordinates)
+    fit_tree = PolynomialTree(fit_coordinates)
     fit_tree.set_order(2, fix_order=False)
     fit_tree.precalculate_phi_terms()
 

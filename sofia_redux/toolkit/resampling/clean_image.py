@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from .resample import Resample
+from .resample_polynomial import ResamplePolynomial
 
 __all__ = ['clean_image']
 
@@ -11,7 +11,7 @@ def clean_image(image, error=None, mask=None, window=None, order=1,
                 fix_order=True, robust=None, negthresh=None, mode=None,
                 leaf_size=None, **kwargs):
     """
-    Uses `Resample` to correct NaNs in image and/or supplied in mask.
+    Uses `ResamplePolynomial` to correct NaNs in image and/or supplied in mask.
 
     Parameters
     ----------
@@ -96,7 +96,7 @@ def clean_image(image, error=None, mask=None, window=None, order=1,
     Returns
     -------
     cleaned_image, [variance_out], [counts] : n_tuple of numpy.ndarray (M, N)
-        See `sofia_redux.toolkit.resampling.Resample`
+        See `sofia_redux.toolkit.resampling.ResamplePolynomial`
     """
     if mask is None:
         mask = np.isfinite(image)
@@ -114,11 +114,13 @@ def clean_image(image, error=None, mask=None, window=None, order=1,
     if error is not None:
         error = np.asarray(error).ravel()
 
-    resampler = Resample([xgrid.ravel(), ygrid.ravel()], corrected.ravel(),
-                         error=error, mask=mask.ravel(),
-                         order=order, window=window, fix_order=fix_order,
-                         robust=robust, negthresh=negthresh,
-                         leaf_size=leaf_size)
+    resampler = ResamplePolynomial([xgrid.ravel(), ygrid.ravel()],
+                                   corrected.ravel(),
+                                   error=error, mask=mask.ravel(),
+                                   order=order, window=window,
+                                   fix_order=fix_order,
+                                   robust=robust, negthresh=negthresh,
+                                   leaf_size=leaf_size)
 
     corrected[missing] = resampler([xgrid[missing], ygrid[missing]],
                                    order_algorithm=mode, **kwargs)

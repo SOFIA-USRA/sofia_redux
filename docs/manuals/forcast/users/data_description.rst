@@ -1759,14 +1759,14 @@ Exposure Time
 -------------
 
 FORCAST has many keywords for time of integration with slightly different
-interpretation, including EXPTIME, INTTIME, and DETITIME. Due to the
+interpretation, including EXPTIME, TOTINT, and DETITIME. Due to the
 details of the setup for chop/nod observations in symmetric and asymmetric
 modes, the various integration times may not appear to match what was
-calculated using SOFIA Instrument Time Estimator (SITE). The keyword
-*TOTINT* is best used to compare what was requested/planned vs.
-what was observed. For example, if you planned to observe 600 sec on source,
-and *TOTINT* in the final combined file is 600 sec, then your observation
-has been completed. See below for a comparison of the various time keywords.
+calculated using SOFIA Instrument Time Estimator (SITE). From Cycle 10
+onwards, SITE will be updated so that all times use EXPTIME and the mode
+(C2NC2, NMC, etc.) will be selectable for a better estimate of the observing
+time required. See below for a comparison of the total time keywords by
+observing mode.
 
 .. table:: Integration time keywords
    :name: time_table

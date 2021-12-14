@@ -490,6 +490,20 @@ class TestQADImView(object):
         assert round(result['xctr']) == 4
         assert round(result['yctr']) == 4
 
+    def test_retrieve_array_error(self, mocker, capsys):
+        """Test retrieving data stamp/wcs from DS9."""
+        self.mock_ds9(mocker)
+        imviewer = self.make_imview()
+        imgfile = self.make_file()
+        imviewer.load([imgfile])
+        mocker.patch.object(imviewer.ds9, 'get_arr2np',
+                            side_effect=ValueError())
+        with pytest.raises(ValueError):
+            imviewer.retrieve_data(5, 5)
+        capt = capsys.readouterr()
+        assert 'cannot be retrieved as an array' in capt.err
+        assert 'Try turning off cube' in capt.err
+
     def test_spec_test(self, mocker):
         """Test the check for spectral data."""
         self.mock_ds9(mocker)
@@ -1330,7 +1344,8 @@ class TestQADImView(object):
 
         # trigger an error in the parser
         log.setLevel('DEBUG')
-        mocker.patch('sofia_redux.pipeline.gui.qad.qad_imview.ar.Regions.parse',
+        mocker.patch('sofia_redux.pipeline.gui.qad.'
+                     'qad_imview.ar.Regions.parse',
                      side_effect=ValueError())
         bad_mask = imviewer._region_mask('image', [ds9_regions_image], x, y,
                                          header_wcs)

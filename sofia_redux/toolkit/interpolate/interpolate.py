@@ -807,7 +807,32 @@ class Interpolate(object):
         self._product = np.nanprod if ignorenans else np.prod
         self._sum = np.nansum if ignorenans else np.sum
         self._min = np.nanmin if ignorenans else np.min
+        self.cval = cval
+        self.values = None
+        self.variance = None
+        self.do_error = False
+        self.ndim = None
+        self.grid = ()
+        self.dgrid = ()
+        self.parse_arguments(*args, error=error)
 
+    def parse_arguments(self, *args, error=None):
+        """
+        Parse initialization arguments.
+
+        Parameters
+        ----------
+        args : array_like or tuple of array_like
+            Either a single array whose coordinates will be determined
+            by the features, or arrays of independent values followed
+            by the dependent values.
+        error : numpy.ndarray, optional
+            The associated error values for the data.
+
+        Returns
+        -------
+        None
+        """
         nargs = len(args)
         if nargs == 1:
             values = np.asarray(args[0])
@@ -824,7 +849,7 @@ class Interpolate(object):
             if not np.issubdtype(values.dtype, np.inexact):
                 values = values.astype(float)
 
-        fill_value_dtype = np.asarray(cval).dtype
+        fill_value_dtype = np.asarray(self.cval).dtype
         if (hasattr(values, 'dtype') and not
                 np.can_cast(fill_value_dtype, values.dtype,
                             casting='same_kind')):
@@ -848,10 +873,25 @@ class Interpolate(object):
             self.grid += g,
             self.dgrid += d,
 
-        self.values = np.full([s + 1 for s in values.shape], cval,
-                              dtype=values.dtype)
-        self.values[(slice(0, -1),) * values.ndim] = values
+        self.set_values_and_error(values, error=error)
 
+    def set_values_and_error(self, values, error=None):
+        """
+        Set new interpolating values and error.
+
+        Parameters
+        ----------
+        values : numpy.ndarray (int or float)
+            The new values to set.  Must be the same shape as the interpolation
+            grid.
+        error : numpy.ndarray (int or float), optional
+            Optional error values to set.
+
+        Returns
+        -------
+        None
+        """
+        self.set_values(values)
         if error is not None:
             self.variance = np.full_like(self.values, np.nan)
             self.variance[(slice(0, -1),) * values.ndim] = np.asarray(
@@ -860,6 +900,24 @@ class Interpolate(object):
         else:
             self.variance = None
             self.do_error = False
+
+    def set_values(self, values):
+        """
+        Reset the interpolation values only.
+
+        Parameters
+        ----------
+        values : numpy.ndarray, optional
+            The new values to set.  Must be the same shape as the interpolation
+            grid.
+
+        Returns
+        -------
+        None
+        """
+        self.values = np.full([s + 1 for s in values.shape], self.cval,
+                              dtype=values.dtype)
+        self.values[(slice(0, -1),) * values.ndim] = values
 
     def __call__(self, *args, method=None, cubic=None, mode=None):
         """
@@ -900,7 +958,7 @@ class Interpolate(object):
                 (self.ndim, self.ndim))
 
         shape_in = np.asarray(args[0]).shape
-        xi = stack(*args)[::-1]
+        xi = stack(*args, copy=False)[::-1]
 
         indices, norm_distances = self._find_indices(xi)
         result = None

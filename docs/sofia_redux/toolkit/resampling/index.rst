@@ -59,3 +59,11 @@ Examples
     :maxdepth: 2
 
     examples.rst
+
+Irregular Kernel Resampling
+===========================
+
+.. toctree::
+    :maxdepth: 2
+
+    kernel_resampler.rst

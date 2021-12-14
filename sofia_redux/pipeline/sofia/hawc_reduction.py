@@ -172,6 +172,7 @@ class HAWCReduction(Reduction):
                     if mode_str in df.config \
                             or mode_str in self.override_steplist:
                         df.mode = override_mode
+                        df.mergeconfig(mode=override_mode)
                     else:
                         raise ValueError(f"Pipeline override mode "
                                          f"{override_mode} not found")

@@ -159,9 +159,23 @@ class Model(object):
         return s
 
     def print_stats(self):
+        """
+        Print statistical information on the fit to stdout.
+
+        Returns
+        -------
+        None
+        """
         print(self._stats_string())
 
     def print_params(self):
+        """
+        Print parameters to stdout.
+
+        Returns
+        -------
+        None
+        """
         print(self._parameters_string())
 
     def __call__(self, *independent_values, dovar=False):  # pragma: no cover

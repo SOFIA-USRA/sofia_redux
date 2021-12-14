@@ -12,8 +12,14 @@ data, check the PIPEVERS keyword in the FITS header to determine the
 pipeline version used.
 
 
-FIFI-LS Redux v2.5.1
+FIFI-LS Redux v2.6.0
 ~~~~~~~~~~~~~~~~~~~~
+*User manual: Rev. J*
+
+- Reformat reference wavelength calibration data for easier maintenance.
+
+FIFI-LS Redux v2.5.1 (2021-04-26)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. J*
 
 - Allow separate spatial flats for Blue Order 1 and Order 2 to better

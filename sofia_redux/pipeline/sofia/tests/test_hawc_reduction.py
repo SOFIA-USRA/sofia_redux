@@ -49,6 +49,9 @@ class MockDataFits(object):
     def loadhead(self, fname, **kwargs):
         self.filename = fname
 
+    def mergeconfig(self, *args, **kwargs):
+        pass
+
     def getheadval(self, *args, **kwargs):
         if self.headval is None:
             raise KeyError('not found')

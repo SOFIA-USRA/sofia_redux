@@ -97,8 +97,7 @@ def simple_query(target, date, time):
         print('Unknown target. Attempting anyways, but verify')
         print('output before using it.')
         code = target
-    obj = aj.Horizons(id=code, location='399', epochs=t.jd,
-                      id_type='majorbody')
+    obj = aj.Horizons(id=code, location='399', epochs=t.jd)
 
     # Get the orbital elements and ephemerides
     ephem = obj.ephemerides()
@@ -133,11 +132,7 @@ def configure_astroquery():
 
     """
     # Set up the query for JPL Horizons
-
     aj.Conf.eph_quantities = '"1,9,19,20,23,24,43"'
-
-    # set the server to batch interface
-    aj.Conf.horizons_server = 'https://ssd.jpl.nasa.gov/horizons_batch.cgi'
 
 
 def horizons_object(target, date, time):

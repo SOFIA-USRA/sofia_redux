@@ -116,7 +116,6 @@ def test_log_records_to_pickle_file(tmpdir):
     test_obj = MultiLogger(logger=log)
     with log_records_to_pickle_file(log, test_file):
         test_obj.process_func()
-
     records, _ = unpickle_file(test_file)
     assert records_valid(records)
 

@@ -1,15 +1,10 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from functools import partial
-
-from astropy import log
-import cloudpickle
 from contextlib import contextmanager
+from functools import partial
 import logging
 import multiprocessing as mp
-import numpy as np
 import os
-import psutil
 import regex
 import shutil
 import signal
@@ -17,6 +12,11 @@ import sys
 import tempfile
 import time
 import threading
+
+from astropy import log
+import cloudpickle
+import numpy as np
+import psutil
 
 
 __all__ = ['get_core_number', 'relative_cores', 'valid_relative_jobs',
@@ -347,9 +347,9 @@ def wrapped_with_logger(func, logger_pickle_file, log_directory,
     run_arg, identifier = run_arg_and_identifier
     log_basename = f"multitask_log_{identifier}.p"
     record_file = os.path.join(log_directory, log_basename)
-
     with log_records_to_pickle_file(logger, record_file):
-        return func(run_arg)
+        result = func(run_arg)
+    return result
 
 
 def wrap_function(func, args, kwargs=None, logger=None, log_directory=None):
@@ -389,12 +389,13 @@ def wrap_function(func, args, kwargs=None, logger=None, log_directory=None):
     if isinstance(logger, str) and os.path.isfile(logger):
         pickle_file = logger
     else:
-        pickle_file = pickle_object(
-            logger,
-            tempfile.mkstemp(prefix='multitask_logger_', suffix='.p')[1])
+        logger_id = id((logger, args))
+        tmp_fh, tmp_fname = tempfile.mkstemp(
+                prefix=f'multitask_logger_{logger_id}', suffix='.p')
+        os.close(tmp_fh)
+        pickle_file = pickle_object(logger, tmp_fname)
     multi_func = _wrap_function_with_logger(
         func, args, kwargs, pickle_file, log_directory)
-
     return multi_func, pickle_file
 
 
@@ -507,7 +508,7 @@ def _parallel(jobs, func, args, kwargs, iterable, skip=None,
         'multiprocessing', None}.  `None` (the default) will estimate the best
         package at runtime.
     logger : Logger, optional
-        The logger with which to emit and messages during `func`.
+        The logger with which to emit any messages during `func`.
     joblib_kwargs : dict, optional
         Optional keyword arguments to pass into :class:`joblib.Parallel` if
         applicable.  The `require` and `backend` options will be overwritten
@@ -536,16 +537,22 @@ def _parallel(jobs, func, args, kwargs, iterable, skip=None,
         return _serial(func, args, kwargs, iterable, skip=skip)
 
     # Determine which package to use.
-    try:
-        from joblib import delayed, Parallel
-        have_joblib = True
-    except ImportError:  # pragma: no cover
+    if not in_windows_os():
+        reason = 'not installed'
+        try:
+            from joblib import delayed, Parallel
+            have_joblib = True
+        except ImportError:  # pragma: no cover
+            have_joblib = False
+            delayed = Parallel = None
+    else:
+        reason = 'not available on Windows'
         have_joblib = False
         delayed = Parallel = None
 
     requested_package = package
     if package == 'joblib' and not have_joblib:  # pragma: no cover
-        raise ValueError("Cannot use joblib package: not installed.")
+        raise ValueError(f"Cannot use joblib package: {reason}.")
     elif package is None:
         package = 'joblib' if have_joblib else 'multiprocessing'
     elif package not in ['multiprocessing', 'joblib']:
@@ -621,11 +628,19 @@ def _parallel(jobs, func, args, kwargs, iterable, skip=None,
     subprocesses_after = set(
         [p.pid for p in current_process.children(recursive=True)])
     terminate = (subprocesses_after - subprocesses_before)
-    for subprocess in terminate:
-        try:
-            os.killpg(subprocess, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
+
+    if in_windows_os():
+        for subprocess in terminate:
+            try:
+                os.kill(subprocess, signal.CTRL_BREAK_EVENT)
+            except ProcessLookupError:
+                pass
+    else:
+        for subprocess in terminate:
+            try:
+                os.killpg(subprocess, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
 
     return processed_result
 
@@ -684,7 +699,7 @@ def unpickle_file(filename):
     pickle_file = filename
     with open(pickle_file, 'rb') as f:
         obj = cloudpickle.load(f)
-        return obj, pickle_file
+    return obj, pickle_file
 
 
 def pickle_list(object_list, prefix=None, naming_attribute=None,
@@ -900,7 +915,7 @@ def purge_multitask_logs(log_directory, log_pickle_file, use_logger=None):
         identifiers[int(search.group(1))] = pickle_file
 
     job_logs = [os.path.join(log_directory, identifiers[i])
-                   for i in sorted(identifiers.keys())]
+                for i in sorted(identifiers.keys())]
 
     unpickle_list(job_logs)  # deletes files and converts to log records
 
@@ -937,6 +952,17 @@ def log_records_to_pickle_file(logger, pickle_file):
     standard_records = [x[-1] for x in multi_handler.records]
     with open(pickle_file, 'wb') as f:
         cloudpickle.dump(standard_records, f)
+
+
+def in_windows_os():
+    """
+    Return `True` if running from a Windows OS.
+
+    Returns
+    -------
+    bool
+    """
+    return os.name.lower().strip() == 'nt'
 
 
 class MultitaskHandler(logging.Handler):
@@ -998,9 +1024,6 @@ class MultitaskHandler(logging.Handler):
         if self.records is None or len(self.records) == 0:
             return
 
-        # sort by time as a start
-        self.records = sorted(list(set(self.records)), key=lambda x: x[0])
-
         # Try to figure out the main and child threads which can be very
         # hard since there is no record in the thread objects, and GUIs may
         # not always launch processes from the main thread.
@@ -1027,7 +1050,6 @@ class MultitaskHandler(logging.Handler):
                 t, _, thread, record = info
                 if main_thread is None:
                     main_thread = thread
-
                 # Note that coverage cannot be determined in threads.
                 if thread == main_thread:
                     if len(thread_logs) > 0:  # pragma: no cover

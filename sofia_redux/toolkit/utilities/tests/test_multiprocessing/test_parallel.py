@@ -1,6 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from sofia_redux.toolkit.utilities.multiprocessing import _parallel
+from sofia_redux.toolkit.utilities.multiprocessing \
+    import _parallel, in_windows_os
 
 import numpy as np
 import psutil
@@ -68,6 +69,7 @@ def test_serial_processing(adder_data):
 
 @pytest.mark.skipif(psutil.cpu_count() < 2, reason='Require multiple CPUs')
 @pytest.mark.skipif(not have_joblib, reason='Require joblib')
+@pytest.mark.skipif(in_windows_os(), reason='Require joblib')
 def test_joblib(adder_data):
     args, iterable, expected = adder_data
     result = _parallel(2, adder, args, None, iterable, package='joblib',

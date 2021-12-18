@@ -388,7 +388,7 @@ def test_2d_example():
 
          [[0.00690038, 0.00221446],
           [0.00221446, 0.01368642]]],
-        rtol=1e-2
+        rtol=1e-1
     )
     assert np.allclose(
         vals['offset'][indices],

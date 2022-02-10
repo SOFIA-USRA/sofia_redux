@@ -11,13 +11,13 @@ from sofia_redux.scan.coordinate_systems.super_galactic_coordinates import \
 def test_init():
     g = SuperGalacticCoordinates()
     assert g.coordinates is None and g.unit == 'degree'
-    
-    
+
+
 def test_copy():
     g = SuperGalacticCoordinates([1, 2])
     g2 = g.copy()
     assert g2 == g and g2 is not g
-    
+
 
 def test_setup_coordinate_system():
     g = SuperGalacticCoordinates()

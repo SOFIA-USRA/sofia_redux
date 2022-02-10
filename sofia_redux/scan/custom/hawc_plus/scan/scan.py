@@ -155,7 +155,8 @@ class HawcPlusScan(SofiaScan):
         super().edit_scan_header(header)
         if self.prior_pipeline_step is not None:
             header['PROCLEVL'] = (
-                self.prior_pipeline_step, 'Last processing step on input scan.')
+                self.prior_pipeline_step,
+                'Last processing step on input scan.')
 
     def add_integrations_from_hdul(self, hdul):
         """
@@ -197,7 +198,7 @@ class HawcPlusScan(SofiaScan):
             'chopper.tolerance', default=np.nan)
         if not np.isnan(tolerance):
             self.info.chopping.transit_tolerance = (
-                    tolerance * units.Unit('arcsec'))
+                tolerance * units.Unit('arcsec'))
 
         self.use_between_scans = self.configuration.has_option('betweenscans')
         super().validate()

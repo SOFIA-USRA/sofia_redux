@@ -17,8 +17,8 @@ __all__ = ['get_signal_variance', 'get_ml_correlated',
            'prepare_frame_temp_fields']
 
 
-@nb.jit(cache=True, nogil=False, Parallel=False, fastmath=False)
-def get_signal_variance(values, weights=None):
+@nb.jit(cache=True, nogil=False, parallel=False, fastmath=False)
+def get_signal_variance(values, weights=None):  # pragma: no cover
     """
     Return the signal variance.
 
@@ -26,7 +26,8 @@ def get_signal_variance(values, weights=None):
 
     v = sum(w * x^2) / sum(w)
 
-    where x are the signal values and w are the signal weights.
+    where x are the signal values and w are the signal weights.  If no weights
+    are supplied, the default weight is taken to be 1 for each value.
 
     Parameters
     ----------
@@ -61,15 +62,33 @@ def get_signal_variance(values, weights=None):
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def get_ml_correlated(frame_data, frame_weights, frame_valid, channel_indices,
-                      channel_wg, channel_wg2, sample_flags, resolution):
+                      channel_wg, channel_wg2, sample_flags, resolution
+                      ):  # pragma: no cover
     """
     Derive the maximum-likelihood gain increments and weights.
 
-    The return values are:
+    The gain increments and associated weights are determined by performing
+    an analysis of the parameters in blocks, the length of which are
+    determined by `resolution`.  While a `resolution` (r) of 1 is standard
+    practice, higher values result in a downsampled set of increments.  The
+    increments for a single block (i) are calculated using the values between
+    frames (f1 and f2) where:
 
-    sum(fw * cw * gain * data) / sum(fw * cw * gain^2)
+        f1 = i * r
+        f2 = (i + 1) * r
 
-    where fw are the relative frame weights and cw are the channel weights.
+    The increment weight is given by:
+
+        increment_weight = sum_{ch}(sum_{f1}^{f2}(fw * cw * g^2))
+
+    where fw is the frame weight, cw is the channel weight, g is the channel
+    gain and sum_{ch} is the sum over all channels.  The gain increment is
+    given by:
+
+        increment = sum_{ch}(sum_{f1}^{f2}(fw * cw * g * d) / increment_weight)
+
+    where d is the `frame_data`.  Any invalid results are returned as zero
+    values increments and increment weights.
 
     Parameters
     ----------
@@ -124,8 +143,8 @@ def get_ml_correlated(frame_data, frame_weights, frame_valid, channel_indices,
             for i, channel_index in enumerate(channel_indices):
                 if sample_flags[frame_index, channel_index] != 0:
                     continue
-                sum_wv += (fw * channel_wg[i] *
-                           frame_data[frame_index, channel_index])
+                sum_wv += (fw * channel_wg[i]
+                           * frame_data[frame_index, channel_index])
                 sum_w += fw * channel_wg2[i]
         if sum_w == 0:
             gain_increments[signal_index] = 0.0
@@ -140,17 +159,26 @@ def get_ml_correlated(frame_data, frame_weights, frame_valid, channel_indices,
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def get_robust_correlated(frame_data, frame_weights, frame_valid,
                           channel_indices, channel_g, channel_wg2,
-                          sample_flags, resolution, max_dependence=0.25):
+                          sample_flags, resolution, max_dependence=0.25
+                          ):  # pragma: no cover
     """
     Derive the robust gain increment and weights.
 
-    The return values are:
+    The robust correlated gain increments and associated weights are derived
+    in a similar way to the maximum-likelihood increments calculated using
+    :func:`get_ml_correlated` but with a median calculation instead of a mean
+    (please see :func:`numba_functions.smart_median` for further details).
+    The input weights and values passed into the median (which returns the
+    increment values and weights) are given by:
 
-    median(data / gain)
+        values = d / g
+        weight = fw * cw * g^2
 
-    where the median is weighted by:
-
-    relative_frame_weight * channel_weight * gain^2
+    where d is the `frame_data`, g are the channel gains, fw are the frame
+    relative weights, and cw are the channel weights.  The median is performed
+    over all channels and frames within a given block (see
+    :func:`get_ml_correlated`).   Any invalid results are returned as zero
+    values increments and increment weights.
 
     Parameters
     ----------
@@ -177,7 +205,8 @@ def get_robust_correlated(frame_data, frame_weights, frame_valid,
         The signal resolution (number of frames).
     max_dependence : float, optional
         The maximum dependence of a single datum before switching to weighted
-        mean.
+        mean.  Please see :func:`numba_functions.smart_median_1d` for further
+        details.
 
     Returns
     -------
@@ -188,9 +217,9 @@ def get_robust_correlated(frame_data, frame_weights, frame_valid,
     if resolution < 1:
         resolution = 1
     n_blocks = numba_functions.roundup_ratio(n_frames, resolution)
+    buffer_size = resolution * channel_indices.size
     signal_values = np.empty(n_blocks, dtype=nb.float64)
     signal_weights = np.empty(n_blocks, dtype=nb.float64)
-    buffer_size = resolution * channel_indices.size
     buffer_values = np.empty(buffer_size, dtype=nb.float64)
     buffer_weights = np.empty(buffer_size, dtype=nb.float64)
 
@@ -232,14 +261,14 @@ def get_robust_correlated(frame_data, frame_weights, frame_valid,
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def resync_gains(frame_data, signal_values, resolution, delta_gains,
-                 channel_indices, frame_valid):
+                 channel_indices, frame_valid):  # pragma: no cover
     """
-    Resync gains for a given block of frames.
+    Resync the frame data with the signal and gain increments.
 
     Removes the previous gain increment correction from frame data.  All frame
-    data values are decremented by
+    data values are decremented by:
 
-    signal[frame_index//resolution] * channel_gain_delta.
+        frame_data -= signal[frame_index//resolution] * channel_gain_delta
 
     Parameters
     ----------
@@ -288,12 +317,30 @@ def apply_gain_increments(frame_data, frame_weight, frame_valid,
                           modeling_frames, frame_dependents, channel_g,
                           channel_fwg2, channel_indices, channel_dependents,
                           sample_flags, signal_values, signal_weights,
-                          resolution, increment, increment_weight):
+                          resolution, increment, increment_weight
+                          ):  # pragma: no cover
     """
     Apply the gain increments to frame data and signals.
 
     Updates the frame data, frame and channel dependents, and signal values and
-    weights by the given correlated gain increments.
+    weights by the given correlated gain increments.  Frame data are updated
+    by:
+
+        d -= g * dc
+
+    where g is the channel gain and dc is the increment.  Frame and channel
+    dependents are updated by the dependent increment of:
+
+        dp = cf * cw * fw  * g^2 / dw
+
+    where cf is the channel filtering, cw is the channel weight, fw is the
+    frame weights, and dw is the gain increment weight.  Channel dependents are
+    incremented by dp summed over all frames for each channel, and frame
+    dependents are incremented by dp summed over all channels for each frame.
+    The signal (s) and signal weight (sw) are incremented by:
+
+        s += dc
+        sw += dw
 
     Parameters
     ----------
@@ -303,7 +350,8 @@ def apply_gain_increments(frame_data, frame_weight, frame_valid,
     frame_weight : numpy.ndarray (float)
         The relative frame weight of shape (n_frames,).
     frame_valid : numpy.ndarray (bool)
-        A boolean mask where `False` excludes a given frame from all processing.
+        A boolean mask where `False` excludes a given frame from
+        all processing.
     modeling_frames : numpy.ndarray (bool)
         A boolean mask where `True` indicates that a given frame is used for
         modeling.  While frame data values will still be updated for modeling
@@ -390,9 +438,24 @@ def apply_gain_increments(frame_data, frame_weight, frame_valid,
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def calculate_filtering(channel_indices, channel_dependents, overlaps,
                         channel_valid, n_parms, channel_source_filtering,
-                        signal_source_filtering):
+                        signal_source_filtering):  # pragma: no cover
     """
     Calculate the new signal and channel source filtering.
+
+    Updates the channel and source filtering by removing the prior
+    correction to the channel filtering before calculating and applying
+    the new corrections to both:
+
+        sf = 1 - phi
+        cf = (cf_prior / sf_prior) * sf
+
+    where sf is the signal source filtering and cf is the channel source
+    filtering.  phi is given by:
+
+        phi[i] = sum_{i != j}(overlaps[i, j] * dependents[j]) / n_parms
+
+    for channel i using the fractional overlaps between channels i and j and
+    the channel dependents for channel j.
 
     Parameters
     ----------
@@ -419,13 +482,12 @@ def calculate_filtering(channel_indices, channel_dependents, overlaps,
 
     Returns
     -------
-    new_channel_source_filtering, new_signal_source_filtering : ndarray, ndarray
+    new_channel_filtering, new_signal_filtering : ndarray, ndarray
         The updated channel and signal source filtering, both of shape
         (n_channels,).
     """
 
     n_channels = channel_indices.size
-    # phi = np.zeros(n_channels, dtype=nb.float64)
 
     new_signal_source_filtering = np.empty(n_channels, dtype=nb.float64)
     new_channel_source_filtering = np.empty(n_channels, dtype=nb.float64)
@@ -472,14 +534,25 @@ def calculate_filtering(channel_indices, channel_dependents, overlaps,
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
-def differentiate_signal(values, dt=1.0):
+def differentiate_signal(values, dt=1.0):  # pragma: no cover
     """
     Differentiate the signal values in-place.
+
+    The differentiated value for the first and last value (i = 0 or n-1) are
+    given by:
+
+        dv[i]/dt = (v[i + 1] - v[i]) / dt
+
+    All the intermediate values (0 < i < n-1) are given by:
+
+        dv[i]/dt = (v[i + 1] - v[i - 1]) / 2dt
+
+    The derivative is stored in the input `values` array (updated in-place).
 
     Parameters
     ----------
     values : numpy.ndarray (float)
-        The signal values of shape (n_signal,).
+        The signal values of shape (n_signal,).  Updated in-place.
     dt : float, optional
         The interval between signal samples.
 
@@ -497,16 +570,29 @@ def differentiate_signal(values, dt=1.0):
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
-def differentiate_weighted_signal(values, weights, dt=1.0):
+def differentiate_weighted_signal(values, weights, dt=1.0):  # pragma: no cover
     """
     Differentiate signal values and weights in-place.
+
+    Similar to :func:`differentiate_signal` except that weightings are also
+    accounted for.  Once again, the differentiated signals and weights are
+    stored in the input `values` and `weights` arrays (updated in-place).  The
+    differentiated values and weights are first calculated via:
+
+        dv'[i] = (v[i + 1] - v[i]) / dt
+        dw'[i] = (w[i] * w[i + 1]) / ((w[i] + w[i + 1]) * dt^2)
+
+    All intermediate values and weights (0 < i < n-1) are then averaged by:
+
+        dv[i]/dt =  (dw'[i-1]dv'[i-1] + dw'[i]dv'[i]) / (dw'[i-1] + dw'[i])
+        dw[i]/dt = dw'[i-1] + dw'[i]
 
     Parameters
     ----------
     values : numpy.ndarray (float)
-        The signal values of shape (n_signal,).
+        The signal values of shape (n_signal,).  Updated in-place.
     weights : numpy.ndarray (float)
-        The signal weights of shape (n_signal,)
+        The signal weights of shape (n_signal,).  Updated in-place.
     dt : float, optional
         The interval between signal samples.
 
@@ -546,14 +632,24 @@ def differentiate_weighted_signal(values, weights, dt=1.0):
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
-def integrate_signal(values, dt=1.0):
+def integrate_signal(values, dt=1.0):  # pragma: no cover
     """
     Integrate signal values in-place using the trapezoid rule.
+
+    The integrated value for signal x (c(x)) at point i is calculated using
+    the trapezoid rule:
+
+        c(x)[i] = sum_{j=0}^{i}((x[j-1] + x[j]) * dt/2)
+
+    where x[-1] is taken to be zero.
+
+    The integrated signal is stored in the input `values` array (updated
+    in-place).
 
     Parameters
     ----------
     values : numpy.ndarray of float
-        1-D array containing values to integrate.
+        1-D array containing values to integrate.  Updated in-place.
     dt : float, optional
         Spacing between samples.
 
@@ -577,12 +673,16 @@ def integrate_signal(values, dt=1.0):
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
-def integrate_weighted_signal(values, weights, dt=1.0):
+def integrate_weighted_signal(values, weights, dt=1.0):  # pragma: no cover
     """
     Integrate signal values and weights in-place using the trapezoid rule.
 
-    Not sure if the weight calculation on this is accurate.  It's definitely
-    not in the original CRUSH.
+    The integrated weights c(w) and integration signal c(x) are given by:
+
+        c(w)[i] = 4w[i-1]w[i]/(w[i-1] + w[i])
+        c(x)[i] = sum_{j=0}^{i}((x[j-1] + x[j]) * dt/2)
+
+    where w[-1] and x[-1] are taken to be zero.
 
     Parameters
     ----------
@@ -598,7 +698,6 @@ def integrate_weighted_signal(values, weights, dt=1.0):
     None
     """
     dt2 = dt * dt
-    idt = 1.0 / dt
     integral = 0.0
     v_last = 0.0
     w_last = 0.0
@@ -618,21 +717,27 @@ def integrate_weighted_signal(values, weights, dt=1.0):
 
         v = v_last + v_next
         integral += v
-        values[i] = integral * idt
+        values[i] = integral
         weights[i] = w * dt2
         w_last = w_next
         v_last = v_next
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
-def add_drifts(signal_values, drifts, drift_length):
+def add_drifts(signal_values, drifts, drift_length):  # pragma: no cover
     """
-    Add drifts to the signal values.
+    Add drift values to the signal.
+
+    Drifts are supplied in block form, where a single `drifts` (d) value is
+    added to a block of `drift_length` (l) `signal_values` (x).  For drift i,
+    the signal will be updated by:
+
+        signal[il:(i+1)l] += d[i]
 
     Parameters
     ----------
     signal_values : numpy.ndarray (float)
-        The signal values of shape (n_signal,).
+        The signal values of shape (n_signal,).  Updated in-place.
     drifts : numpy.ndarray (float)
         The signal drifts of shape (n_drifts,).
     drift_length : int
@@ -659,14 +764,14 @@ def add_drifts(signal_values, drifts, drift_length):
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def level(values, start_frame, end_frame, resolution,
-          weights=None, robust=False):
+          weights=None, robust=False):  # pragma: no cover
     """
     Remove and return the average value between a start and end frame.
 
     Parameters
     ----------
     values : numpy.ndarray (float)
-        The signal values of length (n_signal,).
+        The signal values of length (n_signal,).  Updated in-place.
     start_frame : int
         The starting frame (inclusive).
     end_frame : int
@@ -703,10 +808,14 @@ def level(values, start_frame, end_frame, resolution,
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
-def remove_drifts(signal_values, drifts, n_frames, resolution, integration_size,
-                  signal_weights=None, robust=False):
+def remove_drifts(signal_values, drifts, n_frames, resolution,
+                  integration_size, signal_weights=None,
+                  robust=False):  # pragma: no cover
     """
     Remove drifts (average signal levels in a frame block) from the signal.
+
+    Performs :func:`level` sequentially over `n_frames` length blocks of the
+    signal and updates the drift values accordingly.
 
     Parameters
     ----------
@@ -751,9 +860,10 @@ def remove_drifts(signal_values, drifts, n_frames, resolution, integration_size,
         drifts[drift_index] += center_value
 
 
-@nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def get_covariance(signal_values, frame_data, frame_valid,
-                   channel_indices, channel_weights, sample_flags):
+                   channel_indices, channel_weights, sample_flags
+                   ):  # pragma: no cover
     """
     Return the signal covariance for samples in frames/channel.
 
@@ -762,13 +872,14 @@ def get_covariance(signal_values, frame_data, frame_valid,
     C = sum_{channels}(xs * xs) / sum_{channels}(ss * xx)
 
     where xs = sum_{frames}(w * x * s), ss = sum_{frames}(w * s * s), and
-    xx = sum_{frames}(w * x * x).  Here w is the channel weight, s is the signal
-    value for each frame, and x are the frame data values.
+    xx = sum_{frames}(w * x * x).  Here w is the channel weight, s is
+    the signal value for each frame, and x are the frame data values.
 
     Parameters
     ----------
     signal_values : numpy.ndarray (float)
-        The signal values of shape (n_frames,).
+        The signal values of shape (n_frames,).  Note that these values should
+        be at the same resolution as `frame_data`.
     frame_data : numpy.ndarray (float)
         The frame data of shape (n_frames, all_channels).
     frame_valid : numpy.ndarray (bool)
@@ -814,8 +925,9 @@ def get_covariance(signal_values, frame_data, frame_valid,
     c2 = 0.0
     for i in range(n_channels):
         xs = sum_xs[i]
-        if xs > 0:
-            c2 += (xs * xs) / (sum_x2[i] * sum_s2[i])
+        x2s2 = sum_x2[i] * sum_s2[i]
+        if xs > 0 and x2s2 != 0:
+            c2 += (xs * xs) / x2s2
 
     return np.sqrt(c2)
 
@@ -889,9 +1001,22 @@ def get_ml_gain_increment(frame_data, signal_wc, signal_wc2, sample_flags,
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def get_robust_gain_increment(frame_data, signal_c, signal_wc2, sample_flags,
-                              channel_indices, valid_frames):
+                              channel_indices, valid_frames
+                              ):  # pragma: no cover
     """
-    Fast implementation of `get_robust_gain_increment`.
+    Return the robust median gain increment.
+
+    This function returns a value similar to :func:`get_ml_gain_increment` that
+    substitutes the mean operation with a robust weighted median (see
+    :func:`numba_functions.smart_median_1d`).  The return increment and
+    increment weight are returned by passing the following values into the
+    weighted median operation:
+
+        values = frame_data / c
+        weights = wc^2
+
+    where c are the signal values (per frame) and w are the frame relative
+    weights.
 
     Parameters
     ----------
@@ -953,9 +1078,25 @@ def get_robust_gain_increment(frame_data, signal_c, signal_wc2, sample_flags,
 def synchronize_gains(frame_data, sample_flags, frame_valid,
                       modeling_frames, channel_indices, delta_gains,
                       frame_wc2, channel_wc2, signal_values,
-                      frame_parms, channel_parms):
+                      frame_parms, channel_parms):  # pragma: no cover
     """
-    Fast implementation of `synchronize_gains` method.
+    Resync the frame data with the gain deltas and update dependents.
+
+    The supplied frame data (d) are decremented by:
+
+        d -= delta_g * c
+
+    where delta_g are the gain deltas and c are the signal values.  Dependents
+    are incremented via:
+
+        frame_dependents += sum_{channels}(frame_wc2 / channel_wc2)
+        channel_dependents += (1 - 1/n)
+
+    where n are the number of channels with channel_wc2 > 0 (i.e., one gain
+    parameter per channel minus the overall gain renormalization).  The frame
+    and channel wc2 values are the current accumulated gain weights in the
+    frame and channel planes (increments are calculated by
+    :func:`get_ml_gain_increment` and :func:`get_robust_gain_increment`.
 
     Parameters
     ----------
@@ -1024,9 +1165,50 @@ def synchronize_gains(frame_data, sample_flags, frame_valid,
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def prepare_frame_temp_fields(signal_values, frame_weights, frame_valid,
-                              frame_modeling, frame_c, frame_wc, frame_wc2):
+                              frame_modeling, frame_c, frame_wc, frame_wc2
+                              ):  # pragma: no cover
+    """
+    Populate some temporary parameters for signal numerical operations.
+
+    Populates the following parameters:
+
+        frame_c = signal_values
+        frame_wc = frame_weights * signal_values
+        frame_wc2 = frame_weights * signal_values^2
+
+    Any NaN signal values or invalid frames result in zeros in all arrays to be
+    populated.  NaN or negative frame weights or modeling frames result in
+    zero valued weight properties for that same frame (in `frame_wc` and
+    `frame_wc2`).
+
+    Parameters
+    ----------
+    signal_values : numpy.ndarray (float)
+        The signal values of shape (n_frames,).
+    frame_weights : numpy.ndarray (float)
+        The frame relative weights of shape (n_frames,).
+    frame_valid : numpy.ndarray (bool)
+        A boolean mask of shape (n_frames,) where `False` marks a frame as
+        invalid.
+    frame_modeling : numpy.ndarray (bool)
+        A boolean mask of shape (n_frames,) where `True` marks a frame as a
+        modeling frame (zero weight).
+    frame_c  : numpy.ndarray (float)
+        The signal array to populate of shape (n_frames,).  Updated in-place.
+    frame_wc : numpy.ndarray (float)
+        The wc (frame_weight * signal) array to populate of shape (n_frames,).
+        Updated in-place.
+    frame_wc2 : numpy.ndarray (float)
+        The wc2 (frame_weight * signal^2) array to populate of shape
+        (n_frames,).  Updated in-place.
+
+    Returns
+    -------
+    None
+    """
     for frame in range(frame_valid.size):
         if not frame_valid[frame]:
+            frame_c[frame] = frame_wc[frame] = frame_wc2[frame] = 0.0
             continue
         c = signal_values[frame]
         if np.isnan(c):
@@ -1039,8 +1221,7 @@ def prepare_frame_temp_fields(signal_values, frame_weights, frame_valid,
         w = frame_weights[frame]
         if w <= 0 or np.isnan(w):
             frame_wc[frame] = frame_wc2[frame] = 0.0
+            continue
         wc = w * c
         frame_wc[frame] = wc
         frame_wc2[frame] = wc * c
-
-

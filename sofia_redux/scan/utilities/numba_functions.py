@@ -728,16 +728,17 @@ def regular_kernel_convolve(data, kernel, kernel_reference_index=None,
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def regular_coarse_kernel_convolve(data, kernel, steps,
                                    kernel_reference_index=None,
-                                   weight=None, valid=None):  # pragma: no cover
+                                   weight=None,
+                                   valid=None):  # pragma: no cover
     """
     Direct convolution of ND data with a given kernel onto a coarse grid.
 
-    This function is similar to :func:`regular_kernel_convolve` in that it
-    results in an output that is the convolution of regular data with a regular
-    grid, except that the output dimensions are altered.  The size of the output
-    grid is:
+    This function is similar to :func:`regular_kernel_convolve` in that
+    it results in an output that is the convolution of regular data with
+    a regular grid, except that the output dimensions are altered.  The size
+    of the output grid is::
 
-        shape_out = ceil(data.shape / steps)
+       shape_out = ceil(data.shape / steps)
 
     and is generally intended to speed up processing time by reducing the
     number of points at which a solution is required.  Later, if necessary and
@@ -909,8 +910,9 @@ def smooth_values_at(data, kernel, indices, kernel_reference_index, knots,
         values.  Must be of shape (n_dimensions, n) and use numpy dimensional
         ordering (y, x).
     kernel_reference_index : numpy.ndarray (int)
-        The kernel reference index specifying the center of the kernel.  Must be
-        of shape (n_dimensions,) and use numpy dimensional ordering (y, x).
+        The kernel reference index specifying the center of the kernel.
+        Must be of shape (n_dimensions,) and use numpy dimensional ordering
+        (y, x).
     knots : numpy.ndarray (float)
         The knots as calculated by the :class:`Spline` object on `kernel`.
         These should be of shape (n_dimensions, max_knots) where max_knots is
@@ -931,9 +933,9 @@ def smooth_values_at(data, kernel, indices, kernel_reference_index, knots,
         The spline knot steps translation for the spline fit.  Should be of
         shape (n_dimensions,).   Dimensions should be ordered as (x, y).
     nk1 : numpy.ndarray (int)
-        Another spline mapping parameter which is equal to n_knots - degrees - 1
-        for the spline.  Should be of shape (n_dimensions,).   Dimensions should
-        be ordered as (x, y).
+        Another spline mapping parameter which is equal to
+        n_knots - degrees - 1 for the spline.  Should be of shape
+        (n_dimensions,).   Dimensions should be ordered as (x, y).
     spline_mapping : numpy.ndarray (int)
         A spline mapping translation for the spline knots.  Should be of shape
         (n_dimensions, max_knots).   Dimensions should be ordered as (x, y).
@@ -1003,8 +1005,9 @@ def smooth_values_at(data, kernel, indices, kernel_reference_index, knots,
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
-def smooth_value_at(data, kernel, index, kernel_indices, kernel_reference_index,
-                    knots, coefficients, degrees, panel_mapping, panel_steps,
+def smooth_value_at(data, kernel, index, kernel_indices,
+                    kernel_reference_index, knots, coefficients,
+                    degrees, panel_mapping, panel_steps,
                     knot_steps, nk1, spline_mapping, data_shape,
                     kernel_shape, data_steps,
                     flat_weight, flat_valid, weighted, validated
@@ -1030,8 +1033,9 @@ def smooth_value_at(data, kernel, index, kernel_indices, kernel_reference_index,
         The kernel to smooth with.  Must be an array of arbitrary shape, but
         match the same number of dimensions as `data`.
     index : numpy.ndarray (int or float)
-        The index on `data` at which to calculate the smooth value.  This should
-        be an array of shape (n_dimensions,) using numpy (y, x) ordering.
+        The index on `data` at which to calculate the smooth value.  This
+        should be an array of shape (n_dimensions,) using numpy (y, x)
+        ordering.
     kernel_indices : numpy.ndarray (int)
         An array of shape (n_dimensions, kernel.size) as returned by
         :func:`spline_utils.flat_index_mapping`.  This gives the N-dimensional
@@ -1039,8 +1043,9 @@ def smooth_value_at(data, kernel, index, kernel_indices, kernel_reference_index,
         as kernel[kernel_indices[i]].  Note that dimensions are ordered using
         the Numpy (y, x) convention.
     kernel_reference_index : numpy.ndarray (int)
-        The kernel reference index specifying the center of the kernel.  Must be
-        of shape (n_dimensions,) and use numpy dimensional ordering (y, x).
+        The kernel reference index specifying the center of the kernel.
+        Must be of shape (n_dimensions,) and use numpy dimensional ordering
+        (y, x).
     knots : numpy.ndarray (float)
         The knots as calculated by the :class:`Spline` object on `kernel`.
         These should be of shape (n_dimensions, max_knots) where max_knots is
@@ -1061,39 +1066,40 @@ def smooth_value_at(data, kernel, index, kernel_indices, kernel_reference_index,
         The spline knot steps translation for the spline fit.  Should be of
         shape (n_dimensions,).   Dimensions should be ordered as (x, y).
     nk1 : numpy.ndarray (int)
-        Another spline mapping parameter which is equal to n_knots - degrees - 1
-        for the spline.  Should be of shape (n_dimensions,).   Dimensions should
-        be ordered as (x, y).
+        Another spline mapping parameter which is equal to
+        n_knots - degrees - 1 for the spline.  Should be of shape
+        (n_dimensions,).   Dimensions should be ordered as (x, y).
     spline_mapping : numpy.ndarray (int)
         A spline mapping translation for the spline knots.  Should be of shape
         (n_dimensions, max_knots).   Dimensions should be ordered as (x, y).
     data_shape : numpy.ndarray (int)
-        The shape of `data` as an array of shape (n_dimensions,) in Numpy (y, x)
-        order.
+        The shape of `data` as an array of shape (n_dimensions,) in
+        Numpy (y, x) order.
     kernel_shape : numpy.ndarray (int)
         The shape of `kernel` as an array of shape (n_dimensions,) in Numpy
         (y, x) order.
     data_steps : numpy.ndarray (int)
         An array of shape (n_dimensions,) in Numpy (y, x) order giving the
         number of elements one would need to jump on a flattened `data` for
-        a single increment along a given dimension on the ND-array.  Please see
-        :func:`spline_utils.flat_index_mapping` for further details.
+        a single increment along a given dimension on the ND-array.  Please
+        see :func:`spline_utils.flat_index_mapping` for further details.
     flat_weight : numpy.ndarray (float)
         The associated weight values for data, flattened to a single dimension
-        array of shape (data.size,).  I.e., `flat_weight` = weight.ravel().  If
-        no weighting is required, this should be an empty array of shape (0,).
+        array of shape (data.size,).  I.e., `flat_weight` = weight.ravel().
+        If no weighting is required, this should be an empty array of
+        shape (0,).
     flat_valid : numpy.ndarray (bool)
         An array marking data values as valid (`True`) or invalid (`False`).
         Any invalid data will not be included in the calculation.  This should
         be a flattened singular dimension array taken from one that was
-        originally the same shape as `data` and be of shape (data.size,).  I.e.,
-        `flat_valid` = valid.ravel().  If no validity checking is required
-        (assumes all data points are valid), set this to an empty array of shape
-        (0,).
+        originally the same shape as `data` and be of shape (data.size,).
+        I.e., `flat_valid` = valid.ravel().  If no validity checking is
+        required (assumes all data points are valid), set this to an empty
+        array of shape (0,).
     weighted : bool
-        If `True`, indicates that weighting is required and `flat_weight` should
-        be of shape (data.size,).  Otherwise, no weighting is required, and
-        `flat_weight` may be of shape (0,).
+        If `True`, indicates that weighting is required and `flat_weight`
+        should be of shape (data.size,).  Otherwise, no weighting is required,
+        and `flat_weight` may be of shape (0,).
     validated : bool
         If `True`, indicates that validity checking is required and
         `flat_valid` should be of shape (data.size,).  Otherwise, `flat_valid`
@@ -1110,7 +1116,8 @@ def smooth_value_at(data, kernel, index, kernel_indices, kernel_reference_index,
     index_difference = index - kernel_reference_index
 
     for dimension in range(n_dimensions):
-        if index_difference[dimension] != np.floor(index_difference[dimension]):
+        if (index_difference[dimension]
+                != np.floor(index_difference[dimension])):
             # Must shift kernel using spline interpolation
             return point_smooth(
                 flat_data=data.ravel(),
@@ -1184,20 +1191,21 @@ def point_aligned_smooth(flat_data, flat_kernel, flat_weight, flat_valid,
         as kernel[kernel_indices[i]].  Note that dimensions are ordered using
         the Numpy (y, x) convention.
     kernel_reference_index : numpy.ndarray (int)
-        The kernel reference index specifying the center of the kernel.  Must be
-        of shape (n_dimensions,) and use numpy dimensional ordering (y, x).
+        The kernel reference index specifying the center of the kernel.
+        Must be of shape (n_dimensions,) and use numpy dimensional ordering
+        (y, x).
     data_shape : numpy.ndarray (int)
-        The shape of `data` as an array of shape (n_dimensions,) in Numpy (y, x)
-        order.
+        The shape of `data` as an array of shape (n_dimensions,) in
+        Numpy (y, x) order.
     data_steps : numpy.ndarray (int)
         An array of shape (n_dimensions,) in Numpy (y, x) order giving the
         number of elements one would need to jump on a flattened `data` for
-        a single increment along a given dimension on the ND-array.  Please see
-        :func:`spline_utils.flat_index_mapping` for further details.
+        a single increment along a given dimension on the ND-array.  Please
+        see :func:`spline_utils.flat_index_mapping` for further details.
     weighted : bool
-        If `True`, indicates that weighting is required and `flat_weight` should
-        be of shape (data.size,).  Otherwise, no weighting is required, and
-        `flat_weight` may be of shape (0,).
+        If `True`, indicates that weighting is required and `flat_weight`
+        should be of shape (data.size,).  Otherwise, no weighting is required,
+        and `flat_weight` may be of shape (0,).
     validated : bool
         If `True`, indicates that validity checking is required and
         `flat_valid` should be of shape (data.size,).  Otherwise, `flat_valid`
@@ -1220,9 +1228,9 @@ def point_aligned_smooth(flat_data, flat_kernel, flat_weight, flat_valid,
 
         ref_data_index = 0
         for dimension in range(n_dimensions):
-            oi = (kernel_indices[dimension, j] -
-                  kernel_reference_index[dimension] +
-                  data_index[dimension])
+            oi = (kernel_indices[dimension, j]
+                  - kernel_reference_index[dimension]
+                  + data_index[dimension])
             if oi < 0:
                 break
             elif oi >= data_shape[dimension]:
@@ -1273,7 +1281,8 @@ def point_smooth(flat_data, index, kernel_indices, kernel_reference_index,
     Parameters
     ----------
     flat_data : numpy.ndarray (float)
-        A flattened version of N-dimensional data (data.ravel()) of shape (n,).
+        A flattened version of N-dimensional data (data.ravel()) of
+        shape (n,).
     index : numpy.ndarray (int)
         The N-D index on the original data array at which to determine the
         smoothed value.  Must be of shape (n_dimensions,) and by in Numpy
@@ -1285,8 +1294,9 @@ def point_smooth(flat_data, index, kernel_indices, kernel_reference_index,
         as kernel[kernel_indices[i]].  Note that dimensions are ordered using
         the Numpy (y, x) convention.
     kernel_reference_index : numpy.ndarray (int)
-        The kernel reference index specifying the center of the kernel.  Must be
-        of shape (n_dimensions,) and use numpy dimensional ordering (y, x).
+        The kernel reference index specifying the center of the kernel.
+        Must be of shape (n_dimensions,) and use numpy dimensional
+        ordering (y, x).
     knots : numpy.ndarray (float)
         The knots as calculated by the :class:`Spline` object on `kernel`.
         These should be of shape (n_dimensions, max_knots) where max_knots is
@@ -1307,27 +1317,27 @@ def point_smooth(flat_data, index, kernel_indices, kernel_reference_index,
         The spline knot steps translation for the spline fit.  Should be of
         shape (n_dimensions,).   Dimensions should be ordered as (x, y).
     nk1 : numpy.ndarray (int)
-        Another spline mapping parameter which is equal to n_knots - degrees - 1
-        for the spline.  Should be of shape (n_dimensions,).   Dimensions should
-        be ordered as (x, y).
+        Another spline mapping parameter which is equal to
+        n_knots - degrees - 1 for the spline.  Should be of shape
+        (n_dimensions,).   Dimensions should be ordered as (x, y).
     spline_mapping : numpy.ndarray (int)
         A spline mapping translation for the spline knots.  Should be of shape
         (n_dimensions, max_knots).   Dimensions should be ordered as (x, y).
     data_shape : numpy.ndarray (int)
-        The shape of `data` as an array of shape (n_dimensions,) in Numpy (y, x)
-        order.
+        The shape of `data` as an array of shape (n_dimensions,) in
+        Numpy (y, x) order.
     kernel_shape : numpy.ndarray (int)
         The shape of `kernel` as an array of shape (n_dimensions,) in Numpy
         (y, x) order.
     data_steps : numpy.ndarray (int)
         An array of shape (n_dimensions,) in Numpy (y, x) order giving the
         number of elements one would need to jump on a flattened `data` for
-        a single increment along a given dimension on the ND-array.  Please see
-        :func:`spline_utils.flat_index_mapping` for further details.
+        a single increment along a given dimension on the ND-array.  Please
+        see :func:`spline_utils.flat_index_mapping` for further details.
     weighted : bool
-        If `True`, indicates that weighting is required and `flat_weight` should
-        be of shape (data.size,).  Otherwise, no weighting is required, and
-        `flat_weight` may be of shape (0,).
+        If `True`, indicates that weighting is required and `flat_weight`
+        should be of shape (data.size,).  Otherwise, no weighting is required,
+        and `flat_weight` may be of shape (0,).
     validated : bool
         If `True`, indicates that validity checking is required and
         `flat_valid` should be of shape (data.size,).  Otherwise, `flat_valid`
@@ -1356,7 +1366,8 @@ def point_smooth(flat_data, index, kernel_indices, kernel_reference_index,
 
     i0 = index - kernel_reference_index
 
-    wd_sum = 0.0  # Continue here, since splines are in (x, y) order...
+    # Continue here, since splines are in (x, y) order...
+    wd_sum = 0.0
     w_sum = 0.0
 
     nd1 = n_dimensions - 1
@@ -1371,7 +1382,8 @@ def point_smooth(flat_data, index, kernel_indices, kernel_reference_index,
             elif data_index >= data_shape[dimension]:
                 break
 
-            # Need to convert numpy (y, x) ordering to spline (x, y) ordering...
+            # Need to convert numpy (y, x) ordering to
+            # spline (x, y) ordering...
             kernel_coordinate[nd1 - dimension] = data_index - i0[dimension]
             flat_data_index += data_steps[dimension] * data_index
         else:
@@ -1437,9 +1449,9 @@ def sequential_array_add(array, add_values, at_indices, valid_array=None,
     add_values : numpy.ndarray (float or int)
         The values to add to the array of shape (shape2)
     at_indices : numpy.ndarray (int)
-        The indices on `array` for which to add `add_values`.  Must be of shape
-        (n_dimensions, values.size or add_values.shape).  One-dimensional arrays
-        may be of shape (values.size,).
+        The indices on `array` for which to add `add_values`.  Must be of
+        shape (n_dimensions, values.size or add_values.shape).
+        One-dimensional arrays may be of shape (values.size,).
     valid_array : numpy.ndarray (bool), optional
         An array of shape (shape1) where `True` indicates that `array` may be
         added to at that index.
@@ -1454,7 +1466,8 @@ def sequential_array_add(array, add_values, at_indices, valid_array=None,
         element has been added to.
     """
     array_shape = np.asarray(array.shape)
-    array_indices, _, array_steps = spline_utils.flat_index_mapping(array_shape)
+    (array_indices, _,
+     array_steps) = spline_utils.flat_index_mapping(array_shape)
 
     flat_array = array.ravel()
     added_to = np.full(array.shape, False)

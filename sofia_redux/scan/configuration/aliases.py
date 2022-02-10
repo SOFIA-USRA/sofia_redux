@@ -157,8 +157,8 @@ class Aliases(Options):
             Either a configuration options branch to unalias, or a single
             string value to unalias.
         copy : bool, optional
-            If `True`, return a copy of the branch.  Otherwise, the given branch
-            will be updated in place.
+            If `True`, return a copy of the branch.  Otherwise, the given
+            branch will be updated in place.
 
         Returns
         -------

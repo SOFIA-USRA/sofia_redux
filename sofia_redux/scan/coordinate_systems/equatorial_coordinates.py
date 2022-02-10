@@ -2,7 +2,6 @@
 
 from astropy import units
 from astropy.coordinates import Angle
-from astropy.io import fits
 import numpy as np
 import warnings
 
@@ -12,7 +11,6 @@ from sofia_redux.scan.coordinate_systems.epoch.epoch import J2000
 from sofia_redux.scan.coordinate_systems.epoch.precession import Precession
 from sofia_redux.scan.coordinate_systems.coordinate_system import \
     CoordinateSystem
-from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 
 __all__ = ['EquatorialCoordinates', 'EQUATORIAL_POLE']
 
@@ -25,7 +23,8 @@ class EquatorialCoordinates(PrecessingCoordinates):
     WEST = 1
     ZERO_LONGITUDE = 0.0 * units.Unit('degree')
 
-    def __init__(self, coordinates=None, unit='degree', copy=True, epoch=J2000):
+    def __init__(self, coordinates=None, unit='degree',
+                 copy=True, epoch=J2000):
         super().__init__(coordinates=coordinates, unit=unit, copy=copy,
                          epoch=epoch)
 

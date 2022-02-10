@@ -7,7 +7,8 @@ import os
 
 from sofia_redux.scan.custom.hawc_plus.info.astrometry import (
     HawcPlusAstrometryInfo)
-from sofia_redux.scan.custom.hawc_plus.info.chopping import HawcPlusChoppingInfo
+from sofia_redux.scan.custom.hawc_plus.info.chopping import (
+    HawcPlusChoppingInfo)
 from sofia_redux.scan.custom.hawc_plus.info.detector_array import (
     HawcPlusDetectorArrayInfo)
 from sofia_redux.scan.custom.hawc_plus.info.instrument import (
@@ -35,8 +36,9 @@ class HawcPlusInfo(SofiaInfo):
         Parameters
         ----------
         configuration_path : str, optional
-            An alternate directory path to the configuration tree to be used
-            during the reduction.  The default is <package>/data/configurations.
+            An alternate directory path to the configuration tree to be
+            used during the reduction.  The default is
+            <package>/data/configurations.
         """
         super().__init__(configuration_path=configuration_path)
         self.name = 'hawc_plus'
@@ -178,8 +180,8 @@ class HawcPlusInfo(SofiaInfo):
         HAWC+ requires special processing for scan polarimetry data.  When
         multiple files are provided, files will be grouped by half-wave-plate
         (HWP) angle and each group will then be reduced for the R0 and T0
-        subarrays.  Note that a standard reduction will be performed if multiple
-        HWP angles are not detected.
+        subarrays.  Note that a standard reduction will be performed if
+        multiple HWP angles are not detected.
 
         Parameters
         ----------

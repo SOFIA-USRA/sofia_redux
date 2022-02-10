@@ -104,7 +104,7 @@ def test_copy(dummy_array):
 def test_eq(dummy_array):
     a = dummy_array
     assert a == a
-    assert a != None
+    assert a is not None
     assert a != 1
     other = a.copy()
     assert a == other
@@ -936,17 +936,17 @@ def test_get_neighbor_kernel():
                        )
     a = FlaggedArray(shape=(10, 10, 10))
     assert np.allclose(a.get_neighbor_kernel(),
-                       [[[1/3, 0.5, 1/3],
+                       [[[1 / 3, 0.5, 1 / 3],
                          [0.5, 1., 0.5],
-                         [1/3, 0.5, 1/3]],
+                         [1 / 3, 0.5, 1 / 3]],
 
                         [[0.5, 1., 0.5],
                          [1., 0., 1.],
                          [0.5, 1., 0.5]],
 
-                        [[1/3, 0.5, 1/3],
+                        [[1 / 3, 0.5, 1 / 3],
                          [0.5, 1., 0.5],
-                         [1/3, 0.5, 1/3]]]
+                         [1 / 3, 0.5, 1 / 3]]]
                        )
 
 

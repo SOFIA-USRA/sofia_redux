@@ -93,7 +93,6 @@ def test_get():
     assert options.get('baz', default=1) == 1
 
 
-
 def test_get_string():
     options = Options()
     options.options['foo'] = 1
@@ -317,4 +316,3 @@ def test_merge_options():
     new['dict'] = 'a value'
     d.merge_options(current, new)
     assert current['dict'] == {'foo': 'bar', 'value': 'a value'}
-

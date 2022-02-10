@@ -1,5 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+from abc import abstractmethod
 import numpy as np
 from astropy.stats import gaussian_sigma_to_fwhm
 
@@ -14,6 +15,9 @@ class AdaptiveFilter(VariedFilter):
     def __init__(self, integration=None, data=None):
         """
         Initialize an integration adaptive filter.
+
+        The adaptive filter is an abstract class where each channel has an
+        individual frequency response (see :class:`VariedFilter`).
 
         Parameters
         ----------
@@ -76,30 +80,31 @@ class AdaptiveFilter(VariedFilter):
         channels = self.get_channels()
         self.channel_profiles = np.zeros((channels.size, 0), dtype=float)
 
-    def set_size(self, nF):
+    def set_size(self, nf):
         """
+        Set the number of frequencies in the adaptive filter.
 
         Parameters
         ----------
-        nF : int
+        nf : int
             The number of frequencies in the adaptive filter.
 
         Returns
         -------
         None
         """
-        if self.profile is None or self.profile.shape[1] != nF:
-            self.profile = np.zeros((self.channels.size, nF), dtype=float)
+        if self.profile is None or self.profile.shape[1] != nf:
+            self.profile = np.zeros((self.channels.size, nf), dtype=float)
 
         channels = self.get_channels()
 
         dt = self.integration.info.sampling_interval.decompose().value
-        self.dF = 0.5 / (nF * dt)
+        self.dF = 0.5 / (nf * dt)
         self.update_source_profile()
 
         if self.channel_profiles.size != 0:
             old_profile = self.channel_profiles.copy()
-            self.channel_profiles = np.zeros((channels.size, nF), dtype=float)
+            self.channel_profiles = np.zeros((channels.size, nf), dtype=float)
             self.resample(old_profile, self.channel_profiles)
 
     def resample(self, old_profile, new_profile):
@@ -109,9 +114,9 @@ class AdaptiveFilter(VariedFilter):
         Parameters
         ----------
         old_profile : numpy.ndarray (float)
-            An array of shape (n1, n_channels) containing the current profile.
+            An array of shape (n_channels, n1) containing the current profile.
         new_profile : numpy.ndarray (float)
-            The new array of shape (n1, n_channels) to populate.
+            The new array of shape (n_channels, n2) to populate.
 
         Returns
         -------
@@ -119,22 +124,6 @@ class AdaptiveFilter(VariedFilter):
         """
         fnf.resample(old_profile, new_profile)
         self.channel_profiles = new_profile
-
-    def pre_filter_channels(self, channels=None):
-        """
-        Performs the pre-filtering channels steps.
-
-        Parameters
-        ----------
-        channels : ChannelGroup, optional
-            The channel group for which to perform the pre-filtering step.
-            If not supplied, defaults to the filtering channels.
-
-        Returns
-        -------
-        None
-        """
-        super().pre_filter_channels(channels=channels)
 
     def post_filter_channels(self, channels=None):
         """
@@ -191,7 +180,8 @@ class AdaptiveFilter(VariedFilter):
         Returns
         -------
         response : numpy.ndarray (float)
-            The response array of shape (n_channels,) or (n_channels, fch.size).
+            The response array of shape (n_channels,) or
+            (n_channels, fch.size).
         """
         n_channels = self.channels.size
         if self.profile is None:
@@ -236,8 +226,8 @@ class AdaptiveFilter(VariedFilter):
         Return the rejection filter sum above the high pass frequency.
 
         channels : ChannelGroup, optional
-            The channel group for which to determine dependents.  The default is
-            all filtering channels.
+            The channel group for which to determine dependents.  The
+            default is all filtering channels.
 
         Returns
         -------
@@ -319,3 +309,25 @@ class AdaptiveFilter(VariedFilter):
             profiles=self.profile,
             channel_indices=channel_indices,
             source_norm=self.source_norm)
+
+    @abstractmethod
+    def get_id(self):  # pragma: no cover
+        """
+        Return the filter ID.
+
+        Returns
+        -------
+        filter_id : str
+        """
+        pass
+
+    @abstractmethod
+    def get_config_name(self):  # pragma: no cover
+        """
+        Return the configuration name.
+
+        Returns
+        -------
+        config_name : str
+        """
+        pass

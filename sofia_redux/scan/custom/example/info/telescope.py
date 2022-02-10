@@ -11,7 +11,6 @@ class ExampleTelescopeInfo(TelescopeInfo):
         super().__init__()
         self.telescope = "Example Telescope"
 
-
     @staticmethod
     def get_telescope_name():
         """

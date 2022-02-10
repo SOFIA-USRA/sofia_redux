@@ -55,6 +55,3 @@ def test_get_offsets():
     with pytest.raises(NotImplementedError) as err:
         p.get_offsets(None, None)
     assert "Not implemented" in str(err.value)
-
-
-

@@ -3,8 +3,8 @@
 from astropy import units
 import numpy as np
 
-from sofia_redux.scan.coordinate_systems.projection.zenithal_projection import \
-    ZenithalProjection
+from sofia_redux.scan.coordinate_systems.projection.zenithal_projection \
+    import ZenithalProjection
 
 __all__ = ['StereographicProjection']
 
@@ -15,15 +15,16 @@ class StereographicProjection(ZenithalProjection):
         """
         Initialize a stereographic projection.
 
-        The stereographic projection is a zenithal projection that is also known
-        as the planisphere projection or azimuthal conformal projection.
+        The stereographic projection is a zenithal projection that is
+        also known as the planisphere projection or azimuthal conformal
+        projection.
 
-        The forward projection is given by:
+        The forward projection is given by::
 
             x = 2 * tan(pi/4 - theta/2) * sin(phi)
             y = -2 * tan(pi/4 - theta/2) * cos(phi)
 
-        and the inverse transform (deprojection) is given by:
+        and the inverse transform (deprojection) is given by::
 
             phi = arctan(x, -y)
             theta = pi/2 - (2 * asin(sqrt(x^2 + y^2)/2))
@@ -78,7 +79,7 @@ class StereographicProjection(ZenithalProjection):
     @classmethod
     def theta_of_r(cls, r):
         """
-        Return the angle theta (latitude) given a radius from the central point.
+        Return theta (latitude) given a radius from the central point.
 
         For the zenithal equal-area projection, the latitude (theta) of a point
         at a distance r from the center of the projection is given as:
@@ -102,4 +103,6 @@ class StereographicProjection(ZenithalProjection):
             else:
                 r = r.to('radian').value
 
-        return cls.right_angle - (2 * np.arctan(0.5 * r)) * units.Unit('radian')
+        return (cls.right_angle
+                - (2 * np.arctan(0.5 * r))
+                * units.Unit('radian'))

@@ -27,7 +27,7 @@ class Coordinate(ABC):
 
         Parameters
         ----------
-        coordinates : list or tuple or numpy.ndarray or units.Quantity, optional
+        coordinates : list or tuple or array-like or units.Quantity, optional
             The coordinates used to populate the object during initialization.
         unit : str or units.Unit, optional
             The units of the internal coordinates.
@@ -151,7 +151,7 @@ class Coordinate(ABC):
     @property
     def singular(self):
         """
-        Return if the coordinates are scalar in nature (not an array of values).
+        Return if the coordinates are scalar in nature (not an array).
 
         Returns
         -------
@@ -361,7 +361,7 @@ class Coordinate(ABC):
     def set_shape_from_coordinates(self, coordinates, single_dimension=False,
                                    empty=False):
         """
-        Set the new shape and units (if appropriate) from the given coordinates.
+        Set the new shape and units from the given coordinates.
 
         The dimensionality of this coordinate will be determined from the input
         `coordinates` if not previously defined.  Otherwise, any previously
@@ -491,7 +491,7 @@ class Coordinate(ABC):
                 if isinstance(coordinates, Coordinate):
                     coordinates = coordinates.copy()
                     coordinates.coordinates = (
-                            coordinates.coordinates * self.unit)
+                        coordinates.coordinates * self.unit)
                     coordinates.unit = self.unit
                 else:
                     coordinates = coordinates * self.unit
@@ -970,7 +970,8 @@ class Coordinate(ABC):
         None
         """
         if self.singular or self.coordinates is None:
-            raise ValueError("Cannot paste onto singular or empty coordinates.")
+            raise ValueError("Cannot paste onto singular "
+                             "or empty coordinates.")
         elif coordinates.coordinates is None:
             raise ValueError("Cannot paste empty coordinates.")
         elif self.ndim != coordinates.ndim:
@@ -999,7 +1000,8 @@ class Coordinate(ABC):
         elif n == 0:
             return
 
-        if self.unit is not None and not isinstance(fill_value, units.Quantity):
+        if (self.unit is not None
+                and not isinstance(fill_value, units.Quantity)):
             fill_value = fill_value * self.unit
 
         if self.coordinates.ndim == 1:

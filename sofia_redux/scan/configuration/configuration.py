@@ -711,22 +711,22 @@ class Configuration(Options):
 
         if user_path != self.config_path:  # pragma: no cover
             user_file = os.path.join(user_path, f)
-            if (os.path.isfile(user_file) and
-                    user_file not in configuration_files):
+            if (os.path.isfile(user_file)
+                    and user_file not in configuration_files):
                 configuration_files.append(user_file)
 
         if self.instrument_name is not None:
             base_instrument_file = os.path.join(
                 self.config_path, self.instrument_name, f)
-            if (os.path.isfile(base_instrument_file) and
-                    base_instrument_file not in configuration_files):
+            if (os.path.isfile(base_instrument_file)
+                    and base_instrument_file not in configuration_files):
                 configuration_files.append(base_instrument_file)
 
             if user_path != self.config_path:  # pragma: no cover
                 user_instrument_file = os.path.join(
                     user_path, self.instrument_name, f)
-                if (os.path.isfile(user_instrument_file) and
-                        user_instrument_file not in configuration_files):
+                if (os.path.isfile(user_instrument_file)
+                        and user_instrument_file not in configuration_files):
                     configuration_files.append(user_instrument_file)
 
         # If not matching files found, check absolute path
@@ -965,11 +965,11 @@ class Configuration(Options):
         """
         Apply options to the configuration.
 
-        The dictionary keys in the options are first examined and separated into
-        commands, keyword=value settings, and configuration section updates.
-        Sections will be updated first, followed by single keyword=value
-        updates.  Finally, configuration commands will be processed using
-        :func:`Configuration.apply_commands`.
+        The dictionary keys in the options are first examined and separated
+        into commands, keyword=value settings, and configuration section
+        updates. Sections will be updated first, followed by single
+        keyword=value updates.  Finally, configuration commands will be
+        processed using :func:`Configuration.apply_commands`.
 
         Parameters
         ----------
@@ -1038,8 +1038,9 @@ class Configuration(Options):
         """
         Parse configuration options and apply.
 
-        Will filter out any sectional keys, but set and apply any other options.
-        Note that configuration commands will always be processed last.
+        Will filter out any sectional keys, but set and apply any other
+        options. Note that configuration commands will always be processed
+        last.
 
         Parameters
         ----------
@@ -1252,7 +1253,8 @@ class Configuration(Options):
         list (str)
             A list of strings matching `wildcard_pattern` from `string_array`.
         """
-        return [s for s in string_array if fnmatch.fnmatch(s, wildcard_pattern)]
+        return [s for s in string_array
+                if fnmatch.fnmatch(s, wildcard_pattern)]
 
     def matching_wildcard_keys(self, wildcard_key, flat_dictionary=None):
         """
@@ -2112,8 +2114,8 @@ class Configuration(Options):
         Parameters
         ----------
         options : ConfigObj or dict, options
-            The options to order.  If not supplied defaults to the configuration
-            options.
+            The options to order.  If not supplied defaults to the
+            configuration options.
         unalias : bool, optional
             If `True`, unalias all keys.
 
@@ -2160,7 +2162,7 @@ class Configuration(Options):
         options['dates'] = self.order_options(
             self.dates.options, unalias=False)
 
-        info = [('COMMENT',  "<------ SOFSCAN Configuration ------>"),
+        info = [('COMMENT', "<------ SOFSCAN Configuration ------>"),
                 ('CNFGVALS', json.dumps(options), 'SOFSCAN configuration.')]
         insert_info_in_header(header, info, delete_special=True)
 

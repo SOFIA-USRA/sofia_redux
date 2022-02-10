@@ -9,128 +9,10 @@ from sofia_redux.scan.configuration.objects import ObjectOptions
 
 from astropy import log
 from astropy.io import fits
-from configobj import ConfigObj
 import json
-import numpy as np
 import os
 import pytest
 import shutil
-
-
-@pytest.fixture
-def config_options():
-    """
-    A sample set of options for configuration testing.
-
-    Returns
-    -------
-    ConfigObj
-    """
-    options = {
-        'rounds': '5',
-        'switch1': 'True',
-        'switch2': 'False',
-        'testvalue1': 'foo',
-        'testvalue2': 'bar',
-        'testvalue3': 'lock_me',
-        'lock': 'testvalue3',
-        'refra': '{?fits.OBSRA}',
-        'refdec': '{?fits.OBSDEC}',
-        'refsrc': '{?fits.OBJECT}',
-        'options1': {'value': 'True',
-                     'suboptions1': {'v1': '1', 'v2': '2'},
-                     'suboptions2': {'v1': '3', 'v2': '3'}},
-        'options2': {'value1': 'a',
-                     'value2': 'b',
-                     'suboptions1': {'v1': 'c', 'v2': 'd'},
-                     'suboptions2': {'v1': 'e', 'v2': 'f'}},
-
-        'aliases': {'o1s1': 'options1.suboptions1',
-                    'o1s2': 'options1.suboptions2',
-                    'o2s1': 'options2.suboptions1',
-                    'o2s2': 'options2.suboptions2',
-                    'i': 'iteration',
-                    'i1': 'iteration.1',
-                    'final': 'iteration.-1'},
-
-        'iteration': {'2': {'o1s1.v1': '10'},
-                      '0.6': {'o1s1.v1': '20'}},
-
-        'date': {'*--*': {'add': 'alldates'},
-                  '2020-07-01--2020-07-31': {'add': 'jul2020'},
-                  '2021-08-01--2021-08-31': {'add': 'aug2021'}},
-
-        'object': {'source1': {'add': 'src1'},
-                   'source2': {'testvalue1': 'baz'},
-                   'Asphodel': {'add': 'finally'}},
-
-        'serial': {'1-5': {'add': 'scans1to5'},
-                   '2-3': {'add': 'scans2to3'}},
-
-        'fits': {'addkeys': ['STORE1', 'STORE2']},
-
-        'conditionals': {
-            'switch2': {'final': {'forget': 'testvalue1'}},
-            'refra>12': {'add': 'switch3'},
-            'switch3': {'o2s2.v2': 'z'},
-            'jul2020': {'final': {'forget': 'testvalue2'}},
-            'aug2021': {'final': {'add': 'lastiteration'}}
-        }
-    }
-    return ConfigObj(options)
-
-
-@pytest.fixture
-def fits_header():
-    h = fits.Header()
-    h['STORE1'] = 1, 'Stored value 1'
-    h['STORE2'] = 2, 'Stored value 2'
-    h['STORE3'] = 3, 'Stored value 3'
-    h['REFVAL'] = 'a_fits_value', 'The referenced FITS value'
-    h['OBSRA'] = 12.5, 'The observation right ascension (hours)'
-    h['OBSDEC'] = 45.0, 'The observation declination (degree)'
-    h['OBJECT'] = 'Asphodel'
-    return h
-
-
-@pytest.fixture
-def fits_file(fits_header, tmpdir):
-    h = fits_header
-    hdul = fits.HDUList()
-    hdul.append(fits.PrimaryHDU(data=np.zeros((5, 5)), header=h))
-    for extension in range(3):
-        he = h.copy()
-        for val in range(1, 4):
-            he[f'STORE{val}'] += 10 * val
-        hdul.append(fits.ImageHDU(data=np.zeros((5, 5)), header=he))
-
-    filename = str(tmpdir.mkdir('test_fits_file_').join('test_file.fits'))
-    hdul.writeto(filename)
-    hdul.close()
-    return filename
-
-
-@pytest.fixture
-def config_file(tmpdir, config_options):
-    c = config_options
-    filename = str(tmpdir.mkdir('test_configuration_').join('config.cfg'))
-    c.filename = filename
-    c.write()
-    return filename
-
-
-@pytest.fixture
-def initialized_configuration(config_options):
-    configuration = Configuration()
-    configuration.read_configuration(config_options)
-    return configuration
-
-
-@pytest.fixture
-def fits_configuration(initialized_configuration, fits_header):
-    c = initialized_configuration
-    c.read_fits(fits_header)
-    return c
 
 
 def test_init():
@@ -280,7 +162,8 @@ def test_get_section_handler():
 def test_parse_to_section():
     configuration = Configuration()
     assert not configuration.parse_to_section('foo', {'bar': 'baz'})
-    assert configuration.parse_to_section('conditionals', {'a=b': {'add': 'c'}})
+    assert configuration.parse_to_section('conditionals',
+                                          {'a=b': {'add': 'c'}})
     assert configuration.parse_to_section('conditionals', {'c=d': 'e'})
     assert configuration.parse_to_section('conditionals',
                                           {'e=True': 'blacklist=f'})
@@ -415,14 +298,14 @@ def test_find_configuration_files():
     assert os.path.join(configuration.config_path, 'default.cfg') in files
 
     # Test aliasing
-    files = configuration.find_configuration_files('{?configpath}' + os.sep +
-                                                   'default.cfg')
+    files = configuration.find_configuration_files('{?configpath}' + os.sep
+                                                   + 'default.cfg')
     assert len(files) == 1
     assert os.path.join(configuration.config_path, 'default.cfg') in files
 
     # Test bad full file path
-    files = configuration.find_configuration_files(os.sep + '_fake_directory_' +
-                                                   os.sep + 'foo.fits')
+    files = configuration.find_configuration_files(os.sep + '_fake_directory_'
+                                                   + os.sep + 'foo.fits')
     assert len(files) == 0
 
     # Test bad partial file path
@@ -500,7 +383,8 @@ def test_read_configuration(config_file):
         'suboptions1']['v1']
 
     # Check dates are populated
-    assert configuration.dates['2020-07-25'] == {'add': ['alldates', 'jul2020']}
+    assert configuration.dates['2020-07-25'] == {'add': ['alldates',
+                                                         'jul2020']}
 
     # Check iterations are populated and rounds are set.
     assert configuration.max_iteration == 5

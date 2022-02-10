@@ -7,8 +7,6 @@ from sofia_redux.scan.frames.frames import Frames
 from sofia_redux.scan.coordinate_systems.horizontal_coordinates import \
     HorizontalCoordinates
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
-from sofia_redux.scan.coordinate_systems.geodetic_coordinates import \
-    GeodeticCoordinates
 
 __all__ = ['HorizontalFrames']
 
@@ -240,7 +238,8 @@ class HorizontalFrames(Frames):
         return self.get_horizontal_offset(
             position, indices=indices, offset=offset)
 
-    def get_equatorial_native_offset(self, position, indices=None, offset=None):
+    def get_equatorial_native_offset(self, position, indices=None,
+                                     offset=None):
         """
         Return the horizontal offsets of a position relative to scan center.
 
@@ -276,7 +275,7 @@ class HorizontalFrames(Frames):
 
     def get_absolute_native_coordinates(self):
         """
-        Return absolute spherical (including chopper) coords in telescope frame.
+        Get absolute spherical (including chopper) coords in telescope frame.
 
         This is named getNativeCoords() in CRUSH
 
@@ -354,11 +353,11 @@ class HorizontalFrames(Frames):
         Parameters
         ----------
         lst : astropy.units.Quantity
-            If provided, the Local Sidereal Time will be used to calculate the
-            position angle from the site and equatorial coordinates.  Otherwise,
-            the parallactic angle will be calculated from the horizontal
-            coordinates.  If an array is provided, should be the same shape
-            as `indices`.
+            If provided, the Local Sidereal Time will be used to calculate
+            the position angle from the site and equatorial coordinates.
+            Otherwise, the parallactic angle will be calculated from the
+            horizontal coordinates.  If an array is provided, should be the
+            same shape as `indices`.
         indices : int or slice or numpy.ndarray (int or bool)
             The frame indices for which to calculate the parallactic angle.
             The default is all frames.

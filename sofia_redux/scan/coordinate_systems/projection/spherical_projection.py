@@ -5,7 +5,6 @@ from astropy import units
 import numpy as np
 import warnings
 
-from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.coordinate_systems.projection.projection_2d import \
     Projection2D
 from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
@@ -36,8 +35,10 @@ class SphericalProjection(Projection2D):
         spherical coordinates.
         """
         super().__init__()
-        self._native_reference = SphericalCoordinates([0.0, 0.0], unit='degree')
-        self._native_pole = SphericalCoordinates([0.0, 90.0], unit='degree')
+        self._native_reference = SphericalCoordinates(
+            [0.0, 0.0], unit='degree')
+        self._native_pole = SphericalCoordinates(
+            [0.0, 90.0], unit='degree')
         self._celestial_pole = SphericalCoordinates()
         self.user_pole = False  # The pole or native pole was set by the user
         self.user_reference = False  # The reference was set via header parsing
@@ -280,8 +281,8 @@ class SphericalProjection(Projection2D):
 
         This a wrapper around the :func:`np.arcsin` function to convert values
         from :class:`units.Quantity` to floats if applicable, and then
-        bound all values between -1 <= x <= 1 before performing the inverse sine
-        operation.  The result will always be return as a
+        bound all values between -1 <= x <= 1 before performing the inverse
+        sine operation.  The result will always be return as a
         :class:`units.Quantity` in radians.
 
         Parameters
@@ -599,12 +600,12 @@ class SphericalProjection(Projection2D):
         Calculate the celestial pole.
 
         Calculates the celestial pole based on the projection reference
-        position coordinate.  There are cases when either a northern or southern
-        celestial pole may exist as solutions, and the `select_solution`
-        attribute can ne set to "northern" or "southern" to always return this
-        pole.  If `select_solution` is defined as something else, such as
-        "nearest" (default), then the solution closest to the native pole will
-        be set.
+        position coordinate.  There are cases when either a northern or
+        southern celestial pole may exist as solutions, and the
+        `select_solution` attribute can be set to "northern" or "southern"
+        to always return this pole.  If `select_solution` is defined as
+        something else, such as "nearest" (default), then the solution
+        closest to the native pole will be set.
 
         Returns
         -------
@@ -615,9 +616,9 @@ class SphericalProjection(Projection2D):
             return
 
         self.celestial_pole = SphericalCoordinates()
-        array_like = (reference.size > 1 or
-                      self.native_reference.size > 1 or
-                      self.native_pole.size > 1)
+        array_like = (reference.size > 1
+                      or self.native_reference.size > 1
+                      or self.native_pole.size > 1)
         if array_like:
             numba_func = pnf.calculate_celestial_pole_array
         else:
@@ -671,10 +672,10 @@ class SphericalProjection(Projection2D):
         Set the native pole to the default value.
 
         The default native pole longitude will be set to 0 degrees if the
-        projection reference latitude is greater than or equal to the projection
-        native reference latitude (0 by default).  Otherwise, it will be set to
-        180 degrees.  Any user native pole will be overwritten during this
-        process.
+        projection reference latitude is greater than or equal to the
+        projection native reference latitude (0 by default).  Otherwise, it
+        will be set to 180 degrees.  Any user native pole will be overwritten
+        during this process.
 
         Returns
         -------
@@ -803,7 +804,8 @@ class SphericalProjection(Projection2D):
         for native_pole_lat_key in [f'{lat_prefix}4{alt}', f'LATPOLE{alt}']:
             if native_pole_lat_key in header:
                 self.user_pole = True
-                self.set_native_pole_latitude(header[native_pole_lat_key] * deg)
+                self.set_native_pole_latitude(
+                    header[native_pole_lat_key] * deg)
 
         reference_lon_key = f'{lon_prefix}1{alt}'
         if reference_lon_key in header:

@@ -99,5 +99,3 @@ def test_set_object(object_options):
     assert c.size == 1
     o.set_object(c, 'source3')
     assert c['options.sub_options.a'] == '1'
-
-

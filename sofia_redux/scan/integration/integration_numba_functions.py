@@ -306,7 +306,7 @@ def robust_channel_weights(frame_data, relative_weights, sample_flags,
 
     Returns
     -------
-    channel_variance_sum, channel_variance_weight : numpy.ndarray, numpy.ndarray
+    variance_sum, variance_weight : numpy.ndarray, numpy.ndarray
         The channel variance sum (variance * weight) and channel variance
         weights, both of shape (n,) and float type.
     """
@@ -321,7 +321,8 @@ def robust_channel_weights(frame_data, relative_weights, sample_flags,
         channel_data = frame_data[:, channel_index]
         channel_flags = sample_flags[:, channel_index]
         for frame_index in range(frame_data.shape[0]):
-            if not valid_frames[frame_index] or channel_flags[frame_index] != 0:
+            if (not valid_frames[frame_index]
+                    or channel_flags[frame_index] != 0):
                 continue
             value = channel_data[frame_index]
             weight = relative_weights[frame_index]
@@ -371,7 +372,7 @@ def differential_channel_weights(frame_data, relative_weights, sample_flags,
 
     Returns
     -------
-    channel_variance_sum, channel_variance_weight : numpy.ndarray, numpy.ndarray
+    variance_sum, variance_weight : numpy.ndarray, numpy.ndarray
         The channel variance sum (variance * weight) and channel variance
         weights, both of shape (n_channels,) and float type.
     """
@@ -433,7 +434,7 @@ def rms_channel_weights(frame_data, frame_weight, valid_frames, sample_flags,
 
     Returns
     -------
-    channel_variance_sum, channel_variance_weight : numpy.ndarray, numpy.ndarray
+    variance_sum, variance_weight : numpy.ndarray, numpy.ndarray
         The channel variance sum and channel variance weight sum, both of shape
         (n_channels,) and float type.
     """
@@ -471,8 +472,8 @@ def set_weights_from_var_stats(channel_indices, var_sum, var_weight,
     """
     Set a number of channel data parameters from variance statistics.
 
-    Given calculated variance and variance weights, update channel the following
-    channel data parameters to:
+    Given calculated variance and variance weights, update channel
+    the following channel data parameters to:
 
     channel_variance = variance
     channel_dof = 1 - (channel_dependents / var_weight)
@@ -1026,8 +1027,8 @@ def next_weight_transit(frame_weights, level, frame_valid, frame_flags,
     start_frame : int, optional
         The frame from which to begin looking for the next transit (inclusive).
     above : bool, optional
-        If `True`, looks for the next weight transit above `level`.  If `False`,
-        looks for the next weight transit below `level`.
+        If `True`, looks for the next weight transit above `level`.  If
+        `False`, looks for the next weight transit below `level`.
 
     Returns
     -------
@@ -1073,7 +1074,8 @@ def get_mean_frame_level(frame_data, frame_weights, frame_valid,
         modelling frame which will not be included when determining the mean.
     sample_flags : numpy.ndarray (int)
         The frame data flag mask of shape (n_frames, all_channels) where any
-        non-zero value excludes a sample from inclusion in the mean calculation.
+        non-zero value excludes a sample from inclusion in the mean
+        calculation.
     channel_indices : numpy.ndarray (int)
         The channel indices for which to calculate the mean of shape
         (n_channels,).
@@ -1135,7 +1137,8 @@ def weighted_mean_frame_level(frame_data, frame_weights, frame_valid,
         modelling frame which will not be included when determining the mean.
     sample_flags : numpy.ndarray (int)
         The frame data flag mask of shape (n_frames, all_channels) where any
-        non-zero value excludes a sample from inclusion in the mean calculation.
+        non-zero value excludes a sample from inclusion in the mean
+        calculation.
     channel_indices : numpy.ndarray (int)
         The channel indices for which to calculate the mean of shape
         (n_channels,).
@@ -1220,7 +1223,8 @@ def weighted_median_frame_level(frame_data, frame_weights, frame_valid,
         modelling frame which will not be included when determining the mean.
     sample_flags : numpy.ndarray (int)
         The frame data flag mask of shape (n_frames, all_channels) where any
-        non-zero value excludes a sample from inclusion in the mean calculation.
+        non-zero value excludes a sample from inclusion in the mean
+        calculation.
     channel_indices : numpy.ndarray (int)
         The channel indices for which to calculate the mean of shape
         (n_channels,).
@@ -1326,8 +1330,8 @@ def remove_channel_drifts(frame_data, frame_weights, frame_valid,
     Returns
     -------
     average_offset, offset_weights : numpy.ndarray, numpy.ndarray
-        The average channel offset (over all drifts) and associated weight sums.
-        Both are float arrays of shape (n_channels,).
+        The average channel offset (over all drifts) and associated weight
+        sums. Both are float arrays of shape (n_channels,).
     """
     n_frames = frame_data.shape[0]
     n_channels = channel_indices.size
@@ -1379,9 +1383,10 @@ def remove_channel_drifts(frame_data, frame_weights, frame_valid,
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
-def level(frame_data, frame_weights, frame_valid, modeling_frames, sample_flags,
-          channel_indices, start_frame, stop_frame, offset, offset_weight,
-          frame_dependents, channel_filtering):  # pragma: no cover
+def level(frame_data, frame_weights, frame_valid, modeling_frames,
+          sample_flags, channel_indices, start_frame, stop_frame,
+          offset, offset_weight, frame_dependents,
+          channel_filtering):  # pragma: no cover
     """
     Subtract an offset per channel from the frame data between given frames.
 
@@ -1402,7 +1407,8 @@ def level(frame_data, frame_weights, frame_valid, modeling_frames, sample_flags,
         modelling frame which will not be included when determining the mean.
     sample_flags : numpy.ndarray (int)
         The frame data flag mask of shape (n_frames, all_channels) where any
-        non-zero value excludes a sample from inclusion in the mean calculation.
+        non-zero value excludes a sample from inclusion in the mean
+        calculation.
     channel_indices : numpy.ndarray (int)
         The channel indices for which to calculate the mean of shape
         (n_channels,).
@@ -1413,8 +1419,8 @@ def level(frame_data, frame_weights, frame_valid, modeling_frames, sample_flags,
         The stop frame (non-inclusive) at which to terminate the mean
         calculation.  The default is the total number of frames (n_frames).
     offset : numpy.ndarray (float)
-        The offsets of shape (n_channels,) to remove from frame data between the
-        start and stop frame for the given channels.
+        The offsets of shape (n_channels,) to remove from frame data between
+        the start and stop frame for the given channels.
     offset_weight : numpy.ndarray (float)
         The offset weights of shape (n_channels,) used to update the frame
         dependents.
@@ -1466,20 +1472,20 @@ def apply_drifts_to_channel_data(channel_indices, offsets, average_drifts,
     Apply the average drifts to channel data.
 
     After calculating the average channel drifts for all channels, the `offset`
-    attribute of the channel data is modified by:
+    attribute of the channel data is modified by::
 
-    offset += average_drifts * G
+       offset += average_drifts * G
 
     where G = 1 if the detector is not staged (`is_detector_stage`=`False`) or
     set to `hardware_gain` if the detector is staged.
 
-    If `update_filtering` is `True`, the source filtering will be updated by
+    If `update_filtering` is `True`, the source filtering will be updated by::
 
-    sf *= 1 - (crossing_time / filter_time_scale)
+       sf *= 1 - (crossing_time / filter_time_scale)
 
     Note that the previous correction will be removed first.  Also, the
-    filtering_time_scale will be set to the minimum of the integration filtering
-    time scale and the current filtering time scale.
+    filtering_time_scale will be set to the minimum of the integration
+    filtering time scale and the current filtering time scale.
 
     Parameters
     ----------
@@ -1518,8 +1524,8 @@ def apply_drifts_to_channel_data(channel_indices, offsets, average_drifts,
     Returns
     -------
     inconsistent_channels, total_inconsistencies : int, int
-        The total number of channels containing one or more inconsistencies, and
-        the total number of inconsistencies in the given channels.
+        The total number of channels containing one or more inconsistencies,
+        and the total number of inconsistencies in the given channels.
     """
     total_inconsistencies = 0
     inconsistent_channels = 0
@@ -1713,8 +1719,8 @@ def get_weighted_timestream(sample_data, sample_flags, frame_valid,
         for i, channel_index in enumerate(channel_indices):
             if sample_flags[frame_index, channel_index] != 0:
                 continue
-            data[frame_index, i] = (frame_weights[frame_index] *
-                                    sample_data[frame_index, channel_index])
+            data[frame_index, i] = (frame_weights[frame_index]
+                                    * sample_data[frame_index, channel_index])
             weight[frame_index, i] = frame_weights[frame_index]
     return data, weight
 
@@ -1897,8 +1903,8 @@ def smooth_positions(coordinates, bin_size,
     bin_size : int
         The size of the smoothing kernel.
     fill_value : float, optional
-        The value with which to fill in the instance that there are insufficient
-        points to determine a smoothed value.
+        The value with which to fill in the instance that there
+        are insufficient points to determine a smoothed value.
 
     Returns
     -------
@@ -2232,9 +2238,6 @@ def get_downsample_start_indices(frame_valid, window,
     window_size = window.size
     downsample_start_indices = np.empty(n_new, dtype=nb.int64)
     downsample_valid = np.empty(n_new, dtype=nb.b1)
-
-    center_offset = (window_size // 2) + 1
-
 
     for k in range(n_new):
         start_frame = k * factor

@@ -134,8 +134,8 @@ class GalacticCoordinates(CelestialCoordinates):
 
 
 # The following is used to determine the equatorial pole and zero longitude
-_pole_ra = ((12 * units.Unit('hourangle')) +
-            (49 * units.Unit('hourangle') / 60))
+_pole_ra = ((12 * units.Unit('hourangle'))
+            + (49 * units.Unit('hourangle') / 60))
 _pole_dec = 27.4 * units.Unit('degree')
 
 EQUATORIAL_POLE = EquatorialCoordinates([_pole_ra, _pole_dec], epoch=B1950)

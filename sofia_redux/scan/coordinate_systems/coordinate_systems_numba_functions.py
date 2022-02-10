@@ -142,36 +142,35 @@ def check_value(value, coordinates):  # pragma: no cover
     return result
 
 
-
-
 @nb.njit(cache=True, nogil=False, parallel=False)
 def spherical_distance_to(x, rx, cos_lat, sin_lat, r_cos_lat, r_sin_lat
                           ):  # pragma: no cover
-    """
+    r"""
     Return the angular distance in radians between spherical coordinate sets.
 
     Calculates the distance between two spherical sets of coordinates using
-    either the law of cosines or Vincenty's formulae.  First we calculate c as:
+    either the law of cosines or Vincenty's formulae.  First we calculate
+    c as::
 
       c = sin(y) * sin(ry) + cos(y) * phi
 
-    where:
+    where::
 
       phi = cos(ry) * cos(rx - x)
 
     and x, rx are the longitudinal coordinates or the coordinates and reference
     coordinates respectively, and (y, ry) are the latitudinal coordinates.
 
-    if |c| > 0.9 (indicating intermediate distances), the law of cosines is used
-    to return an angle (a) of:
+    if \|c\| > 0.9 (indicating intermediate distances), the law of cosines
+    is used to return an angle (a) of::
 
       a = acos(c)
 
-    Otherwise, Vincenty's formula is used to return a value of:
+    Otherwise, Vincenty's formula is used to return a value of::
 
       a = atan2(B, c)
 
-    where:
+    where::
 
       B = sqrt((cos(ry) * sin(rx - x))^2 + (cos(y) * sin(ry) - sin(y) * phi)^2)
 
@@ -260,21 +259,21 @@ def spherical_pole_transform(x, px, cos_lat, sin_lat, p_cos_lat,
     """
     Transform spherical coordinates to a new pole.
 
-    The transformation occurs according to:
+    The transformation occurs according to::
 
-      xt = arcsin((sin(py) * sin(y)) + (cos(py) * cos(y) * cos(dl)))
-      yt = o + arctan2((-sin(y) * cos(py)) + (cos(y) * sin(py) * cos(dl)),
-                       (-cos(y) * sin(dl)))
+       xt = arcsin((sin(py) * sin(y)) + (cos(py) * cos(y) * cos(dl)))
+       yt = o + arctan2((-sin(y) * cos(py)) + (cos(y) * sin(py) * cos(dl)),
+                        (-cos(y) * sin(dl)))
 
-    For when `reverse=False`:
+    For when `reverse=False`::
 
-      dl = x - px
-      o = pi/2 - phi0
+       dl = x - px
+       o = pi/2 - phi0
 
-    and when `reverse=True`:
+    and when `reverse=True`::
 
-      dl = x + phi0
-      o = x + pi/2
+       dl = x + phi0
+       o = x + pi/2
 
     Here, (x, px) refer respectively to the coordinate and pole longitudes,
     while (y, py) refer to latitudes.

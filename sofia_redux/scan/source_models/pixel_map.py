@@ -5,7 +5,8 @@ import os
 import numpy as np
 
 from sofia_redux.scan.source_models.astro_model_2d import AstroModel2D
-from sofia_redux.scan.source_models.astro_intensity_map import AstroIntensityMap
+from sofia_redux.scan.source_models.astro_intensity_map import \
+    AstroIntensityMap
 from sofia_redux.scan.coordinate_systems.index_2d import Index2D
 from sofia_redux.scan.coordinate_systems.projector.astro_projector import \
     AstroProjector
@@ -203,7 +204,7 @@ class PixelMap(AstroModel2D):
         -------
         None
         """
-        log.debug(f"pixel map: lookup for single pixel at (0, 0)")
+        log.debug("pixel map: lookup for single pixel at (0, 0)")
         self.index_shift_x = numba_functions.log2ceil(self.size_y)
         self.index_mask_y = (1 << self.index_shift_x) - 1
 
@@ -372,7 +373,8 @@ class PixelMap(AstroModel2D):
 
         return fixed_index, pixel_map
 
-    def calculate_coupling(self, integration, pixels, source_gains, sync_gains):
+    def calculate_coupling(self, integration, pixels, source_gains,
+                           sync_gains):
         """Not implemented for pixel maps"""
         pass
 
@@ -497,8 +499,8 @@ class PixelMap(AstroModel2D):
         kwargs = None
 
         frame_data = multiprocessing.multitask(
-            self.parallel_safe_sync_source_gains, range(n_pixels), args, kwargs,
-            jobs=jobs, logger=log, force_threading=True)
+            self.parallel_safe_sync_source_gains, range(n_pixels),
+            args, kwargs, jobs=jobs, logger=log, force_threading=True)
         for channel, data in enumerate(frame_data):
             frames.data[:, channel] = data
 
@@ -528,7 +530,8 @@ class PixelMap(AstroModel2D):
             The synced frame data for `pixel_number` of shape (n_frames,).
         """
         # TODO: test to see if this can be updated in place with threading.
-        pixel_maps, frames, pixels, frame_gains, source_gains, sync_gains = args
+        (pixel_maps, frames, pixels, frame_gains,
+         source_gains, sync_gains) = args
         fixed_index = pixels.fixed_index[pixel_number]
         pixel_map = pixel_maps[fixed_index]
         channel_indices = np.full(1, pixel_number)
@@ -745,9 +748,8 @@ class PixelMap(AstroModel2D):
                                 f'{self.get_default_core_name()}.rcp')
         channels.data.coupling = source_gain / channels.data.gain
 
-        file_contents = channels.print_pixel_rcp(
-            header=self.get_first_scan().get_first_integration(
-                ).get_ascii_header())
+        hdr = self.get_first_scan().get_first_integration().get_ascii_header()
+        file_contents = channels.print_pixel_rcp(header=hdr)
 
         with open(filename, 'w') as f:
             f.write(file_contents)

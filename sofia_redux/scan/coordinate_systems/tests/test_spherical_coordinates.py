@@ -78,7 +78,9 @@ def test_local_coordinate_system(dummy_spherical):
 
 def test_longitude_axis(dummy_spherical):
     x = dummy_spherical.longitude_axis
-    assert x.label == 'Longitude' and x.short_label == 'LON' and x.unit == 'deg'
+    assert (x.label == 'Longitude'
+            and x.short_label == 'LON'
+            and x.unit == 'deg')
 
 
 def test_latitude_axis(dummy_spherical):
@@ -730,6 +732,3 @@ def test_shift(dummy_spherical):
     s1 = s.copy()
     s.shift(99)
     assert s == s1
-
-
-

@@ -199,7 +199,8 @@ class SofiaProcessingInfo(InfoBase):
             info.append(('PRODTYPE', self.product_type, 'Type of product.'))
 
         if self.revision is not None:
-            info.append(('FILEREV', self.revision, 'File revision identifier.'))
+            info.append(('FILEREV', self.revision,
+                         'File revision identifier.'))
 
         if self.quality is not None:
             info.append(('DATAQUAL', self.quality, 'Data quality level.'))
@@ -212,13 +213,13 @@ class SofiaProcessingInfo(InfoBase):
             info.append(('ASSC_AOR', ', '.join(self.associated_aors),
                          'Associated AOR IDs.'))
 
-        if (self.associated_mission_ids is not None and
-                len(self.associated_mission_ids) > 0):
+        if (self.associated_mission_ids is not None
+                and len(self.associated_mission_ids) > 0):
             info.append(('ASSC_MSN', ', '.join(self.associated_mission_ids),
                          'Associated Mission IDs.'))
 
-        if (self.associated_frequencies is not None and
-                len(self.associated_frequencies) > 0):
+        if (self.associated_frequencies is not None
+                and len(self.associated_frequencies) > 0):
             freqs = ', '.join([str(x) for x in self.associated_frequencies
                               if x is not None])
             info.append(('ASSC_FRQ', freqs, 'Associated Frequencies.'))

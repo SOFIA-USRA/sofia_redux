@@ -5,7 +5,6 @@ import numpy as np
 
 from sofia_redux.scan.custom.sofia.integration.models.atran import AtranModel
 from sofia_redux.scan.integration.integration import Integration
-from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 
 __all__ = ['SofiaIntegration']
 

@@ -5,9 +5,6 @@ import pandas as pd
 
 from sofia_redux.scan.custom.hawc_plus.flags.channel_flags import (
     HawcPlusChannelFlags)
-from sofia_redux.scan.custom.hawc_plus.info.info import HawcPlusInfo
-from sofia_redux.scan.custom.hawc_plus.info.detector_array import (
-    HawcPlusDetectorArrayInfo)
 from sofia_redux.scan.custom.sofia.channels.channel_data.channel_data import (
     SofiaChannelData)
 from sofia_redux.scan.channels.channel_data.single_color_channel_data import (
@@ -201,9 +198,10 @@ class HawcPlusChannelData(SingleColorChannelData, SofiaChannelData):
         self.flag[self.subrow == detector.DARK_SQUID_ROW] = blind_flag
 
         self.channel_id = np.array(
-            [detector.POL_ID[pol] +
-             str(sub & 1) + f'[{subrow},{col}]' for (pol, sub, subrow, col) in
-             zip(self.pol, self.sub, self.subrow, self.col)])
+            [detector.POL_ID[pol]
+             + str(sub & 1) + f'[{subrow},{col}]'
+             for (pol, sub, subrow, col)
+             in zip(self.pol, self.sub, self.subrow, self.col)])
 
     def apply_info(self, info):
         """

@@ -8,39 +8,25 @@ from astropy.time import Time
 from copy import deepcopy
 import numpy as np
 
-from sofia_redux.scan.info.info import Info
 from sofia_redux.scan.utilities import utils, numba_functions
-from sofia_redux.scan.channels.channels import Channels
 from sofia_redux.scan.utilities.class_provider import get_scan_class
-from sofia_redux.scan.integration.integration import Integration
-from sofia_redux.scan.flags.channel_flags import ChannelFlags
-from sofia_redux.scan.flags.frame_flags import FrameFlags
-from sofia_redux.scan.info.astrometry import AstrometryInfo
-from sofia_redux.scan.configuration.configuration import Configuration
 from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
     EquatorialCoordinates
-from sofia_redux.scan.coordinate_systems.horizontal_coordinates import \
-    HorizontalCoordinates
-from sofia_redux.scan.coordinate_systems.geodetic_coordinates import \
-    GeodeticCoordinates
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
     SphericalCoordinates
-from sofia_redux.scan.coordinate_systems.epoch.epoch import Epoch, J2000
-from sofia_redux.scan.source_models.source_model import SourceModel
-from sofia_redux.scan.source_models.astro_intensity_map import AstroIntensityMap
+from sofia_redux.scan.coordinate_systems.epoch.epoch import J2000
+from sofia_redux.scan.source_models.astro_intensity_map import \
+    AstroIntensityMap
 from sofia_redux.scan.info.weather_info import WeatherInfo
 from sofia_redux.scan.flags.mounts import Mount
 from sofia_redux.scan.source_models.beams.elliptical_source import \
     EllipticalSource
-from sofia_redux.scan.source_models.beams.gaussian_source import \
-    GaussianSource
 from sofia_redux.scan.coordinate_systems.offset_2d import Offset2D
 from sofia_redux.scan.coordinate_systems.celestial_coordinates import \
     CelestialCoordinates
 from sofia_redux.scan.coordinate_systems.focal_plane_coordinates import \
     FocalPlaneCoordinates
-from sofia_redux.scan.source_models.beams.asymmetry_2d import Asymmetry2D
 from sofia_redux.scan.source_models.beams.instant_focus import InstantFocus
 from sofia_redux.scan.utilities.range import Range
 from sofia_redux.scan.utilities.class_provider import get_integration_class
@@ -811,8 +797,8 @@ class Scan(ABC):
         for integration in self.integrations:
             integration.pointing_at(correction)
 
-        if (self.pointing_correction is None or
-                self.pointing_correction.size) == 0:
+        if (self.pointing_correction is None
+                or self.pointing_correction.size) == 0:
             self.pointing_correction = correction
         else:
             self.pointing_correction.add(correction)
@@ -1005,7 +991,8 @@ class Scan(ABC):
         new_integrations = []
         merged = self.integrations[0]
         day = units.Unit('day')
-        merged.trim(start=False, end=True)  # Remove invalid frames from the end
+        # Remove invalid frames from the end
+        merged.trim(start=False, end=True)
         last_mjd = merged.frames.get_last_frame_value('mjd') * day
 
         for integration in self.integrations[1:]:
@@ -1204,7 +1191,8 @@ class Scan(ABC):
 
         relative = self.get_native_pointing_increment(self.pointing)
 
-        header['COMMENT'] = "<------ Fitted Pointing / Calibration Info ------>"
+        header['COMMENT'] = "<------ Fitted Pointing / " \
+                            "Calibration Info ------>"
         header['PNT_DX'] = (relative.x.value,
                             f'({relative.unit}) pointing offset in native X.')
         header['PNT_DY'] = (relative.y.value,
@@ -1241,8 +1229,8 @@ class Scan(ABC):
             return observing_time
 
         for integration in self.integrations:
-            discard_flag = ~(integration.flagspace.flags.CHOP_LEFT |
-                             integration.flagspace.flags.CHOP_RIGHT)
+            discard_flag = ~(integration.flagspace.flags.CHOP_LEFT
+                             | integration.flagspace.flags.CHOP_RIGHT)
             n_frames = integration.get_frame_count(discard_flag=discard_flag)
             t = n_frames * integration.info.instrument.integration_time
             observing_time += t
@@ -1291,7 +1279,8 @@ class Scan(ABC):
         """
         if not self.have_horizontal() and (self.have_equatorial()
                                            and self.have_site()):
-            self.horizontal = self.equatorial.to_horizontal(self.site, self.lst)
+            self.horizontal = self.equatorial.to_horizontal(
+                self.site, self.lst)
 
         if self.source_model is None:
             source_type = 'model'
@@ -1306,7 +1295,8 @@ class Scan(ABC):
                 return None
 
             if len(value) == 0:
-                return True  # The configuration value exists, but is not set
+                # The configuration value exists, but is not set
+                return True
 
             return value
 
@@ -1488,8 +1478,8 @@ class Scan(ABC):
         if self.pointing is not None:
             log.info(f"Instant Focus Results for Scan {self.get_id()}:\n\n"
                      f"{self.get_focus_string()}")
-        elif (self.has_option('pointing') and
-              self.source_model.is_valid()):
+        elif (self.has_option('pointing')
+              and self.source_model.is_valid()):
             method = self.configuration.get_string('pointing')
             if method in ['suggest', 'auto']:
                 log.warning(f"Cannot suggest focus for scan {self.get_id()}.")
@@ -1596,8 +1586,8 @@ class Scan(ABC):
         None
         """
         robust = self.configuration.get_string('estimator') == 'median'
-        if (self.configuration.get_bool(f'correlated.{modality_name}.span') or
-                self.configuration.get_bool('gains.span')):
+        if (self.configuration.get_bool(f'correlated.{modality_name}.span')
+                or self.configuration.get_bool('gains.span')):
             for integration in self.integrations:
                 integration.decorrelate_signals(modality_name, robust=robust)
             self.update_gains(modality_name)
@@ -1695,7 +1685,8 @@ class Scan(ABC):
             data['delong'] = 100 * percent * ellipse.elongation_rms
             data['angle'] = ellipse.position_angle.to('degree')
             data['dangle'] = ellipse.position_angle.to('degree')
-            elongation_x, elongation_rms = self.get_source_elongation_x(ellipse)
+            (elongation_x,
+             elongation_rms) = self.get_source_elongation_x(ellipse)
             data['elongX'] = 100 * percent * elongation_x
             data['delongX'] = 100 * percent * elongation_rms
 
@@ -1816,7 +1807,7 @@ class Scan(ABC):
             result += f"  Elongation: {elongation * 100:.3f}%\n"
 
         relative_fwhm = (
-                self.pointing.fwhm / self.get_point_size()).decompose().value
+            self.pointing.fwhm / self.get_point_size()).decompose().value
         force_focus = self.has_option('focus')
         if force_focus or (0.8 < relative_fwhm <= 2.0):
             focus = InstantFocus()
@@ -1883,8 +1874,8 @@ class Scan(ABC):
         result += f"{increment.y.to(size_unit):.3f} ({name_x}, {name_y})"
 
         # Also print Nasmyth offsets if applicable
-        if (self.info.instrument.mount == Mount.LEFT_NASMYTH or
-                self.info.instrument.mount == Mount.RIGHT_NASMYTH):
+        if (self.info.instrument.mount == Mount.LEFT_NASMYTH
+                or self.info.instrument.mount == Mount.RIGHT_NASMYTH):
             nasmyth = self.get_nasmyth_offset(increment)
             result += f"\n  Offset: {nasmyth.x.to(size_unit)}, "
             result += f"{nasmyth.y.to(size_unit)} (nasmyth)"
@@ -1904,8 +1895,8 @@ class Scan(ABC):
         coordinates : Coordinate2D
         """
         source_coordinates = source.coordinates
-        if (source_coordinates.__class__ !=
-                self.source_model.reference.__class__):
+        if (source_coordinates.__class__
+                != self.source_model.reference.__class__):
             raise ValueError("Pointing source is in a different coordinate "
                              "system from source model.")
 
@@ -1934,8 +1925,8 @@ class Scan(ABC):
         Offset2D
         """
         pointing = self.get_native_pointing_increment(source)
-        if (self.pointing_correction is not None and
-                self.pointing_correction.size > 0):
+        if (self.pointing_correction is not None
+                and self.pointing_correction.size > 0):
             pointing.add(self.pointing_correction)
         return pointing
 
@@ -1951,8 +1942,8 @@ class Scan(ABC):
         -------
         Offset2D
         """
-        if (source.coordinates.__class__ !=
-                self.source_model.reference.__class__):
+        if (source.coordinates.__class__
+                != self.source_model.reference.__class__):
 
             raise ValueError("pointing source is in a different coordinate "
                              "system from the source model.")

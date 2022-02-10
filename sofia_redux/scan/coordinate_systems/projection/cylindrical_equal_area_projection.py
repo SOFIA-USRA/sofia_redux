@@ -19,10 +19,10 @@ class CylindricalEqualAreaProjection(CylindricalProjection):
         Initialize a cylindrical equal-area projection.
 
         The cylindrical equal-area projection maps spherical coordinates onto
-        a stretched vertical cylinder, with meridians as equally spaced vertical
-        lines, and parallels as horizontal lines.  In this model, the stretch
-        parameter is applied to the vertical axis, but is typically set to 1
-        (Lambert projection).
+        a stretched vertical cylinder, with meridians as equally spaced
+        vertical lines, and parallels as horizontal lines.  In this model,
+        the stretch parameter is applied to the vertical axis, but is typically
+        set to 1 (Lambert projection).
         """
         super().__init__()
         self.stretch = 1.0

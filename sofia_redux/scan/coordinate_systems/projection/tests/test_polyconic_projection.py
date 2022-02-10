@@ -31,7 +31,7 @@ def test_get_phi_theta():
 def test_get_offsets():
     p = PolyconicProjection()
     # Test zero theta
-    o = p.get_offsets(0, np.pi/4)
+    o = p.get_offsets(0, np.pi / 4)
     assert np.allclose(o.coordinates.value, [45, 0])
-    o = p.get_offsets(np.pi/4, np.pi/6)
+    o = p.get_offsets(np.pi / 4, np.pi / 6)
     assert np.allclose(o.coordinates.value, [20.73187096, 48.88233667])

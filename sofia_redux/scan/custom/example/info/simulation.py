@@ -46,7 +46,8 @@ class SimulationInfo(CameraInfo):
         ----------
         configuration_path : str, optional
             An alternate directory path to the configuration tree to be used
-            during the reduction.  The default is <package>/data/configurations.
+            during the reduction.  The default is
+            <package>/data/configurations.
         """
         super().__init__(configuration_path=configuration_path)
         self.name = 'simulation'
@@ -213,7 +214,8 @@ class SimulationInfo(CameraInfo):
         )
         scan_hdu = self.scan_hdu_from_header(header, **kwargs)
         source_model = SimulatedSource.get_source_model(source_type, **kwargs)
-        data_hdu = self.simulated_data(scan_hdu, header, source_model, **kwargs)
+        data_hdu = self.simulated_data(scan_hdu, header, source_model,
+                                       **kwargs)
         hdul = fits.HDUList()
         hdul.append(fits.PrimaryHDU(header=header, data=np.empty(0)))
         hdul.append(data_hdu)
@@ -248,7 +250,8 @@ class SimulationInfo(CameraInfo):
         scan_id : str or int
             The scan identifier.
         scan_pattern : str
-            The scan pattern type.  Allowable values are {'daisy', 'lissajous'}.
+            The scan pattern type.  Allowable values are
+            {'daisy', 'lissajous'}.
 
         Returns
         -------
@@ -362,7 +365,8 @@ class SimulationInfo(CameraInfo):
         dec = table['DEC'] * deg
 
         equatorial = EquatorialCoordinates(
-            np.stack((ra, dec)), epoch=frames.info.astrometry.epoch, copy=False)
+            np.stack((ra, dec)), epoch=frames.info.astrometry.epoch,
+            copy=False)
         frames.equatorial[:] = equatorial
 
         horizontal = HorizontalCoordinates(np.stack(
@@ -485,4 +489,3 @@ class SimulationInfo(CameraInfo):
             max_data = np.nanmax(np.abs(data))
             noise_level = max_data / float(s2n)
             data += rand.randn(*data.shape) * noise_level
-

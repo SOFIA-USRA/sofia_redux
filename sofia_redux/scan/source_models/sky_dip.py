@@ -269,8 +269,9 @@ class SkyDip(SourceModel):
         try:
             mode = modality.modes[self.signal_index]
         except IndexError:
-            raise ValueError(f"Cannot retrieve signal index {self.signal_index}"
-                             f" from integration channel {self.signal_name} "
+            raise ValueError(f"Cannot retrieve signal "
+                             f"index {self.signal_index} "
+                             f"from integration channel {self.signal_name} "
                              f"modality modes.")
 
         signal = integration.get_signal(mode)

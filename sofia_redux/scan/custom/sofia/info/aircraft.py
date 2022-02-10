@@ -91,7 +91,7 @@ class SofiaAircraftInfo(InfoBase):
              '(deg) True aircraft heading at start.'),
             ('TRACKANG', to_header_float(self.track_ang, 'deg'),
              '(deg) Aircraft tracking angle at start.')
-            ]
+        ]
         insert_info_in_header(header, info, delete_special=True)
 
     def get_table_entry(self, name):

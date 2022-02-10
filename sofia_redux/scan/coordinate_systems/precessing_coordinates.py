@@ -5,8 +5,6 @@ from astropy.time import Time
 import numpy as np
 import warnings
 
-from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
-    SphericalCoordinates
 from sofia_redux.scan.coordinate_systems.epoch.epoch import (
     B1950, J2000, Epoch, JulianEpoch, BesselianEpoch)
 from sofia_redux.scan.coordinate_systems.celestial_coordinates import \
@@ -17,7 +15,8 @@ __all__ = ['PrecessingCoordinates']
 
 class PrecessingCoordinates(CelestialCoordinates):
 
-    def __init__(self, coordinates=None, unit='degree', copy=True, epoch=J2000):
+    def __init__(self, coordinates=None, unit='degree',
+                 copy=True, epoch=J2000):
         """
         Initialize a PrecessingCoordinates object.
 
@@ -28,7 +27,7 @@ class PrecessingCoordinates(CelestialCoordinates):
 
         Parameters
         ----------
-        coordinates : list or tuple or numpy.ndarray or units.Quantity, optional
+        coordinates : list or tuple or array-like or units.Quantity, optional
             The coordinates used to populate the object during initialization.
             The first (0) value or index should represent longitudinal
             coordinates, and the second should represent latitude.

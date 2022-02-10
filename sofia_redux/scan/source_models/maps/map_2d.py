@@ -18,8 +18,6 @@ from sofia_redux.scan.source_models.maps.image_2d import Image2D
 from sofia_redux.scan.flags.flagged_array import FlaggedArray
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.coordinate_systems.index_2d import Index2D
-from sofia_redux.scan.coordinate_systems.projection.projection_2d import \
-    Projection2D
 
 __all__ = ['Map2D']
 
@@ -89,8 +87,8 @@ class Map2D(Overlay):
         None
         """
         self.add_local_unit(np.nan * units.Unit('beam'),
-                            alternate_names=['beam', 'BEAM', 'Beam', 'bm', 'BM',
-                                             'Bm'])
+                            alternate_names=['beam', 'BEAM', 'Beam', 'bm',
+                                             'BM', 'Bm'])
         self.add_local_unit(self.grid.get_pixel_area() * units.Unit('pixel'),
                             alternate_names=['pixel', 'PIXEL', 'Pixel',
                                              'PIXELS', 'Pixels', 'pxl', 'PXL',
@@ -528,8 +526,8 @@ class Map2D(Overlay):
         else:
             smoothing_beam_area = self.smoothing_beam.area
 
-        factor = ((underlying_beam_area - smoothing_beam_area) /
-                  (underlying_beam_area + self.get_filter_area())
+        factor = ((underlying_beam_area - smoothing_beam_area)
+                  / (underlying_beam_area + self.get_filter_area())
                   ).decompose().value
         return 1.0 / (1.0 - factor)
 
@@ -780,8 +778,8 @@ class Map2D(Overlay):
                 default_unit=display_unit.unit).to(display_unit.unit)
             self.smoothing_beam = Gaussian2D(x_fwhm=fwhm, y_fwhm=fwhm)
 
-        pixel_smoothing = np.sqrt(self.grid.get_pixel_area() /
-                                  Gaussian2D.AREA_FACTOR)
+        pixel_smoothing = np.sqrt(self.grid.get_pixel_area()
+                                  / Gaussian2D.AREA_FACTOR)
         self.smoothing_beam.encompass(pixel_smoothing)
 
     def parse_filter_beam(self, header):
@@ -851,8 +849,8 @@ class Map2D(Overlay):
 
             if resolution > self.smoothing_beam.major_fwhm:
                 self.underlying_beam.fwhm = np.sqrt(
-                    (resolution ** 2) - (self.smoothing_beam.x_fwhm *
-                                         self.smoothing_beam.y_fwhm))
+                    (resolution ** 2) - (self.smoothing_beam.x_fwhm
+                                         * self.smoothing_beam.y_fwhm))
             else:
                 self.underlying_beam.fwhm = 0.0 * display_unit.unit
 
@@ -883,7 +881,8 @@ class Map2D(Overlay):
                 fwhm = psf.fwhm.to(display_unit.unit).value
                 unit_name = display_unit.unit.name
                 header['RESOLUTN'] = (
-                    fwhm, f'{{Deprecated}} Effective image FWHM ({unit_name}).')
+                    fwhm, f'{{Deprecated}} Effective image '
+                          f'FWHM ({unit_name}).')
 
         if self.underlying_beam is not None:
             self.underlying_beam.edit_header(
@@ -1042,8 +1041,8 @@ class Map2D(Overlay):
         inverse_points_per_beam = eta * min(
             9, smoothing_area / self.grid.get_pixel_area())
 
-        return int(np.ceil((1.0 + area / beam_area).decompose().value *
-                           inverse_points_per_beam))
+        return int(np.ceil((1.0 + area / beam_area).decompose().value
+                           * inverse_points_per_beam))
 
     def nearest_to_offset(self, offset):
         """
@@ -1052,7 +1051,8 @@ class Map2D(Overlay):
         Parameters
         ----------
         offset : Coordinate2D or tuple or numpy.ndarray or list.
-            The spatial offset given as a coordinate or tuple of (x, y) offsets.
+            The spatial offset given as a coordinate or tuple of
+            (x, y) offsets.
 
         Returns
         -------
@@ -1258,9 +1258,10 @@ class Map2D(Overlay):
         """
         extended = self.copy()
 
-        if (hasattr(extended, 'is_zero_weight_valid') and
-                hasattr(extended, 'validate')):
-            extended.validate()  # Make sure zero weights are flagged
+        if (hasattr(extended, 'is_zero_weight_valid')
+                and hasattr(extended, 'validate')):
+            # Make sure zero weights are flagged
+            extended.validate()
             extended.is_zero_weight_valid = True
 
         # Null out the points that are to be skipped over by the validator
@@ -1577,7 +1578,7 @@ class Map2D(Overlay):
         size_unit = self.get_display_grid_unit()
         px, py = (self.grid.get_pixel_size().coordinates.to(
             size_unit.unit) / size_unit.value).value
-        info = [f"Map information:",
+        info = ["Map information:",
                 f"Image Size: {self.get_size_string()} pixels "
                 f"({px} x {py} {size_unit.unit}).",
                 self.grid.to_string(),

@@ -5,8 +5,6 @@ import pytest
 
 from sofia_redux.scan.configuration.configuration import Configuration
 from sofia_redux.scan.configuration.iterations import IterationOptions
-from sofia_redux.scan.configuration.tests.test_configuration import (
-    config_options, initialized_configuration, fits_header, fits_configuration)
 
 
 @pytest.fixture

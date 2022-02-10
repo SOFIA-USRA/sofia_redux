@@ -1,7 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from astropy import units
-from astropy.io import fits
 
 from sofia_redux.scan.coordinate_systems.grid.grid_2d import Grid2D
 from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
@@ -19,8 +18,8 @@ class SphericalGrid(Grid2D):
         Initialize a spherical grid.
 
         The spherical grid is used to convert between longitude/latitude
-        coordinates on a sphere and offsets in relation to a specified reference
-        position onto a regular grid, and the reverse operation.
+        coordinates on a sphere and offsets in relation to a specified
+        reference position onto a regular grid, and the reverse operation.
 
         Forward transform: grid projection -> offsets -> coordinates
         Reverse transform: coordinates -> offsets -> grid projection
@@ -36,8 +35,8 @@ class SphericalGrid(Grid2D):
         if isinstance(reference, SphericalCoordinates):
             self.set_reference(reference)
         elif reference is not None:
-            raise ValueError(f"Reference must be {SphericalCoordinates} class. "
-                             f"Received {reference}.")
+            raise ValueError(f"Reference must be {SphericalCoordinates} "
+                             f"class. Received {reference}.")
 
     def set_defaults(self):
         """
@@ -48,7 +47,8 @@ class SphericalGrid(Grid2D):
         None
         """
         super().set_defaults()
-        self.set_coordinate_system(SphericalCoordinates.get_default_system()[0])
+        self.set_coordinate_system(
+            SphericalCoordinates.get_default_system()[0])
 
     @property
     def fits_x_unit(self):

@@ -78,8 +78,8 @@ def test_get_mem_correction():
 
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
-            mem = np.sign(d) * n * lm * np.log(np.sqrt(d ** 2 + n ** 2) /
-                                               np.sqrt(m ** 2 + n ** 2))
+            mem = np.sign(d) * n * lm * np.log(np.sqrt(d ** 2 + n ** 2)
+                                               / np.sqrt(m ** 2 + n ** 2))
         mem[~is_valid] = 0.0
         return mem
 
@@ -107,4 +107,3 @@ def test_set_new_blank_value():
     old = test.copy()
     nf.set_new_blank_value(test, test[0], None)
     assert np.allclose(old, test, equal_nan=True)
-

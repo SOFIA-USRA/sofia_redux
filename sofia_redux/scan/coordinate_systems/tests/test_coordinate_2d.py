@@ -349,8 +349,3 @@ def test_edit_header(c2d):
     assert h['X2'] == 2.0
     assert h.comments['X1'] == 'The reference x coordinate (arcsec).'
     assert h.comments['X2'] == 'The reference y coordinate (arcsec).'
-
-
-
-
-

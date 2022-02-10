@@ -16,7 +16,6 @@ from sofia_redux.scan.channels.modality.coupled_modality import (
 from sofia_redux.scan.channels.modality.correlated_modality import (
     CorrelatedModality)
 from sofia_redux.scan.channels.modality.modality import Modality
-from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 
 __all__ = ['HawcPlusChannels']
 
@@ -310,7 +309,8 @@ class HawcPlusChannels(SofiaCamera):
         None
         """
         for hdu in hdul:
-            if hdu.header.get('EXTNAME', '').strip().upper() == 'CONFIGURATION':
+            if (hdu.header.get('EXTNAME', '').strip().upper()
+                    == 'CONFIGURATION'):
                 self.info.detector_array.parse_configuration_hdu(hdu)
 
     def validate_scan(self, scan):
@@ -455,8 +455,10 @@ class HawcPlusChannels(SofiaCamera):
         hdul.append(fits.ImageHDU(flag_r, name='R bad pixel mask'))
         hdul.append(fits.ImageHDU(flag_t, name='T bad pixel mask'))
         if include_nonlinear:
-            hdul.append(fits.ImageHDU(nonlinear_r, name='R array nonlinearity'))
-            hdul.append(fits.ImageHDU(nonlinear_t, name='T array nonlinearity'))
+            hdul.append(fits.ImageHDU(nonlinear_r,
+                                      name='R array nonlinearity'))
+            hdul.append(fits.ImageHDU(nonlinear_t,
+                                      name='T array nonlinearity'))
         hdul.writeto(filename, overwrite=True)
         hdul.close()
 

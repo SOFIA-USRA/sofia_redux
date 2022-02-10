@@ -1,6 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from sofia_redux.scan.coordinate_systems.cartesian_system import CartesianSystem
+from sofia_redux.scan.coordinate_systems.cartesian_system \
+    import CartesianSystem
 
 
 def test_init():

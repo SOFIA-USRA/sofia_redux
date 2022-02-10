@@ -12,7 +12,7 @@ from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 def test_init():
     h = HorizontalCoordinates()
     assert h.unit == 'degree' and h.coordinates is None
-    
+
 
 def test_setup_coordinate_system():
     h = HorizontalCoordinates()
@@ -112,7 +112,7 @@ def test_to_equatorial_offset():
     position_angle = 30 * units.Unit('degree')
     o = h.to_equatorial_offset(offset, position_angle, in_place=True)
     assert o is offset
-    assert np.allclose(o.coordinates, [-0.3660254,  1.3660254])
+    assert np.allclose(o.coordinates, [-0.3660254, 1.3660254])
     o2 = h.to_equatorial_offset(o, position_angle, in_place=False)
     assert o is not o2 and o2 == o0
 
@@ -167,5 +167,3 @@ def test_edit_header():
     hdr = fits.Header()
     h.edit_header(hdr, 'FOO')
     assert len(hdr) == 0
-
-

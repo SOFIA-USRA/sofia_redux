@@ -1,7 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from astropy import log
-from astropy.io import fits
 
 from sofia_redux.scan.integration.integration import Integration
 

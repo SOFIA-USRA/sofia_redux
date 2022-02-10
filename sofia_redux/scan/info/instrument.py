@@ -79,7 +79,8 @@ class InstrumentInfo(InfoBase):
         return np.hypot(source_size, beam_size)
 
     def get_stability(self):
-        return self.configuration.get_float('stability', default=10.0) * units.s
+        return self.configuration.get_float('stability',
+                                            default=10.0) * units.s
 
     # TODO: This belongs to channels
     def get_one_over_fstat(self):
@@ -133,7 +134,7 @@ class InstrumentInfo(InfoBase):
 
         try:
             conversion = (1 * self.get_data_unit()).to('Jy').value
-        except:
+        except Exception:
             conversion = 1.0
 
         jansky = self.configuration.get_float('jansky')
@@ -154,7 +155,8 @@ class InstrumentInfo(InfoBase):
             return np.nan * units.Unit('Kelvin')
 
         elif self.configuration.has_option('kelvin'):
-            return self.configuration.get_float('kelvin') * units.Unit('Kelvin')
+            return (self.configuration.get_float('kelvin')
+                    * units.Unit('Kelvin'))
 
         elif self.configuration.has_option('k2jy'):
             jy = self.jansky_per_beam().to('Jy/beam').value
@@ -204,7 +206,7 @@ class InstrumentInfo(InfoBase):
             wavelength = self.configuration.get_float(
                 'wavelength') * units.Unit('um')
             instrument.frequency = (
-                    constants.c / wavelength).decompose().to('Hz')
+                constants.c / wavelength).decompose().to('Hz')
 
         if self.configuration.is_configured('resolution'):
             instrument.resolution = self.configuration.get_float(

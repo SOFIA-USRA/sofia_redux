@@ -71,7 +71,7 @@ class SofiaObservationInfo(ObservationInfo):
             ('KWDICT', self.dictionary_version,
              'SOFIA keyword dictionary version'),
             ('OBS_ID', obs_id, 'SOFIA observation ID.'),
-            ]
+        ]
 
         if self.image_id is not None:
             info.append(('IMAGEID', self.image_id,

@@ -58,8 +58,8 @@ def get_string(value, default=None):
     value : thing
         The value to resolve.
     default : str, optional
-        The default result to return if a conversion is not possible, or `value`
-        matches the UNKNOWN_STRING_VALUE.
+        The default result to return if a conversion is not possible,
+        or `value` matches the UNKNOWN_STRING_VALUE.
 
     Returns
     -------
@@ -83,8 +83,8 @@ def get_bool(value, default=False):
     value : thing
         The value to resolve.
     default : bool, optional
-        The default result to return if a conversion is not possible, or `value`
-        matches the UNKNOWN_BOOL_VALUE.
+        The default result to return if a conversion is not possible,
+        or `value` matches the UNKNOWN_BOOL_VALUE.
 
     Returns
     -------
@@ -109,8 +109,8 @@ def get_int(value, default=0):
     value : thing
         The value to resolve.
     default : int, optional
-        The default result to return if a conversion is not possible, or `value`
-        matches the UNKNOWN_INT_VALUE.
+        The default result to return if a conversion is not possible,
+        or `value` matches the UNKNOWN_INT_VALUE.
 
     Returns
     -------
@@ -137,8 +137,8 @@ def get_float(value, default=np.nan):
     value : thing
         The value to resolve.
     default : float, optional
-        The default result to return if a conversion is not possible, or `value`
-        matches the UNKNOWN_FLOAT_VALUE.
+        The default result to return if a conversion is not possible,
+        or `value` matches the UNKNOWN_FLOAT_VALUE.
 
     Returns
     -------
@@ -289,8 +289,8 @@ def to_int_list(values, is_positive=True):
 
     String representations of integers may also be included as ranges.
     The default behaviour is to treat the '-' character as range rather than
-    a minus sign.  Ranges should generally be specified using the ':' character.
-    To allow negative values, set `is_positive=False`.
+    a minus sign.  Ranges should generally be specified using the ':'
+    character. To allow negative values, set `is_positive=False`.
 
     For example
     >>> print(to_int_list(['1-3']))
@@ -601,9 +601,9 @@ def valid_value(value):
     Returns
     -------
     valid : bool
-        `False` if the value and type matches the corresponding unknown value or
-        is not a bool, int, str, or float.  NaNs also return `False`.  All other
-        values will return `True`.
+        `False` if the value and type matches the corresponding unknown
+        value or is not a bool, int, str, or float.  NaNs also return `False`.
+        All other values will return `True`.
     """
     if isinstance(value, bool):
         return True
@@ -667,9 +667,9 @@ def robust_sigma_clip_mask(values, weights=None, mask=None, sigma=5.0,
     from the median are ignored on subsequent iterations in which new medians
     and standard deviations are calculated.
 
-    Note that while any multi-dimensional arrays may be provided, the calculated
-    median and standard deviation on each iteration will apply to the entirety
-    of the data set.
+    Note that while any multi-dimensional arrays may be provided, the
+    calculated median and standard deviation on each iteration will apply
+    to the entirety of the data set.
 
     The iterations will desist once `max_iterations` iterations have occurred,
     no additional elements are identified as outliers on an iteration, or all
@@ -682,8 +682,8 @@ def robust_sigma_clip_mask(values, weights=None, mask=None, sigma=5.0,
         NaN values will be ignored in all calculations and appear as `False` in
         the output mask array.
     weights : units.Quantity or numpy.ndarray (float), optional
-        Optional weighting for the values.  These should typically represent the
-        inverse variance of the provided data.  If provided, the calculated
+        Optional weighting for the values.  These should typically represent
+        the inverse variance of the provided data.  If provided, the calculated
         median will be weighted accordingly using
         :func:`numba_functions.smart_median`, as will the derived standard
         deviation.
@@ -698,8 +698,8 @@ def robust_sigma_clip_mask(values, weights=None, mask=None, sigma=5.0,
         clipped values, the median, and the standard deviation on each
         iteration.
     max_iterations : int, optional
-        The maximum number of iterations that will be used to derive the masking
-        array.
+        The maximum number of iterations that will be used to derive the
+        masking array.
 
     Returns
     -------
@@ -1351,8 +1351,8 @@ def insert_into_header(header, key, value, comment=None, refkey='HISTORY',
         not present in the header, the key will be inserted in the standard
         manner.
     after : bool, optional
-        If `True`, insert `key` after `refkey`.  If `False`, insert `key` before
-        `refkey`.
+        If `True`, insert `key` after `refkey`.  If `False`, insert `key`
+        before `refkey`.
     delete_special : bool, optional
         If `True`, allow deletion of previous HISTORY and COMMENT entries
         containing the same value.
@@ -1475,10 +1475,10 @@ def to_header_cards(header_info):
 
     elif isinstance(header_info, dict):
         for key, value in header_info.items():
-            if (hasattr(value, '__len__') and
-                    not isinstance(value, str) and
-                    len(value) == 2 and
-                    isinstance(value[1], str)):
+            if (hasattr(value, '__len__')
+                    and not isinstance(value, str)
+                    and len(value) == 2
+                    and isinstance(value[1], str)):
                 comment = value[1]
                 value = value[0]
             else:
@@ -1533,8 +1533,8 @@ def round_values(x):
     Round any given value to the expected result.
 
     The function :func:`np.round` does not round values as one might expect.
-    If int(x) is equal to an odd number, #.5 numbers will be rounded down rather
-    than up (as expected).  This function attempts to fix that.
+    If int(x) is equal to an odd number, #.5 numbers will be rounded down
+    rather than up (as expected).  This function attempts to fix that.
 
     Parameters
     ----------
@@ -1587,14 +1587,15 @@ def calculate_position_angle(lon1, lat1, lon2, lat2):
     Returns
     -------
     pa : units.Quantity
-        The (positive) position angle of the vector pointing from position 1 to
-        position 2.  If any of the angles are arrays, this will contain an array
-        following the appropriate `numpy` broadcasting rules.
+        The (positive) position angle of the vector pointing from position
+        1 to position 2.  If any of the angles are arrays, this will contain
+        an array following the appropriate `numpy` broadcasting rules.
     """
     delta_lon = lon2 - lon1
     cos_lat = np.cos(lat2)
 
-    x = np.sin(lat2) * np.cos(lat1) - cos_lat * np.sin(lat1) * np.cos(delta_lon)
+    x = (np.sin(lat2) * np.cos(lat1)
+         - cos_lat * np.sin(lat1) * np.cos(delta_lon))
     y = np.sin(delta_lon) * cos_lat
 
     pa = Angle(np.arctan2(y, x), units.Unit('radian'))

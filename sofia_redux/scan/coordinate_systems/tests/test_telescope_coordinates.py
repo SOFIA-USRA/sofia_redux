@@ -11,14 +11,14 @@ from sofia_redux.scan.coordinate_systems.telescope_coordinates import \
 def test_init():
     t = TelescopeCoordinates()
     assert t.coordinates is None and t.unit == 'degree'
-    
-    
+
+
 def test_copy():
     t = TelescopeCoordinates([1, 2])
     t2 = t.copy()
     assert t == t2 and t is not t2
-    
-    
+
+
 def test_setup_coordinate_system():
     t = TelescopeCoordinates()
     t.setup_coordinate_system()

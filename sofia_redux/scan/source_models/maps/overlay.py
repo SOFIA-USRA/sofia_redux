@@ -1,7 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from sofia_redux.scan.flags.flagged_array import FlaggedArray
-from sofia_redux.scan.source_models.maps.fits_data import FitsData
 from sofia_redux.scan.source_models.maps.image import Image
 
 __all__ = ['Overlay']
@@ -32,8 +30,8 @@ class Overlay(Image):
             The data unit.
         """
         if not isinstance(data, Image):
-            basis = Image(data=data, blanking_value=blanking_value, dtype=dtype,
-                          shape=shape, unit=unit)
+            basis = Image(data=data, blanking_value=blanking_value,
+                          dtype=dtype, shape=shape, unit=unit)
         else:
             basis = data
 
@@ -193,9 +191,9 @@ class Overlay(Image):
             (n_dimensions, 2) where ranges[0, 0] would give the minimum crop
             limit for the first dimension and ranges[0, 1] would give the
             maximum crop limit for the first dimension.  In this case, the
-            'first' dimension is in numpy format.  i.e., (y, x) for a 2-D array.
-            Also note that the upper crop limit is not inclusive so a range
-            of (0, 3) includes indices [0, 1, 2] but not 3.
+            'first' dimension is in numpy format.  i.e., (y, x) for a 2-D
+            array. Also note that the upper crop limit is not inclusive so
+            a range of (0, 3) includes indices [0, 1, 2] but not 3.
 
         Returns
         -------

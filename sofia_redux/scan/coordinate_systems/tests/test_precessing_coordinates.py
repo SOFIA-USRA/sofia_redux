@@ -315,5 +315,3 @@ def test_paste():
     assert np.allclose(p.x.value, [0, 1, 10, 10, 4])
     assert np.allclose(p.y.value, [5, 6, 10, 10, 9])
     assert np.allclose(p.epoch.equinox.jyear, [2001, 2002, 2000, 2000, 2005])
-
-

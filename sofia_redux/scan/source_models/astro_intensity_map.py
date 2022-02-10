@@ -8,7 +8,6 @@ from sofia_redux.scan.source_models.astro_data_2d import AstroData2D
 from sofia_redux.scan.source_models.maps.image_2d import Image2D
 from sofia_redux.scan.source_models.maps.observation_2d import Observation2D
 from sofia_redux.scan.utilities.range import Range
-from sofia_redux.scan.source_models.beams.gaussian_source import GaussianSource
 from sofia_redux.scan.source_models.beams.elliptical_source import (
     EllipticalSource)
 from sofia_redux.scan.source_models import source_numba_functions as snf
@@ -607,7 +606,8 @@ class AstroIntensityMap(AstroData2D):
             sample_blank_flag=frames.flagspace.convert_flag(
                 'SAMPLE_SOURCE_BLANK').value)
 
-    def calculate_coupling(self, integration, pixels, source_gains, sync_gains):
+    def calculate_coupling(self, integration, pixels, source_gains,
+                           sync_gains):
         """
         Don't know
 
@@ -689,8 +689,8 @@ class AstroIntensityMap(AstroData2D):
         None
         """
         super().process_final()
-        if not (self.configuration.get_bool('extended') |
-                self.configuration.get_bool('deep')):
+        if not (self.configuration.get_bool('extended')
+                | self.configuration.get_bool('deep')):
             if self.enable_level:
                 self.map.level(robust=True)
             if self.enable_weighting:

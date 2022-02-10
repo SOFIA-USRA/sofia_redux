@@ -57,8 +57,8 @@ class AtranModel(ABC):
         d_am = (1.0 / np.sin(elevation)) - self.reference_airmass
         result = self.poly_am(d_am)
 
-        d_alt = ((altitude - self.reference_altitude) /
-                 self.kft).decompose().value
+        d_alt = ((altitude - self.reference_altitude)
+                 / self.kft).decompose().value
         result *= self.poly_alt(d_alt)
 
         return result.value

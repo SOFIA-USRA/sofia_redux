@@ -12,7 +12,6 @@ from sofia_redux.scan.utilities import utils
 from sofia_redux.scan.utilities.class_provider import (
     channel_data_class_for)
 from sofia_redux.scan.channels import channel_numba_functions
-from sofia_redux.scan.info.info import Info
 
 __all__ = ['ChannelData']
 
@@ -390,8 +389,8 @@ class ChannelData(FlaggedData):
         """
         Set BLIND flag for elements based on fixed indices.
 
-        Will kill (set flag to only DEAD) any previously defined BLIND channels.
-        All new blinded channels will only have the BLIND flag.
+        Will kill (set flag to only DEAD) any previously defined BLIND
+        channels. All new blinded channels will only have the BLIND flag.
 
         Parameters
         ----------
@@ -640,7 +639,8 @@ class ChannelData(FlaggedData):
 
         The overlap distances are stored in the `overlaps` attribute values.
         This should be a csr_sparse matrix of shape (n_channels, n_channels)
-        where overlaps[i, j] gives the distance between channel i and channel j.
+        where overlaps[i, j] gives the distance between channel i and
+        channel j.
 
         Parameters
         ----------

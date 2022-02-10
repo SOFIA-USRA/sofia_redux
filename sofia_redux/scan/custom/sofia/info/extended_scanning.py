@@ -70,7 +70,8 @@ class SofiaExtendedScanningInfo(SofiaScanningInfo):
                                               options.get_float('SCNANGLF'),
                                               unit='degree')
         self.duration = options.get_float('SCNDUR') * second
-        self.iterations = options.get_int('SCNITERS', default=UNKNOWN_INT_VALUE)
+        self.iterations = options.get_int('SCNITERS',
+                                          default=UNKNOWN_INT_VALUE)
         self.subscans = options.get_int('SCNNSUBS', default=UNKNOWN_INT_VALUE)
         self.raster_length = options.get_float('SCNLEN') * arcsec
         self.raster_step = options.get_float('SCNSTEP') * arcsec
@@ -102,10 +103,11 @@ class SofiaExtendedScanningInfo(SofiaScanningInfo):
             self.amplitude = Coordinate2D([np.nan, np.nan], unit='arcsec')
 
         info = [
-            ('COMMENT',  "<------ SOFIA Extra Scanning Data ------>"),
+            ('COMMENT', "<------ SOFIA Extra Scanning Data ------>"),
             ('SCNPATT', self.pattern, "Scan pattern."),
             ('SCNCRSYS', self.coordinate_system, "Scan coordinate system."),
-            ('SCNANGLC', to_header_float(self.current_position_angle, 'degree'),
+            ('SCNANGLC',
+             to_header_float(self.current_position_angle, 'degree'),
              "(deg) current scan angle."),
             ('SCNANGLS', to_header_float(self.position_angle.start, 'degree'),
              "(deg) initial scan angle."),

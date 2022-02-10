@@ -141,6 +141,3 @@ class TestPipeline(object):
         scan.integrations[0].source_generation = 1
         pipe.update_source(scan)
         assert not pipe.scan_source.enable_level
-
-
-

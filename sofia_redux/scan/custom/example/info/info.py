@@ -14,8 +14,9 @@ class ExampleInfo(SimulationInfo):
         Parameters
         ----------
         configuration_path : str, optional
-            An alternate directory path to the configuration tree to be used
-            during the reduction.  The default is <package>/data/configurations.
+            An alternate directory path to the configuration tree to be
+            used during the reduction.  The default is
+            <package>/data/configurations.
         """
         super().__init__(configuration_path=configuration_path)
         self.name = 'example'

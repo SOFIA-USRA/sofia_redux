@@ -145,7 +145,8 @@ class TestReduction(object):
         assert reduction2.total_reductions == 2
         assert reduction2.is_sub_reduction
         assert reduction2.is_sub_reduction
-        assert reduction2.reduction_id == f'{id(reduction)}.0-{id(reduction2)}.0'
+        assert reduction2.reduction_id == f'{id(reduction)}.0-' \
+                                          f'{id(reduction2)}.0'
 
     def test_iteration(self):
         reduction = Reduction(None)

@@ -59,5 +59,4 @@ def test_from_geocentric():
     g.from_geocentric(gc)
     assert np.allclose(g.x.value, [0, 1, 2, 3, 4])
     assert np.allclose(
-        g.y.value, [5.12008921, 6.14378469, 7.167305  , 8.19062147, 9.2137057])
-
+        g.y.value, [5.12008921, 6.14378469, 7.167305, 8.19062147, 9.2137057])

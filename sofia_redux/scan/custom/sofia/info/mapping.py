@@ -72,7 +72,7 @@ class SofiaMappingInfo(InfoBase):
              '(arcmin) Map step interval in X.'),
             ('MAPINTY', to_header_float(step.y, unit='arcmin'),
              '(arcmin) Map step interval in Y.')
-            ]
+        ]
         insert_info_in_header(header, info, delete_special=True)
 
     def get_table_entry(self, name):

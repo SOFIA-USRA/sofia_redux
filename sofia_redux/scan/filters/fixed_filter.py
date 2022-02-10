@@ -1,5 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+from abc import abstractmethod
 import numpy as np
 
 from sofia_redux.scan.filters.filter import Filter
@@ -14,11 +15,8 @@ class FixedFilter(Filter):
         """
         Initializes a fixed filter.
 
-        The filter is designed to filter integration data using an FFT.  The
-        varied filter also contains a source profile, point response, and
-        `dp` or delta dependents for channels.
-
-        The fixed filter has a fixed point response.
+        The fixed filter has a fixed point response for each channel in an
+        integration.
 
         Parameters
         ----------
@@ -87,7 +85,8 @@ class FixedFilter(Filter):
         if channels is None or channels is self.channels:
             return self.point_response
 
-        channel_indices = self.channels.find_fixed_indices(channels.fixed_index)
+        channel_indices = self.channels.find_fixed_indices(
+            channels.fixed_index)
         return self.point_response[channel_indices]
 
     def get_mean_point_response(self, channels=None):
@@ -155,13 +154,15 @@ class FixedFilter(Filter):
         """
         Performs the pre-filtering channels steps.
 
+        The fixed filter recalculates each channel point response to update the
+        channel direct and source filtering by::
+
+            filtering /= point_response
+
         Parameters
         ----------
         channels : ChannelGroup
             The set of channels to filter.  Defaults to the filter channels.
-
-        The varied filter divides the channel direct and source filtering by
-        the point response.
 
         Returns
         -------
@@ -188,9 +189,6 @@ class FixedFilter(Filter):
         if np.allclose(point_response, 0):
             return
 
-        if channels is None:
-            channels = self.get_channels()
-
         if channels is self.channels:
             channel_indices = np.arange(channels.size)
         else:
@@ -214,9 +212,9 @@ class FixedFilter(Filter):
             The set of channels to filter.  Defaults to the filter channels.
 
         The fixed filter adds the rejected sum to the channel and frame
-        dependents, sets the point response and multiplies the direct and source
-        filtering by the new calculated value.  This reverses what occurred in
-        the pre-filtering step.
+        dependents, sets the point response and multiplies the direct and
+        source filtering by the new calculated value.  This reverses what
+        occurred in the pre-filtering step.
 
         Returns
         -------
@@ -237,6 +235,8 @@ class FixedFilter(Filter):
         if not do_bugs:
             self.parms.add_async(channels, self.rejected)
 
+        # This adds to self.frame_parms, which are then applied to
+        # self.parms.for_frame during the apply method (Filter).
         self.add_frame_parms(channels=channels)
 
         self.reset_point_response(channels=channels)
@@ -265,8 +265,8 @@ class FixedFilter(Filter):
         -------
         None
         """
-        if (self.frame_parms is None or
-                self.frame_parms.size != self.integration.size):
+        if (self.frame_parms is None
+                or self.frame_parms.size != self.integration.size):
             self.frame_parms = np.zeros(self.integration.size, dtype=float)
 
         if channels is None:
@@ -283,3 +283,41 @@ class FixedFilter(Filter):
             frame_parms=self.frame_parms,
             sample_flags=frames.sample_flag,
             channel_indices=channels.indices)
+
+    @abstractmethod
+    def get_id(self):  # pragma: no cover
+        """
+        Return the filter ID.
+
+        Returns
+        -------
+        filter_id : str
+        """
+        pass
+
+    @abstractmethod
+    def get_config_name(self):  # pragma: no cover
+        """
+        Return the configuration name.
+
+        Returns
+        -------
+        config_name : str
+        """
+        pass
+
+    @abstractmethod
+    def response_at(self, fch):  # pragma: no cover
+        """
+        Return the response at a given frequency channel(s).
+
+        Parameters
+        ----------
+        fch : int or numpy.ndarray (int or bool) or slice
+            The frequency channel or channels in question.
+
+        Returns
+        -------
+        response : numpy.ndarray (float)
+        """
+        pass

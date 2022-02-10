@@ -33,7 +33,8 @@ class ColorArrangement(Camera):
                 return
             beam = self.configuration.get_float(alias, default=np.nan)
             if np.isfinite(beam):
-                self.info.resolution = beam * self.info.instrument.get_size_unit()
+                self.info.resolution = (
+                    beam * self.info.instrument.get_size_unit())
                 self.data.set_beam_size(self.info.resolution)
 
     def get_min_beam_fwhm(self):

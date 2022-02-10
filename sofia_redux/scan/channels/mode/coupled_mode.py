@@ -63,8 +63,8 @@ class CoupledMode(CorrelatedMode):
         parent_gains = self.parent_mode.get_gains(validate=validate)
         gains = super().get_gains(validate=validate)
         gains *= parent_gains
-        if (isinstance(gains, units.Quantity) and
-                gains.units == units.dimensionless_unscaled):
+        if (isinstance(gains, units.Quantity)
+                and gains.units == units.dimensionless_unscaled):
             gains = gains.value
         return gains
 

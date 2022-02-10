@@ -189,13 +189,13 @@ class HawcPlusFrames(SofiaFrames):
                     np.stack((ra, dec)), epoch=J2000)
 
         if columns['ora'] is not None or columns['odec'] is not None:
-            if (np.isnan(hdu.data[columns['ora']][0]) or
-                    np.isnan(hdu.data[columns['odec']][0])):
+            if (np.isnan(hdu.data[columns['ora']][0])
+                    or np.isnan(hdu.data[columns['odec']][0])):
                 columns['ora'] = None
                 columns['odec'] = None
                 if self.scan.is_nonsidereal:
-                    log.warning("Missing NonSiderealRA/NonSiderealDEC columns. "
-                                "Forcing sidereal mapping.")
+                    log.warning("Missing NonSiderealRA/NonSiderealDEC "
+                                "columns. Forcing sidereal mapping.")
                     self.info.astrometry.is_nonsidereal = False
 
         return columns
@@ -266,7 +266,7 @@ class HawcPlusFrames(SofiaFrames):
 
         if columns['hwp'] is not None:
             self.hwp_angle[indices] = (
-                    table[columns['hwp']] * self.info.instrument.hwp_step
+                table[columns['hwp']] * self.info.instrument.hwp_step
             ) - self.info.instrument.hwp_telescope_vertical
 
         is_lab = self.configuration.get_bool('lab') or None in [
@@ -284,7 +284,8 @@ class HawcPlusFrames(SofiaFrames):
             pwv[pwv == -9999] = np.nan
             self.pwv[indices] = pwv * units.Unit('um')
 
-        have_site = None not in [columns['lat'], columns['lon'], columns['lst']]
+        have_site = None not in ([columns['lat'], columns['lon'],
+                                  columns['lst']])
         if have_site:
             lon = table[columns['lon']] * deg
             lat = table[columns['lat']] * deg
@@ -303,8 +304,8 @@ class HawcPlusFrames(SofiaFrames):
 
         self.equatorial[indices] = equatorial
 
-        if (self.scan.is_nonsidereal and
-                None not in [columns['ora'], columns['odec']]):
+        if (self.scan.is_nonsidereal
+                and None not in [columns['ora'], columns['odec']]):
 
             ora = (table[columns['ora']] * hourangle) % (24 * hourangle)
             odec = table[columns['odec']] * deg
@@ -328,12 +329,13 @@ class HawcPlusFrames(SofiaFrames):
             self.roll[indices] = table[columns['roll']] * deg
 
         # Rotation from pixel coordinates to telescope coordinates
-        self.set_rotation(self.instrument_vpa[indices] -
-                          self.telescope_vpa[indices], indices=indices)
+        self.set_rotation(self.instrument_vpa[indices]
+                          - self.telescope_vpa[indices], indices=indices)
 
         # Rotation from telescope coordinates to equatorial
         # Sets cos_pa and sin_pa
-        self.set_parallactic_angle(self.telescope_vpa[indices], indices=indices)
+        self.set_parallactic_angle(self.telescope_vpa[indices],
+                                   indices=indices)
 
         horizontal_offset = equatorial.get_native_offset_from(reference)
         self.equatorial_native_to_horizontal_offset(
@@ -355,8 +357,8 @@ class HawcPlusFrames(SofiaFrames):
         if self.configuration.get_bool('chopper.invert'):
             chopper_position.invert()
 
-        chopper_position.rotate(self.chop_vpa[indices] -
-                                self.telescope_vpa[indices])
+        chopper_position.rotate(self.chop_vpa[indices]
+                                - self.telescope_vpa[indices])
         self.chopper_position[indices] = chopper_position
 
         # If lat/lon site data is available, use it to calculate horizontal
@@ -396,7 +398,7 @@ class HawcPlusFrames(SofiaFrames):
         else:
             if self.is_singular:
                 self.hwp_angle = self.hwp_angle + (
-                        scaling * other_frames.hwp_angle)
+                    scaling * other_frames.hwp_angle)
             else:
                 self.hwp_angle[indices] += scaling * other_frames.hwp_angle
 

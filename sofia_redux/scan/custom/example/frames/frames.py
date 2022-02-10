@@ -3,7 +3,6 @@
 from astropy import log
 
 from sofia_redux.scan.custom.example.flags.frame_flags import ExampleFrameFlags
-from sofia_redux.scan.custom.example.info.info import ExampleInfo
 from sofia_redux.scan.frames.horizontal_frames import HorizontalFrames
 
 __all__ = ['ExampleFrames']
@@ -64,7 +63,8 @@ class ExampleFrames(HorizontalFrames):
             log.debug("Reading data from HDU")
             data = table['DAC']
             n_records, n_rows, n_cols = data.shape
-            log.debug(f"FITS HDU has {n_records} ({n_rows} x {n_cols}) arrays.")
+            log.debug(f"FITS HDU has {n_records} "
+                      f"({n_rows} x {n_cols}) arrays.")
 
             row, col = self.channels.data.row, self.channels.data.col
             self.data[:] = data[:, row, col]
@@ -81,7 +81,8 @@ class ExampleFrames(HorizontalFrames):
         # dec = table['DEC'] * deg
         #
         # equatorial = EquatorialCoordinates(
-        #     np.stack((ra, dec)), epoch=self.info.astrometry.epoch, copy=False)
+        #     np.stack((ra, dec)),
+        #     epoch=self.info.astrometry.epoch, copy=False)
         # self.equatorial[:] = equatorial
         #
         # horizontal = HorizontalCoordinates(np.stack(

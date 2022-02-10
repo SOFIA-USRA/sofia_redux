@@ -65,7 +65,7 @@ def test_eq():
     p = CP()
     p.celestial_pole = SphericalCoordinates([0, 90])
     assert p == p
-    assert p != None
+    assert p is not None
     p2 = p.copy()
     assert p == p2
     p2.reference = SphericalCoordinates([1, 2])
@@ -211,7 +211,7 @@ def test_project():
     projected = SphericalCoordinates()
     o = p.project(c, projected=projected)
     assert projected is o and c == c0
-    assert np.allclose(o.coordinates.value, [-50.76847952,  35.08635606])
+    assert np.allclose(o.coordinates.value, [-50.76847952, 35.08635606])
     p.celestial_pole = p.native_pole.copy()
     o = p.project(c)
     assert np.allclose(o.coordinates.value, [225, 28.64788976])
@@ -290,10 +290,12 @@ def test_calculate_celestial_pole():
     assert p.select_solution == 'nearest'
     assert p.celestial_pole.size == 0
     p.calculate_celestial_pole()
-    assert p.celestial_pole.size == 0  # Check nothing happens without reference
+    # Check nothing happens without reference
+    assert p.celestial_pole.size == 0
 
     p._reference = SphericalCoordinates([30, 60])
-    assert p.celestial_pole.size == 0  # Check nothing was inadvertently set
+    # Check nothing was inadvertently set
+    assert p.celestial_pole.size == 0
 
     p.calculate_celestial_pole()
     assert p.celestial_pole == SphericalCoordinates([-150, 30])

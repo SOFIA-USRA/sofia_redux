@@ -8,7 +8,8 @@ from sofia_redux.scan import custom
 from sofia_redux.scan.channels import mode as mode_module
 from sofia_redux.scan.coordinate_systems import grid as grid_module
 from sofia_redux.scan.coordinate_systems import projection as projection_module
-from sofia_redux.scan.simulation import source_models as simulated_source_module
+from sofia_redux.scan.simulation \
+    import source_models as simulated_source_module
 
 custom_module_path = custom.__name__
 
@@ -95,8 +96,8 @@ def to_module_name(class_name):
     """
     Convert a class name to the base module it may be found in.
 
-    Inserts an underscore before any uppercase character or digit (excluding the
-    first) and converts the string to lower case.  For example:
+    Inserts an underscore before any uppercase character or digit
+    (excluding the first) and converts the string to lower case.
 
     Examples
     --------
@@ -155,8 +156,8 @@ def get_class_for(instrument, module_path_name, other_module=None):
 
     scan.custom.<instrument>.<...>
 
-    For example, a custom channel data class for the HAWC_PLUS instrument should
-    be placed at:
+    For example, a custom channel data class for the HAWC_PLUS instrument
+    should be placed at:
 
     scan.custom.hawc_plus.channels.channel_data.channel_data
 
@@ -179,8 +180,9 @@ def get_class_for(instrument, module_path_name, other_module=None):
         custom instrument path.  For example, 'channels.channel_data'.
     other_module : str, optional
         Usually, the class will be retrieved from a module matching the last
-        path level in `module_path_name`.  For example, ChannelData will usually
-        be retrieved from <instrument_path>.channels.channel_data.channel_data.
+        path level in `module_path_name`.  For example, ChannelData will
+        usually be retrieved from
+        <instrument_path>.channels.channel_data.channel_data.
         Set this to an empty string ('') to retrieve from
         <instrument_path>.channels.channel_data or <other> to retrieve from
         <instrument_path>.channels.channel_data.<other>.

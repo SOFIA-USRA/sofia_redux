@@ -5,8 +5,6 @@ import numpy as np
 
 from sofia_redux.scan.coordinate_systems.projection.spherical_projection \
     import SphericalProjection
-from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
-    SphericalCoordinates
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 
 __all__ = ['PolyconicProjection']
@@ -94,8 +92,8 @@ class PolyconicProjection(SphericalProjection):
         Parameters
         ----------
         theta : units.Quantity or float
-            The theta (latitude) angle.  If a float value is provided, it should
-            be in radians.
+            The theta (latitude) angle.  If a float value is provided, it
+            should be in radians.
         phi : units.Quantity or float
             The phi (longitude) angle.  If a float value is provided, it should
             be in radians.

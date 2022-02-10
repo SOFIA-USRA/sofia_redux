@@ -21,10 +21,11 @@ class FlaggedDataGroup(FlaggedData):
         The FlaggedDataGroup object is a wrapper around the FlaggedData class,
         accessing only certain indices and may be used to access or modify
         those elements of the original data.  However, due to the nature of
-        indexing in numpy arrays, for value writing operations, the entire field
-        must be modified at one.  For example self.gain[0]=1.234 will not result
-        in any values being set.  To modify values, use self.gain=<new_array> or
-        self.gain = <value> where <value> can be broadcast to the parent array.
+        indexing in numpy arrays, for value writing operations, the entire
+        field must be modified at one.  For example self.gain[0]=1.234 will
+        not result in any values being set.  To modify values, use
+        self.gain=<new_array> or self.gain = <value> where <value> can be
+        broadcast to the parent array.
 
         Parameters
         ----------
@@ -166,7 +167,8 @@ class FlaggedDataGroup(FlaggedData):
             full_matrix[r, c] = value
             setattr(self.data, attribute, csr_matrix(full_matrix))
 
-        elif isinstance(value, (BaseCoordinateFrame, SkyCoord, SkyOffsetFrame)):
+        elif isinstance(value, (BaseCoordinateFrame, SkyCoord,
+                                SkyOffsetFrame)):
             # Only data values may be set
             parent_value.cache.clear()
             parent_value.data.lat[self.indices] = value.data.lat
@@ -179,7 +181,7 @@ class FlaggedDataGroup(FlaggedData):
     @property
     def protected_attributes(self):
         """
-        Protected attributes are those that belong to the group, not the parent.
+        Protected attributes belong to the group, not the parent.
 
         These are used to distinguish between internal and referenced
         attributes.
@@ -325,8 +327,8 @@ class FlaggedDataGroup(FlaggedData):
             self.apply_data(getattr(data, 'data'))
         else:
             raise ValueError(f"Flagged data must be {FlaggedDataGroup} or "
-                             f"{FlaggedData}, or contain such an object in the "
-                             f"'data' attribute.")
+                             f"{FlaggedData}, or contain such an "
+                             f"object in the 'data' attribute.")
 
     def create_data_group(self, indices=None, name=None, keep_flag=None,
                           discard_flag=None, match_flag=None):
@@ -401,7 +403,8 @@ class FlaggedDataGroup(FlaggedData):
         self.indices = self.indices[keep_indices]
 
     def discard_flag(self, flag, criterion=None):
-        """Given a flag, remove indices from the group data.
+        r"""
+        Given a flag, remove indices from the group data.
 
         Since this is a FlaggedDataGroup object, only the reference indices are
         removed, not data in the parent FlaggedData object.
@@ -412,9 +415,9 @@ class FlaggedDataGroup(FlaggedData):
             The flag to discard_flag.
         criterion : str, optional
             One of {'DISCARD_ANY', 'DISCARD_ALL', 'DISCARD_MATCH',
-            'KEEP_ANY', 'KEEP_ALL', 'KEEP_MATCH'}.  *_ANY refers to any flag
-            that is not zero (unflagged).  *_ALL refers to any flag that
-            contains `flag`, and *_MATCH refers to any flag that exactly
+            'KEEP_ANY', 'KEEP_ALL', 'KEEP_MATCH'}.  \*_ANY refers to any flag
+            that is not zero (unflagged).  \*_ALL refers to any flag that
+            contains `flag`, and \*_MATCH refers to any flag that exactly
             matches `flag`.  The default (`None`), uses DISCARD_ANY if
             `flag` is None, and DISCARD_ALL otherwise.
 

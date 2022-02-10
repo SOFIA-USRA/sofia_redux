@@ -89,7 +89,7 @@ class SofiaChoppingInfo(InfoBase):
             ('CHPSYM', self.symmetry_type, 'Chop symmetry mode.'),
             ('SHPCRSYS', self.coordinate_system, 'Chop coordinate system.'),
             ('CHPPHASE', to_header_float(self.phase, 'ms'), '(ms) Chop phase.')
-            ]
+        ]
         insert_info_in_header(header, info, delete_special=True)
 
     def get_table_entry(self, name):

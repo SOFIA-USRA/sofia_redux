@@ -14,7 +14,8 @@ from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
 from sofia_redux.scan.coordinate_systems.geodetic_coordinates import (
     GeodeticCoordinates)
 from sofia_redux.scan.configuration.dates import DateRange
-from sofia_redux.scan.custom.sofia.simulation.aircraft import AircraftSimulation
+from sofia_redux.scan.custom.sofia.simulation.aircraft import \
+    AircraftSimulation
 from sofia_redux.scan.simulation.scan_patterns.daisy import \
     daisy_pattern_equatorial
 from sofia_redux.scan.simulation.scan_patterns.lissajous import \
@@ -36,7 +37,8 @@ class HawcPlusSimulation(ABC):
     sim_keys = {'CHPNOISE', 'SCNDRAD', 'SCNDPER', 'SCNDNOSC',
                 'SRCTYPE', 'SRCSIZE', 'SRCAMP', 'SRCS2N',
                 'JUMPCHAN', 'JUMPFRMS', 'JUMPSIZE',
-                'SPECTEL1', 'OBSRA', 'OBSDEC', 'DATE-OBS', 'LON_STA', 'LAT_STA'}
+                'SPECTEL1', 'OBSRA', 'OBSDEC', 'DATE-OBS', 'LON_STA',
+                'LAT_STA'}
 
     data_column_definitions = {
         'FrameCounter': ('frames', '1K'),  # X
@@ -609,7 +611,7 @@ class HawcPlusSimulation(ABC):
         primary_header = self.create_primary_header(
             ra=ra, dec=dec,
             site_latitude=site_latitude, site_longitude=site_longitude,
-            date_obs=date_obs,  header_options=header_options)
+            date_obs=date_obs, header_options=header_options)
 
         primary_hdu = fits.PrimaryHDU(
             header=primary_header, data=np.empty(0, dtype=np.float32))
@@ -931,7 +933,7 @@ class HawcPlusSimulation(ABC):
             'FCST3': -9999.0,
             'FCSX': -9999.0,
             'FCSTOFF': 25.0
-            }
+        }
 
         for key, value in defaults.items():
             if key not in header:
@@ -1288,7 +1290,8 @@ class HawcPlusSimulation(ABC):
         if 'WVZ_STA' not in header or 'WVZ_END' not in header:
             pwv41k = self.info.configuration.get_float(
                 'pwv41k', default=29.0)
-            b = 1.0 / self.info.configuration.get_float('pwvscale', default=5.0)
+            b = 1.0 / self.info.configuration.get_float('pwvscale',
+                                                        default=5.0)
 
             for k in ['STA', 'END']:
                 key = f'WVZ_{k}'
@@ -1498,7 +1501,8 @@ class HawcPlusSimulation(ABC):
         """
         Return the Nonsidereal RA/DEC values for the FITS data HDU.
 
-        If a true nonsidereal object is to be simulated, this should be updated.
+        If a true nonsidereal object is to be simulated, this should
+        be updated.
 
         Parameters
         ----------
@@ -1551,7 +1555,8 @@ class HawcPlusSimulation(ABC):
 
         Currently, only CHPAMP1 is used to determine amplitude and 2-point
         chopping is simulated.  CHPNOISE in the header is used to apply
-        random simulated chopper offsets up to a maximum of CHPNOISE arcseconds.
+        random simulated chopper offsets up to a maximum of CHPNOISE
+        arcseconds.
 
         Returns
         -------
@@ -1567,8 +1572,8 @@ class HawcPlusSimulation(ABC):
         self.chopper_position = Coordinate2D(
             np.zeros((2, n_frames)), unit='arcsec')
 
-        if (not self.primary_header['CHOPPING'] and
-                'CHPNOISE' not in self.primary_header):
+        if (not self.primary_header['CHOPPING']
+                and 'CHPNOISE' not in self.primary_header):
             return
 
         # Add noise to chopper position?
@@ -1589,8 +1594,8 @@ class HawcPlusSimulation(ABC):
         dt = self.scan.info.sampling_interval.decompose().value  # Seconds
         volts_to_angle = self.scan.info.chopping.volts_to_angle
         inverted = self.scan.configuration.get_bool('chopper.invert')
-        rotation = (self.column_values['Chop_VPA'] -
-                    self.column_values['TABS_VPA']) * units.Unit('degree')
+        rotation = (self.column_values['Chop_VPA']
+                    - self.column_values['TABS_VPA']) * units.Unit('degree')
 
         amplitude = self.primary_header['CHPAMP1'] * units.Unit('arcsec')
         if amplitude > 0:  # TODO: it's obviously not sinusoidal
@@ -1604,7 +1609,8 @@ class HawcPlusSimulation(ABC):
             self.chopper_position.invert()
 
         # # Must apply reverse chopper shift
-        # n = self.integration.configuration.get_int('chopper.shift', default=0)
+        # n = self.integration.configuration.get_int('chopper.shift',
+        #                                            default=0)
         # if n != 0:
         #     self.chopper_position.shift(-n, fill_value=0.0)
 
@@ -1780,7 +1786,8 @@ class HawcPlusSimulation(ABC):
             cols.append(column)
 
         key = 'SQ1Feedback'
-        values = self.column_values.get(key, np.ones(data_shape, dtype='int32'))
+        values = self.column_values.get(key,
+                                        np.ones(data_shape, dtype='int32'))
         cols.append(fits.Column(
             name=key, format=f'{n_array}J', dim=dim, array=values))
 
@@ -1831,8 +1838,8 @@ class HawcPlusSimulation(ABC):
         frames.chopper_position = self.chopper_position.copy()
         frames.validate()
 
-        self.projection = SphericalProjection.for_name(configuration.get_string(
-            'projection', default='gnomonic'))
+        self.projection = SphericalProjection.for_name(
+            configuration.get_string('projection', default='gnomonic'))
         self.projection.set_reference(self.source_equatorial)
         self.projector = AstroProjector(self.projection)
         offsets = frames.project(channels.data.position, self.projector)

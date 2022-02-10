@@ -101,7 +101,8 @@ def flatten_nd_indices(indices, array_shape):  # pragma: no cover
     Parameters
     ----------
     indices : tuple or numpy.ndarray (int)
-        The ND indices in the form that would be returned by :func:`np.nonzero`.
+        The ND indices in the form that would be returned by
+        :func:`np.nonzero`.
     array_shape : tuple (int) or numpy.ndarray (int)
         The shape of the array for which to generate flat indices.
 
@@ -175,8 +176,8 @@ def is_unflagged(flag_array, flag=None, exact=False):  # pragma: no cover
         is zero.
     exact : bool, optional
         If `True`, an unflagged result is one that does not exactly match the
-        flag.  Otherwise, an unflagged result is one which does not contains the
-        flag.
+        flag.  Otherwise, an unflagged result is one which does not contain
+        the flag.
 
     Returns
     -------
@@ -213,8 +214,8 @@ def get_mem_correction(data, noise, multiplier=0.1, valid=None, model=None
     dx = sign(x) * n * multiplier * log(sqrt(x^2 + n^2) / sqrt(m^2 + n^2))
 
     Where x is a data value, n is the noise, and m is the model.  Any invalid
-    values (NaN, zero-divisions, marked invalid etc.) will result in zero valued
-    MEM correction (dx) on output.
+    values (NaN, zero-divisions, marked invalid etc.) will result in zero
+    valued MEM correction (dx) on output.
 
     Parameters
     ----------

@@ -12,8 +12,6 @@ from sofia_redux.scan.coordinate_systems.horizontal_coordinates import \
     HorizontalCoordinates
 from sofia_redux.scan.coordinate_systems.geodetic_coordinates import \
     GeodeticCoordinates
-from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
-    SphericalCoordinates
 
 __all__ = ['SofiaAstrometryInfo']
 
@@ -93,7 +91,7 @@ class SofiaAstrometryInfo(AstrometryInfo):
 
     def is_requested_valid(self, header=None):
         """
-        Check whether the requested OBSRA/OBSDEC values in the header are valid.
+        Check whether the requested OBSRA/DEC values in the header are valid.
 
         Parameters
         ----------
@@ -220,4 +218,3 @@ class SofiaAstrometryInfo(AstrometryInfo):
         log.info(f"Location: {self.site}")
 
         log.info(f"Mean telescope VPA is {scan.get_telescope_vpa():.6f}")
-

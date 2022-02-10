@@ -77,7 +77,7 @@ class SofiaEnvironmentInfo(InfoBase):
              '(C) Primary mirror temperature #3.'),
             ('TEMPSEC1', to_header_float(self.secondary_t, 'deg_C'),
              '(C) Secondary mirror temperature.')
-            ]
+        ]
         insert_info_in_header(header, info, delete_special=True)
 
     def get_table_entry(self, name):

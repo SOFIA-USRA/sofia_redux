@@ -25,7 +25,7 @@ def test_reference():
 def test_equal():
     p = DefaultProjection2D()
     assert p == p
-    assert p != None
+    assert p is not None
     p2 = p.copy()
     assert p == p2
     p2.reference = Coordinate2D([1, 2])
@@ -56,11 +56,3 @@ def test_get_deprojected():
     c = Coordinate2D([1, 2])
     cdp = p.get_deprojected(c)
     assert cdp == c and cdp is not c
-
-
-
-
-
-
-
-

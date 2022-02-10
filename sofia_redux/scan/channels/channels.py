@@ -111,7 +111,8 @@ class Channels(ABC):
         new.groups = None
         new.divisions = None
         new.modalities = None
-        if np.isfinite(self.overlap_point_size) and self.overlap_point_size > 0:
+        if (np.isfinite(self.overlap_point_size)
+                and self.overlap_point_size > 0):
             new.overlap_point_size = np.nan
             new.calculate_overlaps(self.overlap_point_size)
 
@@ -497,7 +498,7 @@ class Channels(ABC):
         if self.configuration.has_option('flag'):
             self.flag_channel_list(
                 self.configuration.get_int_list(
-                    'flag', is_positive=True,  default=[]))
+                    'flag', is_positive=True, default=[]))
         flag_branch = self.configuration.get_branch('flag', default=None)
         if flag_branch is not None:
             self.flag_fields(flag_branch)
@@ -657,7 +658,8 @@ class Channels(ABC):
             check = np.nonzero(bins == i)[0]
             if check.size > 0:
                 perimeter_indices[i] = check[np.argmax(distance[check])]
-        perimeter_indices = np.unique(perimeter_indices[perimeter_indices >= 0])
+        perimeter_indices = np.unique(
+            perimeter_indices[perimeter_indices >= 0])
 
         return mapping_pixels.create_data_group(indices=perimeter_indices,
                                                 name='perimeter_pixels')
@@ -666,8 +668,8 @@ class Channels(ABC):
         """
         Returns the actual indices given fixed indices.
 
-        The fixed indices are those that are initially loaded.  Returned indices
-        are their locations in the data arrays.
+        The fixed indices are those that are initially loaded.  Returned
+        indices are their locations in the data arrays.
 
         Parameters
         ----------
@@ -790,7 +792,8 @@ class Channels(ABC):
             return
         if not isinstance(channel_division, ChannelDivision):
             raise ValueError(
-                f"The divisions dictionary can only contain {ChannelDivision}. "
+                f"The divisions dictionary can only "
+                f"contain {ChannelDivision}. "
                 f"Received {type(channel_division)}.")
 
         self.divisions[channel_division.name] = channel_division
@@ -954,10 +957,12 @@ class Channels(ABC):
         """
         if not self.is_initialized:
             self.initialize()
-        log.info(f"Available pixel divisions for {self.info.instrument.name}: ")
+        log.info(f"Available pixel divisions for "
+                 f"{self.info.instrument.name}: ")
         for name, modality in self.modalities.items():
             if isinstance(modality, CorrelatedModality):
-                configured = self.configuration.has_option(f'correlated.{name}')
+                configured = self.configuration.has_option(
+                    f'correlated.{name}')
                 log.info(f" {'(*)' if configured else '  '} {name}")
 
     def print_response_modalities(self):
@@ -1175,10 +1180,10 @@ class Channels(ABC):
         """
         Flag channels based on channel weights and gain.
 
-        Only detector channels are used during flagging (based on noise weights,
-        not source weights).  Channels with zero degrees of freedom are flagged
-        with the DOF channel flag and unflagged when the degrees of freedom are
-        greater than zero.
+        Only detector channels are used during flagging (based on noise
+        weights, not source weights).  Channels with zero degrees of
+        freedom are flagged with the DOF channel flag and unflagged when
+        the degrees of freedom are greater than zero.
 
         The 'weighting.noiserange' configuration option sets the minimum and
         maximum allowable noise ranges for a channel in standard deviations.
@@ -1212,8 +1217,8 @@ class Channels(ABC):
             channel_flags=channels.flag,
             min_weight=weight_range.min,
             max_weight=weight_range.max,
-            exclude_flag=(self.flagspace.hardware_flags() |
-                          self.flagspace.flags.GAIN).value,
+            exclude_flag=(self.flagspace.hardware_flags()
+                          | self.flagspace.flags.GAIN).value,
             dof_flag=self.flagspace.convert_flag('DOF').value,
             sensitivity_flag=self.flagspace.convert_flag('SENSITIVITY').value,
             default_weight=channels.default_field_types['weight'])
@@ -1270,7 +1275,8 @@ class Channels(ABC):
         stability_time : astropy.units.Quantity
             The stability time in seconds.
         """
-        return self.configuration.get_float('stability', 10.0) * units.Unit('s')
+        return (self.configuration.get_float('stability', 10.0)
+                * units.Unit('s'))
 
     def get_one_over_f_stat(self):
         """
@@ -1438,7 +1444,8 @@ class Channels(ABC):
         if self.configuration.has_option('despike'):
             msg += spc + "* Disable despiking with '-forget=despike'.\n"
         if self.configuration.has_option('weighting.noiseRange'):
-            msg += spc + "* Adjust noise flagging via 'weighting.noiseRange'.\n"
+            msg += spc + ("* Adjust noise flagging via "
+                          "'weighting.noiseRange'.\n")
         log.info(msg)
 
     def flag_field(self, field, specs):
@@ -1520,8 +1527,8 @@ class Channels(ABC):
         """
         Set BLIND flag for elements based on fixed indices.
 
-        Will kill (set flag to only DEAD) any previously defined BLIND channels.
-        All new blinded channels will only have the BLIND flag.
+        Will kill (set flag to only DEAD) any previously defined BLIND
+        channels. All new blinded channels will only have the BLIND flag.
 
         Parameters
         ----------
@@ -2044,10 +2051,10 @@ class Channels(ABC):
                             f"Configuration division {division_name} "
                             f"does not contain {gain_field} gain field.")
                         continue
-                self.add_modality(CorrelatedModality(name=division_name,
-                                                     identity=identity,
-                                                     gain_provider=gain_field,
-                                                     channel_division=division))
+                self.add_modality(
+                    CorrelatedModality(name=division_name, identity=identity,
+                                       gain_provider=gain_field,
+                                       channel_division=division))
                 if 'gainflag' in options:
                     try:
                         gain_flag = int(options['gainflag'])

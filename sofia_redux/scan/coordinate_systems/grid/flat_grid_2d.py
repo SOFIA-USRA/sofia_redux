@@ -4,7 +4,8 @@ from sofia_redux.scan.coordinate_systems.grid.grid_2d import Grid2D
 from sofia_redux.scan.coordinate_systems.projection.default_projection_2d \
     import DefaultProjection2D
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
-from sofia_redux.scan.coordinate_systems.cartesian_system import CartesianSystem
+from sofia_redux.scan.coordinate_systems.cartesian_system \
+    import CartesianSystem
 
 __all__ = ['FlatGrid2D']
 
@@ -19,9 +20,9 @@ class FlatGrid2D(Grid2D):
         occur in relation to a single reference coordinate (at the origin by
         default).
 
-        The flat grid is used to convert from 2D Cartesian (x, y) coordinates to
-        offsets in relation to a specified reference onto a regular grid, and
-        the reverse operation.
+        The flat grid is used to convert from 2D Cartesian (x, y) coordinates
+        to offsets in relation to a specified reference onto a regular grid,
+        and the reverse operation.
 
         Forward transform: grid projection -> offsets -> coordinates
         Reverse transform: coordinates -> offsets -> grid projection

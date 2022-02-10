@@ -11,7 +11,6 @@ from sofia_redux.scan.channels.channels import Channels
 from sofia_redux.scan.channels.channel_data.channel_data import ChannelData
 from sofia_redux.scan.channels.channel_group.channel_group import ChannelGroup
 from sofia_redux.scan.filters import filters_numba_functions as fnf
-from sofia_redux.scan.frames.frames import Frames
 
 __all__ = ['Filter']
 
@@ -22,18 +21,18 @@ class Filter(ABC):
         """
         Initialize an integration filter.
 
-        The filter is designed to filter integration data using an FFT.  This is
-        an abstract class designed to hold a few main parameters necessary for
-        filtering.  Each filter requires an integration on which to operate, and
-        defines a response at any given frequency.
+        The filter is designed to filter integration data using an FFT.
+        This is an abstract class designed to hold a few main parameters
+        necessary for filtering.  Each filter requires an integration on
+        which to operate, and defines a response at any given frequency.
 
         Parameters
         ----------
         integration : Integration, optional
         data : numpy.ndarray (float), optional
-            An array of shape (nt, n_channels) where nt is the nearest power of
-            2 integer above the number of integration frames. i.e., if
-            n_frames=5, nt=8, or if n_frames=13, nt=16.
+            An array of shape (nt, n_channels) where nt is the nearest
+            power of 2 integer above the number of integration frames. i.e.,
+            if n_frames=5, nt=8, or if n_frames=13, nt=16.
         """
         self.integration = None
         self.channels = None
@@ -215,8 +214,8 @@ class Filter(ABC):
 
         When the channels in the filter integration change for some reason
         (such as a slim operation in which bad channels are removed), filter
-        attributes that map to integration channels will also need to be updated
-        to account for such a change.
+        attributes that map to integration channels will also need to be
+        updated to account for such a change.
 
         At a base level, the filter attributes that need to be updated include
         channel dependents, and the `points` (sum of frame weights) for
@@ -597,7 +596,8 @@ class Filter(ABC):
         None
         """
         if self.parms is None:
-            self.parms = self.integration.get_dependents(self.get_config_name())
+            self.parms = self.integration.get_dependents(
+                self.get_config_name())
 
         # Sub filters should not directly change the dependents in the
         # integration since this is the job of the parent filter.
@@ -613,8 +613,8 @@ class Filter(ABC):
         """
         Perform the post-filtering steps.
 
-        During the post-filtering steps, dependents are added to the integration
-        and integration channels.
+        During the post-filtering steps, dependents are added to the
+        integration and integration channels.
 
         Returns
         -------
@@ -852,8 +852,8 @@ class Filter(ABC):
         point_response : float
         """
         t = self.integration.get_point_crossing_time()
-        sigma = gaussian_sigma_to_fwhm / (
-                2 * np.pi * t * self.df).decompose().value
+        sigma = gaussian_sigma_to_fwhm / (2 * np.pi * t
+                                          * self.df).decompose().value
         a = -0.5 / (sigma ** 2)
         f0 = self.integration.get_modulation_frequency(
             'TOTAL_POWER').decompose().value / self.df  # Usually the chopper
@@ -914,8 +914,8 @@ class Filter(ABC):
         signal : numpy.ndarray (float)
             The data to level of shape (channels.size, n_frames).
         channels : ChannelGroup, optional
-            The channel group for which the data applied.  By default set to the
-            filtering channels.
+            The channel group for which the data applied.  By default set
+            to the filtering channels.
 
         Returns
         -------

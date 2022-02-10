@@ -236,11 +236,12 @@ class CorrelatedSignal(Signal):
         good_channels.delete_indices(good_channels.temp_wg2 == 0)
 
         # Correct for lowered degrees of freedom due to prior filtering
-        good_channels.temp = (good_channels.temp_wg2 *
-                              good_channels.get_filtering(self.integration))
+        good_channels.temp = (good_channels.temp_wg2
+                              * good_channels.get_filtering(self.integration))
 
         # Clear the dependents in all mode channels
-        self.dependents.clear(channel_group, start=0, end=self.integration.size)
+        self.dependents.clear(channel_group, start=0,
+                              end=self.integration.size)
 
         # Resync gains if necessary
         if resync_gains:
@@ -371,15 +372,15 @@ class CorrelatedSignal(Signal):
         """
         Update the source filtering of the signal.
 
-        Where phi is the channel dependents, they are updated by
+        Where phi is the channel dependents, they are updated by::
 
-        phi = mean(phi + phi * channel_overlaps)
+           phi = mean(phi + phi * channel_overlaps)
 
         The signal source filtering is set to 1 - phi.
         The channel source filtering has the prior correction undone, and
-        then updated as:
+        then updated as::
 
-        csf *= signal source filtering.
+           csf *= signal source filtering.
 
         Returns
         -------

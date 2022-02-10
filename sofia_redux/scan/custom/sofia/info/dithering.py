@@ -76,7 +76,7 @@ class SofiaDitheringInfo(InfoBase):
              'Approximate shape of dither pattern.'),
             ('DTHNPOS', self.positions, 'Number of dither positions.'),
             ('DTHINDEX', self.index, 'Dither position index.')
-            ]
+        ]
         insert_info_in_header(header, info, delete_special=True)
 
     def get_table_entry(self, name):

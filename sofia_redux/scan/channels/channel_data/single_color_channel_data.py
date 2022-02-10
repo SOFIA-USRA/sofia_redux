@@ -40,7 +40,8 @@ class SingleColorChannelData(ColorArrangementData):
 
         The overlap distances are stored in the `overlaps` attribute values.
         This should be a csr_sparse matrix of shape (n_channels, n_channels)
-        where overlaps[i, j] gives the distance between channel i and channel j.
+        where overlaps[i, j] gives the distance between channel i and
+        channel j.
 
         Parameters
         ----------
@@ -104,8 +105,9 @@ class SingleColorChannelData(ColorArrangementData):
             values = np.zeros(0, dtype=float)
 
         flagged_channels = np.nonzero(
-            self.is_flagged(self.flagspace.flags.BLIND |
-                            self.flagspace.flags.DEAD) | self.independent)[0]
+            self.is_flagged(self.flagspace.flags.BLIND
+                            | self.flagspace.flags.DEAD)
+            | self.independent)[0]
 
         valid = np.isin(matrix_rows, flagged_channels, invert=True)
         valid &= np.isin(matrix_cols, flagged_channels, invert=True)

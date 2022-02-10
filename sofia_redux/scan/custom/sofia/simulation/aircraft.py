@@ -1,7 +1,6 @@
 from abc import ABC
 from astropy import constants
 from astropy import units
-from astropy.units import imperial
 import numpy as np
 
 from sofia_redux.scan.configuration.dates import DateRange
@@ -118,11 +117,12 @@ class AircraftSimulation(ABC):
         lon_1 = self.start_location.longitude
         lat_1 = self.start_location.latitude
 
-        lat_2 = np.arcsin(np.sin(lat_1) * np.cos(dr) +
-                          np.cos(lat_1) * np.sin(dr) * np.cos(a))
+        lat_2 = np.arcsin(np.sin(lat_1) * np.cos(dr)
+                          + np.cos(lat_1) * np.sin(dr) * np.cos(a))
 
         lon_2 = lon_1 + np.arctan2(np.sin(a) * np.sin(dr) * np.cos(lat_1),
-                                   np.cos(dr) - (np.sin(lat_1) * np.sin(lat_2)))
+                                   np.cos(dr) - (np.sin(lat_1)
+                                                 * np.sin(lat_2)))
 
         self.end_location = GeodeticCoordinates([lon_2, lat_2], unit='degree')
         self.end_lst = self.end_utc.sidereal_time(

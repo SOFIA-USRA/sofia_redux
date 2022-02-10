@@ -19,11 +19,12 @@ class ZenithalProjection(SphericalProjection):
         """
         Initialization for the abstract zenithal projection.
 
-        A zenithal projection (azimuthal projection) is one in which the surface
-        of projection is a plane.  A native coordinate system is defined such
-        that the polar axis is orthogonal to the plane of projection.  Meridians
-        are projected as equispaced rays from a central point, and parallels are
-        concentric circles centered on that same point.
+        A zenithal projection (azimuthal projection) is one in which the
+        surface of projection is a plane.  A native coordinate system is
+        defined such that the polar axis is orthogonal to the plane of
+        projection.  Meridians are projected as equispaced rays from a
+        central point, and parallels are concentric circles centered on
+        that same point.
 
         By default, the native pole is set to (0, 90) degrees LON/LAT.
         """
@@ -136,7 +137,7 @@ class ZenithalProjection(SphericalProjection):
     @abstractmethod
     def theta_of_r(self, r):  # pragma: no cover
         """
-        Return the angle theta (latitude) given a radius from the central point.
+        Return theta (latitude) given a radius from the central point.
 
         Parameters
         ----------

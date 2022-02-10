@@ -5,7 +5,6 @@ from abc import abstractmethod
 from astropy import log, units
 from astropy.coordinates import FK5, SkyCoord
 from astropy.stats import gaussian_fwhm_to_sigma
-from astropy.wcs import WCS
 import numpy as np
 import os
 import psutil
@@ -19,8 +18,6 @@ from sofia_redux.scan.coordinate_systems.projection.spherical_projection \
     import SphericalProjection
 from sofia_redux.scan.coordinate_systems.grid.spherical_grid import \
     SphericalGrid
-from sofia_redux.scan.coordinate_systems.projection.projection_2d import \
-    Projection2D
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.coordinate_systems.index_2d import Index2D
 from sofia_redux.scan.coordinate_systems.projector.astro_projector import \
@@ -335,7 +332,8 @@ class AstroModel2D(SourceModel):
         pass
 
     @abstractmethod
-    def calculate_coupling(self, integration, pixels, source_gains, sync_gains):
+    def calculate_coupling(self, integration, pixels, source_gains,
+                           sync_gains):
         """
         Don't know
 
@@ -364,7 +362,8 @@ class AstroModel2D(SourceModel):
         -------
         bytes : int
         """
-        return pixels * self.get_pixel_footprint() + self.base_footprint(pixels)
+        return (pixels * self.get_pixel_footprint()
+                + self.base_footprint(pixels))
 
     def get_reduction_footprint(self, pixels):
         """
@@ -486,8 +485,8 @@ class AstroModel2D(SourceModel):
         super().create_from(scans, assign_scans=assign_scans)
         log.info("\nInitializing Source Map.\n")
 
-        projection = SphericalProjection.for_name(self.configuration.get_string(
-            'projection', default='gnomonic'))
+        projection = SphericalProjection.for_name(
+            self.configuration.get_string('projection', default='gnomonic'))
         projection.set_reference(self.get_first_scan().get_position_reference(
             self.configuration.get_string('system', default='equatorial')))
 
@@ -539,17 +538,18 @@ class AstroModel2D(SourceModel):
             map_range[1], in_place=False)
         log.debug(f"far corner: {upper_corner_index}")
 
-        x_size = 1 + int(np.ceil(self.grid.reference_index.x +
-                                 (x_max / delta.x).decompose().value))
-        y_size = 1 + int(np.ceil(self.grid.reference_index.y +
-                                 (y_max / delta.y).decompose().value))
+        x_size = 1 + int(np.ceil(self.grid.reference_index.x
+                                 + (x_max / delta.x).decompose().value))
+        y_size = 1 + int(np.ceil(self.grid.reference_index.y
+                                 + (y_max / delta.y).decompose().value))
 
         log.debug(f"Map pixels: {x_size} x {y_size} (nx, ny)")
         if x_size < 0 or y_size < 0:
             raise ValueError(f"Negative image size: {x_size} x {y_size}")
 
         if not self.has_option('large'):
-            if x_size >= self.MAX_X_OR_Y_SIZE or y_size >= self.MAX_X_OR_Y_SIZE:
+            if (x_size >= self.MAX_X_OR_Y_SIZE
+                    or y_size >= self.MAX_X_OR_Y_SIZE):
                 raise ValueError("Map too large.  Use 'large' option.")
 
         self.set_data_shape((y_size, x_size))
@@ -677,7 +677,7 @@ class AstroModel2D(SourceModel):
     @classmethod
     def parallel_safe_flag_outside(cls, args, integration_number):
         """
-        Flag points that are outside the specified map range for an integration.
+        Flag points that are outside specified map range for an integration.
 
         This function is safe for use with :func:`multiprocessing.multitask`.
 
@@ -709,7 +709,7 @@ class AstroModel2D(SourceModel):
         integration : Integration
         map_range : Coordinate2D
             The map range containing the minimum (x, y) and maximum (x, y)
-            coordinates of the map of shape (2,).
+            coordinates of the map of shape (n_frames, n_channels).
 
         Returns
         -------
@@ -744,8 +744,8 @@ class AstroModel2D(SourceModel):
         log.debug(f"Indexing maps (up to {100 * max_usage}% "
                   f"of RAM saturation).")
 
-        max_available = (psutil.virtual_memory().total -
-                         self.get_reduction_footprint(self.pixels()))
+        max_available = (psutil.virtual_memory().total
+                         - self.get_reduction_footprint(self.pixels()))
 
         max_used = int(max_available * max_usage)
         for scan in self.scans:
@@ -1117,8 +1117,8 @@ class AstroModel2D(SourceModel):
         -------
         None
         """
-        if (integration.source_sync_gain is None or
-                integration.source_sync_gain.size != source_gains.size):
+        if (integration.source_sync_gain is None
+                or integration.source_sync_gain.size != source_gains.size):
             integration.source_sync_gain = np.zeros(
                 source_gains.size, dtype=float)
 
@@ -1146,8 +1146,8 @@ class AstroModel2D(SourceModel):
         source_gains = integration.channels.get_source_gains(
             filter_corrected=False)
 
-        if (integration.source_sync_gain is None or
-                integration.source_sync_gain.size != source_gains.size):
+        if (integration.source_sync_gain is None
+                or integration.source_sync_gain.size != source_gains.size):
             integration.source_sync_gain = np.zeros(
                 source_gains.size, dtype=float)
 
@@ -1171,7 +1171,6 @@ class AstroModel2D(SourceModel):
             signal_mode=signal_mode)
 
         # Do an approximate accounting of the source dependence.
-
         n_points = min(self.count_points(), integration.scan.source_points)
         n_points /= self.covariant_points()
         frames = integration.frames
@@ -1311,7 +1310,8 @@ class AstroModel2D(SourceModel):
             file_name = os.path.join(path, f'{self.get_core_name()}.fits')
 
         if self.is_empty():
-            source_name = ((self.id + ' ') if self.id not in [None, ''] else '')
+            source_name = ((self.id + ' ')
+                           if self.id not in [None, ''] else '')
             log.warning(f"Source {source_name} is empty. Skipping")
             if os.path.isfile(file_name):
                 os.remove(file_name)

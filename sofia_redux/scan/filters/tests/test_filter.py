@@ -485,10 +485,9 @@ def test_dft_filter(kill_filter, configured_filter):
     assert np.allclose(f.data, f0)
 
     f = kill_filter.copy()
-    d0 = f.data.copy()
     f0 = f.integration.frames.data.copy()
     freq_channels = np.arange(f.nf + 1)
-    rejection = f.rejection_at(freq_channels)
+    f.rejection_at(freq_channels)
     f.dft_filter()
     d1 = f.data.copy()
     # Check that the integration data is unmodified
@@ -582,4 +581,3 @@ def test_set_dft(kill_filter):
     assert f.dft
     f.set_dft(False)
     assert not f.dft
-

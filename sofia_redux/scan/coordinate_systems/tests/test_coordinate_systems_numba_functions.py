@@ -52,7 +52,8 @@ def test_spherical_distance_to():
     r_cos_lat = cos_lat.copy()
     r_sin_lat = sin_lat.copy()
 
-    d = cnf.spherical_distance_to(x, rx, cos_lat, sin_lat, r_cos_lat, r_sin_lat)
+    d = cnf.spherical_distance_to(x, rx, cos_lat, sin_lat,
+                                  r_cos_lat, r_sin_lat)
     assert d.shape == (6,) and np.allclose(d, 0)
 
     # Check single coordinate
@@ -139,14 +140,14 @@ def test_spherical_pole_transform():
                                    [expected_forward, expected_reverse]):
 
         assert np.allclose(cnf.spherical_pole_transform(
-                               x=x,
-                               px=np.full(1, px),
-                               cos_lat=cos_lat,
-                               sin_lat=sin_lat,
-                               p_cos_lat=np.full(1, p_cos_lat),
-                               p_sin_lat=np.full(1, p_sin_lat),
-                               phi0=phi0,
-                               reverse=reverse), expected)
+            x=x,
+            px=np.full(1, px),
+            cos_lat=cos_lat,
+            sin_lat=sin_lat,
+            p_cos_lat=np.full(1, p_cos_lat),
+            p_sin_lat=np.full(1, p_sin_lat),
+            phi0=phi0,
+            reverse=reverse), expected)
 
     # Test single coordinate
     c = cnf.spherical_pole_transform(
@@ -161,7 +162,3 @@ def test_spherical_pole_transform():
     assert c.shape == (2, 6)
     assert np.allclose(c[0], 3.17649924, atol=1e-4)
     assert np.allclose(c[1], 0.03490659, atol=1e-4)
-
-
-
-

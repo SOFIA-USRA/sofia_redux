@@ -44,7 +44,6 @@ class TestIntegration(object):
         assert integ.scan is s
         assert integ.configuration is not s.configuration
 
-
         # set a scan without config enabled: raises error
         s.info.configuration.enabled = False
         with pytest.raises(ValueError) as err:
@@ -984,14 +983,13 @@ class TestIntegration(object):
         output = {
             'write.pattern': f'pattern-{file_id}.dat',
             'write.pixeldata': f'pixel-{file_id}.dat',
-            'write.flatfield': f'test_flat.fits',
+            'write.flatfield': 'test_flat.fits',
             'write.flatfield:True': f'flat-{file_id}.fits',
             'write.covar:full': f'covar-{file_id}.fits',
             'write.ascii': f'{file_id}-{file_id}.tms',
             'write.signals:test': f'test-{file_id}.tms',
             'write.spectrum:Hamming': f'{file_id}.spec',
-            'write.coupling:subarrays': f'{file_id}.subarrays-coupling.dat'
-            }
+            'write.coupling:subarrays': f'{file_id}.subarrays-coupling.dat'}
         with tmpdir.as_cwd():
             for opt, fname in output.items():
                 try:

@@ -110,7 +110,7 @@ def test_fits_y_unit():
 def test_eq():
     g = FlatGrid2D()
     assert g == g
-    assert g != None
+    assert g is not None
     g2 = g.copy()
     g2.projection.reference = Coordinate2D([1, 1])
     assert g != g2
@@ -604,6 +604,3 @@ def test_toggle_native():
     g.y_axis.reverse = True
     g.toggle_native(c)
     assert c == Coordinate2D([-1, -1])
-
-
-

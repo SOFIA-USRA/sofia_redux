@@ -101,7 +101,8 @@ class FlaggedArray(FlaggedData):
         if self.validating_flags != other.validating_flags:
             return False
 
-        if self.blanking_value is not None and other.blanking_value is not None:
+        if (self.blanking_value is not None
+                and other.blanking_value is not None):
             try:
                 not_equal_nan = np.isnan(self.blanking_value) is not np.isnan(
                     other.blanking_value)
@@ -475,7 +476,8 @@ class FlaggedArray(FlaggedData):
         return 'x'.join([str(x) for x in self.shape])
 
     def discard_flag(self, flag, criterion=None):
-        """Clear all data flagged with the given flag.
+        r"""
+        Clear all data flagged with the given flag.
 
         All data matching the given flag and criteria will be cleared according
         to :func:`FlaggedArray.clear` method.  This generally should result in
@@ -487,9 +489,9 @@ class FlaggedArray(FlaggedData):
             The flag to discard_flag.
         criterion : str, optional
             One of {'DISCARD_ANY', 'DISCARD_ALL', 'DISCARD_MATCH',
-            'KEEP_ANY', 'KEEP_ALL', 'KEEP_MATCH'}.  *_ANY refers to any flag
-            that is not zero (unflagged).  *_ALL refers to any flag that
-            contains `flag`, and *_MATCH refers to any flag that exactly
+            'KEEP_ANY', 'KEEP_ALL', 'KEEP_MATCH'}.  \*_ANY refers to any flag
+            that is not zero (unflagged).  \*_ALL refers to any flag that
+            contains `flag`, and \*_MATCH refers to any flag that exactly
             matches `flag`.  The default (`None`), uses DISCARD_ANY if
             `flag` is None, and DISCARD_ALL otherwise.
 
@@ -718,8 +720,8 @@ class FlaggedArray(FlaggedData):
         """
         Returns the actual indices given fixed indices.
 
-        The fixed indices are those that are initially loaded.  Returned indices
-        are their locations in the data arrays.
+        The fixed indices are those that are initially loaded.  Returned
+        indices are their locations in the data arrays.
 
         Parameters
         ----------
@@ -1084,12 +1086,12 @@ class FlaggedArray(FlaggedData):
         """
         Return the variance of the data.
 
-        The variance is given as:
+        The variance is given as::
 
-        var = func(d[valid]^2)
+           var = func(d[valid]^2)
 
-        where d is the data and func is median(x)/0.454937 if `robust` is `True`
-        and mean(x) otherwise.
+        where d is the data and func is median(x)/0.454937 if `robust`
+        is `True` and mean(x) otherwise.
 
         Parameters
         ----------
@@ -1236,10 +1238,10 @@ class FlaggedArray(FlaggedData):
         ranges : numpy.ndarray (int)
             A range for each dimension or shape (n_dimensions, 2) giving the
             minimum and maximum range in each dimension.  Note that this is
-            numpy dimension ordering (y-range = ranges[0], x-range = ranges[1]).
-            Also note that the upper range is returned such that the real
-            upper index is included in any slice operation. i.e., max = real
-            max index + 1.
+            numpy dimension ordering (y-range = ranges[0],
+            x-range = ranges[1]). Also note that the upper range is returned
+            such that the real upper index is included in any slice
+            operation. i.e., max = real max index + 1.
         """
         if self.data is None:
             return np.full((self.ndim, 2), -1, dtype=int)
@@ -1412,11 +1414,11 @@ class FlaggedArray(FlaggedData):
         image : FlaggedArray or numpy.ndarray (float)
             The image to resample.
         to_indices : numpy.ndarray (float or int)
-            An array of shape (n_dimensions, self.shape or self.size) specifying
-            which image pixels belong to the resampled map.  i.e., if this were
-            a 2-D array and the pixel at (x, y) = (2, 2) corresponds to the
-            image at pixel (3.3, 4.4) then to_indices[:, 2, 2] = [4.4, 3.3]
-            (reversed because numpy).
+            An array of shape (n_dimensions, self.shape or self.size)
+            specifying which image pixels belong to the resampled map.
+            I.e., if this were a 2-D array and the pixel at (x, y) = (2, 2)
+            corresponds to the image at pixel (3.3, 4.4) then
+            to_indices[:, 2, 2] = [4.4, 3.3] (reversed because numpy).
         kernel : numpy.ndarray (float), optional
             The kernel used to perform the resampling.  If supplied, the result
             will be smoothed accordingly.
@@ -1501,7 +1503,8 @@ class FlaggedArray(FlaggedData):
             ind = index[dimension]
             min_ind = max(0, int(np.floor(ind)) - degree - 1)
             from_index[dimension] = min_ind
-            max_ind = min(self.shape[dimension], int(np.ceil(ind)) + degree + 1)
+            max_ind = min(self.shape[dimension],
+                          int(np.ceil(ind)) + degree + 1)
             slicer.append(slice(min_ind, max_ind))
 
         slicer = tuple(slicer)
@@ -1531,10 +1534,11 @@ class FlaggedArray(FlaggedData):
         to_indices : numpy.ndarray (float or int)
             An array of shape (n_dimensions, self.shape or self.size)
         kernel_reference_index : numpy.ndarray (int or float)
-            The reference index of the kernel defining center of the convolution
-            operation.  The default is (kernel.shape - 1) / 2.
+            The reference index of the kernel defining center of the
+            convolution operation.  The default is (kernel.shape - 1) / 2.
         weights : numpy.ndarray (float or int)
-            The data weights for resampling.  Should be the same shape as image.
+            The data weights for resampling.  Should be the same shape
+            as image.
 
         Returns
         -------
@@ -1643,7 +1647,7 @@ class FlaggedArray(FlaggedData):
 
     def get_neighbors(self):
         """
-        Return the number of valid neighbors for each point including the point.
+        Return the number of valid neighbors for each point, including itself.
 
         Partial implementation of GetNeighborValidator.
 
@@ -1659,7 +1663,8 @@ class FlaggedArray(FlaggedData):
 
         kernel = np.ones(np.full(self.ndim, 3), dtype=float)
         kernel.ravel()
-        return np.round(signal.convolve(valid, kernel, mode='same')).astype(int)
+        return np.round(signal.convolve(
+            valid, kernel, mode='same')).astype(int)
 
     def discard_min_neighbors(self, min_neighbors):
         """
@@ -1793,9 +1798,9 @@ class FlaggedArray(FlaggedData):
             (n_dimensions, 2) where ranges[0, 0] would give the minimum crop
             limit for the first dimension and ranges[0, 1] would give the
             maximum crop limit for the first dimension.  In this case, the
-            'first' dimension is in numpy format.  i.e., (y, x) for a 2-D array.
-            Also note that the upper crop limit is not inclusive so a range
-            of (0, 3) includes indices [0, 1, 2] but not 3.
+            'first' dimension is in numpy format.  i.e., (y, x) for a 2-D
+            array. Also note that the upper crop limit is not inclusive so
+            a range of (0, 3) includes indices [0, 1, 2] but not 3.
 
         Returns
         -------
@@ -1828,9 +1833,9 @@ class FlaggedArray(FlaggedData):
             (n_dimensions, 2) where ranges[0, 0] would give the minimum crop
             limit for the first dimension and ranges[0, 1] would give the
             maximum crop limit for the first dimension.  In this case, the
-            'first' dimension is in numpy format.  i.e., (y, x) for a 2-D array.
-            Also note that the upper crop limit is not inclusive so a range
-            of (0, 3) includes indices [0, 1, 2] but not 3.
+            'first' dimension is in numpy format.  i.e., (y, x) for a
+            2-D array. Also note that the upper crop limit is not inclusive
+            so a range of (0, 3) includes indices [0, 1, 2] but not 3.
 
         Returns
         -------

@@ -3,10 +3,10 @@
 from astropy import units
 import numpy as np
 
-from sofia_redux.scan.coordinate_systems.projection.zenithal_projection import \
-    ZenithalProjection
-from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
-    SphericalCoordinates
+from sofia_redux.scan.coordinate_systems.projection.zenithal_projection \
+    import ZenithalProjection
+from sofia_redux.scan.coordinate_systems.spherical_coordinates \
+    import SphericalCoordinates
 
 __all__ = ['GnomonicProjection']
 
@@ -19,16 +19,17 @@ class GnomonicProjection(ZenithalProjection):
 
         A gnomonic projection displays all great circles as straight lines by
         converting surface points on a sphere to a tangent plane where a ray
-        from the center of the sphere passes through the point on the sphere and
-        then onto the plane.  Distortion is extreme away from the tangent point.
+        from the center of the sphere passes through the point on the sphere
+        and then onto the plane.  Distortion is extreme away from the tangent
+        point.
 
-        The forward projection is given by:
+        The forward projection is given by::
 
             x = cot(theta)sin(phi)
             y = -cot(theta)cos(phi)
 
         with cot(theta) evaluating to zero at theta=90 degrees, and the inverse
-        transform (deprojection) is given by:
+        transform (deprojection) is given by::
 
             phi = arctan(x, -y)
             theta = arctan(1, sqrt(x^2 + y^2))
@@ -64,7 +65,7 @@ class GnomonicProjection(ZenithalProjection):
 
         Calculates the distance of a point from the celestial pole.  Since the
         projection defined by create circles on a sphere, this only depends on
-        the latitude (theta), and is given as:
+        the latitude (theta), and is given as::
 
             r = cot(theta) ; |theta| > 0
             r = 0 ; theta = 90 degrees

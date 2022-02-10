@@ -84,9 +84,18 @@ class KillFilter(FixedFilter):
 
     def update_config(self):
         """
-        Determine whether the filter is configuration and if it's pedantic.
+        Apply settings from the integration configuration.
 
-        Will also set the filter response for the fill filter.
+        Sets the rejection response for the kill filter between two frequencies
+        specified in the configuration key "filter.kill.bands".  The
+        configuration value should be of the form "f1:f2" where f1 and f2 are
+        the start and end frequencies (in Hz).   Multiple frequency rejection
+        bands may be specified with a comma in the configuration::
+
+            filter.kill.bands = <f1>:<f2>,<f3>:<f4>
+
+        The above lines will reject frequencies between f1 and f2, and also
+        between f3 and f4.
 
         Returns
         -------
@@ -96,7 +105,7 @@ class KillFilter(FixedFilter):
         if not self.has_option('bands'):
             return
 
-        ranges = utils.get_list(self.option('bands'))
+        ranges = utils.get_string_list(self.option('bands'))
         for band_range in ranges:
             frequency_range = Range.from_spec(band_range, is_positive=True)
             self.kill(frequency_range)
@@ -175,4 +184,3 @@ class KillFilter(FixedFilter):
         config_name : str
         """
         return 'filter.kill'
-

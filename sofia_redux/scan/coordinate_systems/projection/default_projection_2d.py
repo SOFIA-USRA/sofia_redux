@@ -65,8 +65,8 @@ class DefaultProjection2D(Projection2D):
         Deproject a projection onto coordinates.
 
         Converts offsets w.r.t a reference position to coordinates.  Note that
-        the deprojected coordinates will always be a Coordinate2D representation
-        of the input coordinates.
+        the deprojected coordinates will always be a Coordinate2D
+        representation of the input coordinates.
 
         Parameters
         ----------

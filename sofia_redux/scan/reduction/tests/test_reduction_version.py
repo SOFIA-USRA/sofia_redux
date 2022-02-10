@@ -15,7 +15,7 @@ def test_add_history(mocker):
     mocker.patch.object(ReductionVersion, 'revision', '')
     header = fits.Header()
     ReductionVersion.add_history(header)
-    assert f'Reduced: SOFSCAN v1.2.3' in str(header['HISTORY'])
+    assert 'Reduced: SOFSCAN v1.2.3' in str(header['HISTORY'])
 
 
 def test_get_full_version(mocker):

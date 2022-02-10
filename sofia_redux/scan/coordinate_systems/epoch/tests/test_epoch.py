@@ -31,7 +31,7 @@ def test_empty_copy():
 
 def test_eq():
     epoch = Epoch()
-    assert epoch != None
+    assert epoch is not None
     assert epoch == epoch
     ej = epoch.get_julian_epoch()
     assert epoch != ej

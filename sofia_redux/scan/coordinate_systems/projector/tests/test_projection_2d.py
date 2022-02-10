@@ -77,6 +77,3 @@ def test_deproject(dummy_projector):
     coordinates = projector.deproject(offsets=offsets)
     assert coordinates == offsets and offsets is not coordinates
     assert coordinates is projector.coordinates
-
-
-

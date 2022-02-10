@@ -8,7 +8,6 @@ from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
     SphericalCoordinates
 from sofia_redux.scan.coordinate_systems.coordinate_system import \
     CoordinateSystem
-from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 
 __all__ = ['HorizontalCoordinates']
 
@@ -230,8 +229,8 @@ class HorizontalCoordinates(SphericalCoordinates):
         c = np.cos(hx) * horizontal.cos_lat
 
         equatorial.set_native_latitude(
-            np.arcsin((horizontal.sin_lat * site_sin_lat) +
-                      (site_cos_lat * c)))
+            np.arcsin((horizontal.sin_lat * site_sin_lat)
+                      + (site_cos_lat * c)))
 
         asin_h = -np.sin(hx) * horizontal.cos_lat
         acos_h = (site_cos_lat * horizontal.sin_lat) - (site_sin_lat * c)
@@ -324,7 +323,7 @@ class HorizontalCoordinates(SphericalCoordinates):
 
         y = -site_cos_lat * np.sin(self.x)
         x = (site_sin_lat * self.cos_lat) - (
-                site_cos_lat * self.sin_lat * np.cos(self.x))
+            site_cos_lat * self.sin_lat * np.cos(self.x))
         return np.arctan2(y, x)
 
     def to_equatorial(self, site, lst, equatorial=None):

@@ -10,14 +10,17 @@ __all__ = ['add_dependents', 'validate_frames', 'downsample_data']
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
 def add_dependents(dependents, dp, frame_valid, start_frame=None,
-                   end_frame=None, subtract=False):
+                   end_frame=None, subtract=False):  # pragma: no cover
     """
-    Add dependents from frame data.
+    Add increments to the frame dependents.
+
+    Increments will only be added to (or subtracted from) frame dependents for
+    valid frames.
 
     Parameters
     ----------
     dependents : numpy.ndarray (float)
-        Must be the same size as self.size.
+        The frame dependents to increment of shape (n_frames,).
     dp : numpy.ndarray (float) or float
         The dependent values to add.
     frame_valid : numpy.ndarray (bool)
@@ -67,12 +70,25 @@ def add_dependents(dependents, dp, frame_valid, start_frame=None,
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def validate_frames(valid, cos_a, sin_a, native_sin_lat, native_cos_lat,
-                    validated, has_telescope_info, mount,
-                    cassegrain, gregorian,
-                    nasmyth_corotating, prime_focus,
-                    left_nasmyth, right_nasmyth):
+                    validated, has_telescope_info, mount, left_nasmyth,
+                    right_nasmyth):  # pragma: no cover
     """
-    Sets the cos(angle) and sin(angle) values is NaN.
+    Checks validity of frame data and updates the angles based on mount type.
+
+    The cos(latitude) and sin(latitude) values will be updated at this point if
+    frames contain telescope data (`has_telescope_info`=`True`) and the current
+    values are non-finite. the sin(latitude), cos(latitude) angles will be
+    updated based on the mount type from the native sin(latitude) and
+    cos(latitude) angles::
+
+       mount            sin(latitude)    cos(latitude)
+       -------------    -------------    -------------
+       Left Nasmyth     -sin(latitude)   cos(latitude)
+       Right Nasmyth    sin(latitude)    cos(latitude)
+       Other            0                1
+
+    Note that latitude is in native coordinates (no reversal by coordinate
+    axis will be applied).
 
     Parameters
     ----------
@@ -93,17 +109,11 @@ def validate_frames(valid, cos_a, sin_a, native_sin_lat, native_cos_lat,
         Otherwise, the validated flag will be set to `True` and cos_a/sin_a
         values will be fixed if NaN.
     has_telescope_info : numpy.ndarray (bool)
-        If `True`, indicates that telescope information is available.
+        If `True`, indicates that telescope information is available.  If so,
+        the `sin_a` and `cos_a` values will be updated depending on the mount
+        type.
     mount : int
         The mount flag.
-    cassegrain : int
-        The Cassegrain mount flag.
-    gregorian : int
-        The Gregorian mount flag.
-    nasmyth_corotating : int
-        The Nasmyth corotating mount flag.
-    prime_focus : int
-        The prime focus mount flag.
     left_nasmyth : int
         The left Nasmyth mount flag.
     right_nasmyth : int
@@ -130,11 +140,7 @@ def validate_frames(valid, cos_a, sin_a, native_sin_lat, native_cos_lat,
         if np.isfinite(cos_a[frame]) and np.isfinite(sin_a[frame]):
             continue
 
-        if mount == prime_focus:
-            sin_a[frame] = 0.0
-            cos_a[frame] = 1.0
-            continue
-        elif mount == left_nasmyth:
+        if mount == left_nasmyth:
             sin_a[frame] = -native_sin_lat[frame]
             cos_a[frame] = native_cos_lat[frame]
             continue
@@ -148,7 +154,38 @@ def validate_frames(valid, cos_a, sin_a, native_sin_lat, native_cos_lat,
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
-def downsample_data(data, sample_flag, valid, window, start_indices):
+def downsample_data(data, sample_flag, valid, window, start_indices
+                    ):  # pragma: no cover
+    """
+    Downsample data to a new resolution using a window kernel.
+
+    Parameters
+    ----------
+    data : numpy.ndarray (float)
+        The high resolution data to downsample of shape (n_frames, n_channels).
+    sample_flag : numpy.ndarray (int)
+        The integer sample flags marking normal data (0) or some other type
+        (nonzero).  The low resolution data will be the result of an OR
+        operation of all sample flags within the kernel window.
+    valid : numpy.ndarray (float)
+        The boolean mask validity array for the low-resolution output data of
+        shape (low_resolution_frames,) where `False` indicates that the low
+        resolution output frame is invalid and should not be populated.
+    window : numpy.ndarray (float)
+        The convolution kernel to apply for the downsampling of shape
+        (n_windows,).  This should be supplied in a normalized form such that
+        sum(window) = 1 as no subsequent normalization occurs.
+    start_indices : numpy.ndarray (int)
+        For each low-resolution frame, the frame index on the high resolution
+        data indicating where the first element of the `window` should be
+        placed for the convolution.  Should be of shape
+        (low_resolution_frames,).
+
+    Returns
+    -------
+    low_resolution_data, low_resolution_flags : numpy.ndarray, numpy.ndarray
+        The low resolution data and sample flags.
+    """
 
     n_window = window.size
     high_frames, n_channels = data.shape

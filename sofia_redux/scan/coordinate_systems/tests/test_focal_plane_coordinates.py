@@ -10,14 +10,14 @@ from sofia_redux.scan.coordinate_systems.focal_plane_coordinates import \
 def test_init():
     f = FocalPlaneCoordinates()
     assert f.unit == 'degree' and f.coordinates is None
-    
-    
+
+
 def test_copy():
     f = FocalPlaneCoordinates([1, 2])
     f2 = f.copy()
     assert f == f2 and f is not f2
-    
-    
+
+
 def test_setup_coordinate_system():
     f = FocalPlaneCoordinates()
     f.setup_coordinate_system()
@@ -64,4 +64,3 @@ def test_edit_header():
     assert h['FOO2'] == 2
     assert h['WCSNAME'] == 'Focal Plane Coordinates'
     assert h.comments['WCSNAME'] == 'coordinate system description.'
-

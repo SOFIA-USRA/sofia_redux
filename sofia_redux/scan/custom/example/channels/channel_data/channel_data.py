@@ -5,9 +5,6 @@ import pandas as pd
 
 from sofia_redux.scan.custom.example.flags.channel_flags import (
     ExampleChannelFlags)
-from sofia_redux.scan.custom.example.info.info import ExampleInfo
-from sofia_redux.scan.custom.example.info.detector_array import (
-    ExampleDetectorArrayInfo)
 from sofia_redux.scan.channels.channel_data.single_color_channel_data import (
     SingleColorChannelData)
 

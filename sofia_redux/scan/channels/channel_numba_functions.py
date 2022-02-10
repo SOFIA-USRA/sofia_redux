@@ -19,12 +19,12 @@ def flag_weights(channel_gain, channel_weight, channel_dof, channel_flags,
 
     Channels will be flagged with the DOF (degrees-of-freedom) flag if its
     degrees-of-freedom is <= 0, or unflagged otherwise.  Channels will also
-    be flagged for sensitivity if:
+    be flagged for sensitivity if::
 
-       wg2 < m * `min_weight`
-       wg2 > m * `max_weight`
+       wg2 < m * min_weight
+       wg2 > m * max_weight
 
-    where wg2 = `channel_weight` * `channel_gain`^2, and
+    where wg2 = channel_weight * channel_gain^2, and::
 
        m = exp(inner_80_percent_mean(ln(1 + wg2))) - 1
 
@@ -133,7 +133,7 @@ def get_typical_gain_magnitude(gains):  # pragma: no cover
     """
     Return the typical gain magnitude for a gain array.
 
-    The typical gain magnitude (g_mag) for an array of gains (g) is given by:
+    The typical gain magnitude (g_mag) for an array of gains (g) is given by::
 
         g_mag = exp(inner_80_percent_mean(ln(1 + |g|))) - 1
 
@@ -226,9 +226,9 @@ def get_source_nefd(filtered_source_gains, weight, variance, flags,
 
     nefd = sqrt(n * t / sum(g^2 / v)) / abs(integration_gain)
 
-    where n are the number of mapping channels (unflagged and positive weights),
-    t is the integration time, g is the source gain, and v is the channel
-    variance.
+    where n are the number of mapping channels (unflagged and positive
+    weights), t is the integration time, g is the source gain, and v is
+    the channel variance.
 
     Parameters
     ----------

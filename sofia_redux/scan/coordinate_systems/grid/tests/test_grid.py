@@ -124,5 +124,3 @@ def test_get_fits_id():
     assert g.get_fits_id() == 'B'
     g.variant = 10
     assert g.get_fits_id() == 'K'
-
-

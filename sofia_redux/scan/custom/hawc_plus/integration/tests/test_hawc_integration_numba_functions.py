@@ -9,7 +9,7 @@ from sofia_redux.scan.custom.hawc_plus.integration import \
 def test_find_inconsistencies():
     n_frames, n_channels = 19, 6
     frame_valid = np.full(n_frames, True)
-    frame_data = np.ones((n_frames, n_channels ))
+    frame_data = np.ones((n_frames, n_channels))
     frame_weights = np.ones(n_frames)
     modeling_frames = np.full(n_frames, False)
     frame_parms = np.ones(n_frames)
@@ -51,7 +51,7 @@ def test_find_inconsistencies():
     assert np.allclose(
         frame_parms,
         [1, 1, 1, 1, 1, 1, 2.5, 2.5, 2.5, 2.5,
-         1.,2.5, 2.5, 2.5, 2.5, 1, 1, 1, 1])
+         1., 2.5, 2.5, 2.5, 2.5, 1, 1, 1, 1])
     assert np.allclose(channel_parms, [3] * n_channels)
 
 

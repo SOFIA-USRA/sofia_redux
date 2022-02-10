@@ -263,7 +263,7 @@ class SourceModel(ABC):
 
     def source_option(self, option_name):
         """
-        Return the name of the option in a configuration specific to the source.
+        Return the name of the option in configuration specific to the source.
 
         Parameters
         ----------
@@ -550,39 +550,42 @@ class SourceModel(ABC):
                 integration_count += 1
             scan_integration_mapping.append(scan_integrations)
 
-        max_parallel = self.reduction.available_reduction_jobs
-
-        parallel_integrations = int(np.clip(max_parallel, 1, integration_count))
+        # parallel integrations seems to cause problems, so
+        # ensure they are processed serially for now
+        #   max_parallel = self.reduction.available_reduction_jobs
+        #   parallel_integrations = int(np.clip(max_parallel, 1,
+        #                                       integration_count))
         parallel_integrations = 1
 
         if parallel_integrations <= 1:
             for integration in integrations:
                 self.sync_integration(integration)
             return
+        else:  # pragma: no cover
+            log.debug(f"Syncing {parallel_integrations} integrations "
+                      f"in parallel.")
 
-        log.debug(f"Syncing {parallel_integrations} integrations in parallel.")
+            pickle_list = [self] + integrations
+            pickle_directory = multiprocessing.pickle_list(pickle_list)
+            source_pickle = pickle_list[0]
+            integration_pickles = pickle_list[1:]
+            args = source_pickle, integration_pickles
+            kwargs = None
 
-        pickle_list = [self] + integrations
-        pickle_directory = multiprocessing.pickle_list(pickle_list)
-        source_pickle = pickle_list[0]
-        integration_pickles = pickle_list[1:]
-        args = source_pickle, integration_pickles
-        kwargs = None
+            integrations = multiprocessing.multitask(
+                self.parallel_safe_sync_integration, range(integration_count),
+                args, kwargs, jobs=parallel_integrations, max_nbytes=None,
+                logger=log)
 
-        integrations = multiprocessing.multitask(
-            self.parallel_safe_sync_integration, range(integration_count),
-            args, kwargs, jobs=parallel_integrations, max_nbytes=None,
-            logger=log)
+            multiprocessing.unpickle_list(integrations, delete=True)
+            shutil.rmtree(pickle_directory)
 
-        multiprocessing.unpickle_list(integrations, delete=True)
-        shutil.rmtree(pickle_directory)
-
-        for scan_number, scan in enumerate(self.scans):
-            for scan_integration_number, integration_number in enumerate(
-                    scan_integration_mapping[scan_number]):
-                integration = integrations[integration_number]
-                integration.scan = scan  # In case object ID changed
-                scan.integrations[scan_integration_number] = integration
+            for scan_number, scan in enumerate(self.scans):
+                for scan_integration_number, integration_number in enumerate(
+                        scan_integration_mapping[scan_number]):
+                    integration = integrations[integration_number]
+                    integration.scan = scan  # In case object ID changed
+                    scan.integrations[scan_integration_number] = integration
 
     @classmethod
     def parallel_safe_sync_integration(cls, args, integration_number):
@@ -806,7 +809,8 @@ class SourceModel(ABC):
         header : str
             A line space delimited header.
         """
-        header = [f'# SOFSCAN version: {ReductionVersion().get_full_version()}',
+        header = [f'# SOFSCAN version: '
+                  f'{ReductionVersion().get_full_version()}',
                   f'# Instrument: {self.info.instrument.name}',
                   f'# Object: {self.get_source_name()}']
         if self.scans is not None and len(self.scans) > 0:
@@ -1079,7 +1083,8 @@ class SourceModel(ABC):
         -------
         message : str
         """
-        msg = " * Check the console output for any problems when reading scans."
+        msg = " * Check the console output for any problems " \
+              "when reading scans."
         return msg
 
     def is_scanning_problem_only(self):
@@ -1096,8 +1101,9 @@ class SourceModel(ABC):
             low_speed = False
             for integration in scan.integrations:
                 if not self.check_pixel_count(integration):
-                    drift_n = int(np.round(integration.filter_time_scale /
-                                           integration.info.sampling_interval))
+                    drift_n = int(
+                        np.round(integration.filter_time_scale
+                                 / integration.info.sampling_interval))
                     if drift_n <= 1:
                         low_speed = True
                     else:
@@ -1138,10 +1144,11 @@ class SourceModel(ABC):
 
         self.reduction.channels.troubleshoot_few_pixels()
 
-        if (self.configuration.has_option('mappingpixels') or
-                self.configuration.has_option('mappingfraction')):
+        if (self.configuration.has_option('mappingpixels')
+                or self.configuration.has_option('mappingfraction')):
 
-            messages.append(" * Adjust 'mappingpixels' or 'mappingfraction' to "
+            messages.append(" * Adjust 'mappingpixels' or "
+                            "'mappingfraction' to "
                             "allow source extraction with fewer pixels.")
 
         log.info('\n'.join(messages))

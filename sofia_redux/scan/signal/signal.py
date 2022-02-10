@@ -53,7 +53,8 @@ class Signal(ABC):
 
         if values is not None:
             values = np.atleast_1d(values)
-            self.resolution = utils.roundup_ratio(integration.size, values.size)
+            self.resolution = utils.roundup_ratio(integration.size,
+                                                  values.size)
             self.value = values
             self.drift_n = values.size
 
@@ -152,7 +153,8 @@ class Signal(ABC):
         """
         Return the signal weight for a given integration frame index.
 
-        Note that the standard signal object does not have an associated weight.
+        Note that the standard signal object does not have an
+        associated weight.
 
         Parameters
         ----------
@@ -168,8 +170,8 @@ class Signal(ABC):
         """
         Scale the signal, drifts, and sync_gains by a given factor.
 
-        Signal values and drifts are multiplied by the given factor.  Sync gains
-        (previous gain values) are divided by the given factor.
+        Signal values and drifts are multiplied by the given factor.
+        Sync gains (previous gain values) are divided by the given factor.
 
         Parameters
         ----------
@@ -260,9 +262,10 @@ class Signal(ABC):
 
         A drift is defined as the average signal for a given block of frames
         (the length of which is given by `n_frames`.  For each drift, the
-        average signal value is calculated and subtracted from all signal values
-        within that drift block.  If the drifts are marked as "reconstructable",
-        they average signal values are stored in the `drifts` attribute.
+        average signal value is calculated and subtracted from all signal
+        values within that drift block.  If the drifts are marked as
+        "reconstructable", they average signal values are stored in the
+        `drifts` attribute.
 
         Parameters
         ----------
@@ -453,7 +456,8 @@ class Signal(ABC):
         """
         Smooth the signal with a given kernel.
 
-        Kernel spacing should be in units of self.resolution (number of frames).
+        Kernel spacing should be in units of self.resolution
+        (number of frames).
 
         Parameters
         ----------
@@ -511,7 +515,8 @@ class Signal(ABC):
             (n_channels,).
         """
         if self.configuration.get_bool('signal-response'):
-            self.integration.comments.append(f'{{{self.get_covariance():.2f}}}')
+            self.integration.comments.append(
+                f'{{{self.get_covariance():.2f}}}')
             log.debug(f"covariance = {self.get_covariance():.2f}")
 
         # Precalculate the gain-weight products...

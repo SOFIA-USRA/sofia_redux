@@ -89,8 +89,8 @@ class NonLinearResponse(Response):
         parent_values = parent_signal.value
 
         if parent_drifts is not None:
-            drift_indices = (np.arange(parent_values.size) //
-                             parent_signal.drift_n)
+            drift_indices = (np.arange(parent_values.size)
+                             // parent_signal.drift_n)
             parent_drifts = parent_drifts[drift_indices]
             signal.value[...] = (parent_values + parent_drifts) ** 2
         else:
@@ -113,8 +113,8 @@ class NonLinearResponse(Response):
         integration : Integration
         robust : bool, optional
             If `True`, derives the gain increment from the integration using
-            the "robust" definition.  This is only applicable if the integration
-            is not phase modulated.
+            the "robust" definition.  This is only applicable if the
+            integration is not phase modulated.
 
         Returns
         -------

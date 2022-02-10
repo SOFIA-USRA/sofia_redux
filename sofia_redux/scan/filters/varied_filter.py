@@ -1,5 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+from abc import abstractmethod
 from astropy.stats import gaussian_sigma_to_fwhm
 import numpy as np
 
@@ -17,7 +18,8 @@ class VariedFilter(Filter):
 
         The filter is designed to filter integration data using an FFT.  The
         varied filter also contains a source profile, point response, and
-        `dp` or delta dependents for channels.
+        `dp` or delta dependents for channels.  This is an abstract class
+        used to model a varying filter response across frequencies.
 
         Parameters
         ----------
@@ -154,7 +156,7 @@ class VariedFilter(Filter):
             rejected_array = False
 
         self.parms.add_async(channels, rejected)
-        self.dp = np.zeros(channels.size, dtype=float)
+        self.dp = np.zeros(self.channels.size, dtype=float)
 
         if isinstance(self.points, np.ndarray):
             nzi = self.points > 0
@@ -164,9 +166,9 @@ class VariedFilter(Filter):
                 self.dp[nzi] = rejected / self.points[nzi]
             self.dp[~nzi] = 0.0
         elif self.points > 0:
-            self.dp[:] = rejected / self.points
+            self.dp[channels.indices] = rejected / self.points
         else:
-            self.dp[:] = 0.0
+            self.dp[channels.indices] = 0.0
 
         response = self.calc_point_response()[channel_indices]
         self.point_response[channel_indices] = response
@@ -224,7 +226,7 @@ class VariedFilter(Filter):
         -------
         None
         """
-        raise NotImplementedError("No DFT for adaptive filters.")
+        raise NotImplementedError("No DFT for varied filters.")
 
     def get_point_response(self, channels=None):
         """
@@ -246,7 +248,7 @@ class VariedFilter(Filter):
         else:
             channel_indices = self.channels.find_fixed_indices(
                 channels.fixed_index)
-            return self.point_response(channel_indices)
+            return self.point_response[channel_indices]
 
     def get_mean_point_response(self):
         """
@@ -319,3 +321,41 @@ class VariedFilter(Filter):
             source_norm=self.source_norm)
 
         return result
+
+    @abstractmethod
+    def get_id(self):  # pragma: no cover
+        """
+        Return the filter ID.
+
+        Returns
+        -------
+        filter_id : str
+        """
+        pass
+
+    @abstractmethod
+    def get_config_name(self):  # pragma: no cover
+        """
+        Return the configuration name.
+
+        Returns
+        -------
+        config_name : str
+        """
+        pass
+
+    @abstractmethod
+    def response_at(self, fch):  # pragma: no cover
+        """
+        Return the response at a given frequency channel(s).
+
+        Parameters
+        ----------
+        fch : int or numpy.ndarray (int or bool) or slice
+            The frequency channel or channels in question.
+
+        Returns
+        -------
+        response : numpy.ndarray (float)
+        """
+        pass

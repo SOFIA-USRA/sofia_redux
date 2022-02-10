@@ -376,8 +376,8 @@ class AstroData2D(AstroModel2D):
         -------
         None
         """
-        if (not self.has_option('source.filter') or
-                self.get_source_size() <= 0):
+        if (not self.has_option('source.filter')
+                or self.get_source_size() <= 0):
             self.reset_filtering()
             return
 
@@ -488,12 +488,12 @@ class AstroData2D(AstroModel2D):
         if self.has_option('source.despike'):
             self.add_process_brief('{despike} ')
 
-        if (self.has_option('source.filter') and
-                self.get_source_size() > 0):
+        if (self.has_option('source.filter')
+                and self.get_source_size() > 0):
             self.add_process_brief('{filter} ')
 
-        if (self.enable_weighting and
-                self.configuration.get_bool('weighting.scans')):
+        if (self.enable_weighting
+                and self.configuration.get_bool('weighting.scans')):
             for scan in self.scans:
                 if scan.weight != 0:
                     message = f'{{{1.0 / scan.weight:.2f}x}}'
@@ -564,7 +564,8 @@ class AstroData2D(AstroModel2D):
             if self.enable_bias and self.has_option('blank'):
                 blanking_level = self.get_blanking_level()
                 self.add_process_brief(f'blank:{blanking_level}) ')
-                self.update_mask(blanking_level=blanking_level, min_neighbors=2)
+                self.update_mask(blanking_level=blanking_level,
+                                 min_neighbors=2)
             else:
                 self.update_mask(blanking_level=np.nan, min_neighbors=2)
 

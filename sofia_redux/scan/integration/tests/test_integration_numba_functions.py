@@ -125,7 +125,7 @@ def test_get_time_weights_by_block():
         time_weight_flag, sample_flags)
 
     assert np.allclose(frame_sum, nframe)
-    assert np.allclose(frame_weight_sum, nframe - nframe/nchannel)
+    assert np.allclose(frame_weight_sum, nframe - nframe / nchannel)
     assert np.all(frame_flags == 0)
 
     # set all channel_weights to 0
@@ -155,7 +155,7 @@ def test_get_time_weights_by_block():
 
     # relative weights ignore flagged channels
     assert np.allclose(frame_sum, nframe)
-    assert np.allclose(frame_weight_sum, nframe - nframe/(nchannel - 5))
+    assert np.allclose(frame_weight_sum, nframe - nframe / (nchannel - 5))
 
 
 def test_robust_channel_weights():

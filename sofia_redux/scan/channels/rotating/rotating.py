@@ -1,7 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from abc import ABC, abstractmethod
-from astropy import units
 
 __all__ = ['Rotating']
 

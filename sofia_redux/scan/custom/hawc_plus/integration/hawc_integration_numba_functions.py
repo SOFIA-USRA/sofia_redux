@@ -21,11 +21,11 @@ def find_inconsistencies(frame_valid, frame_data, frame_weights,
     """
     Find, fix (or flag) jumps and return the number corrected per channel.
 
-    This function is a wrapper around :func:`fix_jumps` the processes chunks of
-    frames (the size of which is determined by `drift_size`) sequentially, and
-    returns the number of chunk blocks found with jumps for each channel.  Jumps
-    may be ignored, levelled, or flagged depending on `min_jump_level_frames`,
-    `fix_each`, and `fix_subarray`.
+    This function is a wrapper around :func:`fix_jumps` the processes chunks
+    of frames (the size of which is determined by `drift_size`) sequentially,
+    and returns the number of chunk blocks found with jumps for each channel.
+    Jumps may be ignored, levelled, or flagged depending on
+    `min_jump_level_frames`, `fix_each`, and `fix_subarray`.
 
     Parameters
     ----------
@@ -59,21 +59,21 @@ def find_inconsistencies(frame_valid, frame_data, frame_weights,
         If this value is not reached, all samples in the block are flagged
         with `jump_flag` instead.
     jump_flag : int
-        The integer flag identifier with which to flag samples if the jump block
-        length to which they belong is less than `min_jump_level_frames` and
-        cannot be levelled.
+        The integer flag identifier with which to flag samples if the
+        jump block length to which they belong is less than
+        `min_jump_level_frames` and cannot be levelled.
     fix_each : bool
         If `False`, do not fix any channel with jumps.
     fix_subarray : numpy.ndarray (bool)
-        An array of shape (n_subarrays,) where `True` indicates that any channel
-        belonging to that subarray should  have jumps corrected.  Ignored
-        if fix_each is False.
+        An array of shape (n_subarrays,) where `True` indicates that any
+        channel belonging to that subarray should  have jumps corrected.
+        Ignored if fix_each is False.
     has_jumps : numpy.ndarray (bool)
         A boolean mask of shape (n_channels,) where `True` indicates that a
         channel has jumps that may be corrected.
     subarray : numpy.ndarray (int)
-        An array of shape (n_channels,) containing the subarray number for each
-        channel.
+        An array of shape (n_channels,) containing the subarray number for
+        each channel.
     jump_counter : numpy.ndarray (int)
         The channel jumps of shape (n_frames, n_channels).
     drift_size : int
@@ -91,8 +91,8 @@ def find_inconsistencies(frame_valid, frame_data, frame_weights,
     -------
     inconsistencies : numpy.ndarray (int)
         An array of shape (n_channels,) containing the number of frame blocks
-        found in the data that contain jumps which have either been levelled or
-        flagged for each channel.
+        found in the data that contain jumps which have either been levelled
+        or flagged for each channel.
     """
 
     n_frames = frame_data.shape[0]
@@ -156,8 +156,8 @@ def fix_jumps(frame_valid, frame_data, frame_weights,
     Parameters
     ----------
     frame_valid : numpy.ndarray (bool)
-        A boolean mask of shape (n_frames,) where `False` excludes a frame from
-        any processing.
+        A boolean mask of shape (n_frames,) where `False` excludes a frame
+        from any processing.
     frame_data : numpy.ndarray (float)
         The frame data values of shape (n_frames, all_channels).
     frame_weights : numpy.ndarray (float)
@@ -185,21 +185,21 @@ def fix_jumps(frame_valid, frame_data, frame_weights,
         If this value is not reached, all samples in the block are flagged
         with `jump_flag` instead.
     jump_flag : int
-        The integer flag identifier with which to flag samples if the jump block
-        length to which they belong is less than `min_jump_level_frames` and
-        cannot be levelled.
+        The integer flag identifier with which to flag samples if the jump
+        block length to which they belong is less than `min_jump_level_frames`
+        and cannot be levelled.
     fix_each : bool
         If `False`, do not fix any channel with jumps.
     fix_subarray : numpy.ndarray (bool)
-        An array of shape (n_subarrays,) where `True` indicates that any channel
-        belonging to that subarray should  have jumps corrected.  Ignored
-        if fix_each is False.
+        An array of shape (n_subarrays,) where `True` indicates that any
+        channel belonging to that subarray should  have jumps corrected.
+        Ignored if fix_each is False.
     has_jumps : numpy.ndarray (bool)
         A boolean mask of shape (n_channels,) where `True` indicates that a
         channel has jumps that may be corrected.
     subarray : numpy.ndarray (int)
-        An array of shape (n_channels,) containing the subarray number for each
-        channel.
+        An array of shape (n_channels,) containing the subarray number for
+        each channel.
     jump_counter : numpy.ndarray (int)
         The channel jumps of shape (n_frames, n_channels).
     start_frame : int, optional
@@ -314,9 +314,9 @@ def fix_block(from_frame, to_frame, frame_valid, frame_data, frame_weights,
     See :func:`fix_jumps` for further details.  This function essentially
     compares the jump block length with `min_jump_level_frames` and determines
     whether the block should be flagged or levelled.  If the number of frames
-    in the block (`to_frame` - `from_frame`) is >= `min_jump_level_frames`, then
-    leveling will occur.  Otherwise, all samples in the block will be flagged
-    with the `jump_flag`.
+    in the block (`to_frame` - `from_frame`) is >= `min_jump_level_frames`,
+    then leveling will occur.  Otherwise, all samples in the block will be
+    flagged with the `jump_flag`.
 
     Parameters
     ----------
@@ -325,8 +325,8 @@ def fix_block(from_frame, to_frame, frame_valid, frame_data, frame_weights,
     to_frame : int
         The end frame (non-inclusive) at which to conclude jump correction.
     frame_valid : numpy.ndarray (bool)
-        A boolean mask of shape (n_frames,) where `False` excludes a frame from
-        any processing.
+        A boolean mask of shape (n_frames,) where `False` excludes a frame
+        from any processing.
     frame_data : numpy.ndarray (float)
         The frame data values of shape (n_frames, all_channels).
     frame_weights : numpy.ndarray (float)
@@ -353,9 +353,9 @@ def fix_block(from_frame, to_frame, frame_valid, frame_data, frame_weights,
         If this value is not reached, all samples in the block are flagged
         with `jump_flag` instead.
     jump_flag : int
-        The integer flag identifier with which to flag samples if the jump block
-        length to which they belong is less than `min_jump_level_frames` and
-        cannot be levelled.
+        The integer flag identifier with which to flag samples if the jump
+        block length to which they belong is less than `min_jump_level_frames`
+        and cannot be levelled.
 
     Returns
     -------
@@ -395,16 +395,16 @@ def flag_block(from_frame, to_frame, frame_valid, sample_flags, jump_flag,
     to_frame : int
         The end frame (non-inclusive) at which to conclude jump correction.
     frame_valid : numpy.ndarray (bool)
-        A boolean mask of shape (n_frames,) where `False` excludes a frame from
-        any processing.
+        A boolean mask of shape (n_frames,) where `False` excludes a frame
+        from any processing.
     sample_flags : numpy.ndarray (int)
         The frame data sample flags.  Typically non-zero samples will be
         excluded from processing.  However, those samples not flagged with
         only `exclude_sample_flag` will be included.
     jump_flag : int
-        The integer flag identifier with which to flag samples if the jump block
-        length to which they belong is less than `min_jump_level_frames` and
-        cannot be levelled.
+        The integer flag identifier with which to flag samples if the jump
+        block length to which they belong is less than `min_jump_level_frames`
+        and cannot be levelled.
     channel : int
         The channel to process.
 
@@ -420,8 +420,9 @@ def flag_block(from_frame, to_frame, frame_valid, sample_flags, jump_flag,
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
 def level_block(from_frame, to_frame, frame_valid, frame_data, frame_weights,
-                modeling_frames, frame_parms, sample_flags, exclude_sample_flag,
-                channel, channel_parms):  # pragma: no cover
+                modeling_frames, frame_parms, sample_flags,
+                exclude_sample_flag, channel,
+                channel_parms):  # pragma: no cover
     """
     Level a frame block for a given channel.
 
@@ -465,9 +466,9 @@ def level_block(from_frame, to_frame, frame_valid, frame_data, frame_weights,
         The frame dependents of shape (n_frames,).  Will be updated in-place.
     sample_flags : numpy.ndarray (int)
         The frame data sample flags.  Any samples flagged with
-        `exclude_sample_flag` will not be included in the mean value calculation
-        or contribute to the frame dependents.  However, the mean value will
-        still be subtracted from them.
+        `exclude_sample_flag` will not be included in the mean value
+        calculation or contribute to the frame dependents.  However, the
+        mean value will still be subtracted from them.
     exclude_sample_flag : int
         The sample flag to explicitly exclude from processing.
     channel : int
@@ -525,8 +526,8 @@ def correct_jumps(frame_data, frame_valid, jump_counter, channel_indices,
 
     n_jumps_{f,c} = jump_counter[f, c] - jump_counter[f0, c]
 
-    where f0 is the first valid frame.  Since the jump counter have byte values,
-    wrap around values are considered.
+    where f0 is the first valid frame.  Since the jump counter have byte
+    values, wrap around values are considered.
 
     Parameters
     ----------

@@ -13,8 +13,8 @@ class BracketedValues(ABC):
         """
         Initialize a BracketedValues object.
 
-        The bracketed values class is used to represent a range, and may perform
-        operations with other BracketedValues objects.
+        The bracketed values class is used to represent a range, and
+        may perform operations with other BracketedValues objects.
 
         Parameters
         ----------

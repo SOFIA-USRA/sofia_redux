@@ -55,8 +55,10 @@ class SofiaInstrumentInfo(CameraInstrumentInfo):
         else:
             d = self.telescope_diameter
 
-        self.angular_resolution = (1.22 * self.wavelength / d).decompose().value
-        self.angular_resolution = self.angular_resolution * units.Unit('radian')
+        self.angular_resolution = (1.22 * self.wavelength
+                                   / d).decompose().value
+        self.angular_resolution = (self.angular_resolution
+                                   * units.Unit('radian'))
         self.frequency = (constants.c / self.wavelength).to(units.Unit('Hz'))
 
     def edit_header(self, header):
@@ -83,7 +85,7 @@ class SofiaInstrumentInfo(CameraInstrumentInfo):
              '(s) total effective on-source time.'),
             ('SPECTEL1', self.spectral_element_1, 'First spectral element.'),
             ('SPECTEL2', self.spectral_element_2, 'Second spectral element.')
-            ]
+        ]
 
         if not np.isnan(self.wavelength):
             info.append(('WAVECENT', to_header_float(self.wavelength, 'um'),
@@ -102,7 +104,8 @@ class SofiaInstrumentInfo(CameraInstrumentInfo):
 
         if not np.isnan(self.total_integration_time):
             info.append(('TOTINT',
-                         to_header_float(self.total_integration_time, 'second'),
+                         to_header_float(self.total_integration_time,
+                                         'second'),
                          '(s) Total integration time.'))
 
         insert_info_in_header(header, info, delete_special=True)

@@ -21,8 +21,8 @@ class SkyGradient(ZeroMeanGains):
         Parameters
         ----------
         horizontal : bool, optional
-            If `True` (default), applied to the horizontal position.  Otherwise,
-            operates on the vertical position data.
+            If `True` (default), applied to the horizontal position.
+            Otherwise, operates on the vertical position data.
         """
         super().__init__()
         self.horizontal = horizontal

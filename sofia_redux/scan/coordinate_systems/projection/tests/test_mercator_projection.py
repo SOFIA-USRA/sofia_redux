@@ -4,10 +4,10 @@ from astropy import units
 import numpy as np
 
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
-from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
-    SphericalCoordinates
-from sofia_redux.scan.coordinate_systems.projection.mercator_projection import \
-    MercatorProjection
+from sofia_redux.scan.coordinate_systems.spherical_coordinates \
+    import SphericalCoordinates
+from sofia_redux.scan.coordinate_systems.projection.mercator_projection \
+    import MercatorProjection
 
 
 def test_init():

@@ -212,8 +212,8 @@ class HawcPlusIntegration(SofiaIntegration):
         """
         log.debug("Checking for flux jumps.")
 
-        if (not hasattr(self.frames, 'jump_counter') or
-                self.frames.jump_counter is None):
+        if (not hasattr(self.frames, 'jump_counter')
+                or self.frames.jump_counter is None):
             log.warning("Scan has no jump counter data.")
             return
 
@@ -380,8 +380,9 @@ class HawcPlusIntegration(SofiaIntegration):
             if len(blank_time) == 1:
                 blank_time = np.full(2, blank_time[0]) * units.Unit('second')
             elif len(blank_time) != 2:
-                log.warning("Jump blanking time in configuration is not a 1 or "
-                            "2 element array.  Will not apply blank flags.")
+                log.warning("Jump blanking time in configuration is "
+                            "not a 1 or 2 element array.  "
+                            "Will not apply blank flags.")
                 blank_time = np.full(2, blank_time[0]) * units.Unit('second')
             else:
                 blank_time = np.asarray(blank_time) * units.Unit('second')
@@ -466,26 +467,27 @@ class HawcPlusIntegration(SofiaIntegration):
         jump_flag = self.flagspace.convert_flag('SAMPLE_PHI0_JUMP').value
         blank_frames = self.get_jump_blank_range()
 
-        inconsistencies = hawc_integration_numba_functions.find_inconsistencies(
-            frame_valid=self.frames.valid,
-            frame_data=self.frames.data,
-            frame_weights=self.frames.relative_weight,
-            modeling_frames=self.frames.is_flagged('MODELING_FLAGS'),
-            frame_parms=frame_dependents,
-            sample_flags=self.frames.sample_flag,
-            exclude_sample_flag=exclude_sample_flag,
-            channel_indices=channels.indices,
-            channel_parms=drift_parms.for_channel,
-            min_jump_level_frames=self.min_jump_level_frames,
-            jump_flag=jump_flag,
-            fix_each=self.fix_jumps,
-            fix_subarray=self.fix_subarray,
-            has_jumps=channels.has_jumps,
-            subarray=channels.sub,
-            jump_counter=self.frames.jump_counter,
-            drift_size=drift_size,
-            flag_before=blank_frames[0],
-            flag_after=blank_frames[1])
+        inconsistencies = \
+            hawc_integration_numba_functions.find_inconsistencies(
+                frame_valid=self.frames.valid,
+                frame_data=self.frames.data,
+                frame_weights=self.frames.relative_weight,
+                modeling_frames=self.frames.is_flagged('MODELING_FLAGS'),
+                frame_parms=frame_dependents,
+                sample_flags=self.frames.sample_flag,
+                exclude_sample_flag=exclude_sample_flag,
+                channel_indices=channels.indices,
+                channel_parms=drift_parms.for_channel,
+                min_jump_level_frames=self.min_jump_level_frames,
+                jump_flag=jump_flag,
+                fix_each=self.fix_jumps,
+                fix_subarray=self.fix_subarray,
+                has_jumps=channels.has_jumps,
+                subarray=channels.sub,
+                jump_counter=self.frames.jump_counter,
+                drift_size=drift_size,
+                flag_before=blank_frames[0],
+                flag_after=blank_frames[1])
 
         channels.inconsistencies += inconsistencies
 

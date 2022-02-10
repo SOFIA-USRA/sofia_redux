@@ -420,9 +420,9 @@ class Observation2D(Map2D):
         weights : FlaggedArray or numpy.ndarray or float
         times : FlaggedArray or numpy.ndarray or float
         indices : numpy.ndarray (bool or int), optional
-            A boolean mask adds to those indices on self.data marked as `True`.
-            If so, image/weights/times etc should be the same shape as self.data
-            of scalar values.
+            A boolean mask adds to those indices on self.data marked
+            as `True`. If so, image/weights/times etc should be the same
+            shape as self.data of scalar values.
 
         Returns
         -------

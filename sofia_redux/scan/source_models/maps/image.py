@@ -141,8 +141,8 @@ class Image(FitsData):
         Image2D
         """
         change_type = not((dtype is None) or (dtype == self.dtype))
-        change_level = not((blanking_value is None) or
-                           (blanking_value is self.blanking_value))
+        change_level = not((blanking_value is None)
+                           or (blanking_value is self.blanking_value))
 
         image = self.copy(with_contents=True)
 
@@ -189,9 +189,9 @@ class Image(FitsData):
             (n_dimensions, 2) where ranges[0, 0] would give the minimum crop
             limit for the first dimension and ranges[0, 1] would give the
             maximum crop limit for the first dimension.  In this case, the
-            'first' dimension is in numpy format.  i.e., (y, x) for a 2-D array.
-            Also note that the upper crop limit is not inclusive so a range
-            of (0, 3) includes indices [0, 1, 2] but not 3.
+            'first' dimension is in numpy format.  i.e., (y, x) for a
+            2-D array. Also note that the upper crop limit is not inclusive
+            so a range of (0, 3) includes indices [0, 1, 2] but not 3.
 
         Returns
         -------
@@ -199,7 +199,8 @@ class Image(FitsData):
         """
         if self.data is None:
             return
-        if not isinstance(ranges, np.ndarray) or ranges.shape != (self.ndim, 2):
+        if (not isinstance(ranges, np.ndarray)
+                or ranges.shape != (self.ndim, 2)):
             raise ValueError(f"The crop range should be of shape "
                              f"({self.ndim}, 2). Received {ranges}")
         self.add_history(f"Cropped {ranges[:, 0]} : {ranges[:, 1]}")

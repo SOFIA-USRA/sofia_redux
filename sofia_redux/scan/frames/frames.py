@@ -13,12 +13,8 @@ from sofia_redux.scan.coordinate_systems.coordinate import Coordinate
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
     EquatorialCoordinates
-from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
-    SphericalCoordinates
 from sofia_redux.scan.coordinate_systems.epoch.epoch import J2000
 from sofia_redux.scan.flags.mounts import Mount
-from sofia_redux.scan.info.info import Info
-from sofia_redux.scan.info.astrometry import AstrometryInfo
 from sofia_redux.scan.coordinate_systems.index_2d import Index2D
 
 __all__ = ['Frames']
@@ -147,7 +143,8 @@ class Frames(FlaggedData):
         """
         Returns attribute names that are internal to the data for get actions.
 
-        These attributes should always be returned as-is regardless of indexing.
+        These attributes should always be returned as-is regardless
+        of indexing.
 
         Returns
         -------
@@ -362,7 +359,8 @@ class Frames(FlaggedData):
                         self, key, coordinate_class(fill_values, copy=False))
 
                 elif isinstance(value, units.Quantity):
-                    setattr(self, key, np.full(shape, value.value) * value.unit)
+                    setattr(self, key,
+                            np.full(shape, value.value) * value.unit)
 
                 elif isinstance(value, units.Unit):
                     setattr(self, key, np.empty(shape, dtype=float) * value)
@@ -412,8 +410,8 @@ class Frames(FlaggedData):
         """
         Returns the actual indices given channel fixed indices.
 
-        The fixed indices are those that are initially loaded.  Returned indices
-        are their locations in the data arrays.
+        The fixed indices are those that are initially loaded.  Returned
+        indices are their locations in the data arrays.
 
         This operates on the channel fixed indices, important for some fields
         of the frame data (data, sample_flags, etc.).
@@ -541,7 +539,8 @@ class Frames(FlaggedData):
                 raise ValueError("Channel fixed indices for frames not set.")
 
         if self.channel_fixed_index.shape == self.frame_fixed_channels.shape:
-            if np.allclose(self.channel_fixed_index, self.frame_fixed_channels):
+            if np.allclose(self.channel_fixed_index,
+                           self.frame_fixed_channels):
                 return
 
         mask = self.channel_fixed_index[:, None] == (
@@ -612,10 +611,6 @@ class Frames(FlaggedData):
             validated=self.validated,
             has_telescope_info=self.has_telescope_info,
             mount=self.info.instrument.mount.value,
-            cassegrain=Mount.CASSEGRAIN.value,
-            gregorian=Mount.GREGORIAN.value,
-            nasmyth_corotating=Mount.NASMYTH_COROTATING.value,
-            prime_focus=Mount.PRIME_FOCUS.value,
             left_nasmyth=Mount.LEFT_NASMYTH.value,
             right_nasmyth=Mount.RIGHT_NASMYTH.value)
 
@@ -651,7 +646,8 @@ class Frames(FlaggedData):
                 equatorial.epoch = self.equatorial.epoch[indices].copy()
 
         native_offsets = self.get_native_xy(offsets, indices=indices)
-        x = self.equatorial.x[indices] / self.info.astrometry.equatorial.cos_lat
+        x = (self.equatorial.x[indices]
+             / self.info.astrometry.equatorial.cos_lat)
         y = self.equatorial.y[indices]
 
         shaped = len(native_offsets.shape) > 1
@@ -663,7 +659,8 @@ class Frames(FlaggedData):
 
         return equatorial
 
-    def get_equatorial_native_offset(self, position, indices=None, offset=None):
+    def get_equatorial_native_offset(self, position, indices=None,
+                                     offset=None):
         """
         Return the horizontal offsets of a position relative to scan center.
 
@@ -835,7 +832,7 @@ class Frames(FlaggedData):
     @abstractmethod
     def get_absolute_native_coordinates(self):
         """
-        Return absolute spherical (including chopper) coords in telescope frame.
+        Get absolute spherical (including chopper) coords in telescope frame.
 
         This is named getNativeCoords() in CRUSH
 
@@ -1066,7 +1063,6 @@ class Frames(FlaggedData):
         else:
             cos_a = self.cos_a[indices]
             sin_a = self.sin_a[indices]
-
 
         xp = focal_plane_position.x
         yp = focal_plane_position.y
@@ -1388,8 +1384,8 @@ class Frames(FlaggedData):
         Returns
         -------
         offset : Coordinate2D
-            The native equatorial offsets between the frame equatorial positions
-            and a reference position.
+            The native equatorial offsets between the frame equatorial
+            positions and a reference position.
         """
         if indices is None:
             indices = slice(None)
@@ -1456,8 +1452,8 @@ class Frames(FlaggedData):
         reference : int, optional
         reference : int, optional
             If supplied, finds the last frame before `reference`, rather than
-            the last index (self.size).  May take negative values to indicate an
-            index relative to the last index.
+            the last index (self.size).  May take negative values to indicate
+            an index relative to the last index.
         """
         if reference is None:
             reference = self.size

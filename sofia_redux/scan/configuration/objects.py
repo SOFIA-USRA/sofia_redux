@@ -168,8 +168,8 @@ class ObjectOptions(Options):
         Parameters
         ----------
         configuration_options : dict or configobj.ConfigObj
-            The options to apply.  These must contain an 'object' key and values
-            in order to have an effect.
+            The options to apply.  These must contain an 'object' key
+            and values in order to have an effect.
 
         Returns
         -------
@@ -188,7 +188,7 @@ class ObjectOptions(Options):
 
     def set_object(self, configuration, source_name, validate=True):
         """
-        Set the object options for a given source in the supplied configuration.
+        Set the object options for a source in the supplied configuration.
 
         Parameters
         ----------

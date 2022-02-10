@@ -1,7 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from astropy import units
-
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
     SphericalCoordinates
@@ -21,8 +19,8 @@ class PlateCarreeProjection(CylindricalProjection):
         equirectangular or equidistant cylindrical projection in which the
         standard parallel is zero (the equator).  Meridians are vertical
         straight lines of constant spacing, and circles of latitude are
-        horizontal straight lines of constant spacing.  It is neither equal-area
-        nor conformal.
+        horizontal straight lines of constant spacing.  It is neither
+        equal-area nor conformal.
         """
         super().__init__()
 

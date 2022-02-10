@@ -185,9 +185,9 @@ class Flags(ABC):
             If `indices` is `True` (only applicable when `thing` is an array),
             returns a numpy array of ints if the number of dimensions is 1.
             For N-D arrays the output will be similar to :func:`np.nonzero`.
-            If `thing` is an array and `indices` is `False`, a boolean mask will
-            be returned.  If `thing` contains a single value then `True` or
-            `False` will be returned.
+            If `thing` is an array and `indices` is `False`, a boolean mask
+            will be returned.  If `thing` contains a single value then `True`
+            or `False` will be returned.
         """
         if flag is not None and not isinstance(flag, int):
             flag = cls.convert_flag(flag).value
@@ -239,9 +239,9 @@ class Flags(ABC):
             If `indices` is `True` (only applicable when `thing` is an array),
             returns a numpy array of ints if the number of dimensions is 1.
             For N-D arrays the output will be similar to :func:`np.nonzero`.
-            If `thing` is an array and `indices` is `False`, a boolean mask will
-            be returned.  If `thing` contains a single value then `True` or
-            `False` will be returned.
+            If `thing` is an array and `indices` is `False`, a boolean mask
+            will be returned.  If `thing` contains a single value then `True`
+            or `False` will be returned.
         """
         if flag is not None and not isinstance(flag, int):
             flag = cls.convert_flag(flag).value
@@ -321,7 +321,7 @@ class Flags(ABC):
 
     @classmethod
     def discard_mask(cls, flag_array, flag=None, criterion=None):
-        """
+        r"""
         Return a mask indicating which flags do not match certain conditions.
 
         Parameters
@@ -337,9 +337,10 @@ class Flags(ABC):
             'DISCARD_ANY' will be used if a flag is not supplied, and
             'DISCARD_ALL' will be used if a flag is supplied.  The '_ANY'
             suffix means `flag` is irrelevant and any non-zero value will be
-            considered "flagged".  '_ALL' means that flagged values will contain
-            'flag', and '_MATCH' means that flagged values will exactly equal
-            'flag'.  'KEEP_' inverts the True/False meaning of the output.
+            considered "flagged".  '_ALL' means that flagged values will
+            contain 'flag', and '_MATCH' means that flagged values will
+            exactly equal 'flag'.  'KEEP\_' inverts the True/False meaning
+            of the output.
 
         Returns
         -------
@@ -371,7 +372,7 @@ class Flags(ABC):
 
     @classmethod
     def flag_mask(cls, flag_array, flag=None, criterion=None):
-        """
+        r"""
         Return a mask indicating which flags that meet certain conditions.
 
         This is basically the same as `discard_mask`, but the meanings of
@@ -390,9 +391,10 @@ class Flags(ABC):
             'KEEP_ANY' will be used if a flag is not supplied, and
             'KEEP_ALL' will be used if a flag is supplied.  The '_ANY'
             suffix means `flag` is irrelevant and any non-zero value will be
-            considered "flagged".  '_ALL' means that flagged values will contain
-            'flag', and '_MATCH' means that flagged values will exactly equal
-            'flag'.  'KEEP_' inverts the True/False meaning of the output.
+            considered "flagged".  '_ALL' means that flagged values will
+            contain 'flag', and '_MATCH' means that flagged values will
+            exactly equal 'flag'.  'KEEP\_' inverts the True/False meaning
+            of the output.
 
         Returns
         -------
@@ -423,7 +425,7 @@ class Flags(ABC):
 
     @classmethod
     def discard_indices(cls, flag_array, flag=None, criterion=None):
-        """
+        r"""
         Return indices to discard for a given criterion/flag.
 
         Parameters
@@ -439,9 +441,10 @@ class Flags(ABC):
             'DISCARD_ANY' will be used if a flag is not supplied, and
             'DISCARD_ALL' will be used if a flag is supplied.  The '_ANY'
             suffix means `flag` is irrelevant and any non-zero value will be
-            considered "flagged".  '_ALL' means that flagged values will contain
-            'flag', and '_MATCH' means that flagged values will exactly equal
-            'flag'.  'KEEP_' inverts the True/False meaning of the output.
+            considered "flagged".  '_ALL' means that flagged values will
+            contain 'flag', and '_MATCH' means that flagged values will
+            exactly equal 'flag'.  'KEEP\_' inverts the True/False meaning of
+            the output.
 
         Returns
         -------
@@ -457,7 +460,7 @@ class Flags(ABC):
 
     @classmethod
     def flagged_indices(cls, flag_array, flag=None, criterion=None):
-        """
+        r"""
         Return indices to for a given criterion/flag.
 
         This is the same as `discard_indices` with switched meanings of
@@ -476,9 +479,10 @@ class Flags(ABC):
             'KEEP_ANY' will be used if a flag is not supplied, and
             'KEEP_ALL' will be used if a flag is supplied.  The '_ANY'
             suffix means `flag` is irrelevant and any non-zero value will be
-            considered "flagged".  '_ALL' means that flagged values will contain
-            'flag', and '_MATCH' means that flagged values will exactly equal
-            'flag'.  'KEEP_' inverts the True/False meaning of the output.
+            considered "flagged".  '_ALL' means that flagged values will
+            contain 'flag', and '_MATCH' means that flagged values will
+            exactly equal 'flag'.  'KEEP\_' inverts the True/False meaning
+            of the output.
 
         Returns
         -------

@@ -63,8 +63,8 @@ class SingleGaussian(SimulatedSource):
         if 'y_fwhm' in options:
             options['y_stddev'] = gaussian_fwhm_to_sigma * options['y_fwhm']
 
-        if 'info' in options and ('x_stddev' not in options or
-                                  'y_stddev' not in options):
+        if 'info' in options and ('x_stddev' not in options
+                                  or 'y_stddev' not in options):
             info = options['info']
             options['x_stddev'] = info.instrument.resolution
             options['y_stddev'] = info.instrument.resolution
@@ -96,5 +96,3 @@ class SingleGaussian(SimulatedSource):
             The modelled data of the source given the offsets.
         """
         return self.model(offsets.x, offsets.y)
-
-

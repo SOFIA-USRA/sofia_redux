@@ -94,5 +94,3 @@ def test_to_time():
     with pytest.raises(ValueError) as err:
         DateRange.to_time({})
     assert 'Input must be of type' in str(err.value)
-
-

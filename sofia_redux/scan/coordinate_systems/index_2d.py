@@ -1,7 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from astropy import units
-from functools import partial
 import numpy as np
 
 from sofia_redux.scan.coordinate_systems import \

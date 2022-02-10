@@ -1,7 +1,8 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from sofia_redux.scan.channels.modality.modality import Modality
-from sofia_redux.scan.channels.mode.non_linear_response import NonLinearResponse
+from sofia_redux.scan.channels.mode.non_linear_response \
+    import NonLinearResponse
 
 __all__ = ['NonlinearModality']
 

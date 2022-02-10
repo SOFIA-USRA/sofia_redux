@@ -1,6 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from astropy import units
 import numpy as np
 import warnings
 
@@ -109,8 +108,8 @@ class GlobalSinusoidalProjection(SphericalProjection):
         if coordinates is None:
             coordinates = SphericalCoordinates(unit='degree')
         coordinates.set_y(self.reference.y + projected.y)
-        coordinates.set_x(self.reference.x +
-                          (projected.x / coordinates.cos_lat))
+        coordinates.set_x(self.reference.x
+                          + (projected.x / coordinates.cos_lat))
         return coordinates
 
     def get_phi_theta(self, offset, phi_theta=None):

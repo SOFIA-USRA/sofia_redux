@@ -1,29 +1,10 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from astropy import log
-from configobj import ConfigObj
 import pytest
 
 from sofia_redux.scan.configuration.conditions import Conditions
 from sofia_redux.scan.configuration.configuration import Configuration
-from sofia_redux.scan.configuration.tests.test_configuration import (
-    config_options, initialized_configuration, fits_header, fits_configuration)
-
-
-@pytest.fixture
-def initialized_conditions(fits_configuration):
-    """
-    Return an initialized Conditions from fully initialized Configuration.
-
-    Parameters
-    ----------
-    fits_configuration : Configuration
-
-    Returns
-    -------
-    Conditions
-    """
-    return  fits_configuration.conditions
 
 
 def test_init():
@@ -203,6 +184,6 @@ def test_update_configuration():
     assert c['bar']
     assert 'key1' not in c and 'key2' not in c and 'key3' not in c
     assert d.update_configuration(c, seen=seen)
-    assert (c['key1'] == 'value1' and c['key2'] == 'value2' and
-            c['key3'] == 'value3')
+    assert (c['key1'] == 'value1' and c['key2'] == 'value2'
+            and c['key3'] == 'value3')
     assert not d.update_configuration(c, seen=seen)

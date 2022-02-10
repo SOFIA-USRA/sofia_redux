@@ -4,7 +4,6 @@ from abc import ABC
 from astropy import units
 import numpy as np
 
-from sofia_redux.scan.coordinate_systems.epoch.epoch import Epoch
 from sofia_redux.scan.coordinate_systems.epoch import \
     precession_numba_functions as pnf
 
@@ -24,8 +23,8 @@ class Precession(ABC):
         The precession object is used to precess equatorial coordinates from
         one epoch to another using the procedure found in:
 
-        Lederle, T. and Schwan, H., "Procedure for computing the apparent places
-            of fundamental stars (APFS) from 1984 onwards",
+        Lederle, T. and Schwan, H., "Procedure for computing the apparent
+            places of fundamental stars (APFS) from 1984 onwards",
             Astronomy and Astrophysics, vol. 134, no. 1, pp. 1–6, 1984.
 
         Parameters
@@ -108,8 +107,9 @@ class Precession(ABC):
         Returns
         -------
         R2 : numpy.ndarray (float)
-           The R2 matrix.  If a single `phi`` was provided, the array will be of
-           shape (3, 3).  Otherwise, it will be of shape (phi.shape, 3, 3).
+           The R2 matrix.  If a single `phi`` was provided, the array will
+           be of shape (3, 3).  Otherwise, it will be of shape
+           (phi.shape, 3, 3).
         """
         if isinstance(phi, np.ndarray) and phi.shape != ():
             singular = False
@@ -152,8 +152,9 @@ class Precession(ABC):
         Returns
         -------
         R2 : numpy.ndarray (float)
-           The R3 matrix.  If a single `phi`` was provided, the array will be of
-           shape (3, 3).  Otherwise, it will be of shape (phi.shape, 3, 3).
+           The R3 matrix.  If a single `phi`` was provided, the array
+           will be of shape (3, 3).  Otherwise, it will be of shape
+           (phi.shape, 3, 3).
         """
         if isinstance(phi, np.ndarray) and phi.shape != ():
             singular = False
@@ -226,12 +227,12 @@ class Precession(ABC):
 
         tau = (from_year - 2000) * self.YEAR_TO_CENTURY
         t = (to_year - from_year) * self.YEAR_TO_CENTURY
-        eta = ((2305.6997 + (1.39744 + 0.000060 * tau) * tau +
-                (0.30201 - 0.000270 * tau + 0.017996 * t) * t) * t)
-        z = ((2305.6997 + (1.39744 + 0.000060 * tau) * tau +
-              (1.09543 + 0.000390 * tau + 0.018326 * t) * t) * t)
-        theta = ((2003.8746 - (0.85405 + 0.000370 * tau) * tau -
-                 (0.42707 + 0.000370 * tau + 0.041803 * t) * t) * t)
+        eta = ((2305.6997 + (1.39744 + 0.000060 * tau) * tau
+                + (0.30201 - 0.000270 * tau + 0.017996 * t) * t) * t)
+        z = ((2305.6997 + (1.39744 + 0.000060 * tau) * tau
+              + (1.09543 + 0.000390 * tau + 0.018326 * t) * t) * t)
+        theta = ((2003.8746 - (0.85405 + 0.000370 * tau) * tau
+                 - (0.42707 + 0.000370 * tau + 0.041803 * t) * t) * t)
 
         x1 = self.r3(-z * arcsec)
         x2 = self.r2(theta * arcsec)

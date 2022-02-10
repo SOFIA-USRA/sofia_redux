@@ -35,7 +35,7 @@ class SphericalCoordinates(Coordinate2D):
 
         Parameters
         ----------
-        coordinates : list or tuple or numpy.ndarray or units.Quantity, optional
+        coordinates : list or tuple or array-like or units.Quantity, optional
             The coordinates used to populate the object during initialization.
             The first (0) value or index should represent longitudinal
             coordinates, and the second should represent latitude.
@@ -389,9 +389,9 @@ class SphericalCoordinates(Coordinate2D):
         """
         Test if these spherical coordinates are equal to another.
 
-        Spherical coordinates are considered equal if the longitude coordinates
-        match when wrapped in the range 0->360 degrees, and latitude coordinates
-        match in the range -180->180 degrees.
+        Spherical coordinates are considered equal if the longitude
+        coordinates match when wrapped in the range 0->360 degrees, and
+        latitude coordinates match in the range -180->180 degrees.
 
         Parameters
         ----------
@@ -677,8 +677,8 @@ class SphericalCoordinates(Coordinate2D):
         -------
         None
         """
-        self.default_coordinate_system, self.default_local_coordinate_system = (
-            self.get_default_system())
+        (self.default_coordinate_system,
+         self.default_local_coordinate_system) = self.get_default_system()
 
     def set_shape(self, shape, empty=False):
         """
@@ -1152,16 +1152,16 @@ class SphericalCoordinates(Coordinate2D):
             self.set_y(np.fmod(self.y, self.pi), copy=False)
 
     def distance_to(self, reference):
-        """
+        r"""
         Return the distance from these coordinates to a given reference.
 
         Calculates the distance between two spherical sets of coordinates using
         either the law of cosines or Vincenty's formulae.  First we calculate c
-        as:
+        as::
 
           c = sin(y) * sin(ry) + cos(y) * phi
 
-        where:
+        where::
 
           phi = cos(ry) * cos(rx - x)
 
@@ -1169,16 +1169,16 @@ class SphericalCoordinates(Coordinate2D):
         reference coordinates respectively, and (y, ry) are the latitudinal
         coordinates.
 
-        if |c| > 0.9 (indicating intermediate distances), the law of cosines is
-        used to return an angle (a) of:
+        if \|c\| > 0.9 (indicating intermediate distances), the law of
+        cosines is used to return an angle (a) of::
 
           a = acos(c)
 
-        Otherwise, Vincenty's formula is used to return a value of:
+        Otherwise, Vincenty's formula is used to return a value of::
 
           a = atan2(B, c)
 
-        where:
+        where::
 
           B = sqrt((cos(ry) * sin(rx - x))^2 +
                    (cos(y) * sin(ry) - sin(y) * phi)^2)
@@ -1279,7 +1279,8 @@ class SphericalCoordinates(Coordinate2D):
         longitude_key = f'{key_stem}1{alt}'
         if longitude_key in header:
             lon = header[longitude_key]
-            unit = get_comment_unit(header.comments[longitude_key], default=deg)
+            unit = get_comment_unit(header.comments[longitude_key],
+                                    default=deg)
             lon = lon * unit
         else:
             lon = default_lon
@@ -1287,7 +1288,8 @@ class SphericalCoordinates(Coordinate2D):
         latitude_key = f'{key_stem}2{alt}'
         if latitude_key in header:
             lat = header[latitude_key]
-            unit = get_comment_unit(header.comments[latitude_key], default=deg)
+            unit = get_comment_unit(header.comments[latitude_key],
+                                    default=deg)
             lat = lat * unit
         else:
             lat = default_lat
@@ -1405,8 +1407,8 @@ class SphericalCoordinates(Coordinate2D):
             The coordinates to transform from.  If not supplied, will be
             *these* coordinates.
         to_coordinates : SphericalCoordinates, optional
-            The output coordinate system to transform to on output.  The default
-            is *this* system.
+            The output coordinate system to transform to on output.
+            The default is *this* system.
 
         Returns
         -------

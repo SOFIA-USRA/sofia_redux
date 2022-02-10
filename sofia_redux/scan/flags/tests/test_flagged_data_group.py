@@ -8,7 +8,12 @@ from scipy.sparse.csr import csr_matrix
 
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.flags.flagged_data_group import FlaggedDataGroup
-from sofia_redux.scan.flags.tests.test_flagged_data import dummy_data
+from sofia_redux.scan.flags.tests.test_flagged_data import set_dummy_data
+
+
+@pytest.fixture
+def dummy_data():
+    return set_dummy_data()
 
 
 @pytest.fixture
@@ -107,7 +112,8 @@ def test_setattr(dummy_group):
     g.matrix = m
     assert np.allclose(g.data.matrix.data, [1, 4, 2, 3])
 
-    sky = SkyCoord(ra=123 * units.Unit('degree'), dec=33 * units.Unit('degree'))
+    sky = SkyCoord(ra=123 * units.Unit('degree'),
+                   dec=33 * units.Unit('degree'))
     g.skycoord = sky
     assert np.allclose(g.data.skycoord.ra.to('degree').value,
                        [123] * 5 + [45] * 5)
@@ -272,5 +278,3 @@ def test_new_indices_in_old(dummy_group):
     g = dummy_group.copy(full=True)
     g._fixed_indices = np.arange(4) + 1
     assert np.allclose(g.new_indices_in_old(), np.arange(4))
-
-

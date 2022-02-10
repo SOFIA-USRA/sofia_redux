@@ -1,7 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from abc import ABC, abstractmethod
-from astropy.io import fits
 from copy import deepcopy
 
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D

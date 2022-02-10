@@ -1,7 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from abc import abstractmethod
-from astropy.io import fits
 
 from sofia_redux.scan.channels.camera.single_color_arrangement import \
     SingleColorArrangement

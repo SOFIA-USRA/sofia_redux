@@ -137,7 +137,8 @@ def spherical_project(x, y, cos_lat, sin_lat,
     The following conversions are used depending on the value of the celestial
     pole native latitude (lat_cp) to convert the coordinates (x, y) to
     coordinates about the celestial pole (x_cp, y_cp).  Here _cp denotes
-    "celestial pole", _np denotes "native pole", and any numbers are in degrees.
+    "celestial pole", _np denotes "native pole", and any numbers are in
+    degrees.
 
     lat_cp = 90:
 
@@ -203,12 +204,12 @@ def spherical_project(x, y, cos_lat, sin_lat,
 
         phi = native_pole_x + np.arctan2(
             -cos_lat * np.sin(d_lon),
-            (sin_lat * celestial_cos_lat) -
-            (cos_lat * celestial_sin_lat * cos_d_lon))
+            (sin_lat * celestial_cos_lat)
+            - (cos_lat * celestial_sin_lat * cos_d_lon))
 
         theta = asin(
-            (sin_lat * celestial_sin_lat) +
-            (cos_lat * celestial_cos_lat * cos_d_lon))
+            (sin_lat * celestial_sin_lat)
+            + (cos_lat * celestial_cos_lat * cos_d_lon))
 
         phi = np.fmod(phi, two_pi)
 
@@ -250,8 +251,8 @@ def spherical_project_array(x, y, cos_lat, sin_lat,
     celestial_sin_lat : float or numpy.ndarray
         The sine of `celestial_pole_y`.
     native_pole_x : float or numpy.ndarray
-        The spherical projection's native pole longitude.  If an array is passed
-        in, it should be of shape (1,) or (n,).
+        The spherical projection's native pole longitude.  If an array
+        is passed in, it should be of shape (1,) or (n,).
 
     Returns
     -------
@@ -380,11 +381,11 @@ def spherical_deproject(phi, theta,
         cos_d_phi = np.cos(d_phi)
         cx = celestial_pole_x + np.arctan2(
             -cos_theta * np.sin(d_phi),
-            ((sin_theta * celestial_cos_lat) -
-             (cos_theta * celestial_sin_lat * cos_d_phi)))
+            ((sin_theta * celestial_cos_lat)
+             - (cos_theta * celestial_sin_lat * cos_d_phi)))
         cy = asin(
-            (sin_theta * celestial_sin_lat) +
-            (cos_theta * celestial_cos_lat * cos_d_phi))
+            (sin_theta * celestial_sin_lat)
+            + (cos_theta * celestial_cos_lat * cos_d_phi))
 
     return cx, cy
 
@@ -420,8 +421,8 @@ def spherical_deproject_array(phi, theta,
     celestial_sin_lat : float or numpy.ndarray
         The sine of `celestial_pole_y`.
     native_pole_x : float or numpy.ndarray
-        The spherical projection's native pole longitude.  If an array is passed
-        in, it should be of shape (1,) or (n,).
+        The spherical projection's native pole longitude.  If an array
+        is passed in, it should be of shape (1,) or (n,).
 
     Returns
     -------
@@ -486,8 +487,8 @@ def calculate_celestial_pole(native_reference_x, native_reference_cos_lat,
 
     The determination of a celestial pole may involve a few steps.  The first
     is to determine the reference position about the native pole wrt the native
-    reference.  The next step involves finding the positions of the northern and
-    southern poles.
+    reference.  The next step involves finding the positions of the northern
+    and southern poles.
 
     A number of solutions are available at this point, and may be selected via
     the `select_solution` parameter value:
@@ -587,7 +588,8 @@ def calculate_celestial_pole(native_reference_x, native_reference_cos_lat,
 
 
 @nb.njit(cache=True, nogil=False, parallel=False)
-def calculate_celestial_pole_array(native_reference_x, native_reference_cos_lat,
+def calculate_celestial_pole_array(native_reference_x,
+                                   native_reference_cos_lat,
                                    native_reference_sin_lat,
                                    reference_x, reference_y,
                                    reference_cos_lat, reference_sin_lat,
@@ -608,8 +610,8 @@ def calculate_celestial_pole_array(native_reference_x, native_reference_cos_lat,
         The cosine of the native reference latitude.  Must be the same input
         shape as `native_reference_x`.
     native_reference_sin_lat : float or numpy.ndarray
-        The sine of the native reference latitude.  Must be the same input shape
-        as `native_reference_x`.
+        The sine of the native reference latitude.  Must be the same input
+        shape as `native_reference_x`.
     reference_x : float or numpy.ndarray
         The reference longitude in radians.  If an array is provided, it should
         be of shape (n,).
@@ -626,8 +628,8 @@ def calculate_celestial_pole_array(native_reference_x, native_reference_cos_lat,
         The native pole longitude in radians.  If an array is provided, it
         should be of shape (n,).
     native_pole_y : float or numpy.ndarray
-        The native pole latitude in radians.  If an array is provided, it should
-        be of shape (n,).
+        The native pole latitude in radians.  If an array is provided, it
+        should be of shape (n,).
     select_solution : int
         The celestial pole to choose.  1 for "northern", 2 for "southern", or
         0 for "nearest".

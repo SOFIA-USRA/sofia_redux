@@ -335,7 +335,7 @@ def test_robust_sigma_clip():
     assert not out_mask[outlier_inds].any()
 
     # Test no weights
-    out_mask = utils.robust_sigma_clip_mask(values,  sigma=5.0,
+    out_mask = utils.robust_sigma_clip_mask(values, sigma=5.0,
                                             max_iterations=5)
     assert np.sum(~out_mask) == n_outliers
     assert not out_mask[outlier_inds].any()
@@ -408,7 +408,7 @@ def test_pow2round():
     half = int(2 ** 9.5)
     assert utils.pow2round(half) == 512
     assert utils.pow2round(half + 1) == 1024
-    result = utils.pow2round(np.arange(half-9, half+11))
+    result = utils.pow2round(np.arange(half - 9, half + 11))
     assert np.allclose(result[:10], 512)
     assert np.allclose(result[10:], 1024)
 
@@ -614,7 +614,8 @@ def test_encompass_beam():
 def test_encompass_beam_fwhm():
     arcsec = units.Unit('arcsec')
     beam1 = Gaussian2D(x_stddev=3 * arcsec, y_stddev=4 * arcsec)
-    beam = utils.encompass_beam_fwhm(beam1, 5 * arcsec * gaussian_sigma_to_fwhm)
+    beam = utils.encompass_beam_fwhm(beam1,
+                                     5 * arcsec * gaussian_sigma_to_fwhm)
     assert beam.x_stddev == 5 * arcsec
     assert beam.y_stddev == 5 * arcsec
 
@@ -804,7 +805,7 @@ def test_round_values():
     assert utils.round_values(x) is x
     x = (x - 5) / 2
     r = utils.round_values(x)
-    assert np.allclose(r, [-3, -2, -2, -1, -1,  0,  1,  1,  2,  2,  3])
+    assert np.allclose(r, [-3, -2, -2, -1, -1, 0, 1, 1, 2, 2, 3])
     expected = r.copy()
 
     # Quantities
@@ -818,7 +819,7 @@ def test_round_values():
     x = (x - 5) / 2
     r = utils.round_values(x)
     assert np.allclose(r, [[-3, -2, -2, -1, -1],
-                           [0,  1,  1,  2,  2]])
+                           [0, 1, 1, 2, 2]])
 
 
 def test_calculate_position_angle():

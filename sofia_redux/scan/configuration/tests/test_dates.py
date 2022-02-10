@@ -42,8 +42,8 @@ def test_set_get_item():
 
 def test_str(date_options):
     d = date_options
-    assert str(d) == ('Available date ranges (UTC):\n' +
-                      '2021-12-09T00:00:00.000--2021-12-10T00:00:00.000\n' +
+    assert str(d) == ('Available date ranges (UTC):\n'
+                      '2021-12-09T00:00:00.000--2021-12-10T00:00:00.000\n'
                       '2021-12-09T12:00:00.000--2021-12-10T13:00:00.000')
 
 
@@ -81,7 +81,8 @@ def test_update():
 
 def test_get(date_options):
     d = date_options
-    assert d.get('2008-07-30', default={'hello': 'there'}) == {'hello': 'there'}
+    assert d.get('2008-07-30',
+                 default={'hello': 'there'}) == {'hello': 'there'}
     assert d.get('2021-12-09T12:30:00') == {'add': ['today', 'tea_time']}
 
 

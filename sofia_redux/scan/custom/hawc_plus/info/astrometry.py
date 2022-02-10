@@ -36,7 +36,7 @@ class HawcPlusAstrometryInfo(SofiaAstrometryInfo):
 
     def is_requested_valid(self, header=None):
         """
-        Check whether the requested OBSRA/OBSDEC values in the header are valid.
+        Check whether the requested OBSRA/DEC values in the header are valid.
 
         Parameters
         ----------

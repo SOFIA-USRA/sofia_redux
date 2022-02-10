@@ -19,9 +19,9 @@ class BonnesProjection(SphericalProjection):
         Initialize a Bonne spherical projection.
 
         The Bonne projection is a pseudo-canonical equal-area projection
-        designed to maintain accurate shapes of areas along the central meridian
-        (y0) and standard parallel (theta1).  Distortion is noticeable from this
-        region, so it is best used to map "T"-shaped regions.
+        designed to maintain accurate shapes of areas along the central
+        meridian (y0) and standard parallel (theta1).  Distortion is noticeable
+        from this region, so it is best used to map "T"-shaped regions.
 
         Notes
         -----
@@ -134,8 +134,8 @@ class BonnesProjection(SphericalProjection):
 
         The theta 1 parameter in the Bonne projection is the standard parallel
         (line where there is no distortion in the map projection).  For this
-        projection, setting theta1 sets the projection native reference latitude
-        to the same value, and the central meridian (y0) to:
+        projection, setting theta1 sets the projection native reference
+        latitude to the same value, and the central meridian (y0) to:
 
            y0 = theta1 + cot(theta1)
 

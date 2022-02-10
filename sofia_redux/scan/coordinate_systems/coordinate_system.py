@@ -64,7 +64,8 @@ class CoordinateSystem(ABC):
         for axis in self.axes:
             if axis.label == axis_name:
                 return axis
-            elif axis.short_label is not None and axis.short_label == axis_name:
+            elif (axis.short_label is not None
+                  and axis.short_label == axis_name):
                 return axis
         else:
             raise KeyError(f"Axis not found: {axis_name}")

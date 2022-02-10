@@ -17,6 +17,9 @@ class MultiFilter(VariedFilter):
         """
         Initialize an integration multi-filter.
 
+        The multi-filter contains multiple sub-filters that operate on an
+        integration in sequence.
+
         Parameters
         ----------
         integration : Integration, optional
@@ -42,15 +45,90 @@ class MultiFilter(VariedFilter):
         Filter
         """
         new = super().copy()
-        new.filters = self.filters
-        if new.filters is None:
-            return
-        for filter_index, filter_object in enumerate(self.filters):
-            new.filters[filter_index] = filter_object.copy()
+        new.filters = []
+        if self.filters is None:
+            new.filters = None
+            return new
+        for sub_filter in self.filters:
+            new.filters.append(sub_filter.copy())
         return new
 
+    @property
+    def size(self):
+        """
+        Return the number of sub-filters in the multi-filter.
+
+        Returns
+        -------
+        n_filters : int
+        """
+        if self.filters is None:
+            return 0
+        return len(self.filters)
+
+    def __contains__(self, filter_or_name):
+        """
+        Return whether the multi-filter contains a filter.
+
+        Parameters
+        ----------
+        filter_or_name : Filter or str
+            A filter object or class or name of the filter to check.
+
+        Returns
+        -------
+        bool
+        """
+        return self[filter_or_name] is not None
+
+    def __getitem__(self, filter_or_name):
+        """
+        Return a given filter from the multi-filter
+
+        Parameters
+        ----------
+        filter_or_name : Filter or str or int
+            A filter object, class, name, label, or filter index of the
+            filter to retrieve.
+
+        Returns
+        -------
+        Filter or None
+        """
+        if self.size == 0:
+            return None
+        if isinstance(filter_or_name, Filter):
+            if filter_or_name in self.filters:
+                return filter_or_name
+        elif inspect.isclass(filter_or_name):
+            for filter_object in self.filters:
+                if filter_object.__class__ == filter_or_name:
+                    return filter_object
+        elif isinstance(filter_or_name, str):
+            check_name = filter_or_name.strip().lower()
+            for filter_object in self.filters:
+                name = filter_object.get_config_name().split('.')[-1].lower()
+                if name == check_name:
+                    return filter_object
+                label = filter_object.get_id().lower()
+                if label == check_name:
+                    return filter_object
+        elif isinstance(filter_or_name, int):
+            if filter_or_name < self.size:
+                return self.filters[filter_or_name]
+        return None
+
     def reindex(self):
-        """Reindex the channel groups to be inline with parent channels."""
+        """
+        Reindex the channel groups to be consistent with parent channels.
+
+        In addition to the main multi-filter, all sub-filters are re-indexed
+        too.
+
+        Returns
+        -------
+        None
+        """
         super().reindex()
         if self.filters is not None:
             for sub_filter in self.filters:
@@ -105,77 +183,6 @@ class MultiFilter(VariedFilter):
         if self.filters is not None:
             for sub_filter in self.filters:
                 sub_filter.set_channels(channels)
-
-    @property
-    def size(self):
-        """Return the number of integration frames.
-
-        Returns
-        -------
-        n_frames : int
-        """
-        if self.filters is None:
-            return 0
-        return len(self.filters)
-
-    def __contains__(self, filter_or_name):
-        """
-        Return whether the multi-filter contains a filter.
-
-        Parameters
-        ----------
-        filter_or_name : Filter or str
-            A filter object or class or name of the filter to check.
-
-        Returns
-        -------
-        bool
-        """
-        if self.size == 0:
-            return False
-        if isinstance(filter_or_name, Filter):
-            return filter_or_name in self.filters
-        elif inspect.isclass(filter_or_name):
-            for filter_object in self.filters:
-                if filter_object.__class__ == filter_or_name:
-                    return True
-        elif isinstance(filter_or_name, str):
-            for filter_object in self.filters:
-                if filter_object.name == filter_or_name:
-                    return True
-        return False
-
-    def __getitem__(self, filter_or_name):
-        """
-        Return a given filter from the multi-filter
-
-        Parameters
-        ----------
-        filter_or_name : Filter or str or int
-            A filter object or class or name or filter index of the filter to
-            retrieve.
-
-        Returns
-        -------
-        Filter or None
-        """
-        if self.size == 0:
-            return None
-        if isinstance(filter_or_name, Filter):
-            if filter_or_name in self.filters:
-                return filter_or_name
-        elif inspect.isclass(filter_or_name):
-            for filter_object in self.filters:
-                if filter_object.__class__ == filter_or_name:
-                    return filter_object
-        elif isinstance(filter_or_name, str):
-            for filter_object in self.filters:
-                if filter_object.name == filter_or_name:
-                    return filter_object
-        elif isinstance(filter_or_name, int):
-            if filter_or_name < self.size:
-                return self.filters[filter_or_name]
-        return None
 
     def add_filter(self, sub_filter):
         """
@@ -423,8 +430,8 @@ class MultiFilter(VariedFilter):
                 continue
 
             sub_response = sub_filter.response_at(fch)
-            sub_singular = (not(isinstance(sub_response, np.ndarray)) or
-                            sub_response.shape == ())
+            sub_singular = (not(isinstance(sub_response, np.ndarray))
+                            or sub_response.shape == ())
             if sub_singular or singular or (
                     sub_response.ndim == full_response.ndim):
                 full_response = full_response * sub_response
@@ -462,3 +469,21 @@ class MultiFilter(VariedFilter):
         config_name : str
         """
         return 'filter'
+
+    def dft_filter(self, channels=None):
+        """
+        Return the filter rejection using a discrete FFT.
+
+        UNSUPPORTED FOR THE MULTI-FILTER.
+
+        Parameters
+        ----------
+        channels : ChannelGroup, optional
+            The channel group for which the filtering applied.  By default,
+            set to the filtering channels.
+
+        Returns
+        -------
+        None
+        """
+        super().dft_filter(channels=channels)

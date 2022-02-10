@@ -212,8 +212,8 @@ class DateRangeOptions(Options):
         configuration : Configuration
         date : str or int or float
             The date for which to retrieve and apply options.  If a string is
-            used, it should be in ISOT format in UTC scale.  Integers and floats
-            will be parsed as MJD times in the UTC scale.
+            used, it should be in ISOT format in UTC scale.  Integers and
+            floats will be parsed as MJD times in the UTC scale.
         validate : bool, optional
             If `True`, validate the configuration once options have been
             applied.
@@ -266,8 +266,15 @@ class DateRange(ABC):
         -------
         str
         """
-        start_string = '*' * 23 if self.range[0] is None else self.range[0].isot
-        end_string = '*' * 23 if self.range[1] is None else self.range[1].isot
+        if self.range[0] is None:
+            start_string = '*' * 23
+        else:
+            start_string = self.range[0].isot
+        if self.range[1] is None:
+            end_string = '*' * 23
+        else:
+            end_string = self.range[1].isot
+
         return f'{start_string}--{end_string}'
 
     def __contains__(self, thing):

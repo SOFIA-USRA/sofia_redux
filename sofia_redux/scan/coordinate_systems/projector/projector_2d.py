@@ -4,8 +4,6 @@ from abc import ABC
 from copy import deepcopy
 
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
-from sofia_redux.scan.coordinate_systems.projection.projection_2d import \
-    Projection2D
 
 __all__ = ['Projector2D']
 
@@ -57,8 +55,8 @@ class Projector2D(ABC):
         Parameters
         ----------
         coordinates : Coordinate2D, optional
-            The coordinates to project.  If not supplied, defaults to the stored
-            coordinates.
+            The coordinates to project.  If not supplied, defaults to
+            the stored coordinates.
         offsets : Coordinate2D, optional
             The output offsets to update with the results.  If not supplied,
             defaults to a set stored in the projector.

@@ -2,8 +2,8 @@
 
 from abc import abstractmethod
 
-from sofia_redux.scan.coordinate_systems.projection.spherical_projection import \
-    SphericalProjection
+from sofia_redux.scan.coordinate_systems.projection.spherical_projection \
+    import SphericalProjection
 
 __all__ = ['CylindricalProjection']
 
@@ -53,5 +53,3 @@ class CylindricalProjection(SphericalProjection):  # pragma: no cover
         offsets : Coordinate2D
         """
         pass
-
-

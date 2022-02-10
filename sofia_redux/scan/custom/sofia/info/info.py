@@ -28,7 +28,6 @@ from sofia_redux.scan.custom.sofia.info.spectroscopy import (
 from sofia_redux.scan.custom.sofia.info.telescope import SofiaTelescopeInfo
 from sofia_redux.scan.utilities import utils
 from sofia_redux.scan.info.camera.info import CameraInfo
-from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 
 __all__ = ['SofiaInfo']
 
@@ -42,8 +41,9 @@ class SofiaInfo(WeatherInfo, CameraInfo):
         Parameters
         ----------
         configuration_path : str, optional
-            An alternate directory path to the configuration tree to be used
-            during the reduction.  The default is <package>/data/configurations.
+            An alternate directory path to the configuration tree to be
+            used during the reduction.  The default is
+            <package>/data/configurations.
         """
         super().__init__(configuration_path=configuration_path)
         self.name = 'sofia'
@@ -277,7 +277,7 @@ class SofiaInfo(WeatherInfo, CameraInfo):
         # SOFIA array keys
         if self.detector_array is not None and len(scans) == 1:
             self.detector_array.boresight_index = (
-                    first_scan.info.detector_array.boresight_index)
+                first_scan.info.detector_array.boresight_index)
 
         self.edit_header(header)
 
@@ -459,7 +459,8 @@ class SofiaInfo(WeatherInfo, CameraInfo):
             self.history = list(header['HISTORY'])
 
         if len(self.history) > 0:
-            log.debug(f"Processing History: {len(self.history)} entries found.")
+            log.debug(f"Processing History: "
+                      f"{len(self.history)} entries found.")
 
     def get_ambient_kelvins(self):
         """

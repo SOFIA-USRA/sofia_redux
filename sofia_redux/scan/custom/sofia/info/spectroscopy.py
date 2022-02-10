@@ -94,7 +94,7 @@ class SofiaSpectroscopyInfo(InfoBase):
              '(km/s) Radial velocity of reference frame wrt observer.'),
             ('RVSYS', to_header_float(self.source_velocity, 'km/s'),
              '(km/s) Source radial velocity wrt observer.')
-            ]
+        ]
         insert_info_in_header(header, info, delete_special=True)
 
     def get_table_entry(self, name):

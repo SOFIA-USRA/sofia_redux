@@ -22,8 +22,8 @@ class Options(ABC):
 
         The Options contain a :class:`ConfigObj` as the container for any
         given configuration.  There is also handling provided for cases when
-        a configuration functionality results in an error.  These may be emitted
-        as log messages if `verbose` is `True`, or raised as errors if
+        a configuration functionality results in an error.  These may be
+        emitted as log messages if `verbose` is `True`, or raised as errors if
         `allow_error` is `False`.
 
         Since all configuration values are stored as strings, there are
@@ -191,7 +191,8 @@ class Options(ABC):
         -------
         value : str
         """
-        return utils.get_string(self.get(key, unalias=unalias), default=default)
+        return utils.get_string(self.get(key, unalias=unalias),
+                                default=default)
 
     def get_bool(self, key, default=False, unalias=True):
         """
@@ -332,9 +333,9 @@ class Options(ABC):
         unalias : bool, optional
             If `True`, unalias the key before attempting retrieval.
         is_positive : bool, optional
-            If `True`, ranges may be specified using both ':' and '-' characters
-            in a string.  Otherwise, the '-' character will imply a negative
-            value.
+            If `True`, ranges may be specified using both ':' and '-'
+            characters in a string.  Otherwise, the '-' character will imply
+            a negative value.
 
         Returns
         -------
@@ -364,7 +365,7 @@ class Options(ABC):
         value : list (float)
         """
         return utils.get_float_list(
-            self.get(key, default=None,  unalias=unalias),
+            self.get(key, default=None, unalias=unalias),
             default=default, delimiter=delimiter)
 
     def get_dms_angle(self, key, default=np.nan, unalias=True):
@@ -388,7 +389,8 @@ class Options(ABC):
         value : units.Quantity
             The resolved angle in degrees.
         """
-        return utils.get_dms_angle(self.get(key, default=None, unalias=unalias),
+        return utils.get_dms_angle(self.get(key, default=None,
+                                            unalias=unalias),
                                    default=default)
 
     def get_hms_time(self, key, angle=False, default=np.nan, unalias=True):

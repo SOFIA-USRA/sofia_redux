@@ -13,7 +13,7 @@ def precess_single(p, ra, dec, cos_lat, sin_lat):  # pragma: no cover
     """
     Precess the coordinates with a precession matrix.
 
-    RA and DEC coordinates are updated in-place according to:
+    RA and DEC coordinates are updated in-place according to::
 
        v0 = cos(DEC) * cos(RA)
        v1 = cos(DEC) * sin(RA)
@@ -99,8 +99,8 @@ def precess_times(p, ra, dec, cos_lat, sin_lat):  # pragma: no cover
         v1 = cos_lat_i * np.sin(ra_i)
         v2 = flat_sin_lat[i]
         for row in range(3):
-            x[row] = ((p_i[row, 0] * v0) +
-                      (p_i[row, 1] * v1) +
-                      (p_i[row, 2] * v2))
+            x[row] = ((p_i[row, 0] * v0)
+                      + (p_i[row, 1] * v1)
+                      + (p_i[row, 2] * v2))
         flat_ra[i] = np.arctan2(x[1], x[0])
         flat_dec[i] = np.arctan2(x[2], np.hypot(x[0], x[1]))

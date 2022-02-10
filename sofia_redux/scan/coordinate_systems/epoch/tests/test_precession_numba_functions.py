@@ -1,14 +1,17 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from astropy import units
 import numpy as np
 import pytest
 
-
-from sofia_redux.scan.coordinate_systems.epoch.tests.test_precession import b2j
-
+from sofia_redux.scan.coordinate_systems.epoch.epoch import J2000, B1950
+from sofia_redux.scan.coordinate_systems.epoch.precession import Precession
 from sofia_redux.scan.coordinate_systems.epoch.precession_numba_functions \
     import (precess_single, precess_times)
+
+
+@pytest.fixture
+def b2j():
+    return Precession(B1950, J2000)
 
 
 @pytest.fixture

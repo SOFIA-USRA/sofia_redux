@@ -64,7 +64,8 @@ class SofiaDetectorArrayInfo(InfoBase):
             try:
                 self.grid = Grid2D.from_header(header, alt='')
             except Exception as err:
-                log.warning(f"Could not read detector array grid system: {err}")
+                log.warning(f"Could not read detector array "
+                            f"grid system: {err}")
                 self.grid = None
         else:
             self.grid = None

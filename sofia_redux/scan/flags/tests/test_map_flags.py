@@ -15,4 +15,3 @@ def test_array_flags():
 def test_init():
     f = MapFlags()
     assert isinstance(f, MapFlags)
-

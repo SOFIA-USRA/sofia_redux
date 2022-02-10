@@ -240,15 +240,15 @@ class SkyDipModel(ABC):
         fit = offset + (t_obs * kelvin)
         t_obs = t_sky * (-(exp(-tau / sin(el) - 1))
 
-        where t_sky is the sky temperature, kelvin is the conversion factor from
-        instrument units to kelvin, offset is the signal offset, and el is the
-        elevation.
+        where t_sky is the sky temperature, kelvin is the conversion factor
+        from instrument units to kelvin, offset is the signal offset, and
+        el is the elevation.
 
         Parameters
         ----------
         elevation : units.Quantity or float or numpy.ndarray (float)
-            The elevations to fit.  If floats are provided, they should be in
-            radians.
+            The elevations to fit.  If floats are provided, they should be
+            in radians.
 
         Returns
         -------

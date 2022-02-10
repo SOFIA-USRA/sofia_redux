@@ -2,11 +2,12 @@
 
 import numpy as np
 
-from sofia_redux.scan.coordinate_systems.projection.projection_numba_functions \
-    import (equal_angles, asin, acos, asin_array, acos_array, spherical_project,
-            spherical_deproject, spherical_project_array,
-            spherical_deproject_array, calculate_celestial_pole,
-            calculate_celestial_pole_array)
+from sofia_redux.scan.coordinate_systems.projection.\
+    projection_numba_functions import (
+        equal_angles, asin, acos, asin_array, acos_array, spherical_project,
+        spherical_deproject, spherical_project_array,
+        spherical_deproject_array, calculate_celestial_pole,
+        calculate_celestial_pole_array)
 
 
 def test_equal_angles():
@@ -107,8 +108,8 @@ def test_spherical_project():
     b -= np.cos(y) * np.sin(lat_cp) * np.cos(d)
     x_cp = lon_np + np.arctan2(a, b)
     y_cp = np.arcsin(
-        (np.sin(y) * np.sin(lat_cp)) +
-        (np.cos(y) * np.cos(lat_cp) * np.cos(d))
+        (np.sin(y) * np.sin(lat_cp))
+        + (np.cos(y) * np.cos(lat_cp) * np.cos(d))
     )
     assert np.isclose(x_cp, phi)
     assert np.isclose(y_cp, theta)
@@ -163,7 +164,7 @@ def test_spherical_deproject():
     d_cp = x_cp - lon_np
     c = -np.cos(y_cp) * np.sin(d_cp)
     d = (np.sin(y_cp) * np.cos(lat_cp)) - (
-            np.cos(y_cp) * np.sin(lat_cp) * np.cos(d_cp))
+        np.cos(y_cp) * np.sin(lat_cp) * np.cos(d_cp))
     x = lon_cp + np.arctan2(c, d)
 
     e = np.sin(y_cp) * np.sin(lat_cp)

@@ -11,9 +11,9 @@ class RollResponse(FieldResponse):
         """
         Initialize a roll response mode.
 
-        The HAWC_PLUS roll response mode extracts a signal from the "roll" field
-        of the integration frame data, returning the second order derivative
-        signal which is "floating".
+        The HAWC_PLUS roll response mode extracts a signal from the
+        "roll" field of the integration frame data, returning the second
+        order derivative signal which is "floating".
 
         Parameters
         ----------
@@ -23,8 +23,8 @@ class RollResponse(FieldResponse):
             If a string is provided a `FieldGainProvider` will be set to
             operate on the given field of the channel group.
         name : str, optional
-            The name of the mode.  If not provided, will be determined from the
-            channel group name (if available).
+            The name of the mode.  If not provided, will be determined from
+            the channel group name (if available).
         """
         super().__init__(channel_group=channel_group,
                          gain_provider=gain_provider,

@@ -291,7 +291,8 @@ class Modality(ABC):
         """
         Sets the default name for each mode in the modality.
 
-        The default name is set to <modality name>:<channel data name in group>.
+        The default name is set to
+        <modality name>:<channel data name in group>.
 
         Returns
         -------
@@ -561,11 +562,12 @@ class Modality(ABC):
             if mode.fixed_gains:
                 continue
             channel_indices = mode.channel_group.indices
-            new_gain, new_weight = mode.derive_gains(integration, robust=robust)
+            new_gain, new_weight = mode.derive_gains(
+                integration, robust=robust)
             update_gain = gains[channel_indices]
             update_weight = gain_weights[channel_indices]
-            update_gain = ((update_weight * update_gain) +
-                           (new_gain * new_weight))
+            update_gain = ((update_weight * update_gain)
+                           + (new_gain * new_weight))
             update_weight = update_weight + new_weight
             nzi = update_weight > 0
             update_gain[nzi] /= update_weight[nzi]

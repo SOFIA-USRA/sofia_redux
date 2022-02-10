@@ -3,8 +3,8 @@
 import numpy as np
 from astropy import units
 
-from sofia_redux.scan.coordinate_systems.projection.zenithal_projection import \
-    ZenithalProjection
+from sofia_redux.scan.coordinate_systems.projection.zenithal_projection \
+    import ZenithalProjection
 
 __all__ = ['SlantOrthographicProjection']
 
@@ -79,7 +79,7 @@ class SlantOrthographicProjection(ZenithalProjection):
     @classmethod
     def theta_of_r(cls, r):
         """
-        Return the angle theta (latitude) given a radius from the central point.
+        Return theta (latitude) given a radius from the central point.
 
         For the slant orthographic projection, the latitude (theta) of a point
         at a distance r from the center of the projection is given as:

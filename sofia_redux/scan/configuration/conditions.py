@@ -219,7 +219,7 @@ class Conditions(Options):
             return False
 
         try:
-            return eval(f'%f %s %f' % (value, operator, test_value))
+            return eval('%f %s %f' % (value, operator, test_value))
         except (ValueError, TypeError):  # pragma: no cover
             return False
 

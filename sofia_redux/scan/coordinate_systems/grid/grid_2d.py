@@ -2,7 +2,6 @@
 
 from abc import abstractmethod
 from astropy import log, units
-from astropy.io import fits
 import numpy as np
 import re
 
@@ -18,7 +17,6 @@ from sofia_redux.scan.coordinate_systems.galactic_coordinates import \
     GalacticCoordinates
 from sofia_redux.scan.coordinate_systems.super_galactic_coordinates import \
     SuperGalacticCoordinates
-from sofia_redux.scan.coordinate_systems.coordinate_axis import CoordinateAxis
 
 __all__ = ['Grid2D']
 
@@ -30,7 +28,8 @@ class Grid2D(Grid):
         Initialize a 2-dimensional abstract grid.
 
         The grid is used to convert from 2D coordinates to offsets in relation
-        to a specified reference onto a regular grid, and the reverse operation.
+        to a specified reference onto a regular grid, and the reverse
+        operation.
 
         Forward transform: grid projection -> offsets -> coordinates
         Reverse transform: coordinates -> offsets -> grid projection
@@ -342,8 +341,8 @@ class Grid2D(Grid):
         coordinates, and the second set should provide the type of projection
         geometry.  The first set is left justified, with hyphens filling in any
         blank characters to the right, and the second set should be right
-        justified with hyphens filling in any blank characters to the left.  For
-        example, 'RA---TAN' or 'GLON-AIT'.
+        justified with hyphens filling in any blank characters to the left.
+        For example, 'RA---TAN' or 'GLON-AIT'.
 
         Note that in addition to the standard FITS CTYPE standards, the LON and
         LAT coordinate systems are also recognized.  E.g., 'LAT--TAN'.
@@ -408,7 +407,7 @@ class Grid2D(Grid):
         projection_name = self.reference.__class__.__name__.split(
             'Coordinates')[0]
         reference_str = f'{projection_name}: {self.reference}'
-        projection_str = (f'{self.projection.get_full_name()} ' 
+        projection_str = (f'{self.projection.get_full_name()} '
                           f'({self.projection.get_fits_id()})')
         dx, dy = self.resolution.coordinates
         if isinstance(dx, units.Quantity):
@@ -803,7 +802,8 @@ class Grid2D(Grid):
                                   "Reference grid index")
         header[f'CRPIX2{alt}'] = (self.reference_index.y + 1,
                                   "Reference grid index")
-        self.projection.reference.edit_header(header, key_stem='CRVAL', alt=alt)
+        self.projection.reference.edit_header(header,
+                                              key_stem='CRVAL', alt=alt)
 
         # Change from native to apparent for reversed axes.
         a = self.m.copy()
@@ -1119,7 +1119,8 @@ class Grid2D(Grid):
         if coordinates is None:
             coordinates = self.projection.get_coordinate_instance()
         index_offsets = self.index_to_offset(indices, in_place=False)
-        return self.projection.deproject(index_offsets, coordinates=coordinates)
+        return self.projection.deproject(index_offsets,
+                                         coordinates=coordinates)
 
     def get_offset(self, indices, offset=None):
         """

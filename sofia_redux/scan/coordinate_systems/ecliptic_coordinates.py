@@ -15,13 +15,14 @@ __all__ = ['EclipticCoordinates']
 
 class EclipticCoordinates(PrecessingCoordinates):
 
-    INCLINATION = ((23 * units.Unit('degree')) +
-                   (26 * units.Unit('arcmin')) +
-                   (30 * units.Unit('arcsec')))
+    INCLINATION = ((23 * units.Unit('degree'))
+                   + (26 * units.Unit('arcmin'))
+                   + (30 * units.Unit('arcsec')))
     EQUATORIAL_POLE = CelestialCoordinates.get_pole(
         INCLINATION, 0.0 * units.Unit('degree'))
 
-    def __init__(self, coordinates=None, unit='degree', copy=True, epoch=J2000):
+    def __init__(self, coordinates=None, unit='degree',
+                 copy=True, epoch=J2000):
         super().__init__(coordinates=coordinates, unit=unit, copy=copy,
                          epoch=epoch)
 

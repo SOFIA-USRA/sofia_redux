@@ -24,20 +24,21 @@ def load_timestream(frame_data, frame_weights, frame_valid, modeling_frames,
     """
     Load timestream data from the supplied frame data.
 
-    The timestream data is defined as:
+    The timestream data is defined as::
 
         timestream = (d * w) - mean(d * w)
 
-    In addition, the points are also calculated at this stage as:
+    In addition, the points are also calculated at this stage as::
 
         points = sum(w)
 
-    where d is the `frame_data` and w are the `frame_weights`.  This calculation
-    occurs for each channel supplied in `channel_indices`.  Only valid samples
-    are included in the mean and sum operations, and equivalent timestream
-    values for invalid samples will be set to zero on output.  Invalid samples
-    are those in which the frame is marked as invalid or a modeling frame, the
-    frame data is NaN or sample flag is nonzero.
+    where d is the `frame_data` and w are the `frame_weights`.  This
+    calculation occurs for each channel supplied in `channel_indices`.
+    Only valid samples are included in the mean and sum operations, and
+    equivalent timestream values for invalid samples will be set to zero
+    on output.  Invalid samples are those in which the frame is marked as
+    invalid or a modeling frame, the frame data is NaN or sample flag is
+    nonzero.
 
     Parameters
     ----------
@@ -148,13 +149,13 @@ def apply_rejection_to_parms(frame_valid, frame_weight, frame_parms, dp,
     Update the frame dependents following the remove operation.
 
     Apply the channel dependent updates to the frame dependents.  For a given
-    frame the increment is given by:
+    frame the increment is given by::
 
         increment = w * sum(dp)
 
-    where w is the frame relative weight, dp is the channel dependent delta, and
-    the sum occurs over valid frames and nonzero samples.  The frame dependents
-    are updated via:
+    where w is the frame relative weight, dp is the channel dependent delta,
+    and the sum occurs over valid frames and nonzero samples.  The frame
+    dependents are updated via::
 
        frame_dependents = frame_dependents + increment
 
@@ -208,9 +209,9 @@ def dft_filter_frequency_channel(data, fch, rejection_value, rejected, n_frames
     rejection_value : float
         The filter rejection value for the `fch` channel.
     rejected : numpy.ndarray (float)
-        The current rejected overall values (in Fourier space).  This is updated
-        in-place, so must be correct on entry and be the same shape as `data`
-        (pow2ceil(n_frames),).
+        The current rejected overall values (in Fourier space).  This is
+        updated in-place, so must be correct on entry and be the same shape
+        as `data` (pow2ceil(n_frames),).
     n_frames : int
         The number of integration frames.
 
@@ -259,8 +260,8 @@ def dft_filter_frames(data, rejection, n_frames):  # pragma: no cover
     Parameters
     ----------
     data : numpy.ndarray (float)
-        The data to filter of shape (n,) where n = pow2ceil(n_frames).  The data
-        are updated in-place.
+        The data to filter of shape (n,) where n = pow2ceil(n_frames).
+        The data are updated in-place.
     rejection : numpy.ndarray (float)
         The rejection filter of shape (nf + 1,) where nf = n // 2.
     n_frames : int
@@ -337,8 +338,8 @@ def level_for_channels(signal, valid_frame, modeling_frame, sample_flag,
         will exclude that given channel and frame from being included in the
         averaging calculation.
     channel_indices : numpy.ndarray (int)
-        The channel indices for which `signal` is applicable and maps n_channels
-        onto all_channels.  An array of shape (n_channels,).
+        The channel indices for which `signal` is applicable and maps
+        n_channels onto all_channels.  An array of shape (n_channels,).
 
     Returns
     -------
@@ -436,16 +437,16 @@ def resample(old, new):  # pragma: no cover
     Parameters
     ----------
     old : numpy.ndarray (float)
-        The old channel profiles of shape (n1, n_channels)
+        The old channel profiles of shape (n_channels, n1)
     new : numpy.ndarray (float)
-        The new channel profiles of shape (n2, n_channels).  Updated in-place.
+        The new channel profiles of shape (n_channels, n2).  Updated in-place.
 
     Returns
     -------
     None
     """
-    n1, n_channels = old.shape
-    n2 = new.shape[0]
+    n_channels, n1 = old.shape
+    n2 = new.shape[1]
     n = n1 / n2
 
     for i in range(n2):
@@ -455,14 +456,14 @@ def resample(old, new):  # pragma: no cover
 
         for j in range(n_channels):
             if start == end:
-                new[i, j] = old[start, j]
+                new[j, i] = old[j, start]
             else:
                 count = 0
                 data_sum = 0.0
                 for k in range(start, end):
                     count += 1
-                    data_sum += old[k, j]
-                new[i, j] = data_sum / count
+                    data_sum += old[j, k]
+                new[j, i] = data_sum / count
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
@@ -546,8 +547,8 @@ def calculate_channel_point_responses(min_fch, source_profile, profiles,
     """
     Calculate the point response for each given channel of an adaptive filter.
 
-    This is a separate implementation of :func:`calculate_varied_point_response`
-    for use over multiple channels.
+    This is a separate implementation of
+    :func:`calculate_varied_point_response` for use over multiple channels.
 
     Parameters
     ----------
@@ -670,7 +671,8 @@ def calc_mean_amplitudes(amplitudes, amplitude_weights, spectrum, windows,
             amplitudes[channel, f] = amplitude
             amplitude_weights[channel, f] = pts
 
-        # Add the Nyquist component to the last bin unless killed by kill filter
+        # Add the Nyquist component to the last bin unless
+        # killed by kill filter
         nyquist_value = real[-1]
         if nyquist_value != 0:
             nv = amplitudes[channel, -1]
@@ -806,8 +808,8 @@ def add_frame_parms(rejected, points, weights, frame_valid, modeling_frame,
 
     and w is the frame weights (`weights`).  Only valid samples (frame/channel
     combination will be updated or considered during the operation.  A valid
-    sample must consist of a valid non-modeling frame with nonzero frame weight,
-    and a zero valued sample flag.
+    sample must consist of a valid non-modeling frame with nonzero frame
+    weight, and a zero valued sample flag.
 
     Parameters
     ----------

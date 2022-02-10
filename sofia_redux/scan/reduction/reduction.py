@@ -41,7 +41,8 @@ class Reduction(ReductionVersion):
             An optional configuration file to use.
         configuration_path : str, optional
             An alternate directory path to the configuration tree to be used
-            during the reduction.  The default is <package>/data/configurations.
+            during the reduction.  The default is
+            <package>/data/configurations.
         """
         super().__init__()
         self.scans = []
@@ -224,7 +225,7 @@ class Reduction(ReductionVersion):
     def total_reductions(self):
         """
         Return the total number of reductions to be processed.
-        
+
         This is of importance for polarimetry HAWC_PLUS reductions, where
         separate source maps are generated for each sub-reduction.  Otherwise,
         it is expected for there to only be a single reduction.
@@ -372,13 +373,10 @@ class Reduction(ReductionVersion):
 
         Parameters
         ----------
-        args : 5-tuple
+        args : 2-tuple
             A tuple of arguments where:
                 args[0] - list (str) of all filenames
                 args[1] - The reduction Channels object.
-                args[2] - A default filename (str) for the log file if required.
-                args[3] - bool indicating if the read should only produce a log.
-                args[4] - A dict of logging options if logging is required.
         file_number : int
             The index of the file to read in all of the supplied filenames
             (args[0]).
@@ -559,7 +557,8 @@ class Reduction(ReductionVersion):
         reduction_files = sub_reduction.reduction_files
         if reduction_files is None or len(reduction_files) == 0:
             log.warning(f"No reduction files exist for sub-reduction "
-                        f"{reduction_number}.  Sub-reduction will be excluded.")
+                        f"{reduction_number}.  Sub-reduction will "
+                        f"be excluded.")
             return None
         sub_reduction.read_scans()
 
@@ -626,7 +625,7 @@ class Reduction(ReductionVersion):
             if self.is_sub_reduction:
                 reduction_name = f'Sub-reduction {self.reduction_number}'
             else:
-                reduction_name = f'Reduction'
+                reduction_name = 'Reduction'
             log.warning(f"{reduction_name} contains no valid scans.")
             return
 
@@ -917,8 +916,8 @@ class Reduction(ReductionVersion):
         """
         Update important configuration settings during prior to run.
 
-        The output path and parallel processing configuration will be determined
-        during this stage.
+        The output path and parallel processing configuration will
+        be determined during this stage.
 
         Parameters
         ----------
@@ -949,7 +948,7 @@ class Reduction(ReductionVersion):
 
     def update_parallel_config(self, reset=False):
         """
-        Update the maximum number of jobs to parallel process at any given time.
+        Update the maximum number of jobs to parallel process.
 
         Parameters
         ----------
@@ -998,7 +997,7 @@ class Reduction(ReductionVersion):
         Determines:
             1 - The number of sub-reductions to read in parallel
             2 - The number of scans to process in parallel
-            3 - The number of tasks (processes within scans) to run in parallel.
+            3 - The number of tasks (processes within scans) to run in parallel
 
         Parameters
         ----------
@@ -1047,7 +1046,7 @@ class Reduction(ReductionVersion):
                     self.max_jobs // self.parallel_scans, 1, self.max_jobs))
 
             self.available_reduction_jobs = (
-                    self.parallel_scans * self.parallel_tasks)
+                self.parallel_scans * self.parallel_tasks)
             self.jobs_assigned = True
             return
 
@@ -1067,7 +1066,8 @@ class Reduction(ReductionVersion):
 
         # The core operations
         self.parallel_read = int(np.clip(np.sum(n_read), 1, self.max_cores))
-        self.parallel_reductions = int(np.clip(n_reductions, 1, self.max_cores))
+        self.parallel_reductions = int(np.clip(n_reductions, 1,
+                                               self.max_cores))
 
         # The thread based operations
         if mode == 'ops':
@@ -1092,16 +1092,18 @@ class Reduction(ReductionVersion):
                     task_jobs[min_idx] -= 1
                     break
             self.parallel_tasks = int(
-                np.clip(self.max_jobs // self.parallel_scans, 1, self.max_jobs))
+                np.clip(self.max_jobs // self.parallel_scans,
+                        1, self.max_jobs))
 
         self.available_reduction_jobs = (
-                self.parallel_scans * self.parallel_tasks)
+            self.parallel_scans * self.parallel_tasks)
         available_reduction_jobs = n_scan_jobs * task_jobs
         for i, sub_reduction in enumerate(self.sub_reductions):
             sub_reduction.parallel_reductions = 1
             sub_reduction.parallel_scans = n_scan_jobs[i]
             sub_reduction.parallel_tasks = task_jobs[i]
-            sub_reduction.available_reduction_jobs = available_reduction_jobs[i]
+            sub_reduction.available_reduction_jobs = \
+                available_reduction_jobs[i]
             sub_reduction.parallel_read = n_read[i]
             sub_reduction.jobs_assigned = True
 
@@ -1123,7 +1125,7 @@ class Reduction(ReductionVersion):
         if self.is_sub_reduction:
             info_str = f'Sub-reduction {self.reduction_number}'
         else:
-            info_str = f'Reduction'
+            info_str = 'Reduction'
 
         n_scans = self.size
 
@@ -1284,8 +1286,9 @@ class Reduction(ReductionVersion):
             self.pickle_sub_reductions()
 
         self.sub_reductions = multiprocessing.multitask(
-            self.parallel_safe_reduce_sub_reduction, range(n_sub), args, kwargs,
-            jobs=jobs,  max_nbytes=None, force_processes=True, logger=log)
+            self.parallel_safe_reduce_sub_reduction, range(n_sub),
+            args, kwargs, jobs=jobs, max_nbytes=None,
+            force_processes=True, logger=log)
 
         if use_pickle:
             self.unpickle_sub_reductions(delete=True)
@@ -1301,8 +1304,8 @@ class Reduction(ReductionVersion):
         Reduce a single sub-reduction.
 
         If the sub-reduction is a string and point to a file, it will be taken
-        to be a cloudpickle file and restored.  If the reduction was successful,
-        this file will be deleted.
+        to be a cloudpickle file and restored.  If the reduction was
+        successful, this file will be deleted.
 
         Parameters
         ----------

@@ -411,7 +411,8 @@ class TestScan(object):
         peak.x = 1 * units.arcsec
         peak.y = 2 * units.arcsec
 
-        m1 = mocker.patch.object(populated_scan, 'get_native_pointing_increment',
+        m1 = mocker.patch.object(populated_scan,
+                                 'get_native_pointing_increment',
                                  return_value=peak)
         m2 = mocker.patch.object(populated_scan.pointing, 'edit_header')
 
@@ -617,7 +618,7 @@ class TestScan(object):
 
         # set a trigger to False: gains not updated
         populated_scan.integrations[0] = test_integ
-        modality = populated_scan.integrations[0].channels.modalities.get('bias')
+        modality = test_integ.channels.modalities.get('bias')
         modality.trigger = 'False'
         populated_scan.update_gains('bias')
         assert populated_scan.integrations[0].comments == expected
@@ -664,7 +665,7 @@ class TestScan(object):
                     'dY': -0.11323433 * units.arcsec,
                     'X': -0.14764207 * units.arcsec,
                     'Y': -0.11323433 * units.arcsec,
-                    'asymX':  0.3364783 * units.Unit('percent'),
+                    'asymX': 0.3364783 * units.Unit('percent'),
                     'asymY': 0.10495604 * units.Unit('percent'),
                     'dasymX': 0.0085857 * units.Unit('percent'),
                     'dasymY': 0.00857513 * units.Unit('percent'),
@@ -966,4 +967,3 @@ class TestScan(object):
         with pytest.raises(ValueError) as err:
             populated_scan.frame_midpoint_value('test')
         assert 'does not contain a test field' in str(err)
-

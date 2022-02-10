@@ -58,7 +58,7 @@ def test_copy():
 
 def test_eq(b2j, j2b):
     assert b2j == b2j
-    assert b2j != None
+    assert b2j is not None
     assert b2j != j2b
     b2 = Precession(b2j.from_epoch, b2j.from_epoch)
     assert b2 != b2j
@@ -144,7 +144,7 @@ def test_precess(from_2001, to_2001):
     p_forward.precess(c)
     assert c.epoch != J2000 and c.epoch.year == 2001
     # Note x coordinates are negative RA
-    assert np.allclose(c.coordinates.value, [[-1.01281092,  1.00556533]])
+    assert np.allclose(c.coordinates.value, [[-1.01281092, 1.00556533]])
     c2001 = c.copy()
     p_reverse.precess(c)
     assert c == c0
@@ -155,7 +155,5 @@ def test_precess(from_2001, to_2001):
     precession = Precession(from_epoch, to_2001.to_epoch)
     precession.precess(c)
     assert c[0] == c2001
-    assert np.allclose(c[1].coordinates.value, [-0.98718903,  0.99443467])
+    assert np.allclose(c[1].coordinates.value, [-0.98718903, 0.99443467])
     assert c.epoch == c2001.epoch
-
-

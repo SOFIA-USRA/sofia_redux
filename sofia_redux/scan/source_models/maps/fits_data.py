@@ -317,7 +317,8 @@ class FitsData(FlaggedArray):
         if unit_key in self.local_units:
             return self.local_units.get(unit_key)
         else:
-            return self.local_units.get(self.alternate_unit_names.get(unit_key))
+            return self.local_units.get(
+                self.alternate_unit_names.get(unit_key))
 
     def set_unit(self, unit):
         """
@@ -546,7 +547,8 @@ class FitsData(FlaggedArray):
             return
         else:
             if is_array:
-                message = f'added scaled {value.__class__.__name__} ({factor}x)'
+                message = f'added scaled ' \
+                          f'{value.__class__.__name__} ({factor}x)'
             else:
                 message = f'add {value * factor}'
         self.add_history(message)
@@ -856,9 +858,10 @@ class FitsData(FlaggedArray):
         image : FlaggedArray or numpy.ndarray (float)
             The image to resample.
         to_indices : numpy.ndarray (float or int)
-            An array of shape (n_dimensions, self.shape or self.size) specifying
-            which image pixels belong to the resampled map.  i.e., if this were
-            a 2-D array and the pixel at (x, y) = (2, 2) corresponds to the
+            An array of shape (n_dimensions, self.shape or self.size)
+            specifying which image pixels belong to the resampled map.
+            I.e., if this were a 2-D array and the pixel at
+            (x, y) = (2, 2) corresponds to the
             image at pixel (3.3, 4.4) then to_indices[:, 2, 2] = [4.4, 3.3]
             (reversed because numpy).
         kernel : numpy.ndarray (float), optional

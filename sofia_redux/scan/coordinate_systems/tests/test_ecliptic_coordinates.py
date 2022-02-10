@@ -13,8 +13,8 @@ def test_init():
     assert e.epoch.year == 2000
     assert e.unit == 'degree'
     assert e.coordinates is None
-    
-    
+
+
 def test_setup_coordinate_system():
     e = EclipticCoordinates()
     e.setup_coordinate_system()
@@ -32,7 +32,7 @@ def test_setup_coordinate_system():
     assert e.y_offset_axis.short_label == 'dELAT'
     assert not e.y_offset_axis.reverse
 
-    
+
 def test_fits_longitude_stem():
     e = EclipticCoordinates()
     assert e.fits_longitude_stem == 'ELON'
@@ -55,20 +55,20 @@ def test_equatorial_pole():
 
 
 def test_get_equatorial_pole():
-    assert (EclipticCoordinates().get_equatorial_pole() ==
-            EclipticCoordinates.EQUATORIAL_POLE)
+    assert (EclipticCoordinates().get_equatorial_pole()
+            == EclipticCoordinates.EQUATORIAL_POLE)
 
 
 def test_get_zero_longitude():
     assert EclipticCoordinates().get_zero_longitude() == (
-            90 * units.Unit('degree'))
+        90 * units.Unit('degree'))
 
 
 def test_precess_to_epoch():
     e = EclipticCoordinates([30, 30])
     epoch = e.epoch.get_epoch('J3000')
     e.precess_to_epoch(epoch)
-    assert np.allclose(e.coordinates.value, [-29.99999821,  29.99999816])
+    assert np.allclose(e.coordinates.value, [-29.99999821, 29.99999816])
 
 
 def test_edit_header():

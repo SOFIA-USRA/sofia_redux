@@ -27,7 +27,7 @@ def test_calculate_celestial_pole():
 def test_get_phi_theta():
     p = ZP()
     pt = p.get_phi_theta(Coordinate2D([1, 2], unit='degree'))
-    assert np.allclose(pt.coordinates.value, [153.43494882,  87.76393202])
+    assert np.allclose(pt.coordinates.value, [153.43494882, 87.76393202])
     pt1 = pt.copy()
     pt2 = p.get_phi_theta(Coordinate2D([1, 2], unit='degree'), phi_theta=pt1)
     assert pt1 is pt2 and pt2 == pt

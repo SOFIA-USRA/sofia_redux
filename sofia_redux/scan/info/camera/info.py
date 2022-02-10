@@ -22,8 +22,9 @@ class CameraInfo(Info):
         Parameters
         ----------
         configuration_path : str, optional
-            An alternate directory path to the configuration tree to be used
-            during the reduction.  The default is <package>/data/configurations.
+            An alternate directory path to the configuration tree to be
+            used during the reduction.  The default is
+            <package>/data/configurations.
         """
         super().__init__(configuration_path=configuration_path)
         self.name = 'camera'
@@ -48,7 +49,8 @@ class CameraInfo(Info):
         if source_type == 'pixelmap':
             return PixelMap(info=self, reduction=reduction)
         else:
-            return super().get_source_model_instance(scans, reduction=reduction)
+            return super().get_source_model_instance(scans,
+                                                     reduction=reduction)
 
     def get_rotation_angle(self):
         """
@@ -115,7 +117,8 @@ class CameraInfo(Info):
         """
         if self.configuration.get_bool('point'):
             return
-        log.debug("Setting 'point' option to obtain pointing/calibration data.")
+        log.debug("Setting 'point' option to obtain "
+                  "pointing/calibration data.")
         self.configuration.set_option('point', True)
         if scan is not None:
             scan.configuration.set_option('point', True)

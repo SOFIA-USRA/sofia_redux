@@ -80,7 +80,7 @@ class SofiaNoddingInfo(InfoBase):
             ('NODPATT', self.pattern, 'Ponting sequence for one nod cycle.'),
             ('NODCRSYS', self.coordinate_system, 'Nodding coordinate system.'),
             ('NODBEAM', self.beam_position, 'Nod beam position.'),
-            ]
+        ]
 
         if self.style is not None:
             info.append(('NODSTYLE', self.style, 'Nodding style'))

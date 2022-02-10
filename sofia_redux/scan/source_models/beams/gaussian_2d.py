@@ -7,7 +7,6 @@ from astropy.stats import gaussian_fwhm_to_sigma, gaussian_sigma_to_fwhm
 from copy import deepcopy
 import numpy as np
 
-from sofia_redux.scan.coordinate_systems.grid.grid_2d import Grid2D
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.coordinate_systems.index_2d import Index2D
 
@@ -22,9 +21,9 @@ class Gaussian2D(ABC):
     # The equivalent area lateral square size to Gaussian beam with FWHM
     FWHM_TO_SIZE = np.sqrt(AREA_FACTOR)
 
-    def __init__(self, peak=1.0, x_mean=0.0, y_mean=0.0, x_fwhm=0.0, y_fwhm=0.0,
-                 theta=0.0 * units.Unit('deg'), peak_unit=None,
-                 position_unit=None):
+    def __init__(self, peak=1.0, x_mean=0.0, y_mean=0.0,
+                 x_fwhm=0.0, y_fwhm=0.0, theta=0.0 * units.Unit('deg'),
+                 peak_unit=None, position_unit=None):
 
         if position_unit is None:
             position_unit = units.dimensionless_unscaled
@@ -565,8 +564,8 @@ class Gaussian2D(ABC):
         size_unit : astropy.units.Unit or astropy.units.Quantity or str
             The size unit to apply to the header values
         fits_id : str, optional
-            The name prefixing the FITS header BMAJ/BMIN keywords.  For example,
-            IBMAJ.
+            The name prefixing the FITS header BMAJ/BMIN keywords.
+            For example, IBMAJ.
 
         Returns
         -------
@@ -596,8 +595,8 @@ class Gaussian2D(ABC):
         header : astropy.io.fits.header.Header
             The FITS header to edit.
         fits_id : str, optional
-            The name prefixing the FITS header BMAJ/BMIN keywords.  For example,
-            IBMAJ.
+            The name prefixing the FITS header BMAJ/BMIN keywords.
+            For example, IBMAJ.
         beam_name : str, optional
             The name of the beam.
         size_unit : astropy.units.Unit or Quantity or str, optional
@@ -698,8 +697,8 @@ class Gaussian2D(ABC):
         if isinstance(pixels_per_beam, units.Quantity):
             pixels_per_beam = pixels_per_beam.decompose().value
 
-        map_size = Index2D(
-            coordinates=(2 * np.ceil(sigmas * pixels_per_beam).astype(int)) + 1)
+        coord = (2 * np.ceil(sigmas * pixels_per_beam).astype(int)) + 1
+        map_size = Index2D(coordinates=coord)
 
         sigma = v0.copy()
         sigma.scale(gaussian_fwhm_to_sigma)

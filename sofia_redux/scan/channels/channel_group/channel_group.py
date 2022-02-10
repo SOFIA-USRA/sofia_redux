@@ -180,9 +180,9 @@ class ChannelGroup(FlaggedDataGroup, ChannelData):
         -------
         None
         """
-        mask = self.is_flagged(self.flagspace.flags.DEAD |
-                               self.flagspace.flags.DISCARD)
-        for attribute in ['coupling', 'gain', 'weight', 'variance', 'coupling']:
+        mask = self.is_flagged(self.flagspace.flags.DEAD
+                               | self.flagspace.flags.DISCARD)
+        for attribute in ['coupling', 'gain', 'weight', 'variance']:
             values = getattr(self, attribute)
             values[mask] = 0.0
             if attribute == 'coupling':

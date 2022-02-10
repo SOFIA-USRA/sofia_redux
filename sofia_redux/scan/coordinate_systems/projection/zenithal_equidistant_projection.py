@@ -2,8 +2,8 @@
 
 from astropy import units
 
-from sofia_redux.scan.coordinate_systems.projection.zenithal_projection import \
-    ZenithalProjection
+from sofia_redux.scan.coordinate_systems.projection.zenithal_projection \
+    import ZenithalProjection
 
 __all__ = ['ZenithalEquidistantProjection']
 
@@ -80,10 +80,10 @@ class ZenithalEquidistantProjection(ZenithalProjection):
     @classmethod
     def theta_of_r(cls, r):
         """
-        Return the angle theta (latitude) given a radius from the central point.
+        Return theta (latitude) given a radius from the central point.
 
-        For the zenithal equidistant projection, the latitude (theta) of a point
-        at a distance r from the center of the projection is given as:
+        For the zenithal equidistant projection, the latitude (theta) of a
+        point at a distance r from the center of the projection is given as:
 
             theta = pi/2 - r
 

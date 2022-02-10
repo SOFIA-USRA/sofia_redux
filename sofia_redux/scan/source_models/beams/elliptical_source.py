@@ -14,15 +14,16 @@ class EllipticalSource(GaussianSource):
     """
     Represent a Gaussian source as an elliptical.
     """
-    def __init__(self, peak=1.0, x_mean=0.0, y_mean=0.0, x_fwhm=0.0, y_fwhm=0.0,
-                 theta=0.0 * units.Unit('deg'), peak_unit=None,
+    def __init__(self, peak=1.0, x_mean=0.0, y_mean=0.0, x_fwhm=0.0,
+                 y_fwhm=0.0, theta=0.0 * units.Unit('deg'), peak_unit=None,
                  position_unit=None, gaussian_model=None):
 
         self.elongation = None
         self.elongation_weight = None
         self.angle_weight = None
-        super().__init__(peak=peak, x_mean=x_mean, y_mean=y_mean, x_fwhm=x_fwhm,
-                         y_fwhm=y_fwhm, theta=theta, peak_unit=peak_unit,
+        super().__init__(peak=peak, x_mean=x_mean, y_mean=y_mean,
+                         x_fwhm=x_fwhm, y_fwhm=y_fwhm,
+                         theta=theta, peak_unit=peak_unit,
                          position_unit=position_unit,
                          gaussian_model=gaussian_model)
 
@@ -173,7 +174,8 @@ class EllipticalSource(GaussianSource):
             return 0.0
         return np.sqrt(1.0 / self.elongation_weight)
 
-    def set_elongation(self, major=None, minor=None, weight=np.inf, angle=None):
+    def set_elongation(self, major=None, minor=None,
+                       weight=np.inf, angle=None):
         """
         Set the elongation parameter.
 
@@ -319,8 +321,8 @@ class EllipticalSource(GaussianSource):
                     f'angle={angle:.6f} deg)')
         return info
 
-    def find_source_extent(self, image, max_iterations=40, radius_increment=1.1,
-                           tolerance=0.05):
+    def find_source_extent(self, image, max_iterations=40,
+                           radius_increment=1.1, tolerance=0.05):
         """
         Find the extent of the source and shape.
 
@@ -388,7 +390,9 @@ class EllipticalSource(GaussianSource):
         grid_offsets.subtract(center)
         distance = grid_offsets.length
 
-        keep = image.valid & (distance >= min_radius) & (distance <= max_radius)
+        keep = (image.valid
+                & (distance >= min_radius)
+                & (distance <= max_radius))
 
         data_values = image.data[keep]
         angle = 2 * np.arctan2(grid_offsets.y[keep], grid_offsets.x[keep])
@@ -414,7 +418,7 @@ class EllipticalSource(GaussianSource):
 
     def get_data(self, map2d, size_unit=None):
         """
-        Return a dictionary of properties relating to the source model on a map.
+        Return a dictionary of properties for to the source model on a map.
 
         The key values returned are:
 

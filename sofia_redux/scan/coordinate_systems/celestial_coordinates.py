@@ -17,14 +17,14 @@ class CelestialCoordinates(SphericalCoordinates):
         """
         Initialize a CelestialCoordinates object.
 
-        Celestial coordinates are used to represent spherical coordinates on the
-        sky with respect to a given pole.  The functionality implemented here
-        allows for transformations between spherical coordinates with differing
-        poles or zero-longitude definitions.
+        Celestial coordinates are used to represent spherical coordinates
+        on the sky with respect to a given pole.  The functionality implemented
+        here allows for transformations between spherical coordinates with
+        differing poles or zero-longitude definitions.
 
         Parameters
         ----------
-        coordinates : list or tuple or numpy.ndarray or units.Quantity, optional
+        coordinates : list or tuple or array-like or units.Quantity, optional
             The coordinates used to populate the object during initialization.
             The first (0) value or index should represent longitudinal
             coordinates, and the second should represent latitude.
@@ -255,7 +255,7 @@ class CelestialCoordinates(SphericalCoordinates):
 
     def convert_to(self, coordinates):
         """
-        Convert coordinates to another (or same) system using these coordinates.
+        Convert coordinates to another system.
 
         Parameters
         ----------

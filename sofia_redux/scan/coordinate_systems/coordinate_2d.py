@@ -157,7 +157,7 @@ class Coordinate2D(Coordinate):
     @property
     def singular(self):
         """
-        Return if the coordinates are scalar in nature (not an array of values).
+        Return if the coordinates are scalar in nature (not an array).
 
         Returns
         -------
@@ -643,8 +643,10 @@ class Coordinate2D(Coordinate):
             x, y = self.x.value, self.y.value
             unit_str = f' ({str(self.unit)}).'
 
-        header[f'{key_stem}1{alt}'] = x, f"The reference x coordinate{unit_str}"
-        header[f'{key_stem}2{alt}'] = y, f"The reference y coordinate{unit_str}"
+        header[f'{key_stem}1{alt}'] = (
+            x, f"The reference x coordinate{unit_str}")
+        header[f'{key_stem}2{alt}'] = (
+            y, f"The reference y coordinate{unit_str}")
 
     def plot(self, *args, **kwargs):  # pragma: no cover
         """

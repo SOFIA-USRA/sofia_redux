@@ -18,9 +18,9 @@ class GaussianSource(Gaussian2D):
     """
     Extends the Gaussian2D to fit a map.
     """
-    def __init__(self, peak=1.0, x_mean=0.0, y_mean=0.0, x_fwhm=0.0, y_fwhm=0.0,
-                 theta=0.0 * units.Unit('deg'), peak_unit=None,
-                 position_unit=None, gaussian_model=None):
+    def __init__(self, peak=1.0, x_mean=0.0, y_mean=0.0,
+                 x_fwhm=0.0, y_fwhm=0.0, theta=0.0 * units.Unit('deg'),
+                 peak_unit=None, position_unit=None, gaussian_model=None):
 
         self.positioning_method = 'position'
         self.coordinates = None
@@ -249,7 +249,7 @@ class GaussianSource(Gaussian2D):
             self.fwhm_weight = 1 / (fwhm_rms ** 2)
 
         integrated_value = self.peak * (
-                (fwhm_pix * self.FWHM_TO_SIZE) ** 2)
+            (fwhm_pix * self.FWHM_TO_SIZE) ** 2)
 
         return integrated_value
 
@@ -352,7 +352,9 @@ class GaussianSource(Gaussian2D):
 
         # Calculate the peak value and fwhm from the image (maybe significance)
         self.set_peak_from(image)
-        fwhm2 = np.abs(self.source_sum * self.grid.get_pixel_area() / self.peak)
+        fwhm2 = np.abs(self.source_sum
+                       * self.grid.get_pixel_area()
+                       / self.peak)
         self.fwhm = np.sqrt(fwhm2) / self.FWHM_TO_SIZE
         fwhm_unit = self.fwhm.unit
         self.fwhm_weight = 1.0 / (fwhm_unit ** 2)
@@ -399,8 +401,8 @@ class GaussianSource(Gaussian2D):
         self.grid.projection.deproject(offset, coordinates=grid_coordinates)
         return grid_coordinates
 
-    def find_source_extent(self, image, max_iterations=40, radius_increment=0.1,
-                           tolerance=0.05):
+    def find_source_extent(self, image, max_iterations=40,
+                           radius_increment=0.1, tolerance=0.05):
         """
         Find the extent of the source and shape.
 
@@ -691,8 +693,8 @@ class GaussianSource(Gaussian2D):
         if not map2d.is_filtered():
             return 1.0
         if map2d.is_filter_blanked():
-            filter_fraction = min((map2d.filter_blanking /
-                                  self.peak_significance), 1.0)
+            filter_fraction = min((map2d.filter_blanking
+                                  / self.peak_significance), 1.0)
             filtering = 1.0 - (1.0 / map2d.get_filter_correction_factor())
             correction = 1.0 / (1.0 - filtering * filter_fraction)
             return correction
@@ -961,7 +963,7 @@ class GaussianSource(Gaussian2D):
 
     def get_data(self, map2d, size_unit=None):
         """
-        Return a dictionary of properties relating to the source model on a map.
+        Return a dictionary of properties for to the source model on a map.
 
         The key values returned are:
 

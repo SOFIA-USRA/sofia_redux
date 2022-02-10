@@ -5,8 +5,6 @@ from astropy import units
 from copy import deepcopy
 import numpy as np
 
-from sofia_redux.scan.configuration.configuration import Configuration
-
 __all__ = ['InstantFocus']
 
 
@@ -127,7 +125,8 @@ class InstantFocus(ABC):
                     setattr(self, direction, v)
                     setattr(self, f'{direction}_weight', w)
 
-                    if configuration.is_configured(f'focus.{direction}scatter'):
+                    if configuration.is_configured(
+                            f'focus.{direction}scatter'):
                         scatter = configuration.get_float(
                             f'focus.{direction}scatter') * mm
 
@@ -151,7 +150,7 @@ class InstantFocus(ABC):
                     self.z_weight = w
                     if configuration.is_configured('focus.zscatter'):
                         scatter = configuration.get_float(
-                            f'focus.zscatter') * mm
+                            'focus.zscatter') * mm
                         variance = (1 / w) + (scatter ** 2)
                         w = 1 / variance
                         self.z_weight = w

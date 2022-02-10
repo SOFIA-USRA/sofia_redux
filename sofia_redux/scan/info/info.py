@@ -19,9 +19,9 @@ from sofia_redux.scan.utilities.class_provider import \
     info_class_for
 from sofia_redux.scan.info.observation import ObservationInfo
 from sofia_redux.scan.info.telescope import TelescopeInfo
-from sofia_redux.scan.source_models.astro_intensity_map import AstroIntensityMap
+from sofia_redux.scan.source_models.astro_intensity_map import \
+    AstroIntensityMap
 from sofia_redux.scan.source_models.sky_dip import SkyDip
-from sofia_redux.scan.source_models.beams.instant_focus import InstantFocus
 
 __all__ = ['Info']
 
@@ -35,8 +35,9 @@ class Info(ABC):
         Parameters
         ----------
         configuration_path : str, optional
-            An alternate directory path to the configuration tree to be used
-            during the reduction.  The default is <package>/data/configurations.
+            An alternate directory path to the configuration tree to be
+            used during the reduction.  The default is
+            <package>/data/configurations.
         """
         self.name = None
         self.scan = None
@@ -144,8 +145,9 @@ class Info(ABC):
         name : str
             The name of the instrument
         configuration_path : str, optional
-            An alternate directory path to the configuration tree to be used
-            during the reduction.  The default is <package>/data/configurations.
+            An alternate directory path to the configuration tree to be
+            used during the reduction.  The default is
+            <package>/data/configurations.
 
         Returns
         -------
@@ -540,14 +542,15 @@ class Info(ABC):
         ----------
         header : fits.Header
         extension : int, optional
-            The HDUL extension of the header.  This is only stored for reference
-            and is not used.
+            The HDUL extension of the header.  This is only stored for
+            reference and is not used.
 
         Returns
         -------
         None
         """
-        self.configuration.read_fits(header, extension=extension, validate=True)
+        self.configuration.read_fits(header, extension=extension,
+                                     validate=True)
 
     def read_configuration(self, configuration_file='default.cfg',
                            validate=True):

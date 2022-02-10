@@ -1,7 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from astropy import units, log
-from astropy.io import fits
 import numpy as np
 import re
 
@@ -357,9 +356,9 @@ class HawcPlusDetectorArrayInfo(SofiaDetectorArrayInfo):
             (self.subarrays, self.subarray_cols), -1)
         blind_idx = channels.data.is_flagged('BLIND', indices=True)
 
-        self.dark_squid_lookup[
-            channels.data.sub[blind_idx],
-            channels.data.col[blind_idx]] = channels.data.fixed_index[blind_idx]
+        self.dark_squid_lookup[channels.data.sub[blind_idx],
+                               channels.data.col[blind_idx]] = \
+            channels.data.fixed_index[blind_idx]
 
     def initialize_channel_data(self, data):
         """

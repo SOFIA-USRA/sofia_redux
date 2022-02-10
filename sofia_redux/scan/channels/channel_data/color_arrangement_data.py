@@ -51,7 +51,7 @@ class ColorArrangementData(ChannelData):
                                 f"value ({alias})")
 
             self.info.instrument.resolution = (
-                    resolution * self.info.instrument.get_size_unit())
+                resolution * self.info.instrument.get_size_unit())
 
     @abstractmethod
     def get_pixel_count(self):

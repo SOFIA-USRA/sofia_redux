@@ -121,9 +121,10 @@ class WhiteningFilter(AdaptiveFilter):
         max_white = self.white_to - min_probe_channels + 1
         if self.white_from > max_white:
             self.white_from = max_white
-        if self.white_from < 0:
+        if self.white_from < 0:  # pragma: no cover
+            # This should never happen
             self.white_from = 0
-        if self.white_from > max_white:  # Don't think this is necessary
+        if self.white_from > max_white:  # In case min channels is too large
             self.white_to = min(min_probe_channels + 1, self.nF)
 
     def set_size(self, n):
@@ -171,16 +172,16 @@ class WhiteningFilter(AdaptiveFilter):
         """
         Calculates the mean amplitudes in the window of a spectrum.
 
+        The amplitude of the FFT spectrum is calculated as the mean value
+        within a given window (usually 1).  The weight of the mean operation
+        will also be stored in the `amplitude_weights` attribute.  These are
+        used later to calculate the channel profiles.
+
         Parameters
         ----------
         channels : ChannelGroup, optional
             The channels to update.  By default, will use all filtering
             channels.
-
-        The amplitude of the FFT spectrum is calculated as the mean value
-        within a given window (usually 1).  The weight of the mean operation
-        will also be stored in the `amplitude_weights` attribute.  These are
-        used later to calculate the channel profiles.
 
         Returns
         -------
@@ -192,10 +193,9 @@ class WhiteningFilter(AdaptiveFilter):
             channel_indices = self.channels.find_fixed_indices(
                 channels.fixed_index)
 
-        n_channels = channel_indices.size
-
         if self.channel_profiles is None or self.channel_profiles.size == 0:
-            self.channel_profiles = np.ones((n_channels, self.nF), dtype=float)
+            self.channel_profiles = np.ones((self.channels.size, self.nF),
+                                            dtype=float)
 
         self.amplitudes.fill(0.0)
         self.amplitude_weights.fill(0.0)
@@ -211,17 +211,19 @@ class WhiteningFilter(AdaptiveFilter):
         """
         Create the channel filtering profiles for whitening.
 
+        Will also set channel 1/f noise statistics.
+
+        Parameters
+        ----------
         channels : ChannelGroup, optional
             The channels to update.  By default, will use all filtering
             channels.
-
-        Will also set channel 1/f noise statistics.
 
         Returns
         -------
         None
         """
-        log.debug(f"Whitening channel profile.")
+        log.debug("Whitening channel profile.")
         if channels is None or channels is self.channels:
             channel_indices = np.arange(self.channels.size)
         else:
@@ -264,3 +266,21 @@ class WhiteningFilter(AdaptiveFilter):
         config_name : str
         """
         return 'filter.whiten'
+
+    def dft_filter(self, channels=None):
+        """
+        Return the filter rejection using a discrete FFT.
+
+        UNSUPPORTED FOR THE WHITENING FILTER.
+
+        Parameters
+        ----------
+        channels : ChannelGroup, optional
+            The channel group for which the filtering applied.  By default,
+            set to the filtering channels.
+
+        Returns
+        -------
+        None
+        """
+        super().dft_filter(channels=channels)

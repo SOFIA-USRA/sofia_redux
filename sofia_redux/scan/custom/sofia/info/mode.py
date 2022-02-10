@@ -59,7 +59,7 @@ class SofiaModeInfo(InfoBase):
             ('DITHER', self.is_dithering, 'Was dithering used?'),
             ('MAPPING', self.is_mapping, 'Was mapping?'),
             ('SCANNING', self.is_scanning, 'Was scanning?')
-            ]
+        ]
         insert_info_in_header(header, info, delete_special=True)
 
     def get_table_entry(self, name):

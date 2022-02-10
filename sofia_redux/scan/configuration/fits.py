@@ -167,7 +167,8 @@ class FitsOptions(Options):
             The value to return in cases where `key` does not exist in the
             options.
         unalias : bool, optional
-            If `True`, unalias the key before attempting to retrieve it's value.
+            If `True`, unalias the key before attempting to retrieve
+            it's value.
 
         Returns
         -------
@@ -231,8 +232,8 @@ class FitsOptions(Options):
         key : str
             The name of the FITS options key to preserve.
         header : fits.Header, optional
-            The header from which to extract the key value and comments.  If not
-            supplied, defaults to the currently stored header.
+            The header from which to extract the key value and comments.
+            If not supplied, defaults to the currently stored header.
 
         Returns
         -------

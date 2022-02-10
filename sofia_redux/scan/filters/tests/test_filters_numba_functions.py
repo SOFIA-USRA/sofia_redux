@@ -215,17 +215,17 @@ def test_level():
 
 def test_resample():
     n_frames, n_channels = 10, 5
-    old = np.arange(n_frames, dtype=float)[:, None] + np.arange(
-        n_channels)[None]
+    old = np.arange(n_frames, dtype=float)[None] + np.arange(
+        n_channels)[:, None]
     new = old.copy()
     resample(old, new)
     assert np.allclose(old, new)
 
     half_frames = n_frames // 2
-    new = np.empty((half_frames, n_channels))
+    new = np.empty((n_channels, half_frames))
     resample(old, new)
 
-    expected = np.linspace(0.5, 8.5, 5)[:, None] + np.arange(n_channels)[None]
+    expected = np.linspace(0.5, 8.5, 5)[None] + np.arange(n_channels)[:, None]
     assert np.allclose(new, expected)
 
 
@@ -422,7 +422,7 @@ def test_add_frame_parms():
     add_frame_parms(rejected, points, weights, frame_valid, modeling_frames,
                     frame_parms, sample_flags, channel_indices)
 
-    assert np.allclose(frame_parms, [0, 0, 2/3, 0, 1, 1, 1, 1, 1, 1])
+    assert np.allclose(frame_parms, [0, 0, 2 / 3, 0, 1, 1, 1, 1, 1, 1])
 
 
 def test_expand_rejection_filter():

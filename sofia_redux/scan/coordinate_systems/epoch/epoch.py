@@ -34,8 +34,8 @@ class Epoch(ABC):
         epoch.
 
         The current standard for the equinox and epoch is J2000.0 with "J"
-        signifying the Julian epoch.  Before 1984, the standard was B1950.0 with
-        "B" signifying the Besselian epoch.
+        signifying the Julian epoch.  Before 1984, the standard was
+        B1950.0 with "B" signifying the Besselian epoch.
 
         Parameters
         ----------

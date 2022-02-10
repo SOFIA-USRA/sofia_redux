@@ -2,8 +2,8 @@
 
 from abc import ABC, abstractmethod
 
-from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
-from sofia_redux.scan.utilities.class_provider import get_simulated_source_class
+from sofia_redux.scan.utilities.class_provider \
+    import get_simulated_source_class
 
 __all__ = ['SimulatedSource']
 

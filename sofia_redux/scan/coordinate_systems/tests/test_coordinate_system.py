@@ -75,6 +75,3 @@ def test_add_axis(c2d):
     with pytest.raises(ValueError) as err:
         c.add_axis(z)
     assert 'already has axis z-axis.' in str(err.value)
-
-
-

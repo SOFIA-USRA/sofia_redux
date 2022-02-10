@@ -167,8 +167,8 @@ def test_box_smooth_along_zero_axis():
     expected[:, 0] = np.nan
     expected[:, -2:] = np.nan
     expected[:, 8] = x[:, 8]
-    expected[:, 9] = x[:, 9] + 1/3
-    expected[:, 10] = x[:, 10] + 2/3
+    expected[:, 9] = x[:, 9] + 1 / 3
+    expected[:, 10] = x[:, 10] + 2 / 3
     expected[:, 11] = x[:, 11] + 1
     assert np.allclose(result, expected, equal_nan=True)
 
@@ -216,7 +216,8 @@ def test_regular_kernel_convolve():
     assert set(np.unique(w)) == {2, 2.5, 3}
     cross_y = np.asarray([29, 30, 30, 30, 31])
     cross_x = np.asarray([32, 31, 32, 33, 32])
-    assert np.allclose(c[cross_y, cross_x], [1/6, 1/6, 1/3, 1/6, 1/6])
+    assert np.allclose(c[cross_y, cross_x],
+                       [1 / 6, 1 / 6, 1 / 3, 1 / 6, 1 / 6])
     mask = np.full(data.shape, True)
     mask[cross_y, cross_x] = False
     assert np.allclose(c[mask], 0)
@@ -238,7 +239,8 @@ def test_regular_kernel_convolve():
     valid = np.full(data.shape, True)
     valid[30, 31] = False
     c, w = nf.regular_kernel_convolve(data, kernel, valid=valid)
-    assert np.allclose(c[cross_y, cross_x], [1/6, 1/4, 2/5, 1/6, 1/6])
+    assert np.allclose(c[cross_y, cross_x],
+                       [1 / 6, 1 / 4, 2 / 5, 1 / 6, 1 / 6])
     assert np.allclose(w[cross_y, cross_x], [3, 2, 2.5, 3, 3])
 
     # Check 3-D
@@ -305,9 +307,9 @@ def test_regular_coarse_kernel_convolve():
     idx = np.nonzero(diff)
     assert np.allclose(idx[0], [9, 9, 10, 10, 11, 11])
     assert np.allclose(idx[1], [10, 11, 10, 11, 10, 11])
-    assert np.allclose(
-        diff[idx],
-        [0.00099159, 0.00017013, 0.0081563, 0.00271877, 0.00099159, 0.00017013])
+    assert np.allclose(diff[idx],
+                       [0.00099159, 0.00017013, 0.0081563,
+                        0.00271877, 0.00099159, 0.00017013])
 
     # Check the effect of a zero weight
     weights = np.ones(data.shape)

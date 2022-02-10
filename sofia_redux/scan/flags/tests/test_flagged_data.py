@@ -47,8 +47,7 @@ class Dummy(FlaggedData):
         return defaults
 
 
-@pytest.fixture
-def dummy_data():
+def set_dummy_data():
     d = Dummy()
     d.fixed_index = np.arange(10)
     d.set_default_values()
@@ -63,6 +62,11 @@ def dummy_data():
     d.earth = EarthLocation(lon=np.zeros(10), lat=np.zeros(10))
     d.none = None
     return d
+
+
+@pytest.fixture
+def dummy_data():
+    return set_dummy_data()
 
 
 def test_init():

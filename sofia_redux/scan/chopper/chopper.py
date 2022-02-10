@@ -183,7 +183,8 @@ class Chopper(ABC):
 
         amplitude = np.nanmedian(distance)
         if amplitude < threshold:
-            log.debug("Small chopper fluctuations (assuming chopper not used).")
+            log.debug("Small chopper fluctuations "
+                      "(assuming chopper not used).")
             self.is_chopping = False
             return
 

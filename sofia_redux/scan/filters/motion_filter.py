@@ -19,7 +19,8 @@ class MotionFilter(KillFilter):
         """
         Initializes a motion filter.
 
-        The motion filter kills specific frequencies based on motion statistics.
+        The motion filter kills specific frequencies based on motion
+        statistics.
 
         Parameters
         ----------
@@ -89,8 +90,8 @@ class MotionFilter(KillFilter):
         Applies the filter over a certain frequency range.
 
         The frequency range is supplied by the 'filter.motion.range'
-        configuration option.  All previously killed frequencies outside of this
-        range will be allowed to pass.
+        configuration option.  All previously killed frequencies outside
+        of this range will be allowed to pass.
 
         Returns
         -------

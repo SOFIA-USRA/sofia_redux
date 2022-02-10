@@ -121,7 +121,7 @@ class Integration(ABC):
     @property
     def configuration(self):
         """
-        Return the integration configuration (taken from channel configuration).
+        Return the integration configuration (from channel configuration).
 
         Returns
         -------
@@ -309,7 +309,8 @@ class Integration(ABC):
         self.channels.set_parent(self)
         self.info.unlink_configuration()
         self.channels.info = self.channels.info.copy()
-        self.frames = Frames.instance_from_instrument_name(self.instrument_name)
+        self.frames = Frames.instance_from_instrument_name(
+            self.instrument_name)
 
     def validate(self):
         """
@@ -419,8 +420,8 @@ class Integration(ABC):
         # Remove the DC offsets, either if explicitly requested or to allow
         # bootstrapping pixel weights when pixeldata is not defined.
         # Must do this before direct tau estimates.
-        if (self.configuration.is_configured('level') or
-                not self.configuration.is_configured('pixeldata')):
+        if (self.configuration.is_configured('level')
+                or not self.configuration.is_configured('pixeldata')):
             robust = self.configuration.get_string('estimator') == 'median'
             log.debug(f"Removing DC offsets{' (robust)' if robust else ''}.")
             self.remove_offsets(robust=robust)
@@ -483,8 +484,8 @@ class Integration(ABC):
         ----------
         reference : int, optional
             If supplied, finds the last frame before `reference`, rather than
-            the last index (self.size).  May take negative values to indicate an
-            index relative to the last index.
+            the last index (self.size).  May take negative values to indicate
+            an index relative to the last index.
 
         Returns
         -------
@@ -606,7 +607,8 @@ class Integration(ABC):
         check_fraction = self.configuration.is_configured('range.flagfraction')
         if not out_of_range.any():
             if check_fraction:
-                log.debug("Flagging out-of-range data. 0 channel(s) discarded.")
+                log.debug("Flagging out-of-range data. "
+                          "0 channel(s) discarded.")
             return
         else:
             range_flag = self.flagspace.flags.SAMPLE_SKIP.value
@@ -623,8 +625,8 @@ class Integration(ABC):
 
         n_flagged_channels = np.sum(bad_channels)
         if n_flagged_channels > 0:
-            bad_channel_flag = (self.channel_flagspace.flags.DAC_RANGE |
-                                self.channel_flagspace.flags.DEAD)
+            bad_channel_flag = (self.channel_flagspace.flags.DAC_RANGE
+                                | self.channel_flagspace.flags.DEAD)
             self.channels.data.set_flags(bad_channel_flag,
                                          indices=np.nonzero(bad_channels)[0])
 
@@ -821,7 +823,8 @@ class Integration(ABC):
 
             if not (motion_flag & self.motion_flagspace.flags.CHOPPER):
                 # Subtract the chopper motion if it is not requested
-                coordinates.subtract_native_offset(self.frames.chopper_position)
+                coordinates.subtract_native_offset(
+                    self.frames.chopper_position)
 
             position.copy_coordinates(coordinates)
             if motion_flag & self.motion_flagspace.flags.PROJECT_GLS:
@@ -829,7 +832,8 @@ class Integration(ABC):
 
         # Scanning includes the chopper mode
         elif motion_flag & self.motion_flagspace.flags.SCANNING:
-            position.copy_coordinates(self.frames.get_absolute_native_offsets())
+            position.copy_coordinates(
+                self.frames.get_absolute_native_offsets())
 
             if not (motion_flag & self.motion_flagspace.flags.CHOPPER):
                 # Subtract the chopper motion if it is not requested.
@@ -858,8 +862,8 @@ class Integration(ABC):
         Parameters
         ----------
         motion_flag : MotionFlagTypes or str or int
-            The motion type for which to extract positions.  See `get_positions`
-            for details on motion flag types.
+            The motion type for which to extract positions.  See
+            `get_positions` for details on motion flag types.
 
         Returns
         -------
@@ -893,8 +897,8 @@ class Integration(ABC):
         Parameters
         ----------
         motion_flag : MotionFlagTypes or str or int
-            The motion type for which to extract positions.  See `get_positions`
-            for details on motion flag types.
+            The motion type for which to extract positions.  See
+            `get_positions` for details on motion flag types.
         return_position : bool, optional
             If `True`, return the position in addition to velocity.
 
@@ -928,8 +932,8 @@ class Integration(ABC):
            The position will be returned in addition to velocity if
            `return_position` is `True`.   Both contain (x, y) coordinates.
         """
-        return self.get_velocities(self.motion_flagspace.flags.SCANNING |
-                                   self.motion_flagspace.flags.CHOPPER,
+        return self.get_velocities(self.motion_flagspace.flags.SCANNING
+                                   | self.motion_flagspace.flags.CHOPPER,
                                    return_position=return_position)
 
     def get_typical_scanning_speed(self):
@@ -944,7 +948,8 @@ class Integration(ABC):
 
         """
         velocities = self.get_scanning_velocities()
-        speed_unit = self.info.instrument.get_size_unit() / units.Unit('second')
+        speed_unit = (self.info.instrument.get_size_unit()
+                      / units.Unit('second'))
         speeds = velocities.length.to(speed_unit)
 
         self.min_speed = np.nanmin(speeds)
@@ -978,23 +983,24 @@ class Integration(ABC):
 
         If the 'chopped' configuration option is set, the minimum speed is set
         to zero.
-        
+
         Returns
         -------
         speed_range : Range
             The minimum and maximum speeds are astropy.unit.Quantity values
             in units of the default size unit per second.
         """
-        speed_unit = self.info.instrument.get_size_unit() / units.Unit('second')
+        speed_unit = (self.info.instrument.get_size_unit()
+                      / units.Unit('second'))
         if not self.configuration.is_configured('vclip'):
             return Range(-np.inf * speed_unit, np.inf * speed_unit)
 
         if self.configuration.get_string('vclip') == 'auto':
-            min_speed = 5 * (self.info.instrument.get_source_size() /
-                             self.info.instrument.get_stability()
+            min_speed = 5 * (self.info.instrument.get_source_size()
+                             / self.info.instrument.get_stability()
                              ).to(speed_unit)
-            max_speed = 0.4 * (self.scan.get_point_size() /
-                               self.info.instrument.sampling_interval
+            max_speed = 0.4 * (self.scan.get_point_size()
+                               / self.info.instrument.sampling_interval
                                ).to(speed_unit)
             speed_range = Range(min_speed, max_speed)
         else:
@@ -1063,9 +1069,11 @@ class Integration(ABC):
             strict = self.configuration.get_bool('vclip.strict')
 
         log.debug(f"Velocity clipping frames (strict={strict}) to "
-                  f"range {speed_range.min.value:.3f} -> {speed_range.max:.3f}")
+                  f"range {speed_range.min.value:.3f} -> "
+                  f"{speed_range.max:.3f}")
 
-        speed_unit = self.info.instrument.get_size_unit() / units.Unit('second')
+        speed_unit = (self.info.instrument.get_size_unit()
+                      / units.Unit('second'))
         velocities, position = self.get_scanning_velocities(
             return_position=True)
         speed = velocities.length.to(speed_unit)
@@ -1168,8 +1176,8 @@ class Integration(ABC):
                 self.info.instrument.sampling_interval.to('second').value
             ) * units.Unit('radian/second2')
 
-        acceleration = Coordinate2D(unit=self.info.instrument.get_size_unit() /
-                                    units.Unit('s2'))
+        acceleration = Coordinate2D(unit=self.info.instrument.get_size_unit()
+                                    / units.Unit('s2'))
         acceleration.set(acceleration_coordinates)
         return acceleration
 
@@ -1320,9 +1328,9 @@ class Integration(ABC):
         """
         Return the factor by which to downsample frames.
 
-        The downsampling factor is retrieved from the configuration 'downsample'
-        option which may either be valued as 'auto', or an integer value.
-        Any value derived at this stage may be corrected by the
+        The downsampling factor is retrieved from the configuration
+        'downsample' option which may either be valued as 'auto', or an
+        integer value. Any value derived at this stage may be corrected by the
         'downsample.autofactor' configuration setting valued as an integer or
         float. i.e, final factor = downsample * autofactor.
 
@@ -1353,7 +1361,8 @@ class Integration(ABC):
 
             point_size = self.scan.get_point_size()
             if np.isnan(point_size):
-                log.warning("No automatic downsampling for unknown point size.")
+                log.warning("No automatic downsampling for unknown "
+                            "point size.")
                 return 1
 
             max_time = 0.4 * self.scan.get_point_size() / maximum_speed
@@ -1489,8 +1498,8 @@ class Integration(ABC):
 
         harmonics = self.configuration.get_int('notch.harmonics', default=1)
         if harmonics > 1:
-            frequencies = ((np.arange(harmonics - 1) + 1)[:, None] *
-                           frequencies[None]).flatten()
+            frequencies = ((np.arange(harmonics - 1) + 1)[:, None]
+                           * frequencies[None]).flatten()
 
         bands = self.configuration.get_list('notch.bands')
         if len(bands) > 0:
@@ -1574,7 +1583,7 @@ class Integration(ABC):
         data[bins] = 0
         data = np.fft.irfft(data, axis=0)
         self.frames.data[start:real_end][valid[:n_frames]] = (
-                data[valid] + channel_average[None])
+            data[valid] + channel_average[None])
 
     def offset(self, value):
         """
@@ -1640,8 +1649,8 @@ class Integration(ABC):
         """
         Return the power spectrum of the data.
 
-        The returned power spectrum is computed using Welch's method of dividing
-        the data into periodograms and averaging the result.
+        The returned power spectrum is computed using Welch's method
+        of dividing the data into periodograms and averaging the result.
 
         Parameters
         ----------
@@ -1709,7 +1718,8 @@ class Integration(ABC):
 
         if self.configuration.get_bool('write.flatfield'):
             if self.has_option('write.flatfield.name'):
-                out_name = self.configuration.get_string('write.flatfield.name')
+                out_name = self.configuration.get_string(
+                    'write.flatfield.name')
             else:
                 out_name = f'flat-{self.get_file_id()}.fits'
             out_file = os.path.join(self.configuration.work_path, out_name)
@@ -1915,7 +1925,8 @@ class Integration(ABC):
         Returns
         -------
         full_covariance : numpy.ndarray (float)
-            The full covariance array of shape (store_channels, store_channels).
+            The full covariance array of shape (store_channels,
+            store_channels).
         """
         return int_nf.get_full_covariance_matrix(
             covariance=covariance,
@@ -2364,13 +2375,13 @@ class Integration(ABC):
         """
         Derive and set robustly derived channel weights for live channels.
 
-        The variance and variance weight for a channel `i` is given as:
+        The variance and variance weight for a channel `i` is given as::
 
-            var = median(relative_weight * frame_data[:, i] ** 2)
-            weight = sum(relative_weight)
+           var = median(relative_weight * frame_data[:, i] ** 2)
+           weight = sum(relative_weight)
 
-        taken over all valid frames for the channel `i` and zero flagged samples
-        for the channel `i`.  These values are then passed to
+        taken over all valid frames for the channel `i` and zero flagged
+        samples for the channel `i`.  These values are then passed to
         `set_weights_from_var_stats` to set the channel degrees of
         freedom, weights, and variances for channels.
 
@@ -2395,12 +2406,12 @@ class Integration(ABC):
 
     def get_differential_channel_weights(self):
         """
-        Derive and set differentially derived channel weights for live channels.
+        Derive and set differentially derived weights for live channels.
 
-        The variance and variance weight for a channel `i` is given as:
+        The variance and variance weight for a channel `i` is given as::
 
-            var = sum(w * (data[:, i] - data[:, i+delta])^2)
-            weight = sum(w)
+           var = sum(w * (data[:, i] - data[:, i+delta])^2)
+           weight = sum(w)
 
         taken over all valid frames for the channel `i` and `i+delta`, and zero
         flagged samples for the channel `i` and `i+delta`.  These values are
@@ -2534,10 +2545,10 @@ class Integration(ABC):
         Derive and set frame weights.
 
         Relative weight values are derived for chunks of frames in turn.
-        The `block_size` parameter determines how many frames are to be included
-        in each chuck.  If not supplied it is either retrieved from the
-        'weighting.frames.resolution` option (in seconds), or defaults to the
-        number of frames in 10 seconds.
+        The `block_size` parameter determines how many frames are to be
+        included in each chunk.  If not supplied it is either retrieved
+        from the 'weighting.frames.resolution` option (in seconds), or
+        defaults to the number of frames in 10 seconds.
 
         This process sets the both the frame relative weights, the frame
         degrees of freedom, flags frames that do not have sufficient degrees
@@ -2647,7 +2658,7 @@ class Integration(ABC):
 
         if self.configuration.is_configured('dejump.resolution'):
             resolution = self.configuration.get_float(
-               'dejump.resolution', default=np.nan) * units.Unit('second')
+                'dejump.resolution', default=np.nan) * units.Unit('second')
             resolution = utils.pow2round(self.frames_for(resolution))
         else:
             resolution = 1
@@ -2707,8 +2718,9 @@ class Integration(ABC):
                 levelled_frames += end_frame - start_frame
                 levelled += 1
             else:
-                self.frames.set_flags(self.flagspace.flags.FLAG_JUMP,
-                                      indices=np.arange(start_frame, end_frame))
+                self.frames.set_flags(
+                    self.flagspace.flags.FLAG_JUMP,
+                    indices=np.arange(start_frame, end_frame))
                 removed += 1
                 removed_frames += end_frame - start_frame
 
@@ -2720,7 +2732,7 @@ class Integration(ABC):
         #       FLAG_JUMP frame (MODELING_FLAG parent) but are STILL included
         #       in the frame weight calculation.  It looks like this is a bug
         #       but I can't be sure.  Channels having the TIME_WEIGHTING_FLAG
-        #       are not included, but this shouldn't this be a frame flag?
+        #       are not included, but shouldn't this be a frame flag?
         #       For now, assuming this is a lucky error and disallowing flagged
         #       channels from the weight calculation.
         if (levelled > 0) or (removed > 0):
@@ -2735,7 +2747,7 @@ class Integration(ABC):
 
     def next_weight_transit(self, level, start=0, above=True):
         """
-        Find the next frame index with a relative weight above or below a level.
+        Find the next frame index with relative weight above or below a level.
 
         Parameters
         ----------
@@ -2771,7 +2783,8 @@ class Integration(ABC):
         ----------
         parms : Dependents
         start : int, optional
-            The starting frame (inclusive).  The default is the first (0) frame.
+            The starting frame (inclusive).  The default is the
+            first (0) frame.
         end : int, optional
             The end frame (exclusive).  The default is the last frame
             (self.size).
@@ -2800,7 +2813,8 @@ class Integration(ABC):
             for signal in self.signals.values():
                 signal.level(start_frame=start, end_frame=end, robust=False)
 
-    def get_mean_level(self, channels=None, start=None, end=None, robust=False):
+    def get_mean_level(self, channels=None, start=None, end=None,
+                       robust=False):
         """
         Return the median data values and associated weights for channels.
 
@@ -2898,7 +2912,8 @@ class Integration(ABC):
         weight = self.frames.relative_weight[frame_indices] * valid
         weight = weight[:, None] * (flags == 0)
 
-        frame_dependents[frame_indices] += np.sum(weight * p_norm[None], axis=1)
+        frame_dependents[frame_indices] += np.sum(weight * p_norm[None],
+                                                  axis=1)
         return self.check_consistency(
             channels.create_channel_group(), frame_dependents,
             start_frame=start, stop_frame=end)
@@ -3083,9 +3098,9 @@ class Integration(ABC):
 
         Samples that obey the above inequality are flagged with the
         SAMPLE_SPIKE flag while all others will be unflagged.  Note that this
-        is only applicable to the "live channels", and those frames that are not
-        flagged with the SAMPLE_SKIP or SAMPLE_SOURCE_BLANK frame flags.
-        Invalid frames are also ignored.
+        is only applicable to the "live channels", and those frames that
+        are not flagged with the SAMPLE_SKIP or SAMPLE_SOURCE_BLANK frame
+        flags. Invalid frames are also ignored.
 
         Parameters
         ----------
@@ -3143,10 +3158,10 @@ class Integration(ABC):
         relative weight of a given frame.
 
         Samples that obey the above inequality are flagged with the
-        SAMPLE_SPIKE flag while all others will be unflagged.  Note that this
-        is only applicable to the "live channels", and those frames that are not
-        flagged with the SAMPLE_SKIP or SAMPLE_SOURCE_BLANK frame flags.
-        Invalid frames are also ignored.
+        SAMPLE_SPIKE flag while all others will be unflagged.  Note that
+        this is only applicable to the "live channels", and those frames
+        that are not flagged with the SAMPLE_SKIP or SAMPLE_SOURCE_BLANK
+        frame flags. Invalid frames are also ignored.
 
         Parameters
         ----------
@@ -3194,10 +3209,10 @@ class Integration(ABC):
         w is the relative weight of a given frame.
 
         Samples that obey the above inequality are flagged with the
-        SAMPLE_SPIKE flag while all others will be unflagged.  Note that this
-        is only applicable to the "live channels", and those frames that are not
-        flagged with the SAMPLE_SKIP or SAMPLE_SOURCE_BLANK frame flags.
-        Invalid frames are also ignored.
+        SAMPLE_SPIKE flag while all others will be unflagged.  Note that
+        this is only applicable to the "live channels", and those frames
+        that are not flagged with the SAMPLE_SKIP or SAMPLE_SOURCE_BLANK
+        frame flags. Invalid frames are also ignored.
 
         Parameters
         ----------
@@ -3532,8 +3547,8 @@ class Integration(ABC):
         if not np.isfinite(time_or_frames):
             return
         if isinstance(time_or_frames, units.Quantity):
-            frame_shift = (time_or_frames /
-                           self.info.sampling_interval).decompose().value
+            frame_shift = (time_or_frames
+                           / self.info.sampling_interval).decompose().value
             frame_shift = int(np.round(frame_shift))
         else:
             frame_shift = int(time_or_frames)
@@ -3627,8 +3642,8 @@ class Integration(ABC):
         -------
         None
         """
-        if not (self.configuration.is_configured('level') or
-                not self.configuration.is_configured('pixeldata')):
+        if not (self.configuration.is_configured('level')
+                or not self.configuration.is_configured('pixeldata')):
             return
 
         robust = self.configuration.get_string('estimator').lower() == 'median'
@@ -4061,7 +4076,8 @@ class Integration(ABC):
         self.get_differential_channel_weights()
         self.channels.census()
         log.debug(f"Bootstrapping pixel weights "
-                  f"({self.scan.channels.n_mapping_channels} active channels).")
+                  f"({self.scan.channels.n_mapping_channels} "
+                  f"active channels).")
 
     def decorrelate(self, modality_name, robust=False):
         """
@@ -4302,14 +4318,17 @@ class Integration(ABC):
             self.calculate_source_nefd()
         columns = [
             Column(name='Obs',
-                   data=np.atleast_1d(self.integration_number), dtype='int32'),
+                   data=np.atleast_1d(self.integration_number),
+                   dtype='int32'),
             Column(name='Integration_Time',
                    data=np.atleast_1d(integration_time.to('second').value),
                    dtype='float64'),
-            Column(name='Frames', data=np.atleast_1d(self.size), dtype='int32'),
+            Column(name='Frames', data=np.atleast_1d(self.size),
+                   dtype='int32'),
             Column(name='Relative_Gain', data=np.atleast_1d(self.gain),
                    dtype='float64'),
-            Column(name='NEFD', data=np.atleast_1d(self.nefd), dtype='float64'),
+            Column(name='NEFD', data=np.atleast_1d(self.nefd),
+                   dtype='float64'),
             Column(name='Hipass_Timescale',
                    data=np.atleast_1d(
                        self.filter_time_scale.to('second').value),

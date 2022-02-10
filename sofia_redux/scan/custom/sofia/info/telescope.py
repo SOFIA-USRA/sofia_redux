@@ -183,7 +183,7 @@ class SofiaTelescopeInfo(TelescopeInfo):
              '(deg) Zenith angle at start.'),
             ('ZA_END', to_header_float(self.zenith_angle.end, 'deg'),
              '(deg) Zenith angle at end.')
-            ]
+        ]
 
         if self.tracking_mode is not None:
             info.extend([

@@ -1,7 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
-    EquatorialCoordinates
 from sofia_redux.scan.coordinate_systems.coordinate_system import \
     CoordinateSystem
 from sofia_redux.scan.coordinate_systems.celestial_coordinates import \
@@ -30,7 +28,7 @@ class SuperGalacticCoordinates(CelestialCoordinates):
 
         Parameters
         ----------
-        coordinates : list or tuple or numpy.ndarray or units.Quantity, optional
+        coordinates : list or tuple or array-like or units.Quantity, optional
             The coordinates used to populate the object during initialization.
             The first (0) value or index should represent longitudinal
             coordinates, and the second should represent latitude.

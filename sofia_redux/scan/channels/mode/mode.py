@@ -116,8 +116,8 @@ class Mode(ABC):
 
         During this phase the gain flag type is determined as the zeroth flag
         of the channel group flagspace if previously undefined.  In addition,
-        the name of the mode will be set to the name of the channel group if not
-        previously defined.
+        the name of the mode will be set to the name of the channel group
+        if not previously defined.
 
         Parameters
         ----------
@@ -256,8 +256,8 @@ class Mode(ABC):
             self.gain_provider.validate(self)
 
         gain = self.gain_provider.get_gain(self.channel_group)
-        if (isinstance(gain, units.Quantity) and
-                gain.unit == units.dimensionless_unscaled):
+        if (isinstance(gain, units.Quantity)
+                and gain.unit == units.dimensionless_unscaled):
             gain = gain.value
         self.gain = gain
         self.gain[np.isnan(self.gain)] = 0.0
@@ -371,8 +371,8 @@ class Mode(ABC):
         integration : Integration
         robust : bool, optional
             If `True`, derives the gain increment from the integration using
-            the "robust" definition.  This is only applicable if the integration
-            is not phase modulated.
+            the "robust" definition.  This is only applicable if the
+            integration is not phase modulated.
 
         Returns
         -------

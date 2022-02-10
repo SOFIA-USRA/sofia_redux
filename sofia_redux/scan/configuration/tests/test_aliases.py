@@ -1,11 +1,9 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+import pytest
+
 from sofia_redux.scan.configuration.aliases import Aliases
 from sofia_redux.scan.configuration.configuration import Configuration
-from sofia_redux.scan.configuration.tests.test_configuration import (
-    config_options, initialized_configuration, fits_header, fits_configuration)
-
-import pytest
 
 
 @pytest.fixture
@@ -94,6 +92,3 @@ def test_call(fits_configuration):
         'options1': {'suboptions1': {'foo': 'bar'}}}
     with pytest.raises(ValueError):
         a(1)
-
-
-

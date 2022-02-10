@@ -17,8 +17,8 @@ class IterationOptions(Options):
         """
         Initialize an IterationOptions object.
 
-        The iterations options object contains configuration settings pertaining
-        to the current SOFSCAN iteration number.
+        The iterations options object contains configuration settings
+        pertaining to the current SOFSCAN iteration number.
 
         Parameters
         ----------
@@ -186,14 +186,14 @@ class IterationOptions(Options):
     def parse_iteration(self, iteration):
         r"""
         Returns an iteration value as either an int or float value.
-        
+
         Parses string iterations including "first", "last", "final" to
         integer of float representations.  Can also parse percentages
         such as 90%.  A float iteration represents a fraction of the
         maximum iteration, and must therefore be between 0 and 1.
         Raises an error if fractional iteration is out of range, or
         value could not be parsed.
-        
+
         Parameters
         ----------
         iteration : str or int or float
@@ -226,7 +226,7 @@ class IterationOptions(Options):
         if not isinstance(iteration, (int, float)):
             self.handle_error(f"iteration must be {str}, {int}, or {float}.")
             return None
-        
+
         if isinstance(iteration, float):
             if iteration < 0 or iteration > 1:
                 msg = "Fractional iterations must be in the range [0, 1]."
@@ -297,7 +297,7 @@ class IterationOptions(Options):
 
     def relative_iteration(self, iteration):
         """
-        Return an iteration number which may be relative to the current maximum.
+        Return an iteration number relative to the current maximum.
 
         Parameters
         ----------

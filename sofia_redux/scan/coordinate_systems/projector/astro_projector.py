@@ -2,8 +2,6 @@
 
 from sofia_redux.scan.coordinate_systems.projector.projector_2d import \
     Projector2D
-from sofia_redux.scan.coordinate_systems.projection.projection_2d import \
-    Projection2D
 from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
     EquatorialCoordinates
 from sofia_redux.scan.coordinate_systems.celestial_coordinates import \
@@ -12,7 +10,6 @@ from sofia_redux.scan.coordinate_systems.horizontal_coordinates import \
     HorizontalCoordinates
 from sofia_redux.scan.coordinate_systems.focal_plane_coordinates import \
     FocalPlaneCoordinates
-from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 
 __all__ = ['AstroProjector']
 
@@ -28,12 +25,12 @@ class AstroProjector(Projector2D):
         designed to better deal with astronomical coordinates (celestial
         coordinates), and other spherical coordinate types.
 
-        Such coordinates will be taken from the projection reference coordinate.
-        If those reference coordinates celestial in nature, they will be
-        converted to equatorial coordinates (if not already) and stored for
-        subsequent use.  In these cases, one will always have access to the
-        projected/deprojected coordinates in both the original celestial frame,
-        and an equatorial frame.
+        Such coordinates will be taken from the projection reference
+        coordinate. If those reference coordinates are celestial in nature,
+        they will be converted to equatorial coordinates (if not already)
+        and stored for subsequent use.  In these cases, one will always have
+        access to the projected/deprojected coordinates in both the original
+        celestial frame, and an equatorial frame.
 
         Parameters
         ----------

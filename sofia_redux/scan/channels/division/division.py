@@ -100,7 +100,8 @@ class ChannelDivision(ABC):
                 raise KeyError(f"Group {index_or_group_name} "
                                f"does not exist in division.")
         else:
-            raise ValueError(f"Invalid index type: {type(index_or_group_name)}")
+            raise ValueError(f"Invalid index type: "
+                             f"{type(index_or_group_name)}")
 
         if index < 0:
             reverse_index = self.size + index

@@ -54,7 +54,7 @@ def test_get_phi_theta():
     assert np.allclose(pt.coordinates.value, [1.00016707, 0.99506408])
     p.theta1 = -45 * units.Unit('degree')
     pt = p.get_phi_theta(offset)
-    assert np.allclose(pt.coordinates.value, [-323.57821363,    1.00484036])
+    assert np.allclose(pt.coordinates.value, [-323.57821363, 1.00484036])
     o = pt.copy()
     pt2 = p.get_phi_theta(offset, phi_theta=o)
     assert pt2 is o and pt2 == pt
@@ -100,13 +100,11 @@ def test_edit_header():
 
 
 def test_consistency():
-    # Note that this does not work unless the theta1 (standard parallel) is set.
+    # Note that this does not work unless the theta1
+    # (standard parallel) is set.
     p = BonnesProjection()
     p.theta1 = 30 * units.Unit('degree')
     pt = SphericalCoordinates([1, 2], unit='degree')
     o = p.get_offsets(pt.y, pt.x)
     phi_theta = p.get_phi_theta(o)
     assert phi_theta == pt
-
-
-

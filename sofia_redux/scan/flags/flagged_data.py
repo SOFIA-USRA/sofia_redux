@@ -129,7 +129,8 @@ class FlaggedData(ABC):
         """
         Returns attribute names that are internal to the data for get actions.
 
-        These attributes should always be returned as-is regardless of indexing.
+        These attributes should always be returned as-is regardless
+        of indexing.
 
         Returns
         -------
@@ -253,8 +254,8 @@ class FlaggedData(ABC):
                         fill_value, Coordinate):
                     coordinate_class, fill_value = value[0], value[1]
                     coordinate_shape = (
-                            (coordinate_class.default_dimensions,) +
-                            self.shape + value[2:])
+                        (coordinate_class.default_dimensions,)
+                        + self.shape + value[2:])
                     if isinstance(fill_value, units.Quantity):
                         unit = fill_value.unit
                         fill_values = np.full(
@@ -277,8 +278,8 @@ class FlaggedData(ABC):
                         shape, fill_value.value) * fill_value.unit)
 
                 elif isinstance(fill_value, units.UnitBase):
-                    setattr(self, key, np.empty(shape, dtype=float) *
-                            fill_value)
+                    setattr(self, key, np.empty(shape, dtype=float)
+                            * fill_value)
 
                 elif isinstance(fill_value, type):
                     setattr(self, key, np.empty(shape, dtype=fill_value))
@@ -316,13 +317,14 @@ class FlaggedData(ABC):
             The flag to check.  If not supplied, returns any indices that have
             non-zero flags.
         indices : bool, optional
-            If `False` the return value will be a boolean mask.  If `True`, the
-            actual indices will be returned.
+            If `False` the return value will be a boolean mask.  If `True`,
+            the actual indices will be returned.
 
         Returns
         -------
         flagged : numpy.ndarray (bool or int)
-            A boolean mask if `indices` is `False` or channel indices otherwise.
+            A boolean mask if `indices` is `False` or channel
+            indices otherwise.
         """
         return self.flagspace.is_flagged(self.flag, flag, indices=indices)
 
@@ -401,7 +403,8 @@ class FlaggedData(ABC):
         flag_numba_functions.unflag(self.flag, flag, indices=indices)
 
     def discard_flag(self, flag, criterion=None):
-        """Remove all data flagged with the given flag.
+        r"""
+        Remove all data flagged with the given flag.
 
         Parameters
         ----------
@@ -409,9 +412,9 @@ class FlaggedData(ABC):
             The flag to discard_flag.
         criterion : str, optional
             One of {'DISCARD_ANY', 'DISCARD_ALL', 'DISCARD_MATCH',
-            'KEEP_ANY', 'KEEP_ALL', 'KEEP_MATCH'}.  *_ANY refers to any flag
-            that is not zero (unflagged).  *_ALL refers to any flag that
-            contains `flag`, and *_MATCH refers to any flag that exactly
+            'KEEP_ANY', 'KEEP_ALL', 'KEEP_MATCH'}.  \*_ANY refers to any flag
+            that is not zero (unflagged).  \*_ALL refers to any flag that
+            contains `flag`, and \*_MATCH refers to any flag that exactly
             matches `flag`.  The default (`None`), uses DISCARD_ANY if
             `flag` is None, and DISCARD_ALL otherwise.
 
@@ -475,8 +478,8 @@ class FlaggedData(ABC):
         """
         Returns the actual indices given fixed indices.
 
-        The fixed indices are those that are initially loaded.  Returned indices
-        are their locations in the data arrays.
+        The fixed indices are those that are initially loaded.
+        Returned indices are their locations in the data arrays.
 
         Parameters
         ----------
@@ -638,8 +641,8 @@ class FlaggedData(ABC):
         """
         keep_indices = self.to_indices(indices_or_mask, discard=True)
         keep_indices = np.unique(keep_indices)
-        if ((keep_indices.size == self.size) and
-                np.allclose(keep_indices, np.arange(self.size))):
+        if ((keep_indices.size == self.size)
+                and np.allclose(keep_indices, np.arange(self.size))):
             return
 
         special_fields = self.special_fields

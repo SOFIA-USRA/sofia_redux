@@ -5,7 +5,6 @@ import enum
 import numpy as np
 
 from sofia_redux.scan.flags.flags import Flags
-from sofia_redux.scan.coordinate_systems.coordinate import Coordinate
 
 __all__ = ['MotionFlags']
 
@@ -127,11 +126,11 @@ class MotionFlags(Flags):
         """
         Initialize a MotionFlags object.
 
-        Unlike most other flag classes, the MotionFlags class can be initialized
-        for use in extracting motion signals from a given position.  The given
-        position object (passed into :func:`MotionFlags.__call__` or
-        :func:`MotionFlags.get_value` must have retrievable values in the
-        'x', 'y', or 'z' attribute.
+        Unlike most other flag classes, the MotionFlags class can be
+        initialized for use in extracting motion signals from a given
+        position.  The given position object (passed into
+        :func:`MotionFlags.__call__` or :func:`MotionFlags.get_value`)
+        must have retrievable values in the 'x', 'y', or 'z' attribute.
 
         Parameters
         ----------
@@ -147,7 +146,8 @@ class MotionFlags(Flags):
                         f"{direction} direction.")
             log.warning("Resulting output will be NaN.")
             self.direction = self.flags(0)
-            self.position_function = self.position_functions.get(self.direction)
+            self.position_function = self.position_functions.get(
+                self.direction)
 
     def get_value(self, position):
         """

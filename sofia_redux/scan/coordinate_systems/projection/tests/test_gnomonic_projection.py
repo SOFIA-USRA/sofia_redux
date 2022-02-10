@@ -3,10 +3,10 @@
 from astropy import units
 import numpy as np
 
-from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
-    SphericalCoordinates
-from sofia_redux.scan.coordinate_systems.projection.gnomonic_projection import \
-    GnomonicProjection
+from sofia_redux.scan.coordinate_systems.spherical_coordinates \
+    import SphericalCoordinates
+from sofia_redux.scan.coordinate_systems.projection.gnomonic_projection \
+    import GnomonicProjection
 
 
 def test_init():
@@ -24,7 +24,8 @@ def test_get_full_name():
 
 def test_r():
     assert GnomonicProjection.r(np.pi / 2) == 0
-    assert np.isclose(GnomonicProjection.r(np.pi / 4), 1 * units.Unit('radian'))
+    assert np.isclose(GnomonicProjection.r(np.pi / 4),
+                      1 * units.Unit('radian'))
     theta = np.full(5, np.pi / 2)
     theta[np.arange(3) * 2] -= np.pi / 4
     r = GnomonicProjection.r(theta)

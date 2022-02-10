@@ -77,7 +77,7 @@ class SofiaScanningInfo(InfoBase):
             ('SCNDIR', to_header_float(self.angle, 'degree'),
              '(deg) Scan direction on sky.'),
             ('SCANTYPE', self.scan_type, 'Scan type.')
-            ]
+        ]
         insert_info_in_header(header, info, delete_special=True)
 
     def get_table_entry(self, name):

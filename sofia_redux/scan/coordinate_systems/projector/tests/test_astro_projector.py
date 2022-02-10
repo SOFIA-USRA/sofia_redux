@@ -90,9 +90,9 @@ def test_copy(projector_celestial):
 
 
 def test_eq(projector_celestial, projector_equatorial, projector_horizontal):
-    pc, pe, ph = projector_celestial, projector_equatorial, projector_horizontal
+    pc, pe, _ = projector_celestial, projector_equatorial, projector_horizontal
     assert pc == pc
-    assert pc != None
+    assert pc is not None
     assert pc != pe
     projection2 = PlateCarreeProjection()
     projection2.reference = pe.coordinates.copy()
@@ -154,7 +154,7 @@ def test_deproject(projector_celestial, projector_equatorial):
     assert cc is coordinates
     # Check coordinates were not updated
     assert pc.coordinates != cc
-    assert np.allclose(cc.coordinates.value, [-120.10638683,  -20.56988235])
+    assert np.allclose(cc.coordinates.value, [-120.10638683, -20.56988235])
 
 
 def test_consistency(projector_celestial, projector_equatorial):

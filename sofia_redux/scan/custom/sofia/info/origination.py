@@ -46,7 +46,7 @@ class SofiaOriginationInfo(OriginationInfo):
             ('OBSERVER', self.observer, 'Name(s) of observer(s).'),
             ('OPERATOR', self.operator, 'Name(s) of operator(s).'),
             ('FILENAME', filename, 'Original file name.')
-            ]
+        ]
         insert_info_in_header(header, info, delete_special=True)
 
     def get_table_entry(self, name):

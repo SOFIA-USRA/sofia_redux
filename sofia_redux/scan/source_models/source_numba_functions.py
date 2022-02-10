@@ -9,9 +9,7 @@ nb.config.THREADING_LAYER = 'threadsafe'
 
 __all__ = ['calculate_coupling_increment', 'get_sample_points',
            'blank_sample_values', 'flag_out_of_range_coupling',
-           'sync_map_samples', 'map_nd_to_flat_indices',
-           'sync_frame_parms', 'sync_channel_parms',
-           'get_delta_sync_parms', 'flag_outside',
+           'sync_map_samples', 'get_delta_sync_parms', 'flag_outside',
            'validate_pixel_indices', 'add_skydip_frames']
 
 
@@ -20,30 +18,42 @@ def calculate_coupling_increment(map_indices, base_values, map_values,
                                  map_noise, sync_gains, source_gains,
                                  frame_data, frame_weight, frame_gains,
                                  frame_valid, sample_flags, channel_indices,
-                                 min_s2n, max_s2n, exclude_flag):
+                                 min_s2n, max_s2n, exclude_flag
+                                 ):  # pragma: no cover
     """
     Calculate and return the coupling increment factor.
 
     The coupling increment factor may be used to increment current coupling
-    values by
+    values and weights for each channel by::
 
-    coupling += increment * coupling
+        increment = sum_{frames}(fw * residual * expected) /
+                    sum_{frames}(fw * expected^2)
+
+    where fw are the frame weights, d are the frame data and::
+
+        expected = frame_gain * channel_source_gain * map_value
+        prior = frame_gain * channel_sync_gain * base_value
+        residual = d + prior - expected
+
+    The channel sync gains and base values are the channel source gains and
+    map values from the previous iteration.
 
     Parameters
     ----------
     map_indices : numpy.ndarray (int)
         The indices of each frame/channel sample on the source map.  Should be
-        of shape (n_frames, all_channels, n_dimensions) with dimensions in
+        of shape (n_dimensions, n_frames, all_channels) with dimensions in
         (x, y) FITS order.
     base_values : numpy.ndarray (float)
-        An image of arbitrary grid shape in n_dimensions.  Contains the base map
-        values (priors).
+        An image of arbitrary grid shape in n_dimensions.  Contains the base
+        map values (priors).
     map_values : numpy.ndarray (float)
         The current map image of arbitrary grid shape in n_dimensions.
     map_noise : numpy.ndarray (float)
         The current map noise values of arbitrary grid shape in n_dimensions.
     sync_gains : numpy.ndarray (float)
-        The previous channel source gains (sync gains) of shape (all_channels,).
+        The previous channel source gains (sync gains) of shape
+        (all_channels,).
     source_gains : numpy.ndarray (float)
         The current channel source gains of shape (all_channels,).
     frame_data : numpy.ndarray (float)
@@ -57,7 +67,8 @@ def calculate_coupling_increment(map_indices, base_values, map_values,
         processing.
     sample_flags : numpy.ndarray (int)
         The integration sample flags of shape (n_frames, all_channels) where
-        any sample flagged with `exclude_flag` will be excluded from processing.
+        any sample flagged with `exclude_flag` will be excluded from
+        processing.
     channel_indices : numpy.ndarray (int)
         The channel indices for which to calculate coupling increments of shape
         (n_channels,).
@@ -75,7 +86,7 @@ def calculate_coupling_increment(map_indices, base_values, map_values,
     coupling_increment : numpy.ndarray (float)
         The coupling increment factors of shape (all_channels,).
     """
-    # Frame gains is integration.gain * frame.source_gain
+    # Frame gains are integration.gain * frame.source_gain
     n_frames, n_channels = frame_data.shape
     coupling_increment = np.zeros(n_channels, dtype=nb.float64)
     coupling_weight = np.zeros(n_channels, dtype=nb.float64)
@@ -131,7 +142,8 @@ def calculate_coupling_increment(map_indices, base_values, map_values,
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def get_sample_points(frame_data, frame_gains, frame_weights, source_gains,
                       channel_variance, valid_frames, map_indices,
-                      channel_indices, sample_flags, exclude_sample_flag):
+                      channel_indices, sample_flags, exclude_sample_flag
+                      ):  # pragma: no cover
     """
     Return the cross-product of frame and channel gains.
 
@@ -187,39 +199,26 @@ def get_sample_points(frame_data, frame_gains, frame_weights, source_gains,
     is_pixel_map = map_indices.shape[2] == 1 and n_channels > 1
 
     for frame in range(n_frames):
-        if not valid_frames[frame]:
-            for i in range(n_channels):
-                sample_gains[frame, i] = sample_data[frame, i] = np.nan
-                sample_weights[frame, i] = 0.0
-                for dimension in range(n_dimensions):
-                    sample_indices[dimension, frame, i] = -1
-            continue
         frame_gain = frame_gains[frame]
         frame_weight = frame_weights[frame]
-        if frame_gain == 0 or frame_weight == 0 or np.isnan(frame_gain):
+        if (not valid_frames[frame] or frame_gain == 0
+                or frame_weight == 0 or np.isnan(frame_gain)):
             for i in range(n_channels):
-                sample_gains[frame, i] = sample_data[frame, i] = np.nan
-                sample_weights[frame, i] = 0.0
-                for dimension in range(n_dimensions):
-                    sample_indices[dimension, frame, i] = -1
+                blank_sample_values(frame, i, n_dimensions, sample_data,
+                                    sample_gains, sample_weights,
+                                    sample_indices)
             continue
+
         mapping_frames += 1
         for i, channel in enumerate(channel_indices):
             channel_gain = source_gains[channel]
             var = channel_variance[i]
-            if channel_gain == 0 or var == 0:
-                sample_gains[frame, i] = sample_data[frame, i] = np.nan
-                sample_weights[frame, i] = 0.0
-                for dimension in range(n_dimensions):
-                    sample_indices[dimension, frame, i] = -1
-                continue
-
             sample_flag = sample_flags[frame, channel]
-            if sample_flag & exclude_sample_flag != 0:
-                sample_gains[frame, i] = sample_data[frame, i] = np.nan
-                sample_weights[frame, i] = 0.0
-                for dimension in range(n_dimensions):
-                    sample_indices[dimension, frame, i] = -1
+            if (channel_gain == 0 or var == 0
+                    or (sample_flag & exclude_sample_flag != 0)):
+                blank_sample_values(frame, i, n_dimensions, sample_data,
+                                    sample_gains, sample_weights,
+                                    sample_indices)
                 continue
 
             sample_gains[frame, i] = frame_gain * channel_gain
@@ -241,7 +240,8 @@ def get_sample_points(frame_data, frame_gains, frame_weights, source_gains,
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def blank_sample_values(frame, channel_index, n_dimensions, sample_data,
-                        sample_gains, sample_weights, sample_indices):
+                        sample_gains, sample_weights, sample_indices
+                        ):  # pragma: no cover
     """
     Set bad frame/channel indices to blank values.
 
@@ -278,7 +278,8 @@ def blank_sample_values(frame, channel_index, n_dimensions, sample_data,
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
 def flag_out_of_range_coupling(channel_indices, coupling_values, min_coupling,
-                               max_coupling, flags, blind_flag):
+                               max_coupling, flags, blind_flag
+                               ):  # pragma: no cover
     """
     Flags channels with an out-of-range coupling value as "BLIND"
 
@@ -315,14 +316,14 @@ def flag_out_of_range_coupling(channel_indices, coupling_values, min_coupling,
 def sync_map_samples(frame_data, frame_valid, frame_gains, channel_indices,
                      map_values, map_valid, map_masked, map_indices,
                      base_values, base_valid, source_gains, sync_gains,
-                     sample_flags, sample_blank_flag):
+                     sample_flags, sample_blank_flag):  # pragma: no cover
     """
     Remove map source gains from frame data and flag samples.
 
     For a given sample at frame i and channel j, frame data d_{i,j} will be
-    decremented by dg where:
+    decremented by dg where::
 
-    dg = fg * ( (gain(source) * map[index]) - (gain(sync) * base[index]) )
+        dg = fg * ( (gain(source) * map[index]) - (gain(sync) * base[index]) )
 
     Here, fg is the frame gain and index is the index on the map of sample
     (i,j).
@@ -442,162 +443,62 @@ def sync_map_samples(frame_data, frame_valid, frame_gains, channel_indices,
                 sample_flags[frame, channel] &= unflag_blank
 
 
-@nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
-def map_nd_to_flat_indices(map_indices, map_shape, frame_valid=None):
-    """
-
-    Parameters
-    ----------
-    map_indices
-    map_shape
-    frame_valid
-
-    Returns
-    -------
-
-    """
-    map_shape = np.asarray(map_shape)
-    fits_shape = map_shape[::-1]
-    _, _, row_col_steps = spline_utils.flat_index_mapping(map_shape)
-    # Convert from (row, col) to (col, row) for FITS type data indexing
-    steps = np.empty_like(row_col_steps)
-    n_dimensions = steps.size
-    for i in range(n_dimensions):
-        steps[i] = row_col_steps[n_dimensions - i - 1]
-    n_dimensions, n_frames, n_channels = map_indices.shape
-    flat_indices = np.empty((n_frames, n_channels), dtype=nb.int64)
-
-    if frame_valid is not None:
-        valid = frame_valid
-        do_valid = True
-    else:
-        valid = np.empty(0, dtype=nb.b1)
-        do_valid = False
-
-    for frame in range(n_frames):
-        if do_valid and not valid[frame]:
-            for channel in range(n_channels):
-                flat_indices[frame, channel] = -1
-            continue
-
-        for channel in range(n_channels):
-            map_index = map_indices[:, frame, channel]
-            flat_index = 0
-            for dimension in range(n_dimensions):
-                index = map_index[dimension]
-                if index < 0 or index >= fits_shape[dimension]:
-                    flat_index = -1
-                    break
-                flat_index += index * steps[dimension]
-            if flat_index < 0:
-                flat_indices[frame, channel] = -1
-                continue
-            flat_indices[frame, channel] = flat_index
-
-    return flat_indices
-
-
-@nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
-def sync_frame_parms(n_points, frame_weight, frame_valid, frame_flags,
-                     frame_gains, source_flag, frame_parms):
-    """
-
-    Parameters
-    ----------
-    n_points
-    frame_weight
-    frame_valid
-    frame_flags
-    frame_gains
-    source_flag
-    frame_parms
-
-    Returns
-    -------
-
-    """
-    if n_points == 0:
-        return
-    weight_sum = 0.0
-    n_frames = frame_valid.size
-    delta_parms = np.empty(n_frames, dtype=nb.float64)
-
-    for frame in range(n_frames):
-        if not frame_valid[frame]:
-            delta_parms[frame] = 0.0
-            continue
-        fw = frame_weight[frame]
-        gain = frame_gains[frame]
-        if fw <= 0 or gain == 0 or (frame_flags[frame] & source_flag) != 0:
-            delta_parms[frame] = 0.0
-            continue
-        dp = fw * gain
-        weight_sum += dp
-        delta_parms[frame] = abs(dp)
-
-        weight_sum += frame_weight[frame] * frame_gains[frame]
-
-    if weight_sum <= 0:
-        return
-
-    norm = n_points / weight_sum
-    for frame in range(n_frames):
-        dp = delta_parms[frame]
-        if dp == 0:
-            continue
-        frame_parms[frame] += norm * dp
-
-
-@nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
-def sync_channel_parms(n_points, channel_indices, source_gains,
-                       channel_variance, channel_flags, channel_parms):
-    """
-
-
-    Parameters
-    ----------
-    n_points
-    channel_indices
-    source_gains
-    channel_variance
-    channel_flags
-    channel_parms
-
-    Returns
-    -------
-
-    """
-
-    if n_points == 0:
-        return
-    weight_sum = 0.0
-    n_channels = channel_indices.size
-    delta_parms = np.empty(n_channels, dtype=nb.float64)
-    for i, channel in enumerate(channel_indices):
-        var = channel_variance[i]
-        gain = source_gains[channel]
-        if channel_flags[i] != 0 or var == 0 or gain == 0:
-            delta_parms[i] = 0.0
-            continue
-        dp = (gain * gain) / var
-        weight_sum += dp
-        delta_parms[i] = dp
-
-    if weight_sum == 0:
-        return
-    norm = n_points / weight_sum
-    for i, channel in enumerate(channel_indices):
-        dp = delta_parms[i]
-        if dp == 0:
-            continue
-        channel_parms[channel] += dp * norm
-
-
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def get_delta_sync_parms(channel_source_gains, channel_indices, channel_flags,
                          channel_variance, frame_weight, frame_source_gains,
-                         frame_valid, frame_flags, source_flag, n_points):
+                         frame_valid, frame_flags, source_flag, n_points
+                         ):  # pragma: no cover
+    """
+    Calculate frame/channel dependent deltas following source synchronization.
 
+    Source synchronization is the process of removing the source model from the
+    integration frame data.  Following this, dependents (scaled degrees-of-
+    freedom) need to be updated to account for the operation.  The dependent
+    increments are calculated as follows::
+
+        channel_dp = n_p * channel_gain^2 / variance
+        frame_dp = n_f * frame_weight * |frame_gain|
+
+        n_p = n_points / sum_{channels}(channel_gain^2/variance)
+        n_f = n_points / sum_{frames}(frame_weight * frame_gain)
+
+    where n_points effective number of pixels in the source model (possibly
+    accounting for smoothing).
+
+    Parameters
+    ----------
+    channel_source_gains : numpy.ndarray (float)
+        The channel source gains of shape (all_channels,).
+    channel_indices : numpy.ndarray (int)
+        The indices of the channels to process of shape (n_channels,).
+    channel_flags : numpy.ndarray (int)
+        The integer flags marking various status types of shape (n_channels,).
+        Only zero-values flags will be included in the calculation.
+    channel_variance : numpy.ndarray (float)
+        The variance associated with each channel of shape (n_channels,).
+    frame_weight : numpy.ndarray (float)
+        The relative weight of each frame of shape (n_frames,).
+    frame_source_gains : numpy.ndarray (float)
+        The frame source gains of shape (n_frames,).
+    frame_valid : numpy.ndarray (bool)
+        A boolean mask where `False` excludes a given frame from inclusion in
+        the calculation and results in that same frame receiving a zero-valued
+        dependent increment.  Should be of shape (n_frames,).
+    frame_flags : numpy.ndarray (int)
+        The integer flags marking various status types for each frame of shape
+        (n_frames,).  Any frames marked with `source_flag` will be excluded
+        from all calculations and receive a zero-valued dependent increment.
+    source_flag : int
+        The integer used to mark a frame with the SOURCE status.
+    n_points : int or float
+        The effective number of points in the source model.
+
+    Returns
+    -------
+    frame_dp, channel_dp : numpy.ndarray, numpy.ndarray
+        The frame and channel dependent deltas of shape (n_frames,) and
+        (n_channels,), both of float type.
+    """
     n_channels = channel_indices.size
     n_frames = frame_valid.size
     sum_pw = 0.0
@@ -631,15 +532,15 @@ def get_delta_sync_parms(channel_source_gains, channel_indices, channel_flags,
         if not frame_valid[frame] or (frame_flags[frame] & source_flag) != 0:
             frame_dp[frame] = 0.0
             continue
-        frame_dp[frame] = (n_f * frame_weight[frame] *
-                           np.abs(frame_source_gains[frame]))
+        frame_dp[frame] = (n_f * frame_weight[frame]
+                           * np.abs(frame_source_gains[frame]))
 
     return frame_dp, channel_dp
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def flag_outside(sample_coordinates, valid_frames, channel_indices,
-                 sample_flags, skip_flag, map_range):
+                 sample_flags, skip_flag, map_range):  # pragma: no cover
     """
     Flag samples outside of the allowed mapping range.
 
@@ -672,7 +573,7 @@ def flag_outside(sample_coordinates, valid_frames, channel_indices,
     min_x, max_x = map_range[0]
     min_y, max_y = map_range[1]
 
-    for frame_index in range(sample_coordinates.shape[0]):
+    for frame_index in range(sample_coordinates.shape[1]):
         valid = False
         if not valid_frames[frame_index]:
             continue
@@ -687,7 +588,8 @@ def flag_outside(sample_coordinates, valid_frames, channel_indices,
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
-def validate_pixel_indices(indices, x_size, y_size, valid_frame=None):
+def validate_pixel_indices(indices, x_size, y_size, valid_frame=None
+                           ):  # pragma: no cover
     """
     Set pixel indices outside of the map range to (0, 0).
 
@@ -695,14 +597,15 @@ def validate_pixel_indices(indices, x_size, y_size, valid_frame=None):
     ----------
     indices : numpy.ndarray (int)
         Pixel indices of shape (2, n_frames, n_channels) containing the
-        (x, y) pixel indices.
+        (x, y) pixel indices.  Any invalid sample (frame, channel) will be
+        updated to (-1, -1) in-place.
     x_size : int
         The size of the map in x.
     y_size : int
         The size of the map in y.
     valid_frame : numpy.ndarray (bool), optional
         An optional flag mask where `False` excludes the given frame from the
-        validation.
+        bad sample count (return value).
 
     Returns
     -------
@@ -744,9 +647,16 @@ def validate_pixel_indices(indices, x_size, y_size, valid_frame=None):
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def add_skydip_frames(data, weight, signal_values, signal_weights,
-                      frame_weights, frame_valid, data_bins):
+                      frame_weights, frame_valid, data_bins
+                      ):  # pragma: no cover
     """
-    Add frames to sky dip model data.
+    Add signal values to the sky dip model data.
+
+    The skydip model data (`data`) and weights (`weight`) are added to using
+    increments of::
+
+        data += frame_weights * signal_weights * signal_values
+        weight += frame_weights * signal_weights
 
     Parameters
     ----------

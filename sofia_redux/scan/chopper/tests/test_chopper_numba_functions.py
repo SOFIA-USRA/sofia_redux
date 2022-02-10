@@ -43,7 +43,8 @@ def test_find_transitions():
 
     threshold = 1.5
 
-    start, end, transitions, angle, distance = find_transitions(x, y, threshold)
+    (start, end, transitions,
+     angle, distance) = find_transitions(x, y, threshold)
     assert start == 1 and end == 494 and transitions == 7
     assert np.isclose(np.rad2deg(angle), 30)
     assert np.isclose(np.median(distance), 2)

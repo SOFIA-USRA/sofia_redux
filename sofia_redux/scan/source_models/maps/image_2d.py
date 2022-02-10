@@ -150,8 +150,8 @@ class Image2D(Image):
         Image2D
         """
         change_type = not((dtype is None) or (dtype == self.dtype))
-        change_level = not((blanking_value is None) or
-                           (blanking_value is self.blanking_value))
+        change_level = not((blanking_value is None)
+                           or (blanking_value is self.blanking_value))
 
         image = self.copy(with_content=True)
 

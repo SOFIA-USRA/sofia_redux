@@ -6,13 +6,7 @@ from astropy.io import fits
 import numpy as np
 import re
 
-from sofia_redux.scan.custom.sofia.info.info import SofiaInfo
-from sofia_redux.scan.custom.sofia.info.astrometry import SofiaAstrometryInfo
 from sofia_redux.scan.scan.scan import Scan
-from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
-    SphericalCoordinates
-from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
-    EquatorialCoordinates
 from sofia_redux.scan.coordinate_systems.offset_2d import Offset2D
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.utilities.utils import to_header_float

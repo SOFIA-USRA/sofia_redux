@@ -255,14 +255,14 @@ def test_check_coordinate_units(c2d):
     coords, original = c.check_coordinate_units(weird_coords)
     assert not original
     assert coords.shape == (2, 3, 4)
-    assert np.allclose(coords[0].value, 1/3600)
-    assert np.allclose(coords[1].value, 1/60)
+    assert np.allclose(coords[0].value, 1 / 3600)
+    assert np.allclose(coords[1].value, 1 / 60)
 
     weird_coords = [1 * units.Unit('arcsec'), 1 * units.Unit('arcmin')]
     coords, original = c.check_coordinate_units(weird_coords)
     assert not original
-    assert coords[0].value == 1/3600
-    assert coords[1].value == 1/60
+    assert coords[0].value == 1 / 3600
+    assert coords[1].value == 1 / 60
 
     c = Coordinate()
     coords, original = c.check_coordinate_units(weird_coords)

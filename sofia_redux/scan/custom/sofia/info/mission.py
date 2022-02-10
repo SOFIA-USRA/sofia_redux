@@ -56,7 +56,7 @@ class SofiaMissionInfo(InfoBase):
             ('MISSN-ID', self.mission_id,
              'unique Mission ID in Mission Plan from MCCS.'),
             ('FLIGHTLG', self.flight_leg, 'Flight leg identifier.')
-            ]
+        ]
 
         if self.obs_plan_id is not None:
             info.append(('PLANID', self.obs_plan_id,

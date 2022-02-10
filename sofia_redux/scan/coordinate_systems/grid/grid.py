@@ -3,8 +3,6 @@
 from abc import ABC, abstractmethod
 from copy import deepcopy
 
-from sofia_redux.scan.coordinate_systems.coordinate_system import \
-    CoordinateSystem
 from sofia_redux.scan.utilities.class_provider import get_grid_class
 
 __all__ = ['Grid']
@@ -23,7 +21,8 @@ class Grid(ABC):
         position, and the grid resolution.
 
         The grid is used to convert from coordinates to offsets in relation
-        to a specified reference onto a regular grid, and the reverse operation.
+        to a specified reference onto a regular grid, and the reverse
+        operation.
 
         Forward transform: grid projection -> offsets -> coordinates
         Reverse transform: coordinates -> offsets -> grid projection

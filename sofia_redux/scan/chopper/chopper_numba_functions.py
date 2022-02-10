@@ -41,9 +41,9 @@ def find_transitions(x, y, threshold):  # pragma: no cover
         s = sign(x); otherwise
 
     It is up to the user on how to best extract the chop amplitude from the
-    data given the chop profile.  For a standard box-step chop profile, a median
-    on the distances should suffice, while more advanced analysis should be
-    applied to other patterns.
+    data given the chop profile.  For a standard box-step chop profile, a
+    median on the distances should suffice, while more advanced analysis
+    should be applied to other patterns.
 
     Parameters
     ----------
@@ -53,7 +53,8 @@ def find_transitions(x, y, threshold):  # pragma: no cover
         The y-direction chopper position of shape (n,).
     threshold : float
         The distance away from the center (x, y) = (0, 0) that would be
-        considered representing a single chopper transition (chopper amplitude).
+        considered representing a single chopper transition
+        (chopper amplitude).
 
     Returns
     -------
@@ -86,8 +87,8 @@ def find_transitions(x, y, threshold):  # pragma: no cover
             started = True
             continue
 
-        if ((x_positive and dx < threshold) or
-                (not x_positive and dx > threshold)):
+        if ((x_positive and dx < threshold)
+                or (not x_positive and dx > threshold)):
             x_positive = not x_positive
             if x_transitions == 0:
                 x_from = i
@@ -95,8 +96,8 @@ def find_transitions(x, y, threshold):  # pragma: no cover
                 x_to = i
             x_transitions += 1
 
-        if ((y_positive and dy < threshold) or
-                (not y_positive and dy > threshold)):
+        if ((y_positive and dy < threshold)
+                or (not y_positive and dy > threshold)):
             y_positive = not y_positive
             if y_transitions == 0:
                 y_from = i

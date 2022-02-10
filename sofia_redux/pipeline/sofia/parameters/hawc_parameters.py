@@ -72,7 +72,7 @@ STEPLISTS = {
                     'StepMerge', 'StepStdPhotCal', 'StepImgMap'],
     # additional calibration mode for skycals: process intcal,
     # then make skycal
-    'skycal': ['process_intcal', 'StepCheckhead', 'StepCrushFlat',
+    'skycal': ['process_intcal', 'StepCheckhead', 'StepScanMapFlat',
                'StepSkycal'],
 }
 
@@ -413,11 +413,11 @@ class HAWCParameters(Parameters):
         """
         self.current[step_index].set_value("keep_auxout", True)
 
-    def crush(self, step_index):
+    def scanmap(self, step_index):
         """
-        Modify parameters for the crush step.
+        Modify parameters for the scanmap step.
 
-        Don't load data into memory: CRUSH loads it separately.
+        Don't load data into memory: scanmap loads it separately.
         If no output is expected, don't save or display the output.
         If output is expected, do save and display it.
 
@@ -426,7 +426,7 @@ class HAWCParameters(Parameters):
         step_index : int
             Reduction recipe index for the step.
         """
-        # never load data for CRUSH -- it will do it itself.
+        # never load data -- it will do it itself.
         self.current[step_index].set_value("load", False)
 
         try:
@@ -446,36 +446,36 @@ class HAWCParameters(Parameters):
             self.current[step_index].set_value("save", True)
             self.current[step_index].set_value("display", True)
 
-    def crushpol(self, step_index):
+    def scanmappol(self, step_index):
         """
-        Modify parameters for the crushpol step.
+        Modify parameters for the scanmappol step.
 
-        Don't load data into memory: CRUSH loads it separately.
+        Don't load data into memory: scanmap loads it separately.
 
         Parameters
         ----------
         step_index : int
             Reduction recipe index for the step.
         """
-        # never load data for CRUSH -- it will do it itself.
+        # never load data -- it will do it itself.
         self.current[step_index].set_value("load", False)
 
         # save and display data
         self.current[step_index].set_value("save", True)
         self.current[step_index].set_value("display", True)
 
-    def crushflat(self, step_index):
+    def scanmapflat(self, step_index):
         """
-        Modify parameters for the crushflat step.
+        Modify parameters for the scanmapflat step.
 
-        Don't load data into memory: CRUSH loads it separately.
+        Don't load data into memory: scanmap loads it separately.
 
         Parameters
         ----------
         step_index : int
             Reduction recipe index for the step.
         """
-        # never load data for CRUSH -- it will do it itself.
+        # never load data for scanmap -- it will do it itself.
         self.current[step_index].set_value("load", False)
 
         # save data
@@ -521,11 +521,11 @@ class HAWCParameters(Parameters):
         """
         self.current[step_index].set_value("save", True)
 
-    def crushfocus(self, step_index):
+    def scanmapfocus(self, step_index):
         """
-        Modify parameters for the crushfocus step.
+        Modify parameters for the scanmapfocus step.
 
-        This step calls CRUSH: don't load the input data.
+        This step calls scanmap: don't load the input data.
         Do save the output.
 
         Parameters

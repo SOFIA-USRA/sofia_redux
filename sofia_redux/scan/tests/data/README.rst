@@ -1,0 +1,1 @@
+This directory contains test data for sofia_redux.scan.

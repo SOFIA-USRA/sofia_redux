@@ -99,6 +99,7 @@ class QADViewerSettings(QtWidgets.QWidget, ui_qad_settings.Ui_Form):
         self.plotColorBox.editingFinished.connect(self.getPlotValue)
         self.histBinBox.editingFinished.connect(self.getPlotValue)
         self.histLimitsBox.editingFinished.connect(self.getPlotValue)
+        self.summaryStatBox.currentIndexChanged.connect(self.getPlotValue)
         self.p2pReferenceBox.editingFinished.connect(self.getPlotValue)
         self.separatePlotsBox.stateChanged.connect(self.getPlotValue)
 
@@ -190,8 +191,6 @@ class QADViewerSettings(QtWidgets.QWidget, ui_qad_settings.Ui_Form):
 
         parameters['window_units'] = \
             str(self.plotWindowUnitsBox.currentText()).lower()
-        parameters['share_axes'] = \
-            str(self.shareAxesBox.currentText()).lower()
 
         try:
             parameters['window'] = float(self.plotWindowSizeBox.text())
@@ -217,6 +216,9 @@ class QADViewerSettings(QtWidgets.QWidget, ui_qad_settings.Ui_Form):
             parameters['hist_limits'] = [float(lim[0]), float(lim[1])]
         except (ValueError, TypeError, AttributeError, IndexError):
             parameters['hist_limits'] = None
+
+        parameters['summary_stat'] = str(
+            self.summaryStatBox.currentText()).lower()
 
         try:
             parameters['p2p_reference'] = int(self.p2pReferenceBox.text())
@@ -607,6 +609,13 @@ class QADViewerSettings(QtWidgets.QWidget, ui_qad_settings.Ui_Form):
             self.histLimitsBox.setText(','.join(str_lim))
         except (KeyError, ValueError, TypeError, AttributeError, IndexError):
             self.histLimitsBox.setText('')
+
+        # summary stat list
+        if 'summary_stat' in fromdict:
+            ax = fromdict['summary_stat'].lower()
+            idx = self.summaryStatBox.findText(ax, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.summaryStatBox.setCurrentIndex(idx)
 
         # P2P reference frame text
         try:

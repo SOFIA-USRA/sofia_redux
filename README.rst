@@ -15,10 +15,9 @@ for instruments on the Stratospheric Observatory for Infrared Astronomy
 (SOFIA).
 
 Currently, the SOFIA instruments supported by this package are the FORCAST
-and FLITECAM imaging and spectroscopic instruments and the FIFI-LS integral
-field spectrometer. A Python pipeline for the HAWC+ imaging and polarimetric
-instrument is still under development, and will be added to this package
-when available.
+and FLITECAM imaging and spectroscopic instruments, the FIFI-LS integral field
+spectrometer, and the HAWC+ imaging and polarimetric
+instrument.
 
 SOFIA raw and processed data can be accessed from the
 `SOFIA archive <https://irsa.ipac.caltech.edu/applications/sofia/>`__.
@@ -43,5 +42,13 @@ License
 
 This project is Copyright (c) Universities Space Research Association
 under Government Prime Contract Number NNA17BF53C and licensed under
-the terms of the BSD 3-Clause license. See the licenses folder for
+the terms of the BSD 3-Clause license.
+
+This package is released under the BSD 3-clause license by written permission
+from Dr. Attila Kovacs, copyright holder of the CRUSH software, which is the
+original work of authorship for the sofia_redux.scan module.
+
+This package is also based upon the
+`Astropy package template <https://github.com/astropy/package-template>`_
+which is licensed under the BSD 3-clause license. See the licenses folder for
 more information.

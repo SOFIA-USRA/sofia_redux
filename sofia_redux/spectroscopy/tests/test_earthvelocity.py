@@ -1,12 +1,16 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+import os
+from pathlib import Path
+
 from astropy.units import Unit
-from astropy.time import Time
+from astropy.time import Time, TimeDelta
 from astropy.coordinates import EarthLocation
 import numpy as np
+import pytest
+
 from sofia_redux.spectroscopy.earthvelocity import (
     cartesian_helio, cartesian_lsr, parse_inputs, earthvelocity)
-import pytest
 
 
 def test_cartesian_lst():
@@ -63,3 +67,38 @@ def test_earthvelocity():
                        [-4.02676891, -4.02676891])
     assert np.allclose(result['vlsr'].value,
                        [-33.8863622, -33.88637819])
+
+
+def test_offline(mocker, capsys):
+    # borrowing some test machinery from astropy.utils.iers
+    # to invoke offline errors
+    from astropy.utils.iers import iers
+    from astropy.utils.data import get_pkg_data_filename
+    ame = 30.0
+    t = Time.now() + TimeDelta(10, format='jd') * np.arange(2)
+    iers_a_file_1 = get_pkg_data_filename(
+        os.path.join('data', 'finals2000A-2016-02-30-test'),
+        package='astropy.utils.iers.tests')
+    iers_a_url_1 = Path(iers_a_file_1).as_uri()
+
+    # standard result
+    expected = earthvelocity(1, 1, t,
+                             time_format=None, time_scale=None,
+                             lat=45, lon=45, height=100)
+
+    # offline, data aged out error
+    with iers.conf.set_temp('iers_auto_url', iers_a_url_1):
+        with iers.conf.set_temp('iers_auto_url_mirror', iers_a_url_1):
+            with iers.conf.set_temp('auto_max_age', ame):
+                # this will raise and handle a ValueError
+                result = earthvelocity(1, 1, t,
+                                       time_format=None, time_scale=None,
+                                       lat=45, lon=45, height=100)
+    capt = capsys.readouterr()
+    assert 'attempting offline calculation' in capt.err
+    assert 'value may not be accurate' in capt.err
+
+    # result is returned
+    assert np.allclose(result['vhelio'].value, expected['vhelio'].value)
+    assert np.allclose(result['vsun'].value, expected['vsun'].value)
+    assert np.allclose(result['vlsr'].value, expected['vlsr'].value)

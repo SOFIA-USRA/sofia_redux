@@ -619,10 +619,10 @@ class TestHAWCReduction(object):
         # steps with non-default parameters
         recipe = ['checkhead', 'fluxjump', 'prepare', 'dmdcut',
                   'dmdplot', 'opacity', 'calibrate', 'merge',
-                  'stdphotcal', 'polmap', 'crush', 'crushpol',
-                  'skydip', 'poldip', 'crushfocus', 'focus',
+                  'stdphotcal', 'polmap', 'scanmap', 'scanmappol',
+                  'skydip', 'poldip', 'scanmapfocus', 'focus',
                   'make_flats', 'demodulate',
-                  'crushflat', 'skycal', 'process_intcal']
+                  'scanmapflat', 'skycal', 'process_intcal']
         red = HAWCReduction()
         red.recipe = recipe
         red.parameters = HAWCParameters()
@@ -636,10 +636,10 @@ class TestHAWCReduction(object):
             assert 'save' in parset or 'load' in parset \
                 or 'display' in parset or 'keep_auxout' in parset
 
-        # for crush, test that no-out sets values correctly
-        recipe = ['crush']
+        # for scanmap, test that no-out sets values correctly
+        recipe = ['scanmap']
         red.recipe = recipe
-        paramlist = {'crush': [['noout', True,
+        paramlist = {'scanmap': [['noout', True,
                                 'test_description']]}
         red.parameters = HAWCParameters(param_lists=paramlist)
         red.load_parameters()

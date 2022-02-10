@@ -1,3 +1,9 @@
+1.2.0
+=====
+
+- Added HAWC+ support (HAWC DRP v3.0.0).
+- Updated FIFI-LS bad pixel and flat files.
+
 1.1.1 (2021-12-13)
 ==================
 

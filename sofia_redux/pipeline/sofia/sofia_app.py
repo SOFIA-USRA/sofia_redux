@@ -2,6 +2,8 @@
 """Run SOFIA Redux reduction objects interactively."""
 
 import argparse
+import sys
+import warnings
 
 from sofia_redux.pipeline.application import Application
 from sofia_redux.pipeline.sofia.sofia_configuration import SOFIAConfiguration
@@ -123,6 +125,11 @@ def main():
 
         redux -l critical
     """
+    # suppress all runtime warnings
+    if not sys.warnoptions:
+        warnings.simplefilter("ignore")
+
+    # parse arguments
     parser = argparse.ArgumentParser(
         description='Interactively reduce data through SOFIA pipelines.')
     parser.add_argument('-c', '--configuration', dest='config', type=str,

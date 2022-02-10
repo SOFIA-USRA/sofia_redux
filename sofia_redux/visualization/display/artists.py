@@ -220,7 +220,7 @@ class Artists(object):
             The data to update to.  Must contain either the
             'new_x_data' or the 'new_y_data' key.
         """
-        current_data = line['artist'].get_offsets().data
+        current_data = line['artist'].get_offsets()
         try:
             x_data = update['new_x_data']
         except KeyError:

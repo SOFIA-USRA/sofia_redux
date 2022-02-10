@@ -72,9 +72,6 @@ exclude_patterns.append('manuals/*/users/spectral_calibration.rst')
 exclude_patterns.append('manuals/*/data_handbook')
 exclude_patterns.append('manuals/*/*/api')
 
-# also exclude hawc for now
-exclude_patterns.append('manuals/hawc/*')
-
 # This is added to the end of RST files - a good place to put substitutions to
 # be used globally.
 rst_epilog += """

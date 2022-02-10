@@ -36,9 +36,8 @@ Out of the box, Redux provides two primary command-line scripts:
 * **redux** (`sofia_redux.pipeline.sofia.redux_app`): An interactive graphical interface (GUI) for the SOFIA pipelines.
 * **redux_pipe** (`sofia_redux.pipeline.sofia.redux_pipe`): A command-line interface to the SOFIA pipelines.
 
-Currently, the FIFI-LS, FLITECAM, and FORCAST instruments are supported by
-these pipelines. The HAWC+ pipeline is still under development and will be added
-to this package when it is available.  See the user's and developer's manuals for
+Currently, the FIFI-LS, FLITECAM, FORCAST, and HAWC+ instruments are supported by
+these pipelines.  See the user's and developer's manuals for
 each instrument for full descriptions of all supported observing
 modes and scientific algorithms.
 
@@ -66,6 +65,7 @@ Tutorials are available for data reduction procedures, via the
 - `FLITECAM Spectroscopy <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FLITECAM_spectroscopy_tutorial.pdf>`__
 - `FORCAST Imaging <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FORCAST_imaging_tutorial.pdf>`__
 - `FORCAST Spectroscopy <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FORCAST_spectroscopy_tutorial.pdf>`__
+- HAWC+ Imaging and Polarimetry: coming soon
 
 Manuals
 =======
@@ -78,6 +78,7 @@ User's Manuals:
    ../manuals/fifils/users/users
    ../manuals/flitecam/users/users
    ../manuals/forcast/users/users
+   ../manuals/hawc/users/users
 
 Developer's Manuals:
 
@@ -87,6 +88,7 @@ Developer's Manuals:
    ../manuals/fifils/developers/developers
    ../manuals/flitecam/developers/developers
    ../manuals/forcast/developers/developers
+   ../manuals/hawc/developers/developers
 
 
 Submodules
@@ -97,6 +99,7 @@ Submodules
 
   pipeline/index.rst
   calibration/index.rst
+  scan/index.rst
   spectroscopy/index.rst
   toolkit/index.rst
   visualization/index.rst

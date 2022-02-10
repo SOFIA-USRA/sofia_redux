@@ -67,7 +67,7 @@ to the pipeline algorithms.
 External Requirements
 ~~~~~~~~~~~~~~~~~~~~~
 
-To run the pipeline for any mode, Python 3.7 or
+To run the pipeline for any mode, Python 3.8 or
 higher is required, as well as the following packages: numpy, scipy,
 matplotlib, pandas, astropy, configobj, numba, bottleneck, joblib,
 and astropy-helpers.

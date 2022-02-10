@@ -2,6 +2,8 @@
 """Run SOFIA Redux reduction objects from the command line."""
 
 import argparse
+import sys
+import warnings
 
 from astropy import log
 
@@ -108,6 +110,10 @@ def main():
 
         redux_pipe -o output *.fits
     """
+    # suppress all runtime warnings
+    if not sys.warnoptions:
+        warnings.simplefilter("ignore")
+
     parser = argparse.ArgumentParser(
         description='Reduce a set of data through a SOFIA pipeline.')
     parser.add_argument('filename', metavar='filename', nargs='+',

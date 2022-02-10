@@ -456,6 +456,9 @@ class PlotSettingsDialog(QtWidgets.QDialog,
         except (ValueError, TypeError, AttributeError, IndexError):
             parameters['hist_limits'] = None
 
+        parameters['summary_stat'] = str(
+            self.summaryStatBox.currentText()).lower()
+
         try:
             parameters['p2p_reference'] = int(self.p2pReferenceBox.text())
         except ValueError:
@@ -529,6 +532,13 @@ class PlotSettingsDialog(QtWidgets.QDialog,
             self.histLimitsBox.setText(','.join(str_lim))
         except (KeyError, ValueError, TypeError, AttributeError, IndexError):
             self.histLimitsBox.setText('')
+
+        # summary stat list
+        if 'summary_stat' in fromdict:
+            ax = fromdict['summary_stat'].lower()
+            idx = self.summaryStatBox.findText(ax, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.summaryStatBox.setCurrentIndex(idx)
 
         # P2P reference frame text
         try:

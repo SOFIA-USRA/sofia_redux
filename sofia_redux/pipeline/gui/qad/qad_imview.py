@@ -304,7 +304,8 @@ class QADImView(object):
                         'separate_plots': True,
                         'bin': 'fd',
                         'hist_limits': None,
-                        'p2p_reference': 1}
+                        'p2p_reference': 1,
+                        'summary_stat': 'clipped median'}
         else:
             defaults = {}
 
@@ -427,7 +428,6 @@ class QADImView(object):
 
             title = f'Frame {frame}, x={xctr:.0f} y={yctr:.0f} in {reg_name}'
             l1 = f'F{frame} {short_reg_name}'
-            l2 = f'Mean {hist_stats[0]:.3g} +/- {hist_stats[2]:.3g}'
             hist_kwargs = {'bins': param['bin'], 'label': l1, 'alpha': 0.8}
             if param['hist_limits'] is not None:
                 hist_kwargs['range'] = (param['hist_limits'][0],
@@ -436,9 +436,28 @@ class QADImView(object):
                         'kwargs': hist_kwargs}
 
             if param['separate_plots'] or len(self.histogram_data) < 1:
+                # summary stat (mean, median, clipped mean, or clipped median)
+                summary_stat = str(param.get('summary_stat', 'mean')).lower()
+                if 'clip' in summary_stat:
+                    se = clip_stats[2]
+                    if 'median' in summary_stat:
+                        ss = clip_stats[1]
+                        ss_label = 'Clipped median'
+                    else:
+                        ss = clip_stats[0]
+                        ss_label = 'Clipped mean'
+                else:
+                    se = hist_stats[2]
+                    if 'median' in summary_stat:
+                        ss = hist_stats[1]
+                        ss_label = 'Median'
+                    else:
+                        ss = hist_stats[0]
+                        ss_label = 'Mean'
+                l2 = f'{ss_label} {ss:.3g} +/- {se:.3g}'
+
                 overplots = [new_hist]
-                vlines = [hist_stats[0], hist_stats[0] - hist_stats[2],
-                          hist_stats[0] + hist_stats[2]]
+                vlines = [ss, ss - se, ss + se]
                 vlabels = [l2, None, None]
                 vstyles = ['-', ':', ':']
                 for vdata, vlabel, vstyle in zip(vlines, vlabels, vstyles):
@@ -1863,8 +1882,9 @@ class QADImView(object):
             ystart = 0
         elif ystart + wdw > ydim:
             ystart = ydim - wdw
-        if zdim > dslice:
+        if zdim >= dslice:
             if not cube:
+                log.debug(f'Retrieving slice {dslice}')
                 fulldata = pdata[dslice - 1, :, :]
                 data = pdata[dslice - 1,
                              ystart:ystart + wdw,

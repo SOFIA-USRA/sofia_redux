@@ -81,7 +81,7 @@ class HAWCReduction(Reduction):
         super().__init__()
 
         # descriptive attributes
-        self.name = "DRP/CRUSH"
+        self.name = "DRP"
         self.instrument = "HAWC"
         self.mode = "any"
         self.data_keys = ['File Name', 'OBJECT',

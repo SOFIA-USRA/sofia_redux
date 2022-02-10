@@ -17,3 +17,4 @@ Submodules
     fifi_ls/index.rst
     flitecam/index.rst
     forcast/index.rst
+    hawc/index.rst

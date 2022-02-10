@@ -224,7 +224,7 @@ def test_2d_example():
 
          [[9.59949785e-03, -7.25118518e-04],
           [-7.25118518e-04, 1.44783814e-02]]],
-        rtol=1e-2
+        rtol=1e-1
     )
     assert np.allclose(
         vals['offset'][indices],
@@ -306,7 +306,7 @@ def test_2d_example():
 
          [[0.00608948, -0.00153193],
           [-0.00153193, 0.00446786]]],
-        rtol=1e-2
+        rtol=1e-1
     )
     assert np.allclose(
         vals['offset'][indices],
@@ -388,7 +388,7 @@ def test_2d_example():
 
          [[0.00690038, 0.00221446],
           [0.00221446, 0.01368642]]],
-        rtol=1e-2
+        rtol=1e-1
     )
     assert np.allclose(
         vals['offset'][indices],

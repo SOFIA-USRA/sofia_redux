@@ -29,14 +29,14 @@ Redux GUI
 .. include:: ../../../api/sofia_redux.pipeline.gui.TextView.rst
 .. include:: ../../../api/sofia_redux.pipeline.gui.QADViewer.rst
 .. include:: ../../../api/sofia_redux.pipeline.gui.QADViewerSettings.rst
+.. include:: ../../../api/sofia_redux.pipeline.gui.MatplotlibViewer.rst
+.. include:: ../../../api/sofia_redux.pipeline.gui.MatplotlibPlot.rst
 
 QAD Viewer
 ~~~~~~~~~~
 .. include:: ../../../api/sofia_redux.pipeline.gui.qad.qad_app.rst
 .. include:: ../../../api/sofia_redux.pipeline.gui.qad.QADMainWindow.rst
 .. include:: ../../../api/sofia_redux.pipeline.gui.qad.QADImView.rst
-.. include:: ../../../api/sofia_redux.pipeline.gui.qad.QADSpecView.rst
-.. include:: ../../../api/sofia_redux.pipeline.gui.qad.QADPlot.rst
 .. include:: ../../../api/sofia_redux.pipeline.gui.qad.HeaderViewer.rst
 .. include:: ../../../api/sofia_redux.pipeline.gui.qad.DispSettingsDialog.rst
 .. include:: ../../../api/sofia_redux.pipeline.gui.qad.PhotSettingsDialog.rst

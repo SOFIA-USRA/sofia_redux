@@ -18,6 +18,7 @@ Current SOFIA DPS team
 SOFIA Pipeline Contributors
 ===========================
 
+* Ryan Arneson
 * Ed Chambers
 * Melanie Clarke
 * Sebastian Colditz
@@ -25,6 +26,7 @@ SOFIA Pipeline Contributors
 * Christian Fischer
 * Nicole Karnath
 * Mark Langer
+* Enrique Lopez-Rodriguez
 * Robert Minchin
 * Dan Perera
 * Leslie Proudfit
@@ -41,8 +43,11 @@ Acknowledgements
 ================
 
 The FORCAST, FLITECAM, and FIFI-LS pipelines distributed in sofia_redux
-were based in part on earlier packages developed in IDL for the SOFIA project,
-with the following primary contributors.
+were based in part on earlier packages developed in IDL for the SOFIA
+project, with the following primary contributors.  The HAWC pipeline was
+based on a Python 2 software package with C and IDL extensions, called
+hawcdrp, and a Java pipeline called CRUSH.  Primary contributors to these
+packages are also listed below.
 
 * FSpextool
    - Melanie Clarke
@@ -68,3 +73,24 @@ with the following primary contributors.
    - Miguel Charcos-Llorens
    - Melanie Clarke
    - William Vacca
+* hawcdrp
+   - Marc Berthoud
+   - Nicholas Chapman
+   - David Chuss
+   - Melanie Clarke
+   - Darren Dowell
+   - Jordan Guerra
+   - Ryan Hamilton
+   - CJ Hansen
+   - Al Harper
+   - Enrique Lopez-Rodriguez
+   - Giles Novak
+   - Fabio Santos
+   - Klara Shabun
+   - David Shupe
+   - William Vacca
+   - John Vaillancourt
+   - Carrie Volpert
+* CRUSH
+   - Attila Kovacs
+

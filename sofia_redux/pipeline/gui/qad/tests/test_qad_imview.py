@@ -1464,6 +1464,37 @@ class TestQADImView(object):
         assert 'Error in retrieving data' in capt.out
         assert 'Total pixels' not in capt.out
 
+    def test_histogram_summary_stats(self, mocker, capsys, gaussian_data):
+        self.mock_ds9(mocker)
+        imviewer = self.make_imview()
+        data, size, fwhm, peak, x0, y0 = gaussian_data
+
+        # set mock values for retrieve_data
+        MockDS9.data = data
+        MockDS9.get_test = {'cube': '1', 'frame': '1',
+                            'frame active': '1'}
+
+        # starting parameters
+        imviewer.plot_parameters['separate_plots'] = True
+        imviewer.plot_parameters['window'] = 20
+        imviewer.plot_parameters['hist_limits'] = [0, peak]
+
+        # expected values for simulated data
+        expected = {'mean': 0.45324,
+                    'median': 1.2831e-4,
+                    'clipped mean': 0.011499,
+                    'clipped median': 2.6974e-5}
+
+        # test histogram overplot for each possible stat
+        for stat in expected.keys():
+            imviewer.histogram_data = []
+            imviewer.plot_parameters['summary_stat'] = stat
+            imviewer.histogram(x0 + 1, y0 + 1)
+            assert len(imviewer.histogram_data) == 1
+            overplot = imviewer.histogram_data[0]['overplot']
+            assert np.allclose(overplot[1]['args'][0], expected[stat],
+                               rtol=1e-4)
+
     def test_make_s2n(self, mocker):
         self.mock_ds9(mocker)
         imviewer = self.make_imview()

@@ -11,13 +11,42 @@ __all__ = ['EllipticalSource']
 
 class EllipticalSource(GaussianSource):
 
-    """
-    Represent a Gaussian source as an elliptical.
-    """
     def __init__(self, peak=1.0, x_mean=0.0, y_mean=0.0, x_fwhm=0.0,
                  y_fwhm=0.0, theta=0.0 * units.Unit('deg'), peak_unit=None,
                  position_unit=None, gaussian_model=None):
+        """
+        Initialize an EllipticalSource model.
 
+        The elliptical source is used to represent a Gaussian source using
+        elliptical parameters such as major/minor FWHM, elongation and
+        rotation.
+
+        Parameters
+        ----------
+        peak : float or units.Quantity, optional
+            The peak amplitude of the Gaussian.
+        x_mean : float or units.Quantity, optional
+            The position of the peak along the x-axis.
+        y_mean : float or units.Quantity, optional
+            The position of the peak along the y-axis.
+        x_fwhm : float or units.Quantity, optional
+            The Full-Width-Half-Max beam width in the x-direction.
+        y_fwhm : float or units.Quantity, optional
+            The Full-Width-Half-Max beam width in the y-direction.
+        theta : float or units.Quantity, optional
+            The rotation of the beam pertaining to `x_fwhm` and `y_fwhm` in
+            relation to the actual (x, y) coordinate axis.  If a float value is
+            supplied, it is assumed to be in degrees.
+        peak_unit : units.Unit or units.Quantity or str, optional
+            The physical units for the peak amplitude.  The default is
+            dimensionless.
+        position_unit : units.Unit or units.Quantity or str, optional
+            The physical units of all position based parameters (`x_mean`,
+            `y_mean`, `x_fwhm`, `y_fwhm`)
+        gaussian_model : Gaussian2D, optional
+            If supplied, extracts all the above parameters from the supplied
+            model.
+        """
         self.elongation = None
         self.elongation_weight = None
         self.angle_weight = None
@@ -36,12 +65,26 @@ class EllipticalSource(GaussianSource):
 
         Returns
         -------
-        float or astropy.units.Quantity
+        major : units.Quantity
         """
         fwhm = self.fwhm
         major = fwhm + (fwhm * self.elongation)
-        major /= 1.0 - (self.elongation ** 2)
+        major /= np.sqrt(1.0 - (self.elongation ** 2))
         return major
+
+    @property
+    def minor_fwhm(self):
+        """
+        Return the minor FWHM of the Gaussian ellipse.
+
+        Returns
+        -------
+        minor : units.Quantity
+        """
+        fwhm = self.fwhm
+        minor = fwhm - (self.elongation * fwhm)
+        minor /= np.sqrt(1 - (self.elongation ** 2))
+        return minor
 
     @property
     def major_fwhm_weight(self):
@@ -50,10 +93,18 @@ class EllipticalSource(GaussianSource):
 
         Returns
         -------
-        float or astropy.units.Quantity
+        major_weight : float or units.Quantity
         """
         a = self.fwhm
         aw = self.fwhm_weight
+
+        if (isinstance(a, units.Quantity) and
+                not isinstance(aw, units.Quantity)):
+            aw = aw / (a.unit ** 2)
+        elif (isinstance(aw, units.Quantity) and
+              not isinstance(a, units.Quantity)):  # pragma: no cover
+            a = a / (aw.unit ** 2)
+
         b = self.elongation
         bw = self.elongation_weight
         w = aw * bw
@@ -66,11 +117,11 @@ class EllipticalSource(GaussianSource):
             bw = w
             # The sum operation
             w = (aw * bw) / (aw + bw)
-            factor = 1.0 / (1 - (b ** 2))
-            w /= factor ** 2
+            factor = 1.0 / (1 - (b ** 2))  # The actual factor squared
+            w /= factor
         elif isinstance(aw, units.Quantity):
             w = 0.0 * aw.unit
-        else:
+        else:  # pragma: no cover
             w = 0.0
 
         return w
@@ -82,23 +133,9 @@ class EllipticalSource(GaussianSource):
 
         Returns
         -------
-        float or astropy.units.Quantity
+        minor_weight : float or units.Quantity
         """
         return self.major_fwhm_weight
-
-    @property
-    def minor_fwhm(self):
-        """
-        Return the minor FWHM of the Gaussian ellipse.
-
-        Returns
-        -------
-        float or astropy.units.Quantity
-        """
-        fwhm = self.fwhm
-        minor = fwhm - (self.elongation * fwhm)
-        minor /= 1 - (self.elongation ** 2)
-        return minor
 
     @property
     def major_fwhm_rms(self):
@@ -107,7 +144,7 @@ class EllipticalSource(GaussianSource):
 
         Returns
         -------
-        float or astropy.units.Quantity
+        major_rms : float or units.Quantity
         """
         return np.sqrt(1.0 / self.major_fwhm_weight)
 
@@ -118,7 +155,7 @@ class EllipticalSource(GaussianSource):
 
         Returns
         -------
-        float or astropy.units.Quantity
+        minor_rms : float or units.Quantity
         """
         return np.sqrt(1.0 / self.minor_fwhm_weight)
 
@@ -129,7 +166,7 @@ class EllipticalSource(GaussianSource):
 
         Returns
         -------
-        astropy.units.Quantity
+        angle : units.Quantity
         """
         return self.position_angle
 
@@ -140,7 +177,7 @@ class EllipticalSource(GaussianSource):
 
         Parameters
         ----------
-        value : astropy.units.Quantity
+        value : units.Quantity
 
         Returns
         -------
@@ -155,7 +192,7 @@ class EllipticalSource(GaussianSource):
 
         Returns
         -------
-        astropy.units.Quantity
+        angle_rms : units.Quantity
         """
         if self.angle_weight is None:
             return 0.0 * units.Unit('degree')
@@ -168,14 +205,14 @@ class EllipticalSource(GaussianSource):
 
         Returns
         -------
-        float
+        elongation_rms : float
         """
         if self.elongation_weight is None or self.elongation_weight <= 0:
             return 0.0
         return np.sqrt(1.0 / self.elongation_weight)
 
-    def set_elongation(self, major=None, minor=None,
-                       weight=np.inf, angle=None):
+    def set_elongation(self, major=None, minor=None, weight=np.inf,
+                       angle=None):
         """
         Set the elongation parameter.
 
@@ -200,12 +237,18 @@ class EllipticalSource(GaussianSource):
         None
         """
         if major is None:
-            major = super().major_fwhm
+            if self.elongation is None:
+                major = super().major_fwhm  # The x FWHM
+            else:
+                major = self.major_fwhm
         if minor is None:
-            minor = super().minor_fwhm
+            if self.elongation is None:
+                minor = super().minor_fwhm  # The y FWHM
+            else:
+                minor = self.minor_fwhm
         if angle is None:
             angle = self.position_angle
-        if not isinstance(angle, units.Quantity):
+        if not isinstance(angle, units.Quantity):  # pragma: no cover
             angle = angle * units.Unit('radian')
         if weight is None:
             weight = np.inf  # Exact
@@ -216,12 +259,16 @@ class EllipticalSource(GaussianSource):
             major = temp
             angle += np.pi * units.Unit('radian') / 2
 
-        self.x_fwhm = major
-        self.y_fwhm = minor
+        self.set_xy_fwhm(major, minor)
         self.fwhm = self.fwhm  # Set circular x and y fwhm
         self.position_angle = angle
         self.elongation_weight = weight
-        self.elongation = (major - minor) / (major + minor)
+
+        axis_sum = major + minor
+        if axis_sum == 0:
+            self.elongation = 0.0
+        else:
+            self.elongation = (major - minor) / axis_sum
         if isinstance(self.elongation, units.Quantity):
             self.elongation = self.elongation.decompose().value
 
@@ -249,19 +296,40 @@ class EllipticalSource(GaussianSource):
                             size_unit=size_unit)
         major, major_rms = self.major_fwhm, self.major_fwhm_rms
         minor, minor_rms = self.minor_fwhm, self.minor_fwhm_rms
+        ud = units.dimensionless_unscaled
 
-        if isinstance(major, units.Quantity):
-            if size_unit is None:
-                size_unit = major.unit
-            elif size_unit != major.unit:
-                major = major.to(size_unit)
-                major_rms = major_rms.to(size_unit)
-                minor = minor.to(size_unit)
-                minor_rms = minor_rms.to(1 / (size_unit ** 2))
-            major = major.value
-            minor = minor.value
-            major_rms = major_rms.value
-            minor_rms = minor_rms.value
+        if size_unit is None and isinstance(major, units.Quantity):
+            size_unit = major.unit
+
+        if isinstance(size_unit, units.Quantity):
+            scaling = size_unit.value
+            size_unit = size_unit.unit
+        else:
+            scaling = 1.0
+
+        if isinstance(size_unit, units.Unit) and size_unit == ud:
+            size_unit = None
+
+        if size_unit is None:
+            if isinstance(major, units.Quantity):
+                major = major.value
+                minor = minor.value
+            if isinstance(major_rms, units.Quantity):
+                major_rms = major_rms.value
+                minor_rms = minor_rms.value
+        else:
+            if isinstance(major, units.Quantity):
+                major = major.to(size_unit).value
+                minor = minor.to(size_unit).value
+            if isinstance(major_rms, units.Quantity):
+                major_rms = major_rms.to(size_unit).value
+                minor_rms = minor_rms.to(size_unit).value
+
+        if scaling != 1:
+            major *= scaling
+            minor *= scaling
+            major_rms *= scaling
+            minor_rms *= scaling
 
         angle = self.position_angle.to('degree').value
         angle_rms = self.angle_rms.to('degree').value
@@ -432,7 +500,7 @@ class EllipticalSource(GaussianSource):
           - dFWHM: The full-width-half-maximum RMS of the peak
           - a: The major FWHM
           - b: The minor FWHM
-          - da: The major FHWM RMS
+          - da: The major FWHM RMS
           - db: The minor FWHM RMS
           - angle: The rotation of the major axis
           - dangle: The RMS of the rotation of the major axis

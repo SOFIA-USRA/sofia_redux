@@ -247,7 +247,7 @@ class MultiFilter(VariedFilter):
             self.filters = []
         add_blanks = filter_index - self.size
         if add_blanks > 0:
-            self.filters.extend([None] * add_blanks)
+            self.filters.extend([None] * (add_blanks + 1))
         self.filters[filter_index] = sub_filter
 
     def remove_filter(self, filter_or_name):
@@ -359,7 +359,7 @@ class MultiFilter(VariedFilter):
         if channels is None:
             channels = self.get_channels()
 
-        data = self.get_temp_data().copy()  # TODO: Check check check (copy)
+        data = self.get_temp_data().copy()
 
         data = scipy.fft.rfft(data, axis=1)
 
@@ -393,14 +393,6 @@ class MultiFilter(VariedFilter):
 
         # Convert to rejected signal
         filtered = scipy.fft.irfft(filtered, axis=1)
-
-        # # Remove the DC component
-        # if self.pedantic:
-        #     self.level_for_channels(filtered, channels=channels)
-        #
-        # # Subtract the rejected signal
-        # self.remove_from_frames(filtered, self.integration.frames, channels)
-
         self.set_temp_data(filtered)
 
     def response_at(self, fch):
@@ -435,7 +427,8 @@ class MultiFilter(VariedFilter):
             if sub_singular or singular or (
                     sub_response.ndim == full_response.ndim):
                 full_response = full_response * sub_response
-            elif full_response.ndim == 2:
+            elif full_response.ndim == 2:  # pragma: no cover
+                # In case other types of filters are added.
                 full_response = full_response * sub_response[None]
             else:
                 full_response = full_response[None] * sub_response

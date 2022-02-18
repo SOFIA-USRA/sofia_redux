@@ -1280,6 +1280,48 @@ class FlaggedArray(FlaggedData):
         new = self.__class__(data=convolved)
         self.paste(new)
 
+    def get_valid_smoothed(self, beam_map, reference_index=None,
+                           weights=None, get_weights=False):
+        """
+        Return smoothed data and weights, where invalid entries are zeroed.
+
+        Parameters
+        ----------
+        beam_map : numpy.ndarray (float)
+            The kernel to convolve with.
+        reference_index : numpy.ndarray (float)
+            The reference index of the beam map center.  The default is
+            (beam_map.shape - 1) / 2.0.
+        weights : numpy.ndarray (float)
+            Weights the same shape as beam map.
+        get_weights : bool, optional
+            If `True`, calculate the smoothed weights in addition to the
+            smoothed data.
+
+        Returns
+        -------
+        smoothed_data, [smoothed_weights] : numpy.ndarray, [numpy.ndarray]
+            The smoothed data and weights.  Will only return smoothed data if
+            `get_weights` is `False`.
+        """
+        if reference_index is None:
+            reference_index = (np.asarray(beam_map.shape) - 1) / 2.0
+            reference_index = reference_index.astype(int)
+
+        smoothed, smoothed_weights = self.get_smoothed(
+            beam_map, reference_index=reference_index, weights=weights)
+
+        invalid = ~self.valid
+        invalid |= ~np.isfinite(smoothed)
+        smoothed[invalid] = self.data[invalid]
+
+        if get_weights:
+            smoothed_weights[invalid] = 0.0
+            smoothed_weights[np.isnan(smoothed_weights)] = 0.0
+            return smoothed, smoothed_weights
+        else:
+            return smoothed
+
     def get_fast_smoothed(self, beam_map, steps, reference_index=None,
                           weights=None, get_weights=False):
         """
@@ -1311,19 +1353,9 @@ class FlaggedArray(FlaggedData):
             reference_index = reference_index.astype(int)
 
         if np.prod(steps) <= 1:
-            smoothed, smoothed_weights = self.get_smoothed(
-                beam_map, reference_index=reference_index, weights=weights)
-
-            invalid = ~self.valid
-            invalid |= ~np.isfinite(smoothed)
-            smoothed[invalid] = self.data[invalid]
-
-            if get_weights:
-                smoothed_weights[invalid] = 0.0
-                smoothed_weights[np.isnan(smoothed_weights)] = 0.0
-                return smoothed, smoothed_weights
-            else:
-                return smoothed
+            return self.get_valid_smoothed(
+                beam_map, reference_index=reference_index, weights=weights,
+                get_weights=get_weights)
 
         # Perform the convolution on a coarse grid.
         course_signal, course_weight, ratio = (
@@ -1337,8 +1369,13 @@ class FlaggedArray(FlaggedData):
         course_weight[course_weight <= 0] = 0.0
         course_weight[np.isnan(course_signal)] = 0.0
 
-        spline = Spline(course_signal, exact=True, weights=course_weight,
-                        reduce_degrees=True)
+        try:
+            spline = Spline(course_signal, exact=True, weights=course_weight,
+                            reduce_degrees=True)
+        except ValueError:
+            return self.get_valid_smoothed(
+                beam_map, reference_index=reference_index, weights=weights,
+                get_weights=get_weights)
 
         # Interpolate onto the original grid.
         args = []
@@ -1354,8 +1391,14 @@ class FlaggedArray(FlaggedData):
         if not get_weights:
             return convolved
 
-        spline = Spline(course_weight, exact=True, weights=None,
-                        reduce_degrees=True)
+        try:
+            spline = Spline(course_weight, exact=True, weights=None,
+                            reduce_degrees=True)
+        except ValueError:
+            return self.get_valid_smoothed(
+                beam_map, reference_index=reference_index, weights=weights,
+                get_weights=get_weights)
+
         convolved_weights = spline(*args)
 
         convolved_weights[~self.valid] = 0.0

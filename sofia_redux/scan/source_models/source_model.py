@@ -1075,7 +1075,8 @@ class SourceModel(ABC):
             log.info("SUGGEST: Please consult the README and/or GLOSSARY "
                      "for details.")
 
-    def suggest_make_valid(self):
+    @staticmethod
+    def suggest_make_valid():
         """
         Return a message suggestion corrections to an invalid map.
 
@@ -1142,11 +1143,10 @@ class SourceModel(ABC):
         elif not self.configuration.is_configured('bright'):
             messages.append(" * Reduce with 'bright'.")
 
-        self.reduction.channels.troubleshoot_few_pixels()
+        messages.extend(self.reduction.channels.troubleshoot_few_pixels())
 
         if (self.configuration.has_option('mappingpixels')
                 or self.configuration.has_option('mappingfraction')):
-
             messages.append(" * Adjust 'mappingpixels' or "
                             "'mappingfraction' to "
                             "allow source extraction with fewer pixels.")

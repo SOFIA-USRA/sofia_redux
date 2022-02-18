@@ -1504,8 +1504,11 @@ class Reduction(ReductionVersion):
                     new_kwargs.update(options)
 
         self.configuration.read_configuration(new_kwargs, validate=False)
+
+        flattened = self.configuration.flatten(new_kwargs)
+
         # Need to lock user settings
-        for key in new_kwargs.keys():
+        for key in flattened.keys():
             if key == 'rounds':
                 self.configuration.lock_rounds(new_kwargs['rounds'])
             elif key in self.configuration.command_keys:
@@ -1513,7 +1516,11 @@ class Reduction(ReductionVersion):
             elif key in self.configuration.section_keys:
                 continue
             else:
-                self.configuration.lock(key)
+                value_key = f'{key}.value'
+                if self.configuration.exists(value_key):
+                    self.configuration.lock(value_key)
+                else:
+                    self.configuration.lock(key)
 
         self.configuration.validate()
         self.info.validate_configuration_registration()

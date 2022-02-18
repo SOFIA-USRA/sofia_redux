@@ -1585,6 +1585,11 @@ class Scan(ABC):
         -------
         None
         """
+        if not self.configuration.get_bool(f'correlated.{modality_name}'):
+            log.debug(f"correlated.{modality_name} is not configured: will "
+                      f"not decorrelate.")
+            return
+
         robust = self.configuration.get_string('estimator') == 'median'
         if (self.configuration.get_bool(f'correlated.{modality_name}.span')
                 or self.configuration.get_bool('gains.span')):

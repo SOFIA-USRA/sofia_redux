@@ -374,8 +374,11 @@ class StepDmdPlot(StepParent):
                 phasename = self.datain.filenamebegin + 'PHS' + \
                     self.datain.filenameend
                 phaseproduct = DataFits(config=self.datain.config)
+
                 phaseproduct.imageset(r_phase.value, 'RPHASE')
                 phaseproduct.imageset(t_phase.value, 'TPHASE')
+
+                phaseproduct.header = self.datain.header.copy()
                 phaseproduct.setheadval('BUNIT', 'deg')
                 phaseproduct.setheadval('CHPFREQ', chpfreq,
                                         'Input chop freq [Hz]')
@@ -383,6 +386,8 @@ class StepDmdPlot(StepParent):
                                         'User-specified chop freq [Hz]')
                 phaseproduct.setheadval('PHASEREF', ref_phase_file,
                                         'Phase reference')
+                phaseproduct.setheadval('PRODTYPE', 'phaseoffset')
+                phaseproduct.setheadval('PROCSTAT', 'LEVEL_2')
                 phaseproduct.save(phasename)
 
             fig = Figure(figsize=(20, 24))

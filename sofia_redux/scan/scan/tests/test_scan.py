@@ -607,38 +607,45 @@ class TestScan(object):
             populated_scan.update_gains('bias')
 
         # perform correlated.bias task, then update_gains
-        expected = ['O', ' ', 'b', '121', ' ']
+        expected = ['O', ' ', 'C', '121', ' ']
         populated_scan.validate()
-        populated_scan.perform('correlated.bias')
+        populated_scan.perform('correlated.obs-channels')
         assert populated_scan.integrations[0].comments == expected
         test_integ = populated_scan.integrations[0].copy()
 
-        populated_scan.update_gains('bias')
+        populated_scan.update_gains('obs-channels')
         assert populated_scan.integrations[0].comments == expected + ['121']
 
         # set a trigger to False: gains not updated
         populated_scan.integrations[0] = test_integ
-        modality = test_integ.channels.modalities.get('bias')
+        modality = test_integ.channels.modalities.get('obs-channels')
         modality.trigger = 'False'
-        populated_scan.update_gains('bias')
+        populated_scan.update_gains('obs-channels')
         assert populated_scan.integrations[0].comments == expected
 
     def test_decorrelate(self, mocker, populated_scan):
         m1 = mocker.patch.object(populated_scan, 'update_gains')
         populated_scan.validate()
-        populated_scan.decorrelate('bias')
+        populated_scan.decorrelate('obs-channels')
 
         # update_gains not called by default
         m1.assert_not_called()
 
         # configure span: calls update_gains
-        populated_scan.configuration.set_option('correlated.bias.span', True)
-        populated_scan.decorrelate('bias')
+        populated_scan.configuration.set_option(
+            'correlated.obs-channels.span', True)
+        populated_scan.decorrelate('obs-channels')
         m1.assert_called_once()
 
-        # decorrelate a non existent modality - not called again,
-        # just appends an empty comment
+        # decorrelate an unconfigured non existent modality - Nothing happens
         populated_scan.integrations[0].comments = None
+        populated_scan.decorrelate('test')
+        m1.assert_called_once()
+        assert populated_scan.integrations[0].comments is None
+
+        # decorrelate an configured non-existent modality - appends comment
+        populated_scan.configuration.parse_key_value(
+            'correlated.test', 'True')
         populated_scan.decorrelate('test')
         m1.assert_called_once()
         assert populated_scan.integrations[0].comments == [' ']

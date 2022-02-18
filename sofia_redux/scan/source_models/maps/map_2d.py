@@ -539,7 +539,7 @@ class Map2D(Overlay):
         -------
         filtered : bool
         """
-        return np.isnan(self.filter_fwhm)
+        return not np.isnan(self.filter_fwhm)
 
     def get_filter_area(self):
         """

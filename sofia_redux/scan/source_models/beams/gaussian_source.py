@@ -14,14 +14,41 @@ __all__ = ['GaussianSource']
 
 
 class GaussianSource(Gaussian2D):
-
-    """
-    Extends the Gaussian2D to fit a map.
-    """
     def __init__(self, peak=1.0, x_mean=0.0, y_mean=0.0,
                  x_fwhm=0.0, y_fwhm=0.0, theta=0.0 * units.Unit('deg'),
                  peak_unit=None, position_unit=None, gaussian_model=None):
+        """
+        Initialize a GaussianSource model.
 
+        The GaussianSource is an extension of the Gaussian2D model that allows
+        the model to be fit to (or from) a source map.
+
+        Parameters
+        ----------
+        peak : float or units.Quantity, optional
+            The peak amplitude of the Gaussian.
+        x_mean : float or units.Quantity, optional
+            The position of the peak along the x-axis.
+        y_mean : float or units.Quantity, optional
+            The position of the peak along the y-axis.
+        x_fwhm : float or units.Quantity, optional
+            The Full-Width-Half-Max beam width in the x-direction.
+        y_fwhm : float or units.Quantity, optional
+            The Full-Width-Half-Max beam width in the y-direction.
+        theta : float or units.Quantity, optional
+            The rotation of the beam pertaining to `x_fwhm` and `y_fwhm` in
+            relation to the actual (x, y) coordinate axis.  If a float value is
+            supplied, it is assumed to be in degrees.
+        peak_unit : units.Unit or units.Quantity or str, optional
+            The physical units for the peak amplitude.  The default is
+            dimensionless.
+        position_unit : units.Unit or units.Quantity or str, optional
+            The physical units of all position based parameters (`x_mean`,
+            `y_mean`, `x_fwhm`, `y_fwhm`)
+        gaussian_model : Gaussian2D, optional
+            If supplied, extracts all the above parameters from the supplied
+            model.
+        """
         self.positioning_method = 'position'
         self.coordinates = None
         self.source_mask = None
@@ -39,11 +66,22 @@ class GaussianSource(Gaussian2D):
                              y_mean=gaussian_model.y_mean,
                              x_fwhm=gaussian_model.x_fwhm,
                              y_fwhm=gaussian_model.y_fwhm,
-                             theta=gaussian_model.theta)
+                             theta=gaussian_model.theta,
+                             peak_unit=gaussian_model.unit)
         else:
             super().__init__(peak=peak, x_mean=x_mean, y_mean=y_mean,
                              x_fwhm=x_fwhm, y_fwhm=y_fwhm, theta=theta,
                              peak_unit=peak_unit, position_unit=position_unit)
+
+    def copy(self):
+        """
+        Return a copy of the Gaussian source.
+
+        Returns
+        -------
+        GaussianSource
+        """
+        return super().copy()
 
     @property
     def referenced_attributes(self):
@@ -136,23 +174,36 @@ class GaussianSource(Gaussian2D):
 
         if isinstance(self.fwhm, units.Quantity):
             rms_unit = self.fwhm.unit
-        else:
+        else:  # pragma: no cover
             rms_unit = None
 
         rms = 0.0 if weight <= 0 else 1.0 / np.sqrt(self.fwhm_weight)
         if not isinstance(rms, units.Quantity) and rms_unit is not None:
-            rms = rms * rms_unit
+            rms = rms * rms_unit  # pragma: no cover
         return rms
 
-    def copy(self):
+    def __eq__(self, other):
         """
-        Return a copy of the Gaussian source.
+        Test if this GaussianSource is functionally equivalent to another.
+
+        Note that only the model is tested for equality.  No factors such as
+        grid or coordinates will be examined.
+
+        Parameters
+        ----------
+        other : GaussianSource
 
         Returns
         -------
-        GaussianSource
+        equal : bool
         """
-        return super().copy()
+        if self is other:
+            return True
+        if not super().__eq__(other):
+            return False
+        if self.is_corrected != other.is_corrected:
+            return False
+        return True
 
     def set_positioning_method(self, method):
         """
@@ -198,7 +249,7 @@ class GaussianSource(Gaussian2D):
                 self.x_mean = peak_position[0]
                 self.y_mean = peak_position[1]
                 self.coordinates = Coordinate2D(peak_position)
-        else:
+        else:  # pragma: no cover
             self.x_mean = peak_position
             self.y_mean = peak_position
             self.coordinates = Coordinate2D([peak_position, peak_position])
@@ -256,6 +307,13 @@ class GaussianSource(Gaussian2D):
     def get_lsq_fit_parameters(self, image):
         """
         Return the LSQ fit parameters for curve_fit.
+
+        Determines the entry parameters for a non-linear least squares fit to
+        the Gaussian source.  These are the initial guess parameters for the
+        peak amplitude, (x, y) mean, and standard deviation.  The bounds for
+        these parameters are also returned.  For the GaussianSource, the
+        amplitude and centroid location are unbounded, and a minimum bound on
+        the standard deviation is set, based on the currently set FWHM.
 
         Parameters
         ----------
@@ -317,7 +375,13 @@ class GaussianSource(Gaussian2D):
     def fit_map(self, map2d, max_iterations=40, radius_increment=1.1,
                 tolerance=0.05):
         """
-        Fit the Gaussian to a given map. (adaptTo)
+        Fit the Gaussian source to a given map.
+
+        An Observation2D object or Map2D overlap object may be supplied
+        and fit with a Gaussian source.  If an Observation2D is supplied, the
+        Gaussian is fit to the significance image, and thus the FWHM rms may
+        also be determined.  Otherwise, all other parameters aside from the
+        FWHM weight will be fit for.
 
         Parameters
         ----------
@@ -363,10 +427,16 @@ class GaussianSource(Gaussian2D):
         if image is not map2d:
             self.set_peak_from(map2d)  # Sets the peak, peak weight, and unit.
             fwhm_rms = np.sqrt(2.0) * self.fwhm / self.peak_significance
-            if fwhm_rms != 0:
+            if fwhm_rms != 0 and not np.isnan(fwhm_rms):
                 self.fwhm_weight = 1.0 / (fwhm_rms ** 2)
             else:
                 self.fwhm_weight = np.inf / (fwhm_unit ** 2)
+
+        fwhm_pix = self.fwhm / np.sqrt(self.grid.get_pixel_area())
+        integrated_value = self.peak * (
+            (fwhm_pix * self.FWHM_TO_SIZE) ** 2)
+
+        return integrated_value
 
     def set_center_index(self, center_index):
         """
@@ -391,10 +461,12 @@ class GaussianSource(Gaussian2D):
         Parameters
         ----------
         index : Coordinate2D
+            The dimensionless map pixel coordinates.
 
         Returns
         -------
-        Coordinate2D
+        coordinates : Coordinate2D
+            The physical map coordinates for the given `index`.
         """
         offset = self.grid.index_to_offset(index)
         grid_coordinates = self.grid.reference.copy()
@@ -405,6 +477,23 @@ class GaussianSource(Gaussian2D):
                            radius_increment=0.1, tolerance=0.05):
         """
         Find the extent of the source and shape.
+
+        Calculates the integral of the source, a circular source radius, and
+        a source mask.  The algorithm for determining the source iterates using
+        an expanding circular aperture centered on the currently defined
+        `center_index` attribute.  The iteration will be halted, and parameters
+        updated once either the `max_iteration` number of iterations has been
+        reached, or::
+
+            data_sum <= last_data_sum * (1 + tolerance)
+
+        The data_sum is the sum of data values inside the circular aperture,
+        and the last_data_sum is that same sum from the previous iteration.
+        Each iteration the radius of the aperture is increased by::
+
+            min(pixel_size, radius_increment * current_radius)
+
+        The starting radius is equal to the pixel size in the data.
 
         Parameters
         ----------
@@ -437,7 +526,7 @@ class GaussianSource(Gaussian2D):
         data_sort = image.data.ravel()[sort_index]
         search_index = np.nonzero(radius_sort <= search_radius)[0]
         if len(search_index) == 0:
-            search_index = np.zeros(1, dtype=int)
+            search_index = 0
         else:
             search_index = search_index[-1]
 
@@ -451,7 +540,7 @@ class GaussianSource(Gaussian2D):
             search_radius += min([grow, radius_increment * search_radius])
             search_index = np.nonzero(radius_sort <= search_radius)[0]
             if len(search_index) == 0:
-                search_index = np.zeros(1, dtype=int)
+                search_index = 0
             else:
                 search_index = search_index[-1]
             data_sum = np.sum(data_sort[:search_index + 1])
@@ -525,7 +614,7 @@ class GaussianSource(Gaussian2D):
         if grid is None:
             return peak
         else:
-            return grid.deproject(peak)
+            return grid.projection.deproject(peak)
 
     @staticmethod
     def find_local_peak(image, sign=0):
@@ -548,7 +637,10 @@ class GaussianSource(Gaussian2D):
             The (x, y) pixel peak position.
         """
         peak_value, peak_index = image.index_of_max(sign=sign)
-        peak_index = Index2D(peak_index)
+        if isinstance(peak_index, Coordinate2D):
+            peak_index = Index2D(peak_index.coordinates)
+        else:  # pragma: no cover
+            peak_index = Index2D(peak_index)
         return Coordinate2D(image.get_refined_peak_index(peak_index))
 
     @staticmethod
@@ -565,7 +657,7 @@ class GaussianSource(Gaussian2D):
         peak : Coordinate2D
             The (x, y) peak position.
         """
-        indices = np.indices(image.shape)[::-1]  # (x, y) FITS format
+        indices = np.indices(image.shape)[::-1]  # to (x, y) FITS format
         data = image.data
 
         w = np.abs(data) * image.valid
@@ -612,7 +704,7 @@ class GaussianSource(Gaussian2D):
 
         Parameters
         ----------
-        unit : astropy.units.Quantity or astropy.units.Unit or None
+        unit : units.Quantity or units.Unit or float or str or None
 
         Returns
         -------
@@ -624,7 +716,8 @@ class GaussianSource(Gaussian2D):
         elif isinstance(unit, units.Quantity):
             unit_value = unit.value
             unit_type = unit.unit
-        elif isinstance(unit, units.Unit):
+        elif isinstance(unit, (units.Unit, str)):
+            unit = units.Unit(unit)
             unit_value = 1.0
             unit_type = unit
         else:  # assume a number
@@ -682,6 +775,13 @@ class GaussianSource(Gaussian2D):
         """
         Get the correction factor for a given map.
 
+        Notes
+        -----
+        The original CRUSH would always return a value of 1, since the logic
+        based on the map2d.filter_fwhm returns 1 if it is not NaN, and sets the
+        filtering factor to 0 if it is NaN.  This has been remedied here, but
+        does not appear to actually be used during the reduction.
+
         Parameters
         ----------
         map2d : Map2D
@@ -690,14 +790,18 @@ class GaussianSource(Gaussian2D):
         -------
         correction_factor : float
         """
-        if not map2d.is_filtered():
+        if not map2d.is_filtered():  # map2d.filter_fwhm = NaN
             return 1.0
+
         if map2d.is_filter_blanked():
-            filter_fraction = min((map2d.filter_blanking
-                                  / self.peak_significance), 1.0)
-            filtering = 1.0 - (1.0 / map2d.get_filter_correction_factor())
-            correction = 1.0 / (1.0 - filtering * filter_fraction)
-            return correction
+            filter_fraction = min(
+                map2d.filter_blanking / self.peak_significance, 1.0)
+        else:
+            filter_fraction = 1.0
+
+        filtering = 1.0 - (1.0 / map2d.get_filter_correction_factor())
+        correction = 1.0 / (1.0 - filtering * filter_fraction)
+        return correction
 
     def correct(self, map2d):
         """
@@ -730,7 +834,8 @@ class GaussianSource(Gaussian2D):
         None
         """
         if not self.is_corrected:
-            log.warnings("Source is already uncorrected")
+            log.warning("Source is already uncorrected")
+            return
         self.scale_peak(1.0 / self.get_correction_factor(map2d))
         self.is_corrected = False
 
@@ -753,6 +858,9 @@ class GaussianSource(Gaussian2D):
         """
         Deconvolve with a given psf.
 
+        Note that this process will result in a circular beam.  I.e. one in
+        which the FWHM in the x and y-directions are equivalent.
+
         Parameters
         ----------
         psf : Gaussian2D
@@ -769,7 +877,7 @@ class GaussianSource(Gaussian2D):
 
         if isinstance(self.fwhm, units.Quantity):
             weight_unit = (1 / self.fwhm.unit) ** 2
-        else:
+        else:  # pragma: no cover
             weight_unit = None
 
         if new_fwhm == 0:
@@ -778,13 +886,18 @@ class GaussianSource(Gaussian2D):
             factor /= new_fwhm
             self.fwhm_weight /= factor ** 2
 
-        if weight_unit is not None and not isinstance(
-                self.fwhm_weight, units.Quantity):
-            self.fwhm_weight = self.fwhm_weight * weight_unit
+        if weight_unit is not None:
+            if not isinstance(self.fwhm_weight, units.Quantity) or (
+                    self.fwhm_weight.unit == units.dimensionless_unscaled):
+                self.fwhm_weight = self.fwhm_weight * weight_unit
 
     def convolve_with(self, psf):
         """
-        Deconvolve with a given psf.
+        Convolve with a given PSF.
+
+        Convolve the current beam with a given PSF.  The shape of the beam
+        will be accounted for correctly in both (x, y) dimensions unlike
+        the `deconvolve_with` method.
 
         Parameters
         ----------
@@ -797,8 +910,7 @@ class GaussianSource(Gaussian2D):
         factor = self.fwhm
         beam = self.get_gaussian_2d()
         beam.convolve_with(psf)
-        self.x_fwhm = beam.x_fwhm
-        self.y_fwhm = beam.y_fwhm
+        self.set_xy_fwhm(beam.x_fwhm, beam.y_fwhm)
         new_fwhm = self.fwhm
         if new_fwhm == 0:
             self.fwhm_weight = 0.0
@@ -808,11 +920,9 @@ class GaussianSource(Gaussian2D):
 
         if isinstance(self.fwhm, units.Quantity):
             weight_unit = (1 / self.fwhm.unit) ** 2
-        else:
-            weight_unit = None
-        if weight_unit is not None and not isinstance(
-                self.fwhm_weight, units.Quantity):
-            self.fwhm_weight = self.fwhm_weight * weight_unit
+            if not isinstance(self.fwhm_weight, units.Quantity) or (
+                    self.fwhm_weight.unit == units.dimensionless_unscaled):
+                self.fwhm_weight = self.fwhm_weight * weight_unit
 
     def edit_header(self, header, fits_id='', beam_name=None, size_unit=None):
         """
@@ -825,7 +935,7 @@ class GaussianSource(Gaussian2D):
         fits_id : str, optional
             Not used.
         beam_name : str, optional
-            The name of the beam.
+            The name of the beam.  Not implemented for the GaussianSource.
         size_unit : astropy.units.Unit or Quantity or str, optional
             If set, convert the major/minor beam values to this unit before
             setting in the header.
@@ -842,13 +952,13 @@ class GaussianSource(Gaussian2D):
                 size_unit = self.fwhm.unit
                 fwhm = self.fwhm.value
                 fwhm_rms = self.fwhm_rms.value
-        else:
+        else:  # pragma: no cover
             fwhm = self.fwhm
             fwhm_rms = self.fwhm_rms
 
-        if isinstance(fwhm, units.Quantity):
+        if isinstance(fwhm, units.Quantity):  # pragma: no cover
             fwhm = fwhm.value
-        if isinstance(fwhm_rms, units.Quantity):
+        if isinstance(fwhm_rms, units.Quantity):  # pragma: no cover
             fwhm_rms = fwhm_rms.value
 
         if self.unit in [None, units.dimensionless_unscaled]:
@@ -859,7 +969,7 @@ class GaussianSource(Gaussian2D):
         size_comment = '' if size_unit is None else f'({size_unit}) '
 
         header['SRCPEAK'] = self.peak, unit_comment + 'source peak flux.'
-        header['SRCPKERR'] = self.peak_rms, unit_comment + 'peak flux error'
+        header['SRCPKERR'] = self.peak_rms, unit_comment + 'peak flux error.'
 
         if np.isfinite(self.fwhm):
             header['SRCFWHM'] = fwhm, size_comment + 'source FWHM.'
@@ -879,11 +989,13 @@ class GaussianSource(Gaussian2D):
         -------
         integral, weight : (float, float) or (Quantity, Quantity)
         """
-        factor = self.area / psf_area
-        if isinstance(factor, units.Quantity):
-            factor = factor.decompose().value
-        integral = self.peak * factor
-        weight = self.peak_weight / (factor ** 2)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', RuntimeWarning)
+            factor = self.area / psf_area
+            if isinstance(factor, units.Quantity):
+                factor = factor.decompose().value
+            integral = self.peak * factor
+            weight = self.peak_weight / (factor ** 2)
         return integral, weight
 
     def pointing_info(self, map2d):
@@ -896,13 +1008,14 @@ class GaussianSource(Gaussian2D):
 
         Returns
         -------
-        list (str)
+        info : list (str)
         """
         info = [f'Peak: {self.peak:.5f} {self.unit} '
                 f'(S/N ~ {self.peak_significance:.5f})']
         size_unit = map2d.display_grid_unit
         integral, integral_weight = self.get_integral(
             map2d.underlying_beam.area)
+        ud = units.dimensionless_unscaled
 
         if integral_weight > 0:
             integral_rms = 1.0 / np.sqrt(integral_weight)
@@ -914,31 +1027,52 @@ class GaussianSource(Gaussian2D):
         else:
             info.append(f'Integral: {integral:.4f} {self.unit}')
 
-        if isinstance(self.fwhm, units.Quantity):
-            fwhm = self.fwhm.to(size_unit.unit).value * size_unit.value
-            fwhm_rms = self.fwhm_rms.to(size_unit.unit).value
-        else:
-            fwhm = self.fwhm * size_unit.value
-            fwhm_rms = self.fwhm_rms * size_unit.value
+        values = [self.fwhm, self.fwhm_rms]
+        for i, check_value in enumerate(values):
+            if size_unit is None:
+                if isinstance(check_value, units.Quantity):
+                    if check_value.unit == ud:
+                        values[i] = check_value.value
+                    else:
+                        size_unit = check_value.unit
 
-        if fwhm_rms == 0:
-            info.append(f'FWHM: {fwhm:.4f} {size_unit.unit}')
+        if isinstance(size_unit, units.Quantity):
+            scaling = size_unit.value
+            size_unit = size_unit.unit
         else:
-            info.append(f'FWHM: {fwhm:.4f} +- {fwhm_rms:.4f} {size_unit.unit}')
+            scaling = 1.0
+
+        if size_unit is None or size_unit == ud:
+            unit_str = ''
+        else:
+            unit_str = f' ({size_unit})'
+            for i, check_value in enumerate(values):
+                if isinstance(check_value, units.Quantity):
+                    values[i] = check_value.to(size_unit).value * scaling
+
+        fwhm, fwhm_rms = values
+        if fwhm_rms == 0:
+            info.append(f'FWHM: {fwhm:.4f}{unit_str}')
+        else:
+            info.append(f'FWHM: {fwhm:.4f} +- {fwhm_rms:.4f}{unit_str}')
         return info
 
     def get_asymmetry_2d(self, image, angle, radial_range):
         """
+        Return the asymmetry of the GaussianSource.
 
         Parameters
         ----------
         image : Image2D
+            The image from which to determine the asymmetry.
         angle : units.Quantity
+            The rotation of the image with respect to the GaussianSource.
         radial_range : Range
+            The range over which the asymmetry should be calculated.
 
         Returns
         -------
-
+        asymmetry : Asymmetry2D
         """
         return image.get_asymmetry_2d(self.grid, self.center_index,
                                       angle, radial_range)
@@ -950,10 +1084,12 @@ class GaussianSource(Gaussian2D):
         Parameters
         ----------
         grid : Grid2D
+            The new grid to apply to a copy of this GaussianSource.
 
         Returns
         -------
         GaussianSource
+            A copy of the Gaussian source on the new grid.
         """
         center_offset = self.grid.index_to_offset(self.center_index)
         new = self.copy()
@@ -985,11 +1121,15 @@ class GaussianSource(Gaussian2D):
 
         Returns
         -------
-        dict
+        data : dict
         """
         convert_size = size_unit is not None
         data = {}
-        i, iw = self.get_integral(map2d.underlying_beam.area)
+        if map2d.underlying_beam is not None:
+            i, iw = self.get_integral(map2d.underlying_beam.area)
+        else:
+            i, iw = 0.0, np.inf
+
         fwhm = self.fwhm
         fwhm_rms = self.fwhm_rms
 
@@ -998,16 +1138,22 @@ class GaussianSource(Gaussian2D):
         data['peakS2N'] = self.peak_significance
         data['int'] = i * self.unit
         data['dint'] = 1.0 / np.sqrt(iw) * self.unit
-        data['intS2N'] = np.abs(i) * np.sqrt(iw)
+        if i == 0 and iw == np.inf:
+            data['intS2N'] = 0.0
+        else:
+            data['intS2N'] = np.abs(i) * np.sqrt(iw)
 
         if convert_size:
+            ud = units.dimensionless_unscaled
+            values = [fwhm, fwhm_rms]
             size_unit = units.Unit(size_unit)
-            if isinstance(fwhm, units.Quantity):
-                fwhm = fwhm.to(size_unit)
-                fwhm_rms = fwhm_rms.to(size_unit)
-            else:
-                fwhm = fwhm * size_unit
-                fwhm_rms = fwhm_rms * size_unit
+            for i, value in enumerate(values):
+                if isinstance(value, units.Quantity) and value.unit != ud:
+                    values[i] = value.to(size_unit)
+                else:
+                    values[i] = value * size_unit
+            fwhm, fwhm_rms = values
+
         data['FWHM'] = fwhm
         data['dFWHM'] = fwhm_rms
         return data

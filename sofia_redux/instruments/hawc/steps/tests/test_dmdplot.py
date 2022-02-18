@@ -120,6 +120,9 @@ class TestDmdPlot(DRPTestCase):
             phase = fits.open('test.PHS.fits')
             assert 'RPHASE' in phase
             assert 'TPHASE' in phase
+            assert phase[0].header['INSTRUME'] == 'HAWC_PLUS'
+            assert phase[0].header['PRODTYPE'] == 'phaseoffset'
+            assert phase[0].header['PROCSTAT'] == 'LEVEL_2'
             phase.close()
 
             # now with no auxphase, no sigma clipping

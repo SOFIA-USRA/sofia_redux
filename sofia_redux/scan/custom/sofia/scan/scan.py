@@ -497,7 +497,7 @@ class SofiaScan(Scan):
         nominal_pointing_offset: Coordinate2D
         """
         offset = Coordinate2D(native_pointing)
-        if self.configuration.has_option('pointing'):
+        if self.configuration.is_configured('pointing'):
             pointing_offset = Coordinate2D(
                 self.configuration.get_float_list('pointing'), unit='arcsec')
             offset.add(pointing_offset)

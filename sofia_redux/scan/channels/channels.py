@@ -1422,31 +1422,31 @@ class Channels(ABC):
 
     def troubleshoot_few_pixels(self):
         """
-        Log a message when there are too few pixels.
+        Return suggestions as to how to remedy too few pixels in the model.
 
         Returns
         -------
-        None
+        suggestions : list (str)
         """
-        spc = '            '
-        msg = spc
-        msg += '* Disable gain estimation for one or more modalities. E.g.:\n'
+        suggestions = [
+            ' * Disable gain estimation for one or more modalities. E.g.:']
+
         for modality in self.list_modalities():
             if not self.configuration.has_option(f'correlated.{modality}'):
                 continue
             if self.configuration.get_bool(f'correlated.{modality}.nogains'):
                 continue
-            msg += spc + f'-correlated.{modality}.noGains\n'
+            suggestions.append(f'\t-correlated.{modality}.nogains=True')
 
         if self.configuration.get_bool('gains'):
-            msg += spc + ("* Disable gain estimation globally with "
-                          "'-forget=gains'.\n")
+            suggestions.append(" * Disable gain estimation globally with "
+                               "'-forget=gains'.")
         if self.configuration.has_option('despike'):
-            msg += spc + "* Disable despiking with '-forget=despike'.\n"
+            suggestions.append(" * Disable despiking with '-forget=despike'.")
         if self.configuration.has_option('weighting.noiseRange'):
-            msg += spc + ("* Adjust noise flagging via "
-                          "'weighting.noiseRange'.\n")
-        log.info(msg)
+            suggestions.append(" * Adjust noise flagging via "
+                               "'weighting.noiseRange'.")
+        return suggestions
 
     def flag_field(self, field, specs):
         """

@@ -1,4 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
+
 import warnings
 from abc import ABC
 from astropy import log, units
@@ -9,6 +10,8 @@ import numpy as np
 
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.coordinate_systems.index_2d import Index2D
+from sofia_redux.scan.utilities.utils import (
+    get_header_quantity, to_header_float)
 
 __all__ = ['Gaussian2D']
 
@@ -20,18 +23,53 @@ class Gaussian2D(ABC):
 
     # The equivalent area lateral square size to Gaussian beam with FWHM
     FWHM_TO_SIZE = np.sqrt(AREA_FACTOR)
+    QUARTER = np.pi / 2 * units.Unit('radian')
 
     def __init__(self, peak=1.0, x_mean=0.0, y_mean=0.0,
                  x_fwhm=0.0, y_fwhm=0.0, theta=0.0 * units.Unit('deg'),
                  peak_unit=None, position_unit=None):
+        """
+        Initializes a 2-D Gaussian beam model.
 
+        The Gaussian2D class is a wrapper around the
+        :class:`functional_models.Gaussian2D` class with additional
+        functionality including convolution/deconvolution with another beam,
+        and header parsing/editing.
+
+        Parameters
+        ----------
+        peak : float or units.Quantity, optional
+            The peak amplitude of the Gaussian.
+        x_mean : float or units.Quantity, optional
+            The position of the peak along the x-axis.
+        y_mean : float or units.Quantity, optional
+            The position of the peak along the y-axis.
+        x_fwhm : float or units.Quantity, optional
+            The Full-Width-Half-Max beam width in the x-direction.
+        y_fwhm : float or units.Quantity, optional
+            The Full-Width-Half-Max beam width in the y-direction.
+        theta : float or units.Quantity, optional
+            The rotation of the beam pertaining to `x_fwhm` and `y_fwhm` in
+            relation to the actual (x, y) coordinate axis.  If a float value is
+            supplied, it is assumed to be in degrees.
+        peak_unit : units.Unit or units.Quantity or str, optional
+            The physical units for the peak amplitude.  The default is
+            dimensionless.
+        position_unit : units.Unit or units.Quantity or str, optional
+            The physical units of all position based parameters (`x_mean`,
+            `y_mean`, `x_fwhm`, `y_fwhm`)
+        """
         if position_unit is None:
             position_unit = units.dimensionless_unscaled
+        else:
+            position_unit = units.Unit(position_unit)
         if peak_unit is None:
             if isinstance(peak, units.Quantity):
                 peak_unit = peak.unit
             else:
                 peak_unit = units.dimensionless_unscaled
+        else:
+            peak_unit = units.Unit(peak_unit)
 
         if not isinstance(x_fwhm, units.Quantity):
             x_fwhm = x_fwhm * position_unit
@@ -53,12 +91,27 @@ class Gaussian2D(ABC):
             y_stddev=y_fwhm * gaussian_fwhm_to_sigma,
             x_mean=x_mean, y_mean=y_mean,
             amplitude=peak.value, theta=theta)
+        self.validate()
 
-    def __repr__(self):
-        s = f"x_fwhm={self.x_fwhm}, y_fwhm={self.y_fwhm}, "
-        s += f"x_mean={self.x_mean}, y_mean={self.y_mean}, "
-        s += f"theta={self.theta}, peak={self.peak} {self.unit}"
-        return s
+    def copy(self):
+        """
+        Return a copy of the Gaussian 2D model.
+
+        Returns
+        -------
+        Gaussian2D
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', RuntimeWarning)
+            new = self.__class__()
+            for key, value in self.__dict__.items():
+                if key in self.referenced_attributes:  # pragma: no cover
+                    setattr(new, key, value)
+                elif hasattr(value, 'copy'):
+                    setattr(new, key, value.copy())
+                else:
+                    setattr(new, key, deepcopy(value))
+        return new
 
     @property
     def referenced_attributes(self):
@@ -71,26 +124,6 @@ class Gaussian2D(ABC):
         """
         return set([])
 
-    def copy(self):
-        """
-        Return a copy of the data.
-
-        Returns
-        -------
-        FlaggedData
-        """
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', RuntimeWarning)
-            new = self.__class__()
-            for key, value in self.__dict__.items():
-                if key in self.referenced_attributes:
-                    setattr(new, key, value)
-                elif hasattr(value, 'copy'):
-                    setattr(new, key, value.copy())
-                else:
-                    setattr(new, key, deepcopy(value))
-        return new
-
     @property
     def x_fwhm(self):
         """
@@ -98,7 +131,7 @@ class Gaussian2D(ABC):
 
         Returns
         -------
-        astropy.units.Quantity
+        units.Quantity
         """
         return self.model.x_stddev * gaussian_sigma_to_fwhm
 
@@ -109,13 +142,14 @@ class Gaussian2D(ABC):
 
         Parameters
         ----------
-        value : astropy.units.Quantity
+        value : units.Quantity
 
         Returns
         -------
         None
         """
         self.model.x_stddev = gaussian_fwhm_to_sigma * value
+        self.validate()
 
     @property
     def y_fwhm(self):
@@ -124,7 +158,7 @@ class Gaussian2D(ABC):
 
         Returns
         -------
-        astropy.units.Quantity
+        units.Quantity
         """
         return self.model.y_stddev * gaussian_sigma_to_fwhm
 
@@ -135,13 +169,14 @@ class Gaussian2D(ABC):
 
         Parameters
         ----------
-        value : astropy.units.Quantity
+        value : units.Quantity
 
         Returns
         -------
         None
         """
         self.model.y_stddev = gaussian_fwhm_to_sigma * value
+        self.validate()
 
     @property
     def x_stddev(self):
@@ -150,7 +185,7 @@ class Gaussian2D(ABC):
 
         Returns
         -------
-        value : astropy.units.Quantity or float
+        value : units.Quantity or float
         """
         return self.model.x_stddev
 
@@ -161,13 +196,14 @@ class Gaussian2D(ABC):
 
         Parameters
         ----------
-        value : astropy.units.Quantity or float
+        value : units.Quantity or float
 
         Returns
         -------
         None
         """
         self.model.x_stddev = value
+        self.validate()
 
     @property
     def y_stddev(self):
@@ -176,7 +212,7 @@ class Gaussian2D(ABC):
 
         Returns
         -------
-        value : astropy.units.Quantity or float
+        value : units.Quantity or float
         """
         return self.model.y_stddev
 
@@ -187,22 +223,23 @@ class Gaussian2D(ABC):
 
         Parameters
         ----------
-        value : astropy.units.Quantity or float
+        value : units.Quantity or float
 
         Returns
         -------
         None
         """
         self.model.y_stddev = value
+        self.validate()
 
     @property
     def position_angle(self):
         """
-        Return the angle of the Gaussian.
+        Return the position angle of the Gaussian.
 
         Returns
         -------
-        astropy.units.Quantity
+        units.Quantity
         """
         return self.model.theta * 1.0
 
@@ -213,7 +250,7 @@ class Gaussian2D(ABC):
 
         Parameters
         ----------
-        value : astropy.units.Quantity
+        value : units.Quantity
 
         Returns
         -------
@@ -223,10 +260,28 @@ class Gaussian2D(ABC):
 
     @property
     def theta(self):
+        """
+        Return the position angle of the Gaussian.
+
+        Returns
+        -------
+        units.Quantity
+        """
         return self.position_angle
 
     @theta.setter
     def theta(self, value):
+        """
+        Set the position angle of the Gaussian.
+
+        Parameters
+        ----------
+        value : units.Quantity
+
+        Returns
+        -------
+        None
+        """
         self.position_angle = value
 
     @property
@@ -236,7 +291,7 @@ class Gaussian2D(ABC):
 
         Returns
         -------
-        astropy.units.Quantity or float
+        units.Quantity or float
         """
         return max(self.x_fwhm, self.y_fwhm)
 
@@ -247,7 +302,7 @@ class Gaussian2D(ABC):
 
         Returns
         -------
-        astropy.units.Quantity
+        units.Quantity
         """
         return min(self.x_fwhm, self.y_fwhm)
 
@@ -258,7 +313,7 @@ class Gaussian2D(ABC):
 
         Returns
         -------
-        astropy.units.Quantity
+        units.Quantity
         """
         return self.get_circular_equivalent_fwhm()
 
@@ -269,13 +324,13 @@ class Gaussian2D(ABC):
 
         Parameters
         ----------
-        value : astropy.units.Quantity
+        value : units.Quantity
 
         Returns
         -------
         None
         """
-        self.x_fwhm = self.y_fwhm = value
+        self.set_xy_fwhm(value, value)
 
     @property
     def area(self):
@@ -310,7 +365,7 @@ class Gaussian2D(ABC):
 
         Returns
         -------
-        astropy.units.Quantity or float
+        units.Quantity or float
         """
         value = self.model.x_mean.value
         unit = self.model.x_mean.unit
@@ -326,7 +381,7 @@ class Gaussian2D(ABC):
 
         Parameters
         ----------
-        value : astropy.units.Quantity or float
+        value : units.Quantity or float
 
         Returns
         -------
@@ -341,7 +396,7 @@ class Gaussian2D(ABC):
 
         Returns
         -------
-        astropy.units.Quantity or float
+        units.Quantity or float
         """
         value = self.model.y_mean.value
         unit = self.model.y_mean.unit
@@ -357,7 +412,7 @@ class Gaussian2D(ABC):
 
         Parameters
         ----------
-        value : astropy.units.Quantity or float
+        value : units.Quantity or float
 
         Returns
         -------
@@ -372,7 +427,7 @@ class Gaussian2D(ABC):
 
         Returns
         -------
-        float or astropy.units.Quantity
+        float or units.Quantity
         """
         return self.model.amplitude * 1.0
 
@@ -383,7 +438,7 @@ class Gaussian2D(ABC):
 
         Parameters
         ----------
-        value : float or astropy.units.Quantity
+        value : float or units.Quantity
 
         Returns
         -------
@@ -391,13 +446,116 @@ class Gaussian2D(ABC):
         """
         self.model.amplitude = value
 
+    def __str__(self):
+        """
+        Return string information on the Gaussian2D model.
+
+        Returns
+        -------
+        str
+        """
+        s = f"x_fwhm={self.x_fwhm}, y_fwhm={self.y_fwhm}, "
+        s += f"x_mean={self.x_mean}, y_mean={self.y_mean}, "
+        s += f"theta={self.theta}, peak={self.peak} {self.unit}"
+        return s
+
+    def __repr__(self):
+        """
+        Return a string representation of the Gaussian2D model.
+
+        Returns
+        -------
+        str
+        """
+        return f'{object.__repr__(self)} {str(self)}'
+
+    def __eq__(self, other):
+        """
+        Test if this Gaussian2D instance is functionally equivalent to another.
+
+        Parameters
+        ----------
+        other : Gaussian2D
+
+        Returns
+        -------
+        equal : bool
+        """
+        if self is other:
+            return True
+        if self.__class__ != other.__class__:
+            return False
+        try:
+            if not np.isclose(self.theta, other.theta):
+                return False
+            if not np.isclose(self.x_fwhm, other.x_fwhm):
+                return False
+            if not np.isclose(self.y_fwhm, other.y_fwhm):
+                return False
+            if not np.isclose(self.x_mean, other.x_mean):
+                return False
+            if not np.isclose(self.y_mean, other.y_mean):
+                return False
+        except (TypeError, units.UnitConversionError):  # pragma: no cover
+            # Just in case these managed to get set strangely (hard to do)
+            return False
+        return (self.peak * self.unit) == (other.peak * other.unit)
+
+    def set_xy_fwhm(self, x_fwhm, y_fwhm):
+        """
+        Set and validate both new x and y FWHM values at once.
+
+        The correct position angle must be set for the process to occur
+        correctly.  This is so both FWHMs get set correctly, as doing it
+        sequentially may result in one of the values getting overwritten by
+        the other.
+
+        Parameters
+        ----------
+        x_fwhm : units.Quantity
+        y_fwhm : units.Quantity
+
+        Returns
+        -------
+        None
+        """
+        x_stddev = x_fwhm * gaussian_fwhm_to_sigma
+        y_stddev = y_fwhm * gaussian_fwhm_to_sigma
+        self.model.x_stddev = x_stddev
+        self.model.y_stddev = y_stddev
+        self.validate()
+
+    def validate(self):
+        """
+        Set the (x, y) FWHM and position angle so that x >= y.
+
+        For consistency, the major and minor axes of the Gaussian FWHM are
+        set so they are equal to the (x, y) axes.  This will result in a 90
+        degree offset to the position angle if y > x on input.
+
+        Returns
+        -------
+        None
+        """
+        x = self.model.x_stddev
+        y = self.model.y_stddev
+        if x >= y:
+            return
+
+        x = x.value if x.unit is None else x.value * x.unit
+        y = y.value if y.unit is None else y.value * y.unit
+
+        self.model.x_stddev = y
+        self.model.y_stddev = x
+        self.position_angle += self.QUARTER
+
     def get_circular_equivalent_fwhm(self):
         """
         Return the FWHM of a circular Gaussian with equivalent area.
 
         Returns
         -------
-        astropy.units.Quantity
+        units.Quantity
         """
         return np.sqrt(self.x_fwhm * self.y_fwhm).to(
             self.x_fwhm.unit)
@@ -405,6 +563,9 @@ class Gaussian2D(ABC):
     def combine_with(self, psf, deconvolve=False):
         """
         Combine with another beam.
+
+        Combination consists of either convolution (default) or deconvolution
+        of this beam by another.
 
         Parameters
         ----------
@@ -452,15 +613,16 @@ class Gaussian2D(ABC):
             sin_beta = direction * np.sin(delta) * b / c
             position_angle = self.position_angle + (0.5 * np.arcsin(sin_beta))
 
-        if minor_fwhm > major_fwhm:
-            self.x_fwhm = minor_fwhm
-            self.y_fwhm = major_fwhm
-            position_angle += (np.pi / 2) * units.Unit('radian')
-        else:
-            self.x_fwhm = major_fwhm
-            self.y_fwhm = minor_fwhm
+        self.position_angle = position_angle
+        self.set_xy_fwhm(major_fwhm, minor_fwhm)
 
-        self.position_angle = position_angle % (np.pi * units.Unit('radian'))
+        # if minor_fwhm > major_fwhm:  # pragma: no cover
+        #     self.x_fwhm = minor_fwhm
+        #     self.y_fwhm = major_fwhm
+        #     position_angle += (np.pi / 2) * units.Unit('radian')
+        # else:
+        #     self.x_fwhm = major_fwhm
+        #     self.y_fwhm = minor_fwhm
 
     def convolve_with(self, psf):
         """
@@ -498,7 +660,7 @@ class Gaussian2D(ABC):
 
         Parameters
         ----------
-        psf : Gaussian2D or astropy.units.Quantity
+        psf : Gaussian2D or units.Quantity
             Another Gaussian PSF or the FWHM of another Gaussian PSF.
 
         Returns
@@ -509,21 +671,25 @@ class Gaussian2D(ABC):
         y_fwhm = self.minor_fwhm
         if isinstance(psf, units.Quantity):
             if x_fwhm < psf:
-                self.x_fwhm = psf
+                x_fwhm = psf
             if y_fwhm < psf:
-                self.y_fwhm = psf
+                y_fwhm = psf
+            self.set_xy_fwhm(x_fwhm, y_fwhm)
             return
 
         delta_angle = psf.position_angle - self.position_angle
         c = np.cos(delta_angle)
         s = np.sin(delta_angle)
 
-        min_x = np.sqrt(((x_fwhm * c) ** 2) + (psf.y_fwhm * s) ** 2)
-        min_y = np.sqrt(((x_fwhm * s) ** 2) + (psf.y_fwhm * c) ** 2)
-        if x_fwhm < min_x:
-            self.x_fwhm = min_x
-        if y_fwhm < min_y:
-            self.y_fwhm = min_y
+        a = psf.major_fwhm
+        b = psf.minor_fwhm
+
+        min_x = np.sqrt(((a * c) ** 2) + (b * s) ** 2)
+        min_y = np.sqrt(((a * s) ** 2) + (b * c) ** 2)
+
+        new_x = min_x if x_fwhm < min_x else x_fwhm
+        new_y = min_y if y_fwhm < min_y else y_fwhm
+        self.set_xy_fwhm(new_x, new_y)
 
     def rotate(self, angle):
         """
@@ -531,7 +697,7 @@ class Gaussian2D(ABC):
 
         Parameters
         ----------
-        angle : astropy.units.Quantity
+        angle : units.Quantity
 
         Returns
         -------
@@ -554,15 +720,30 @@ class Gaussian2D(ABC):
         self.model.x_stddev *= factor
         self.model.y_stddev *= factor
 
-    def parse_header(self, header, size_unit='deg', fits_id=''):
+    def parse_header(self, header, size_unit=None, fits_id=''):
         """
         Set the beam from a FITS header.
+
+        Reads a FITS header to determine::
+
+            - The major FWHM (BMAJ)
+            - The minor FWHM (BMIN)
+            - The position angle (BPA)
+
+        By default, an attempt will be made to determine the size unit for the
+        FWHMs from the header comments, although a fixed unit may be supplied
+        by the `size_unit` parameter.  The same process will occur for the
+        position angle, but no overriding unit may be supplied.  In case no
+        unit is determined, all parameters will default to 'degree'.
 
         Parameters
         ----------
         header : astropy.io.fits.header.Header
-        size_unit : astropy.units.Unit or astropy.units.Quantity or str
-            The size unit to apply to the header values
+        size_unit : units.Unit or units.Quantity or str
+            The size unit to apply to the header values.  If `None`, an attempt
+            will be made to determine the size unit from the header comments
+            for the appropriate keywords, and if not found, will default to
+            'degree'.  Any other supplied value will take priority.
         fits_id : str, optional
             The name prefixing the FITS header BMAJ/BMIN keywords.
             For example, IBMAJ.
@@ -571,20 +752,29 @@ class Gaussian2D(ABC):
         -------
         None
         """
-        if isinstance(size_unit, str):
-            size_unit = units.Unit(size_unit)
         major_key = f'{fits_id}BMAJ'
+        minor_key = f'{fits_id}BMIN'
+        angle_key = f'{fits_id}BPA'
         if major_key not in header:
             log.error(f"FITS header contains no beam description "
                       f"for type '{fits_id}'.")
             return
-        minor_key = f'{fits_id}BMIN'
-        angle_key = f'{fits_id}BPA'
-        self.x_fwhm = float(header.get(major_key, np.nan)) * size_unit
-        self.y_fwhm = float(header.get(minor_key, np.nan)) * size_unit
-        if np.isnan(self.y_fwhm):
-            self.y_fwhm = self.x_fwhm
-        self.position_angle = header.get(angle_key, 0.0) * units.Unit('deg')
+        if minor_key not in header:
+            minor_key = major_key
+
+        if size_unit is None:
+            x_fwhm = get_header_quantity(header, major_key,
+                                         default_unit='degree')
+            y_fwhm = get_header_quantity(
+                header, minor_key, default_unit='degree').to(x_fwhm.unit)
+        else:
+            size_unit = units.Unit(size_unit)
+            x_fwhm = header[major_key] * size_unit
+            y_fwhm = header[minor_key] * size_unit
+
+        self.position_angle = get_header_quantity(
+            header, angle_key, default=0.0, default_unit='degree')
+        self.set_xy_fwhm(x_fwhm, y_fwhm)
 
     def edit_header(self, header, fits_id='', beam_name=None, size_unit=None):
         """
@@ -599,7 +789,7 @@ class Gaussian2D(ABC):
             For example, IBMAJ.
         beam_name : str, optional
             The name of the beam.
-        size_unit : astropy.units.Unit or Quantity or str, optional
+        size_unit : units.Unit or units.Quantity or str, optional
             If set, convert the major/minor beam values to this unit before
             setting in the header.
 
@@ -611,19 +801,24 @@ class Gaussian2D(ABC):
             header[f'{fits_id}BNAM'] = beam_name, 'Beam name.'
         major_fwhm = self.major_fwhm
         minor_fwhm = self.minor_fwhm
-        if isinstance(size_unit, str):
+
+        if size_unit is not None:
             size_unit = units.Unit(size_unit)
-        elif isinstance(size_unit, units.Quantity):
-            size_unit = size_unit.unit
-        major_fwhm = major_fwhm.to(size_unit)
-        minor_fwhm = minor_fwhm.to(size_unit)
-        major_string_unit = major_fwhm.unit.name
-        minor_string_unit = minor_fwhm.unit.name
-        angle = self.position_angle.to('deg').value
-        header[f'{fits_id}BMAJ'] = (
-            major_fwhm.value, f'Beam major axis ({major_string_unit}).')
-        header[f'{fits_id}BMIN'] = (
-            minor_fwhm.value, f'Beam minor axis ({minor_string_unit}).')
+        elif isinstance(major_fwhm, units.Quantity):
+            if major_fwhm.unit != units.dimensionless_unscaled:
+                size_unit = major_fwhm.unit
+
+        major_fwhm = to_header_float(major_fwhm, unit=size_unit)
+        minor_fwhm = to_header_float(minor_fwhm, unit=size_unit)
+        angle = to_header_float(self.position_angle, unit='degree')
+
+        if size_unit is None:
+            unit_str = ''
+        else:
+            unit_str = f' ({size_unit})'
+
+        header[f'{fits_id}BMAJ'] = major_fwhm, f'Beam major axis{unit_str}.'
+        header[f'{fits_id}BMIN'] = minor_fwhm, f'Beam minor axis{unit_str}.'
         header[f'{fits_id}BPA'] = angle, 'Beam position angle (deg).'
 
     def is_circular(self):
@@ -651,17 +846,24 @@ class Gaussian2D(ABC):
         delta_angle = psf.position_angle - self.position_angle
         cos = np.cos(delta_angle)
         sin = np.sin(delta_angle)
-        min_major = np.hypot(psf.x_fwhm * cos, psf.y_fwhm * sin)
-        min_minor = np.hypot(psf.x_fwhm * sin, psf.y_fwhm * cos)
-        if self.x_fwhm < min_major:
+        a = psf.major_fwhm
+        b = psf.minor_fwhm
+
+        min_major = np.hypot(a * cos, b * sin)
+        min_minor = np.hypot(a * sin, b * cos)
+        if self.major_fwhm < min_major:
             return False
-        if self.y_fwhm < min_minor:
+        if self.minor_fwhm < min_minor:
             return False
         return True
 
     def extent(self):
         """
         Return the extent in x and y.
+
+        The extent is the maximum (x, y) deviation away from the center of the
+        psf in the native coordinate frame, accounting for rotation by the
+        position angle.
 
         Returns
         -------
@@ -681,29 +883,32 @@ class Gaussian2D(ABC):
         Parameters
         ----------
         grid : Grid2D
+            The output grid on which the beam map should be projected.
         sigmas : float, optional
+            The number of Gaussian sigmas to be encapsulated within the map
+            (determines the size of the map).
 
         Returns
         -------
         beam_map : numpy.ndarray (float)
             A 2-D beam map image.
         """
-        v0 = Coordinate2D(coordinates=[self.major_fwhm, self.minor_fwhm])
-        v = v0.copy()
-        v.rotate(self.position_angle)
-
+        extent = self.extent()
         pixel_sizes = grid.get_pixel_size()
-        pixels_per_beam = v.coordinates / pixel_sizes.coordinates
+        pixels_per_beam = extent.coordinates / pixel_sizes.coordinates
         if isinstance(pixels_per_beam, units.Quantity):
             pixels_per_beam = pixels_per_beam.decompose().value
-
         coord = (2 * np.ceil(sigmas * pixels_per_beam).astype(int)) + 1
         map_size = Index2D(coordinates=coord)
 
-        sigma = v0.copy()
+        sigma = Coordinate2D(coordinates=[self.major_fwhm, self.minor_fwhm])
         sigma.scale(gaussian_fwhm_to_sigma)
         ax = -0.5 * (pixel_sizes.x / sigma.x) ** 2
         ay = -0.5 * (pixel_sizes.y / sigma.y) ** 2
+        if isinstance(ax, units.Quantity):
+            ax = ax.decompose().value
+            ay = ay.decompose().value
+
         center = Coordinate2D(coordinates=(map_size.coordinates - 1) / 2.0)
 
         y, x = np.mgrid[:map_size.y, :map_size.x]
@@ -718,6 +923,9 @@ class Gaussian2D(ABC):
     def get_equivalent(beam_map, pixel_size):
         """
         Return a 2-D Gaussian for a beam map and given pixel size.
+
+        The equivalent psf if circular with a FWHM equal to that determined
+        from the beam map.
 
         Parameters
         ----------
@@ -738,6 +946,10 @@ class Gaussian2D(ABC):
         """
         Set Gaussian parameters from a given beam map and pixel size.
 
+        The area and thus FWHM are determined from the input parameters.
+        Therefore, only a circular Gaussian will be set with zero position
+        angle.
+
         Parameters
         ----------
         beam_map : numpy.ndarray (float)
@@ -755,9 +967,9 @@ class Gaussian2D(ABC):
             if pixel_size.size == 2:
                 px, py = pixel_size.ravel()
             else:
-                px, py = np.atleast_1d(pixel_size).ravel()[0]
+                px = py = np.atleast_1d(pixel_size).ravel()[0]
         else:
-            px, py = pixel_size
+            px = py = pixel_size
 
         area = np.sum(np.abs(beam_map)) * px * py
         self.set_area(area)
@@ -774,4 +986,7 @@ class Gaussian2D(ABC):
         -------
         None
         """
-        self.fwhm = np.sqrt(area / self.AREA_FACTOR).decompose().to('degree')
+        fwhm = np.sqrt(area / self.AREA_FACTOR)
+        if not isinstance(fwhm, units.Quantity):
+            fwhm = fwhm * units.dimensionless_unscaled
+        self.fwhm = fwhm

@@ -1,5 +1,12 @@
-1.2.0
+1.2.1
 =====
+
+- Various build and test error fixes, including missing scan
+  package configuration files.
+
+
+1.2.0 (2022-02-18)
+==================
 
 - Added HAWC+ support (HAWC DRP v3.0.0).
 - Updated FIFI-LS bad pixel and flat files.

@@ -1,18 +1,28 @@
-language: python            # this works for Linux but is an error on macOS or Windows as Travis only has a python image for Linux
+language: python
 jobs:
   include:
-    - name: "Python 3.8 on Linux"
+    - name: "Python 3.8 on Linux: core"
       python: 3.8
       env:
         - QT_QPA_PLATFORM="offscreen"
-# Not running macOS run
-#    - name: "Python 3.7.4 on macOS"
-#      os: osx
-#      osx_image: xcode11.2  # Python 3.7.4 running on macOS 10.14.4
-#      language: shell       # 'language: python' is an error on Travis CI macOS
-#      env:
-#        - QT_QPA_PLATFORM="offscreen"
-    - name: "Python 3.8 on Windows"
+      script:
+        - pip install -r requirements.txt
+        - pytest ./sofia_redux/calibration ./sofia_redux/scan ./sofia_redux/spectroscopy ./sofia_redux/toolkit ./sofia_redux/visualization
+    - name: "Python 3.8 on Linux: instruments"
+      python: 3.8
+      env:
+        - QT_QPA_PLATFORM="offscreen"
+      script:
+        - pip install -r requirements.txt
+        - pytest ./sofia_redux/instruments
+    - name: "Python 3.8 on Linux: pipeline"
+      python: 3.8
+      env:
+        - QT_QPA_PLATFORM="offscreen"
+      script:
+        - pip install -r requirements.txt
+        - pytest ./sofia_redux/pipeline
+    - name: "Python 3.8 on Windows: core"
       os: windows
       language: shell       # Must install python via Chocolatey
       before_install:
@@ -21,9 +31,31 @@ jobs:
       env:
         - PATH=/c/Python38:/c/Python38/Scripts:$PATH
         - QT_QPA_PLATFORM="offscreen"
+      script:
+        - pip install -r requirements.txt
+        - pytest ./sofia_redux/calibration ./sofia_redux/scan ./sofia_redux/spectroscopy ./sofia_redux/toolkit ./sofia_redux/visualization
+    - name: "Python 3.8 on Windows: instruments"
+      os: windows
+      language: shell
+      before_install:
+        - choco install python --version 3.8.0
+        - python -m pip install --upgrade pip
+      env:
+        - PATH=/c/Python38:/c/Python38/Scripts:$PATH
+        - QT_QPA_PLATFORM="offscreen"
+      script:
+        - pip install -r requirements.txt
+        - pytest ./sofia_redux/instruments
+    - name: "Python 3.8 on Windows: pipeline"
+      os: windows
+      language: shell
+      before_install:
+        - choco install python --version 3.8.0
+        - python -m pip install --upgrade pip
+      env:
+        - PATH=/c/Python38:/c/Python38/Scripts:$PATH
+        - QT_QPA_PLATFORM="offscreen"
+      script:
+        - pip install -r requirements.txt
+        - pytest ./sofia_redux/pipeline
 install: pip3 install --upgrade pip
-
-script:
-  - pip install -r requirements.txt
-  - coverage run --source=./sofia_redux -m pytest ./sofia_redux
-  - coverage report -m

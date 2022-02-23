@@ -569,9 +569,11 @@ def test_get_offset_index(affine_offset):
     g = affine_offset.copy()
     c = Coordinate2D([3, 4])
     i = g.get_offset_index(c)
-    assert i == Coordinate2D([1, 1]) and i is not c
+    assert np.allclose([i.x, i.y], [1, 1], atol=1)
+    assert i is not c
     i = g.get_offset_index(c, indices=c)
-    assert i == Coordinate2D([1, 1]) and i is c
+    assert np.allclose([i.x, i.y], [1, 1], atol=1)
+    assert i is c
 
 
 def test_get_coordinates(affine_offset):

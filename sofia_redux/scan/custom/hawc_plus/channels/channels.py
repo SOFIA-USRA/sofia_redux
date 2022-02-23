@@ -234,6 +234,8 @@ class HawcPlusChannels(SofiaCamera):
         -------
         None
         """
+        if filename is None:
+            return
         log.info(f"Loading jump levels from {filename}")
         hdul = fits.open(filename)
         self.data.read_jump_hdu(hdul[0])

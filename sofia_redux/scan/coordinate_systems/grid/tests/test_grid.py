@@ -11,7 +11,7 @@ from sofia_redux.scan.coordinate_systems.grid.grid import Grid
 system2d = CoordinateSystem(dimensions=2)
 
 
-class TestingGrid(Grid):
+class GridCheck(Grid):
     """An un-abstracted grid for testing"""
 
     def __init__(self):
@@ -50,18 +50,18 @@ class TestingGrid(Grid):
 
 
 def test_init():
-    g = TestingGrid()
+    g = GridCheck()
     assert g.variant == 0
     assert g.coordinate_system == system2d
 
 
 def test_referenced_attributes():
-    g = TestingGrid()
+    g = GridCheck()
     assert g.referenced_attributes == {'_reference'}
 
 
 def test_copy():
-    g = TestingGrid()
+    g = GridCheck()
     g2 = g.copy()
     assert g.reference is g2.reference
     assert g.coordinate_system is not g2.coordinate_system
@@ -70,46 +70,46 @@ def test_copy():
 
 
 def test_coordinate_system():
-    g = TestingGrid()
+    g = GridCheck()
     assert g.coordinate_system.name == 'Default Coordinate System'
     g.coordinate_system = CoordinateSystem(name='FOO', dimensions=2)
     assert g.coordinate_system.name == 'FOO'
 
 
 def test_ndim():
-    g = TestingGrid()
+    g = GridCheck()
     assert g.ndim == 2
 
 
 def test_resolution():
-    g = TestingGrid()
+    g = GridCheck()
     g.resolution = 2.0
     assert g.resolution == 2.0
 
 
 def test_reference():
-    g = TestingGrid()
+    g = GridCheck()
     g.reference = Coordinate2D([1, 1])
     assert g.reference == Coordinate2D([1, 1])
 
 
 def test_fits_id():
-    assert TestingGrid().fits_id == ''
+    assert GridCheck().fits_id == ''
 
 
 def test_get_grid_class():
-    c = TestingGrid.get_grid_class('spherical_grid')
+    c = GridCheck.get_grid_class('spherical_grid')
     assert c.__name__ == 'SphericalGrid'
 
 
 def test_get_grid_instance():
-    c = TestingGrid.get_grid_instance('spherical_grid')
+    c = GridCheck.get_grid_instance('spherical_grid')
     assert isinstance(c, Grid)
     assert c.coordinate_system.name == 'Spherical Coordinates'
 
 
 def test_set_coordinate_system():
-    g = TestingGrid()
+    g = GridCheck()
     with pytest.raises(ValueError) as err:
         g.set_coordinate_system(CoordinateSystem(dimensions=3))
     assert 'does not equal the grid dimensions' in str(err.value)
@@ -118,7 +118,7 @@ def test_set_coordinate_system():
 
 
 def test_get_fits_id():
-    g = TestingGrid()
+    g = GridCheck()
     assert g.get_fits_id() == ''
     g.variant = 1
     assert g.get_fits_id() == 'B'

@@ -691,7 +691,7 @@ class Configuration(Options):
         user_path = self.expected_path
         configuration_files = []
 
-        if f.startswith(os.sep):
+        if f.startswith(os.sep) or f.startswith('/'):
             # A full file path
             if os.path.isfile(f):
                 configuration_files.append(os.path.abspath(f))

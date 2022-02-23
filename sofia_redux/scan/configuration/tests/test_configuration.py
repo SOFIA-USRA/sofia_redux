@@ -1,18 +1,20 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+import os
+import json
+import shutil
+
+from astropy import log
+from astropy.io import fits
+import pytest
+
 from sofia_redux.scan.configuration.configuration import Configuration
 from sofia_redux.scan.configuration.aliases import Aliases
 from sofia_redux.scan.configuration.conditions import Conditions
 from sofia_redux.scan.configuration.dates import DateRangeOptions
 from sofia_redux.scan.configuration.iterations import IterationOptions
 from sofia_redux.scan.configuration.objects import ObjectOptions
-
-from astropy import log
-from astropy.io import fits
-import json
-import os
-import pytest
-import shutil
+from sofia_redux.toolkit.utilities.multiprocessing import in_windows_os
 
 
 def test_init():
@@ -288,6 +290,7 @@ def test_get_configuration_filepath():
     assert configuration.get_configuration_filepath('foo') is None
 
 
+@pytest.mark.skipif(in_windows_os(), reason='Path differences')
 def test_find_configuration_files():
     configuration = Configuration()
     configuration.set_instrument('hawc_plus')
@@ -298,10 +301,10 @@ def test_find_configuration_files():
     assert os.path.join(configuration.config_path, 'default.cfg') in files
 
     # Test aliasing
-    files = configuration.find_configuration_files('{?configpath}' + os.sep
-                                                   + 'default.cfg')
+    files = configuration.find_configuration_files('{?configpath}/default.cfg')
     assert len(files) == 1
-    assert os.path.join(configuration.config_path, 'default.cfg') in files
+    assert os.path.isfile(files[0])
+    assert configuration.config_path + '/default.cfg' in files
 
     # Test bad full file path
     files = configuration.find_configuration_files(os.sep + '_fake_directory_'

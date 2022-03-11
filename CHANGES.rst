@@ -1,5 +1,12 @@
-1.2.1
+1.2.2
 =====
+
+- Updated FORCAST and FIFI-LS calibration files.
+- Increased test coverage and minor bug fixes for the scan module.
+
+
+1.2.1 (2022-02-22)
+==================
 
 - Various build and test error fixes, including missing scan
   package configuration files.

@@ -640,7 +640,7 @@ class TestHAWCReduction(object):
         recipe = ['scanmap']
         red.recipe = recipe
         paramlist = {'scanmap': [['noout', True,
-                                'test_description']]}
+                                  'test_description']]}
         red.parameters = HAWCParameters(param_lists=paramlist)
         red.load_parameters()
         parset = red.get_parameter_set(0)

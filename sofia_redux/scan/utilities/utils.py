@@ -34,12 +34,12 @@ __all__ = ['UNKNOWN_STRING_VALUE', 'UNKNOWN_FLOAT_VALUE',
            'robust_sigma_clip_mask', 'roundup_ratio', 'rotate',
            'log2round', 'pow2round', 'pow2floor', 'pow2ceil',
            'skycoord_insert_blanks', 'dict_intersection',
-           'dict_difference', 'to_header_float', 'combine_beams',
-           'convolve_beam', 'deconvolve_beam', 'encompass_beam',
-           'encompass_beam_fwhm', 'get_beam_area', 'get_header_quantity',
-           'ascii_file_to_frame_data', 'insert_into_header',
-           'insert_info_in_header', 'to_header_cards', 'clear_numba_cache',
-           'round_values', 'get_comment_unit']
+           'dict_difference', 'to_header_quantity', 'to_header_float',
+           'combine_beams', 'convolve_beam', 'deconvolve_beam',
+           'encompass_beam', 'encompass_beam_fwhm', 'get_beam_area',
+           'get_header_quantity', 'ascii_file_to_frame_data',
+           'insert_into_header', 'insert_info_in_header', 'to_header_cards',
+           'clear_numba_cache', 'round_values', 'get_comment_unit']
 
 UNKNOWN_STRING_VALUE = ''
 UNKNOWN_FLOAT_VALUE = -9999.0
@@ -1008,14 +1008,103 @@ def dict_difference(options1, options2, initialized=False):
     return result
 
 
+def to_header_quantity(value, unit=None, keep=False):
+    """
+    Convert a value to a Quantity suitable for header entry.
+
+    Converts various input types to a `float` or `units.Quantity` output value.
+    If a dimensionless value is input, it will be multiplied by the unit if
+    present.  UNKNOWN header quantities (typically -9999) are preserved, and
+    non-finite values also return the UNKNOWN float value.
+
+    Parameters
+    ----------
+    value : int or float or str or units.Quantity or None
+        The value to convert.
+    unit : str or units.Unit or units.Quantity, optional
+        The units of the output value.  If a `units.Quantity` value is
+        supplied, the output value will be converted to the quantity unit and
+        scaled by the quantity value.  Dimensionless units will have no effect,
+        while dimensionless quantities will still scale the value, but result
+        in no conversion to an output unit.
+    keep : bool, optional
+        If `True`, return the original value when invalid instead of the
+        UNKNOWN_FLOAT_VALUE.
+
+    Returns
+    -------
+    header_quantity : float or units.Quantity
+    """
+    ud = units.dimensionless_unscaled
+    if unit is None and isinstance(value, units.Quantity):
+        unit = value.unit
+
+    # Determine scaling and unit
+    if unit is None:
+        scaling = 1.0
+    elif isinstance(unit, units.Quantity):
+        scaling = unit.value
+        unit = unit.unit
+    else:
+        scaling = 1.0
+        unit = units.Unit(unit)
+
+    if isinstance(unit, units.UnitBase) and unit == ud:
+        unit = None
+
+    if isinstance(value, (str, int, float)):
+        value = float(value)
+    elif value is None:
+        value = np.nan
+    elif not isinstance(value, units.Quantity):
+        raise ValueError(f"Value must be {float}, {int}, {str}, {None} or "
+                         f"{units.Quantity}.")
+
+    if isinstance(value, units.Quantity):
+        if value.unit == ud:
+            value = value.value
+
+    if keep:
+        bad_return_value = value
+    else:
+        bad_return_value = UNKNOWN_FLOAT_VALUE
+
+    # Value is either a float or quantity at this point
+    # Unit is either None or an actual unit
+    # Neither is dimensionless
+
+    if isinstance(value, units.Quantity):
+        if value.value == UNKNOWN_FLOAT_VALUE or not np.isfinite(value):
+            if unit is None:
+                return bad_return_value * value.unit
+            else:
+                return bad_return_value * unit
+        elif isinstance(unit, units.Unit):
+            return value.to(unit) * scaling
+        else:
+            return value * scaling
+
+    elif value == UNKNOWN_FLOAT_VALUE or not np.isfinite(value):
+        if isinstance(unit, units.Unit):
+            return bad_return_value * unit
+        else:
+            return bad_return_value
+
+    elif isinstance(unit, units.Unit):
+        return value * scaling * unit
+
+    else:
+        return value * scaling
+
+
 def to_header_float(value, unit=None):
     """
     Parse a value to a parsable header float value.
 
     Parameters
     ----------
-    value : float or astropy.units.Quantity or None
-    unit : str or astropy.units.Unit
+    value : float or units.Quantity or None
+    unit : str or units.Unit or units.Quantity or int or float, optional
         If a quantity was passed in, convert to this unit first.
 
     Returns

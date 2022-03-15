@@ -1852,8 +1852,7 @@ class HawcPlusSimulation(ABC):
             source_data = source_data.value
 
         # Multiply values by this
-        instrument_gain = 1 / integration.configuration.get_float(
-            'scale', 1.0)
+        instrument_gain = 1 / integration.get_default_scaling_factor()
 
         abs_gain = np.abs(instrument_gain)
 

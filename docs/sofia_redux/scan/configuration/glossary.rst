@@ -963,6 +963,39 @@
        beam-mapping.  Thus, focal-plane coordinates are default when
        `source.type`_ is set to 'pixelmap'.  See pixelmap_ and `source.type`_.
 
+   * - .. _focus.<direction>coeff:
+
+       **focus.<direction>coeff**
+     - focus.<direction>coeff=<X>
+     - Used to convert the asymmetry and elongation parameters of an elliptical
+       model of the source to focus values (in mm) using focus=-1/coeff * param
+       where coeff is the value supplied here, and param is the asymmetry x or
+       y factor for directions x and y, and param is the elongation factor for
+       the z direction.  <direction> may take values of x, y, or z.
+
+   * - .. _focus.<direction>scatter:
+
+       **focus.<direction>scatter**
+     - focus.<direction>scatter=<X>
+     - Adds extra noise to the reported focus measurements in the x, y, and/or
+       z <direction>.  RMS values should be provided in units of mm.
+
+   * - .. _focus.significance:
+
+       **focus.significance**
+     - focus.significance=<X>
+     - Require focus calculation factors (asymmetry and elongation) to have a
+       signal-to-noise ratio of greater than <X> in order for the focus results
+       to be reported in the x, y, and z directions.
+
+   * - .. _focus.elong0:
+
+       **focus.elong0**
+     - focus.elong0=<X>
+     - Subtracts an offset correction from the elongation of an elliptical
+       model of the source when and if focus calculations are performed.  <X>
+       should be supplied as a percentage value.
+
    * - .. _forget:
 
        **forget**
@@ -2071,7 +2104,8 @@
    * - .. _scale:
 
        **scale**
-     - scale={<X>, <filename>}
+     - | [scale]
+       | value={<X>, <filename>}
      - Set the calibration scaling of the data.  The following values are
        available:
 
@@ -2082,6 +2116,15 @@
 
        Note: not all instruments support the <filename> value.  See tau_, gain_,
        invert_, and jackknife_.
+
+   * - .. _scale.grid:
+
+       **scale.grid**
+     - | [scale]
+       | grid=<X>
+     - The grid resolution in arcseconds for which the scale_ value was
+       derived.  If set, this correctly conserves flux values if grid_ is
+       set to a different value.
 
    * - .. _scanmaps:
 

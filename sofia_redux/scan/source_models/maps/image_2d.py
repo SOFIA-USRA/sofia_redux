@@ -12,6 +12,36 @@ class Image2D(Image):
 
     def __init__(self, x_size=None, y_size=None, dtype=float,
                  data=None, blanking_value=np.nan, unit=None):
+        """
+        Create an Image2D instance.
+
+        The Image2D is an extension of the :class:`Image` class that restricts
+        the number of image dimensions to 2.  Generally, the two dimensions
+        will be referred to as x and y where x refers to data columns, and y
+        refers to data rows.
+
+        Parameters
+        ----------
+        x_size : int, optional
+            The number of pixels for the image in the x-direction.  Will only
+            be applied if `data` is `None` and `y_size` is also set to an
+            integer.
+        y_size : int, optional
+            The number of pixels for the image in the y-direction.  Will only
+            be applied if `data` is `None` and `x_size` is also set to an
+            integer.
+        dtype : type, optional
+            The data type of the data array.
+        data : numpy.ndarray, optional
+            Data to initialize the flagged array with.  If supplied, sets the
+            shape of the array.  Note that the data type will be set to that
+            defined by the `dtype` parameter.
+        blanking_value : int or float, optional
+            The blanking value defines invalid values in the data array.  This
+            is the equivalent of defining a NaN value.
+        unit : str or units.Unit or units.Quantity, optional
+            The data unit.
+        """
         super().__init__(dtype=dtype, blanking_value=blanking_value, unit=unit)
         if data is not None:
             self.set_data(data)
@@ -28,6 +58,17 @@ class Image2D(Image):
         numpy.ndarray or None
         """
         return self.data
+
+    @property
+    def ndim(self):
+        """
+        Return the number of dimensions in the map image data.
+
+        Returns
+        -------
+        int
+        """
+        return 2
 
     def add_proprietary_unit(self):
         """
@@ -59,20 +100,24 @@ class Image2D(Image):
         """
         return self.shape[0]
 
-    # TODO: Re-examine this wrt flagged_array and map_data.
-
-    def copy(self, with_content=True):
+    def copy(self, with_contents=True):
         """
         Return a copy of the Image2D.
 
+        Parameters
+        ----------
+        with_contents : bool, optional
+            If `True`, copy the image data to the output image.  Otherwise,
+            the new copy will be of the same shape, but contain zeroed values.
+
         Returns
         -------
-        Image2D
+        image : Image2D
         """
-        new = super().copy()
+        new = super().copy(with_contents=False)
         if self.size > 0:
             new.set_data_shape(self.shape)
-            if with_content:
+            if with_contents:
                 new.paste(self, report=True)
         return new
 
@@ -91,17 +136,6 @@ class Image2D(Image):
         """
         self.set_data_shape((y_size, x_size))
 
-    def destroy(self):
-        """
-        Destroy the image data.
-
-        Returns
-        -------
-        None
-        """
-        super().destroy()
-        self.clear_history()
-
     def set_data(self, data, change_type=False):
         """
         Set the image data array.
@@ -118,21 +152,19 @@ class Image2D(Image):
         None
         """
         data = data.astype(self.dtype)
+        self.log_new_data = False  # To not add additional message during super
         super().set_data(data, change_type=change_type)
         self.record_new_data(detail=f'2D {self.dtype} (no copy)')
 
-    def transpose(self):
+    def new_image(self):
         """
-        Transpose the data array.
+        Return a new image.
 
         Returns
         -------
-        None
+        image : Image2D
         """
-        if self.data is None:
-            return
-        self.data = self.data.T
-        self.add_history('transposed')
+        return super().new_image()
 
     def get_image(self, dtype=None, blanking_value=None):
         """
@@ -147,131 +179,27 @@ class Image2D(Image):
 
         Returns
         -------
-        Image2D
+        image : Image2D
         """
-        change_type = not((dtype is None) or (dtype == self.dtype))
-        change_level = not((blanking_value is None)
-                           or (blanking_value is self.blanking_value))
+        return super().get_image(dtype=dtype, blanking_value=blanking_value)
 
-        image = self.copy(with_content=True)
-
-        if not change_type and not change_level:
-            return image
-
-        if change_type:
-            image.dtype = dtype
-            image.data = image.data.astype(dtype)
-
-        if change_level:
-            image.blanking_value = blanking_value
-            image.paste(self, report=True)
-
-    def get_valid_data(self, default=None):
-        """
-        Return a copy of the image data, optionally replacing invalid points.
-
-        Parameters
-        ----------
-        default : int or float, optional
-            The value to replace blanked values with.
-
-        Returns
-        -------
-        numpy.ndarray or None
-        """
-        if self.data is None:
-            return None
-        data = self.data.copy()
-        if default is None:
-            return data
-        data[~self.valid] = default
-        return data
-
-    def auto_crop(self):
-        """
-        Auto crop the image data.
-
-        The data is cropped to the extent of valid data point indices.
-
-        Returns
-        -------
-        None
-        """
-        if self.data is None:
-            return
-        ranges = self.get_index_range()
-        if len(ranges) != 2 or None in ranges:
-            return
-        self.crop(ranges)
-
-    def edit_header(self, header):
-        """
-        Edit a FITS header using information in the current map.
-
-        Parameters
-        ----------
-        header : astropy.io.fits.header.Header
-
-        Returns
-        -------
-        None
-        """
-        if self.id not in ['', None]:
-            header['EXTNAME'] = self.id, 'Content identifier.'
-        super().parse_header(header)
-
-    def parse_header(self, header):
-        """
-        Parse a FITS header and apply to the image.
-
-        Parameters
-        ----------
-        header : astropy.io.fits.header.Header
-            The FITS header to parse.
-
-        Returns
-        -------
-        None
-        """
-        self.id = header.get('EXTNAME', '')
-        if 'BUNIT' in header:
-            self.set_unit(header['BUNIT'])
-        self.parse_history(header)
-
-    def read_hdu(self, image_hdu):
-        """
-        Read and apply an HDU.
-
-        Parameters
-        ----------
-        image_hdu : astropy.io.fits.hdu.image.ImageHDU
-
-        Returns
-        -------
-        None
-        """
-        self.parse_header(image_hdu.header)
-        self.set_data(image_hdu.data)
-        self.data *= self.unit.value
-
-    @staticmethod
-    def read_hdul(hdul, hdu_index):
+    @classmethod
+    def read_hdul(cls, hdul, hdu_index):
         """
         Read a specific HDU image from an HDU list, and return an image.
 
         Parameters
         ----------
         hdul : astropy.io.fits.hdu.hdulist.HDUList
+            The HDU list to read.
         hdu_index : int
+            The index of the HDU in the provided `hdul` to read.
 
         Returns
         -------
-        Image2D
+        image : Image2D
         """
-        hdu = hdul[hdu_index]
-        image = Image2D(dtype=hdu.data.dtype)
-        image.read_hdu(hdu)
-        return image
+        return super().read_hdul(hdul, hdu_index)
 
     @classmethod
     def numpy_to_fits(cls, coordinates):
@@ -288,13 +216,3 @@ class Image2D(Image):
         """
         coordinates = super().numpy_to_fits(coordinates)
         return Coordinate2D(coordinates)
-
-    def renew(self):
-        """
-        Renew the image by clearing all data.
-
-        Returns
-        -------
-        None
-        """
-        self.clear()

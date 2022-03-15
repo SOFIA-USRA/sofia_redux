@@ -9,6 +9,8 @@ import warnings
 from sofia_redux.scan.source_models.beams.gaussian_2d import Gaussian2D
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.coordinate_systems.index_2d import Index2D
+from sofia_redux.scan.utilities.utils import (
+    to_header_quantity, UNKNOWN_FLOAT_VALUE)
 
 __all__ = ['GaussianSource']
 
@@ -944,36 +946,52 @@ class GaussianSource(Gaussian2D):
         -------
         None
         """
-        if isinstance(self.fwhm, units.Quantity):
-            if size_unit is not None:
-                fwhm = self.fwhm.to(size_unit).value
-                fwhm_rms = self.fwhm_rms.to(size_unit).value
-            else:
-                size_unit = self.fwhm.unit
-                fwhm = self.fwhm.value
-                fwhm_rms = self.fwhm_rms.value
-        else:  # pragma: no cover
-            fwhm = self.fwhm
-            fwhm_rms = self.fwhm_rms
+        fwhm = to_header_quantity(self.fwhm, unit=size_unit)
+        if size_unit is None and isinstance(fwhm, units.Quantity):
+            size_unit = fwhm.unit
+        fwhm_rms = to_header_quantity(self.fwhm_rms, unit=size_unit)
+        if size_unit is None and isinstance(
+                fwhm_rms, units.Quantity):  # pragma: no cover
+            # Cannot reach in normal operation
+            size_unit = fwhm_rms.unit
+            if not isinstance(fwhm, units.Quantity):
+                fwhm = to_header_quantity(fwhm, unit=size_unit)
 
-        if isinstance(fwhm, units.Quantity):  # pragma: no cover
+        if isinstance(fwhm, units.Quantity):
+            size_comment = f'({size_unit}) '
             fwhm = fwhm.value
-        if isinstance(fwhm_rms, units.Quantity):  # pragma: no cover
             fwhm_rms = fwhm_rms.value
-
-        if self.unit in [None, units.dimensionless_unscaled]:
-            unit_comment = ''
         else:
-            unit_comment = f'({self.unit}) '
+            size_comment = ''
 
-        size_comment = '' if size_unit is None else f'({size_unit}) '
+        peak_unit = self.unit
+        peak = to_header_quantity(self.peak, unit=peak_unit)
+        if isinstance(peak, units.Quantity):
+            peak_unit = peak.unit
+        else:
+            peak_unit = None
 
-        header['SRCPEAK'] = self.peak, unit_comment + 'source peak flux.'
-        header['SRCPKERR'] = self.peak_rms, unit_comment + 'peak flux error.'
+        peak_rms = to_header_quantity(self.peak_rms, unit=peak_unit)
+        if peak_unit is None and isinstance(
+                peak_rms, units.Quantity):  # pragma: no cover
+            # Cannot reach in normal operation
+            peak_unit = peak_rms.unit
+            peak = to_header_quantity(peak, unit=peak_unit)
 
-        if np.isfinite(self.fwhm):
+        if isinstance(peak, units.Quantity):
+            unit_comment = f'({peak_unit}) '
+            peak = peak.value
+            peak_rms = peak_rms.value
+        else:
+            unit_comment = ''
+
+        header['SRCPEAK'] = peak, unit_comment + 'source peak flux.'
+        header['SRCPKERR'] = peak_rms, unit_comment + 'peak flux error.'
+
+        if np.isfinite(fwhm) and fwhm != UNKNOWN_FLOAT_VALUE:
             header['SRCFWHM'] = fwhm, size_comment + 'source FWHM.'
-        if self.fwhm_weight > 0:
+        if (self.fwhm_weight > 0 and np.isfinite(fwhm_rms) and
+                fwhm_rms != UNKNOWN_FLOAT_VALUE):
             header['SRCWERR'] = fwhm_rms, size_comment + 'FWHM error.'
 
     def get_integral(self, psf_area):
@@ -1010,47 +1028,45 @@ class GaussianSource(Gaussian2D):
         -------
         info : list (str)
         """
-        info = [f'Peak: {self.peak:.5f} {self.unit} '
+        peak = to_header_quantity(self.peak, unit=self.unit)
+        peak_value = peak.value if isinstance(peak, units.Quantity) else peak
+        if peak_value == UNKNOWN_FLOAT_VALUE:
+            peak_value = self.peak
+
+        unit_str = f' {peak.unit}' if isinstance(peak, units.Quantity) else ''
+        info = [f'Peak: {peak_value:.5f}{unit_str} '
                 f'(S/N ~ {self.peak_significance:.5f})']
         size_unit = map2d.display_grid_unit
         integral, integral_weight = self.get_integral(
             map2d.underlying_beam.area)
-        ud = units.dimensionless_unscaled
 
         if integral_weight > 0:
             integral_rms = 1.0 / np.sqrt(integral_weight)
         else:
             integral_rms = integral_weight * 0
         if integral_rms != 0:
-            info.append(f'Integral: {integral:.4f} +- {integral_rms:.4f} '
-                        f'{self.unit}')
+            info.append(
+                f'Integral: {integral:.4f} +- {integral_rms:.4f}{unit_str}')
         else:
-            info.append(f'Integral: {integral:.4f} {self.unit}')
+            info.append(f'Integral: {integral:.4f}{unit_str}')
 
-        values = [self.fwhm, self.fwhm_rms]
-        for i, check_value in enumerate(values):
-            if size_unit is None:
-                if isinstance(check_value, units.Quantity):
-                    if check_value.unit == ud:
-                        values[i] = check_value.value
-                    else:
-                        size_unit = check_value.unit
+        fwhm = to_header_quantity(self.fwhm, unit=size_unit)
+        if size_unit is None and isinstance(fwhm, units.Quantity):
+            size_unit = fwhm.unit
+        fwhm_rms = to_header_quantity(self.fwhm_rms, unit=size_unit)
+        if size_unit is None and isinstance(
+                fwhm_rms, units.Quantity):  # pragma: no cover
+            # Cannot reach during normal operation
+            size_unit = fwhm_rms.unit
+            fwhm = to_header_quantity(fwhm, unit=size_unit)
 
-        if isinstance(size_unit, units.Quantity):
-            scaling = size_unit.value
-            size_unit = size_unit.unit
+        if isinstance(fwhm, units.Quantity):
+            unit_str = f' ({fwhm.unit})'
+            fwhm = fwhm.value
+            fwhm_rms = fwhm_rms.value
         else:
-            scaling = 1.0
-
-        if size_unit is None or size_unit == ud:
             unit_str = ''
-        else:
-            unit_str = f' ({size_unit})'
-            for i, check_value in enumerate(values):
-                if isinstance(check_value, units.Quantity):
-                    values[i] = check_value.to(size_unit).value * scaling
 
-        fwhm, fwhm_rms = values
         if fwhm_rms == 0:
             info.append(f'FWHM: {fwhm:.4f}{unit_str}')
         else:
@@ -1123,7 +1139,6 @@ class GaussianSource(Gaussian2D):
         -------
         data : dict
         """
-        convert_size = size_unit is not None
         data = {}
         if map2d.underlying_beam is not None:
             i, iw = self.get_integral(map2d.underlying_beam.area)
@@ -1143,16 +1158,8 @@ class GaussianSource(Gaussian2D):
         else:
             data['intS2N'] = np.abs(i) * np.sqrt(iw)
 
-        if convert_size:
-            ud = units.dimensionless_unscaled
-            values = [fwhm, fwhm_rms]
-            size_unit = units.Unit(size_unit)
-            for i, value in enumerate(values):
-                if isinstance(value, units.Quantity) and value.unit != ud:
-                    values[i] = value.to(size_unit)
-                else:
-                    values[i] = value * size_unit
-            fwhm, fwhm_rms = values
+        fwhm = to_header_quantity(fwhm, unit=size_unit, keep=True)
+        fwhm_rms = to_header_quantity(fwhm_rms, unit=size_unit, keep=True)
 
         data['FWHM'] = fwhm
         data['dFWHM'] = fwhm_rms

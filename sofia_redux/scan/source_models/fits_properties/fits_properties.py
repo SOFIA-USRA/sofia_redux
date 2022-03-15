@@ -9,9 +9,20 @@ __all__ = ['FitsProperties']
 class FitsProperties(ABC):
 
     default_creator = 'SOFSCAN'
-    default_copyright = 'LOL'
+    default_copyright = ("(c) Universities Space Research Association under "
+                         "Government Prime Contract Number NNA17BF53C and "
+                         "licensed under the terms of the BSD 3-Clause "
+                         "license.")
 
     def __init__(self):
+        """
+        Initialize a FITS properties object.
+
+        The FITS properties generally refer to high level FITS header keywords
+        that describe an observation/scan.  These include the software name
+        responsible for the reduction, any copyright, the filename, observed
+        source, telescope, instrument, observer, and date.
+        """
         self.creator = self.default_creator
         self.copyright = self.default_copyright
         self.filename = ''
@@ -34,11 +45,11 @@ class FitsProperties(ABC):
 
     def copy(self):
         """
-        Return a copy of the map data.
+        Return a copy of the FITS properties.
 
         Returns
         -------
-        FitsData
+        FitsProperties
         """
         new = self.__class__()
         referenced = self.referenced_attributes
@@ -51,6 +62,30 @@ class FitsProperties(ABC):
                 setattr(new, attribute, deepcopy(value))
 
         return new
+
+    def __eq__(self, other):
+        """
+        Check if these FITS properties are equal to another.
+
+        Parameters
+        ----------
+        other : FitsProperties
+
+        Returns
+        -------
+        equal : bool
+        """
+        if self is other:
+            return True
+        if self.__class__ != other.__class__:
+            return False
+
+        for attribute in ['creator', 'copyright', 'filename', 'object_name',
+                          'telescope_name', 'instrument_name',
+                          'observer_name', 'observation_date_string']:
+            if getattr(self, attribute) != getattr(other, attribute):
+                return False
+        return True
 
     def set_filename(self, filename):
         """
@@ -198,7 +233,7 @@ class FitsProperties(ABC):
         header['OBJECT'] = self.object_name, "Observed object's name."
         header['TELESCOP'] = self.telescope_name, 'Name of telescope.'
         header['INSTRUME'] = self.instrument_name, 'Name of instrument used.'
-        header['OBSERVER'] = self.object_name, 'Name of observer(s).'
+        header['OBSERVER'] = self.observer_name, 'Name of observer(s).'
         header['DATE-OBS'] = (self.observation_date_string,
                               'Start of observation.')
         header['CREATOR'] = self.creator, self.copyright

@@ -23,6 +23,10 @@ class FitsData(FlaggedArray):
         additional functionality for FITS data.  This includes specifying
         data units (astropy.units), history messages and FITS handling.
 
+        Notably, the dimensional ordering will now be in FITS (x, y) order
+        rather than the `FlaggedArray` Numpy (y, x) ordering for the various
+        methods.
+
         Parameters
         ----------
         data : numpy.ndarray, optional
@@ -37,7 +41,7 @@ class FitsData(FlaggedArray):
         shape : tuple (int), optional
             The shape of the data array.  This will only be relevant if
             `data` is not defined.
-        unit : str or astropy.units.Unit or astropy.units.Quantity, optional
+        unit : str or units.Unit or units.Quantity, optional
             The data unit.
         """
         self.history = []
@@ -58,6 +62,16 @@ class FitsData(FlaggedArray):
         if self.unit is None:
             self.unit = self.DEFAULT_UNIT
 
+    def copy(self):
+        """
+        Return a copy of the FITS data.
+
+        Returns
+        -------
+        FitsData
+        """
+        return super().copy()
+
     def __eq__(self, other):
         """
         Check whether this data is equal to another.
@@ -77,16 +91,6 @@ class FitsData(FlaggedArray):
         if self.unit != other.unit:
             return False
         return super().__eq__(other)
-
-    def copy(self):
-        """
-        Return a copy of the FITS data.
-
-        Returns
-        -------
-        FitsData
-        """
-        return super().copy()
 
     @property
     def referenced_attributes(self):
@@ -135,18 +139,22 @@ class FitsData(FlaggedArray):
         """
         Convert FITS based (x, y) coordinates/indices to numpy (y, x).
 
+        Reverses the dimensional ordering so that (x, y) coordinates are
+        returned as (y, x) coordinates.  Note that boolean arrays remain
+        unaltered, since these usually indicate masking arrays.
+
         Parameters
         ----------
-        coordinates : numpy.ndarray (int or float) or Coordinate
+        coordinates : numpy.ndarray or Coordinate or iterable
 
         Returns
         -------
-        numpy_indices : numpy.ndarray (int)
+        numpy_coordinates : numpy.ndarray (int or float)
         """
         if isinstance(coordinates, Coordinate):
             new = coordinates.coordinates[::-1]
         elif isinstance(coordinates, np.ndarray):
-            if coordinates.dtype != bool:
+            if coordinates.dtype != bool:  # To avoid messing up masks
                 new = coordinates[::-1]
             else:
                 new = coordinates
@@ -163,7 +171,7 @@ class FitsData(FlaggedArray):
 
         Parameters
         ----------
-        coordinates : numpy.ndarray
+        coordinates : numpy.ndarray or Coordinate or iterable
 
         Returns
         -------
@@ -186,6 +194,10 @@ class FitsData(FlaggedArray):
     def set_data_shape(self, shape):
         """
         Set the shape of the data image array.
+
+        Note that array shapes should still be provided in Numpy (y, x) format.
+        In addition to settings the data shape, adds a new history message
+        indicating that this has been done.
 
         Parameters
         ----------
@@ -242,9 +254,10 @@ class FitsData(FlaggedArray):
             return unit
         elif isinstance(unit, str):
             return 1.0 * units.Unit(unit)
-        elif isinstance(unit, (units.Unit, units.Quantity)):
+        elif isinstance(
+                unit, (units.Unit, units.Quantity, units.IrreducibleUnit)):
             return 1.0 * unit
-        elif unit == units.dimensionless_unscaled:
+        elif isinstance(unit, units.UnitBase):  # dimensionless
             return 1.0 * unit
         else:
             raise ValueError(
@@ -306,19 +319,24 @@ class FitsData(FlaggedArray):
 
         Parameters
         ----------
-        unit : str or astropy.units.Unit or astropy.units.Quantity
+        unit : str or units.Unit or units.Quantity
 
         Returns
         -------
-        astropy.units.Quantity
+        units.Quantity
         """
-        quantity = self.unit_to_quantity(unit)
-        unit_key = quantity.unit.to_string()
+        if isinstance(unit, units.Quantity):
+            unit_key = str(unit.unit)
+        else:
+            unit_key = str(unit)
+
         if unit_key in self.local_units:
             return self.local_units.get(unit_key)
-        else:
+        elif unit_key in self.alternate_unit_names:
             return self.local_units.get(
                 self.alternate_unit_names.get(unit_key))
+        else:
+            return self.unit_to_quantity(unit)
 
     def set_unit(self, unit):
         """
@@ -477,7 +495,9 @@ class FitsData(FlaggedArray):
         ----------
         indices : tuple (numpy.ndarray (int)) or numpy.ndarray (bool), optional
             The indices to discard.  Either supplied as a boolean mask of
-            shape (self.data.shape).
+            shape (self.data.shape).  Note that if an integer array or tuple
+            of integer arrays are supplied, they should be in (x, y) FITS
+            order.  Boolean masks should be of the same shape as the data.
 
         Returns
         -------
@@ -543,8 +563,6 @@ class FitsData(FlaggedArray):
                 message = f'added {value.__class__.__name__}'
             else:
                 message = f'add {value}'
-        elif isinstance(value, np.ndarray):
-            return
         else:
             if is_array:
                 message = f'added scaled ' \
@@ -561,7 +579,7 @@ class FitsData(FlaggedArray):
         ----------
         factor : int or float
             The factor to scale by.
-        indices : tuple (numpy.ndarray (int)) or numpy.ndarray (bool), optional
+        indices : tuple (np.ndarray) or np.ndarray (int or bool), optional
             The indices to discard.  Either supplied as a boolean mask of
             shape (self.data.shape).
 
@@ -569,7 +587,11 @@ class FitsData(FlaggedArray):
         -------
         None
         """
-        super().scale(factor, indices=self.fits_to_numpy(indices))
+        np_indices = self.fits_to_numpy(indices)
+        if isinstance(np_indices, np.ndarray) and np_indices.dtype != bool:
+            if 1 < self.ndim == np_indices.shape[0]:
+                np_indices = tuple(np_indices)
+        super().scale(factor, indices=np_indices)
         self.add_history(f'scale by {factor}')
 
     def validate(self, validator=None):
@@ -669,10 +691,11 @@ class FitsData(FlaggedArray):
             The beam map image kernel with which to smooth the map of shape
             (ky, kx).
         steps : Index2D
-            The fast step skips in (x, y).
+            The fast step skips in (x, y) FITS dimensional order.
         reference_index : Coordinate2D, optional
-            The reference pixel index of the kernel in (x, y).  The default is
-            the beam map center ((kx-1)/2, (ky-1)/2).
+            The reference pixel index of the kernel in (x, y) FITS
+            dimensional order.  The default is the beam map center at
+            (kx-1)/2, (ky-1)/2.
         weights : numpy.ndarray (float), optional
             The map weights of shape (ny, nx).  The default is no weighting.
 
@@ -680,7 +703,6 @@ class FitsData(FlaggedArray):
         -------
         None
         """
-
         super().fast_smooth(
             beam_map,
             self.fits_to_numpy(steps),
@@ -773,6 +795,16 @@ class FitsData(FlaggedArray):
         """
         Edit a FITS header using information in the current map.
 
+        The information keywords added to the header are::
+
+          - DATAMIN: The lowest value in the data (float)
+          - DATAMAX: The highesst value in the data (float)
+          - BZERO: Zeroing level of the data (float)
+          - BSCALE: Scaling of the data (float)
+          - BUNIT: The data unit (str)
+
+        Note that BUNIT will default to 'count' if no unit has been set.
+
         Parameters
         ----------
         header : astropy.io.fits.header.Header
@@ -795,11 +827,13 @@ class FitsData(FlaggedArray):
 
         header['BZERO'] = 0.0, 'Zeroing level of the image data'
         header['BSCALE'] = 1.0, 'Scaling of the image data'
-        if self.unit is not None:
-            header['BUNIT'] = (self.unit.unit.to_string(),
+
+        if (not isinstance(self.unit, units.Quantity) or
+                self.unit.unit == units.dimensionless_unscaled):
+            header['BUNIT'] = (units.Unit("count").to_string(),
                                'Data unit specification.')
         else:
-            header['BUNIT'] = (units.Unit("count").to_string(),
+            header['BUNIT'] = (self.unit.unit.to_string(),
                                'Data unit specification.')
 
         self.add_history_to_header(header)
@@ -837,15 +871,71 @@ class FitsData(FlaggedArray):
         self.set_history(history)
 
     def get_indices(self, indices):
+        """
+        Return selected data for given indices.
+
+        Parameters
+        ----------
+        indices : list or int or numpy.ndarray (bool or int)
+            The indices to extract.
+
+        Raises
+        ------
+        NotImplementedError
+        """
         super().get_indices(indices)
 
     def delete_indices(self, indices_or_mask):
+        """
+        Completely deletes data elements.
+
+        Actual indices should be passed in.  To delete based on fixed index
+        values, please convert first using `find_fixed_indices`.
+
+        Parameters
+        ----------
+        indices_or_mask : int or list or numpy.ndarray of (bool or int)
+            The indices to delete, or a boolean mask where `True` marks an
+            element for deletion.
+
+        Raises
+        ------
+        NotImplementedError
+        """
         super().delete_indices(indices_or_mask)
 
     def insert_blanks(self, insert_indices):
+        """
+        Inserts blank frame data.
+
+        Actual indices should be passed in.  To delete based on fixed index
+        values, please convert first using `find_fixed_indices`.
+
+        Blank data are set to 0 in whatever unit is applicable.
+
+        Parameters
+        ----------
+        insert_indices : int or list or numpy.ndarray of (bool or int)
+            The index locations to insert.
+
+        Raises
+        ------
+        NotImplementedError
+        """
         super().insert_blanks(insert_indices)
 
     def merge(self, data):
+        """
+        Add additional data onto the end of this data.
+
+        Parameters
+        ----------
+        data : FlaggedData
+
+        Raises
+        ------
+        NotImplementedError
+        """
         super().merge(data)
 
     def resample_from(self, image, to_indices, kernel=None,
@@ -856,37 +946,40 @@ class FitsData(FlaggedArray):
         Parameters
         ----------
         image : FlaggedArray or numpy.ndarray (float)
-            The image to resample.
+            The image to resample of shape (shape,) and have n_dimensions.
         to_indices : numpy.ndarray (float or int)
             An array of shape (n_dimensions, self.shape or self.size)
             specifying which image pixels belong to the resampled map.
-            I.e., if this were a 2-D array and the pixel at
-            (x, y) = (2, 2) corresponds to the
-            image at pixel (3.3, 4.4) then to_indices[:, 2, 2] = [4.4, 3.3]
-            (reversed because numpy).
+            Dimensions should be ordered using the FITS (x, y) convention.
+            For example, if pixel i is at (x, y) = (2, 3) then
+            `to_indices[:, i] = [2, 3]`.
         kernel : numpy.ndarray (float), optional
             The kernel used to perform the resampling.  If supplied, the result
             will be smoothed accordingly.
         kernel_reference_index : numpy.ndarray (int), optional
             If a kernel is supplied, specifies the center pixel of the kernel
             to be used during kernel convolution.  The default is
-            (kernel.shape - 1) / 2.
+            (kernel.shape - 1) / 2.  Should be an array of shape
+            (n_dimensions,) using FITS dimensional ordering (x, y).
         weights : numpy.ndarray (int or float), optional
-            An optional weighting array used for kernel convolution.
+            An optional weighting array used for kernel convolution.  Should
+            be an array of shape (shape,).
 
         Returns
         -------
         None
         """
+        # Reverse for FITS to numpy dimensional order.
         if kernel_reference_index is not None:
-            # Reverse for FITS/numpy translation.
-            kernel_reference_index = kernel_reference_index[::-1]
+            kernel_reference_index = self.fits_to_numpy(kernel_reference_index)
+        indices = self.fits_to_numpy(to_indices)
 
-        super().resample_from(image, to_indices, kernel=kernel,
+        super().resample_from(image, indices, kernel=kernel,
                               kernel_reference_index=kernel_reference_index,
                               weights=weights)
 
         if isinstance(image, np.ndarray):
+            # Just to get the size string
             image = self.__class__(data=image)
 
         self.add_history(f'resampled {self.get_size_string()} '
@@ -924,27 +1017,6 @@ class FitsData(FlaggedArray):
             max index + 1.
         """
         return self.numpy_to_fits(super().get_index_range())
-
-    def get_cropped(self, ranges):
-        """
-        Return a cropped Flagged Array.
-
-        Parameters
-        ----------
-        ranges : numpy.ndarray (int) or Coordinate
-            The ranges to set crop the data to.  Should be of shape
-            (n_dimensions, 2) where ranges[0, 0] would give the minimum crop
-            limit for the first dimension and ranges[0, 1] would give the
-            maximum crop limit for the first dimension.  In this case, the
-            'first' dimension is in FITS format.  i.e., (x, y) for a 2-D array.
-            Also note that the upper crop limit is not inclusive so a range
-            of (0, 3) includes indices [0, 1, 2] but not 3.
-
-        Returns
-        -------
-        FlaggedArray
-        """
-        return super().get_cropped(self.fits_to_numpy(ranges))
 
     def value_at(self, index, degree=3):
         """

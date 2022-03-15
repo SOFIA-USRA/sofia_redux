@@ -1699,6 +1699,20 @@ class TestIntegration(object):
         assert 'Applying scaling' in capsys.readouterr().out
         assert integ.gain == 0.5
 
+    def test_get_default_scaling_factor(self, populated_integration):
+        integ = populated_integration
+        config = integ.configuration
+        config.parse_key_value('scale.value', '1.5')
+        config.parse_key_value('scale.grid', '2.0')
+        config.parse_key_value('grid', '4.0')
+        assert integ.get_default_scaling_factor() == 6
+        config.parse_key_value('grid', '2.0')
+        assert integ.get_default_scaling_factor() == 1.5
+        del config['scale.grid']
+        assert integ.get_default_scaling_factor() == 1.5
+        del config['scale']
+        assert integ.get_default_scaling_factor() == 1
+
     def test_reindex_channels(self, populated_integration):
         integ = populated_integration
 

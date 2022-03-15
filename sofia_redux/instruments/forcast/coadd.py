@@ -401,7 +401,7 @@ def coadd(hdr_list, data_list, var_list, exp_list,
         log.info('Setting up output grid.')
         resampler = Resample(
             coordinates, flxvals, error=errvals,
-            window=window, order=fit_order, fix_order=False)
+            window=window, order=fit_order, fix_order=True)
 
         log.info('Resampling flux data.')
         flux, std = resampler(

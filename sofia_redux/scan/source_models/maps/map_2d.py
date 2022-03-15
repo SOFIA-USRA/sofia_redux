@@ -1377,11 +1377,13 @@ class Map2D(Overlay):
         Returns
         -------
         indices : numpy.ndarray (float)
-            An array of shape (n_dimensions, size).
+            An array of shape (n_dimensions, size).  Dimensions are ordered
+            using (x, y) FITS ordering.
         """
         indices = np.stack([x.ravel() for x in np.indices(self.shape)]).T
         coordinates = self.wcs.wcs_pix2world(indices, 0)
-        return map2d.wcs.wcs_world2pix(coordinates, 0).T.round(8)
+        return self.numpy_to_fits(
+            map2d.wcs.wcs_world2pix(coordinates, 0).T.round(8))
 
     def resample_from_map(self, map2d, weights=None):
         """

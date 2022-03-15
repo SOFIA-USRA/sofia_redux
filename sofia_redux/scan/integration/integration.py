@@ -3954,13 +3954,36 @@ class Integration(ABC):
         None
         """
         if factor is None:
-            factor = self.configuration.get_float('scale', default=np.nan)
+            factor = self.get_default_scaling_factor()
 
         factor = float(factor)
-        if np.isnan(factor):
+        if np.isnan(factor) or factor == 1:
             return
         log.debug(f"Applying scaling factor {factor:.3f}")
         self.gain /= factor
+
+    def get_default_scaling_factor(self):
+        """
+        Return the default scaling factor from the configuration.
+
+        Returns
+        -------
+        scale : float
+        """
+        scale = self.configuration.get_float('scale', default=np.nan)
+        if np.isnan(scale):
+            return 1.0
+
+        grid_scaling = self.configuration.get_float('scale.grid',
+                                                    default=np.nan)
+        if np.isnan(grid_scaling):
+            return scale
+
+        grid = self.configuration.get_float('grid', default=np.nan)
+        if np.isnan(grid) or grid == grid_scaling:
+            return scale
+
+        return scale * ((grid / grid_scaling) ** 2)
 
     def slim(self):
         """

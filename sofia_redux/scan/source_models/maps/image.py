@@ -14,30 +14,32 @@ class Image(FitsData):
 
     def __init__(self, data=None, blanking_value=None, dtype=float,
                  shape=None, unit=None):
-
-        self.id = ''
-        super().__init__(data=data, blanking_value=blanking_value, dtype=dtype,
-                         shape=shape, unit=unit)
-
-    def __eq__(self, other):
         """
-        Check whether this
+        Creates an Image instance.
+
+        This class is an extension of the :class:`FitsData` class and is used
+        to provide additional handling for FITS image HDUs.
 
         Parameters
         ----------
-        other : Image
-
-        Returns
-        -------
-        equal : bool
+        data : numpy.ndarray, optional
+            Data to initialize the flagged array with.  If supplied, sets the
+            shape of the array.  Note that the data type will be set to that
+            defined by the `dtype` parameter.
+        blanking_value : int or float, optional
+            The blanking value defines invalid values in the data array.  This
+            is the equivalent of defining a NaN value.
+        dtype : type, optional
+            The data type of the data array.
+        shape : tuple (int), optional
+            The shape of the data array.  This will only be relevant if
+            `data` is not defined.
+        unit : str or units.Unit or units.Quantity, optional
+            The data unit.
         """
-        if other is self:
-            return True
-        if not isinstance(other, Image):
-            return False
-        if self.id != other.id:
-            return False
-        return super().__eq__(other)
+        self.id = ''
+        super().__init__(data=data, blanking_value=blanking_value, dtype=dtype,
+                         shape=shape, unit=unit)
 
     def copy(self, with_contents=True):
         """
@@ -60,13 +62,33 @@ class Image(FitsData):
             new.shape = self.shape
         return new
 
+    def __eq__(self, other):
+        """
+        Check whether this image is equal to another.
+
+        Parameters
+        ----------
+        other : Image
+
+        Returns
+        -------
+        equal : bool
+        """
+        if other is self:
+            return True
+        if not isinstance(other, Image):
+            return False
+        if self.id != other.id:
+            return False
+        return super().__eq__(other)
+
     def new_image(self):
         """
         Return a new image.
 
         Returns
         -------
-        Image
+        image : Image
         """
         return self.copy(with_contents=False)
 
@@ -93,6 +115,27 @@ class Image(FitsData):
         image_id : str
         """
         return self.id
+
+    def destroy(self):
+        """
+        Destroy the image data.
+
+        Returns
+        -------
+        None
+        """
+        super().destroy()
+        self.clear_history()
+
+    def renew(self):
+        """
+        Renew the image by clearing all data.
+
+        Returns
+        -------
+        None
+        """
+        self.clear()
 
     def set_data(self, data, change_type=False):
         """
@@ -138,7 +181,7 @@ class Image(FitsData):
 
         Returns
         -------
-        Image2D
+        image : Image
         """
         change_type = not((dtype is None) or (dtype == self.dtype))
         change_level = not((blanking_value is None)
@@ -156,6 +199,8 @@ class Image(FitsData):
         if change_level:
             image.blanking_value = blanking_value
             image.paste(self, report=True)
+
+        return image
 
     def get_valid_data(self, default=None):
         """
@@ -219,7 +264,9 @@ class Image(FitsData):
         if self.data is None:
             return
         ranges = self.get_index_range()
-        if ranges.shape != (self.ndim, 2) or None in ranges:
+        if (ranges.shape != (self.ndim, 2) or
+                None in ranges):  # pragma: no cover
+            # Cannot reach during normal operation
             return  # invalid ranges
         elif (ranges[:, 0] == 0).all() and np.allclose(
                 ranges[:, 1], self.shape[::-1]):  # ::-1 because FITS to numpy
@@ -268,6 +315,7 @@ class Image(FitsData):
         Parameters
         ----------
         image_hdu : astropy.io.fits.hdu.image.ImageHDU
+            The image HDU to read and apply.
 
         Returns
         -------
@@ -277,66 +325,66 @@ class Image(FitsData):
         self.set_data(image_hdu.data)
         self.data *= self.unit.value
 
-    @staticmethod
-    def read_hdul(hdul, hdu_index):
+    @classmethod
+    def read_hdul(cls, hdul, hdu_index):
         """
         Read a specific HDU image from an HDU list, and return an image.
 
         Parameters
         ----------
         hdul : astropy.io.fits.hdu.hdulist.HDUList
+            The HDU list to read.
         hdu_index : int
+            The index of the HDU in the provided `hdul` to read.
 
         Returns
         -------
-        Image2D
+        image : Image
         """
         hdu = hdul[hdu_index]
         image = Image(dtype=hdu.data.dtype)
         image.read_hdu(hdu)
         return image
 
-    def get_asymmetry_2d(self, grid, center_index, angle, radial_range):
-        """
-        Return the 2-D asymmetry.
-
-        Parameters
-        ----------
-        grid : Grid2D
-        center_index : Coordinate2D
-        angle : units.Quantity
-        radial_range : Range
-
-        Returns
-        -------
-        asymmetry : Asymmetry2D
-        """
-        right_angle = 90 * units.Unit('degree')
-        asymmetry_x, x_rms = self.get_asymmetry(
-            grid, center_index, angle, radial_range)
-        asymmetry_y, y_rms = self.get_asymmetry(
-            grid, center_index, angle + right_angle, radial_range)
-
-        x_weight = np.inf if x_rms == 0 else (1 / x_rms) ** 2
-        y_weight = np.inf if y_rms == 0 else (1 / y_rms) ** 2
-
-        return Asymmetry2D(x=asymmetry_x, y=asymmetry_y,
-                           x_weight=x_weight, y_weight=y_weight)
-
     def get_asymmetry(self, grid, center_index, angle, radial_range):
         """
         Return the Asymmetry.
 
+        The asymmetry and rms are calculated via::
+
+            asymmetry = sum(d * c) / sum(|d|)
+            rms = sum(|c|) / sum(|d|)
+
+        where::
+
+            c = cos(arctan2(dy, dx) - angle)
+            dx = x - x_0
+            dy = y - y_0
+
+        The sum occurs over all points within the provided `radial_range`
+        about the `center_index`.  The coordinates (x, y) are the projected
+        coordinates of the image map indices onto the grid, and (x_0, y_0) is
+        the `center_index` projected onto the same grid.  The data values d
+        are the image data values.
+
         Parameters
         ----------
         grid : Grid2D
+            The grid used to convert image pixel locations to the coordinate
+            system in which to calculate the asymmetry.
         center_index : Coordinate2D
+            The center index on the image (x_pix, y_pix) from which to
+            calculate the asymmetry.
         angle : units.Quantity
+            The rotation of the image with respect to the asymmetry,
         radial_range : Range
+            The range (in `grid` units) about `center_index` on which to base
+            the asymmetry calculation.
 
         Returns
         -------
-        asymmetry, asymmetry_rms
+        asymmetry, asymmetry_rms : float, float
+            The asymmetry and asymmetry RMS.
         """
         center_offset = grid.index_to_offset(center_index)
         j, i = np.nonzero(self.valid)
@@ -369,3 +417,41 @@ class Image(FitsData):
             rms = rms.value
 
         return value, rms
+
+    def get_asymmetry_2d(self, grid, center_index, angle, radial_range):
+        """
+        Return the 2-D asymmetry.
+
+        Calculates the asymmetry in both the x and y directions.  The y
+        asymmetry values are calculated by applying an addition rotation of
+        90 degrees to supplied angle during the asymmetry derivation.
+
+        Parameters
+        ----------
+        grid : Grid2D
+            The grid used to convert image pixel locations to the coordinate
+            system in which to calculate the asymmetry.
+        center_index : Coordinate2D
+            The center index on the image (x_pix, y_pix) from which to
+            calculate the asymmetry.
+        angle : units.Quantity
+            The rotation of the image with respect to the asymmetry,
+        radial_range : Range
+            The range (in `grid` units) about `center_index` on which to base
+            the asymmetry calculation.
+
+        Returns
+        -------
+        asymmetry : Asymmetry2D
+        """
+        right_angle = 90 * units.Unit('degree')
+        asymmetry_x, x_rms = self.get_asymmetry(
+            grid, center_index, angle, radial_range)
+        asymmetry_y, y_rms = self.get_asymmetry(
+            grid, center_index, angle + right_angle, radial_range)
+
+        x_weight = np.inf if x_rms == 0 else (1 / x_rms) ** 2
+        y_weight = np.inf if y_rms == 0 else (1 / y_rms) ** 2
+
+        return Asymmetry2D(x=asymmetry_x, y=asymmetry_y,
+                           x_weight=x_weight, y_weight=y_weight)

@@ -565,6 +565,19 @@ def test_edit_header(gaussian_source):
     assert h.comments['SRCFWHM'] == '(arcmin) source FWHM.'
     assert h.comments['SRCWERR'] == '(arcmin) FWHM error.'
 
+    ud = units.dimensionless_unscaled
+    g.fwhm = 10 * ud
+    g.fwhm_weight = 1 * ud
+    g.edit_header(h, size_unit=ud)
+    assert h['SRCPEAK'] == 2
+    assert h['SRCPKERR'] == 0.5
+    assert h['SRCFWHM'] == 10
+    assert h['SRCWERR'] == 1
+    assert h.comments['SRCPEAK'] == 'source peak flux.'
+    assert h.comments['SRCPKERR'] == 'peak flux error.'
+    assert h.comments['SRCFWHM'] == 'source FWHM.'
+    assert h.comments['SRCWERR'] == 'FWHM error.'
+
 
 def test_get_integral(gaussian_source):
     g = gaussian_source.copy()
@@ -579,6 +592,7 @@ def test_pointing_info(filtered_map2d, gaussian_source):
     image = filtered_map2d.copy()
     g = gaussian_source.copy()
     info = g.pointing_info(image)
+
     assert info == ['Peak: 2.00000 Jy (S/N ~ 2.00000)',
                     'Integral: 11.1111 +- 5.5556 Jy',
                     'FWHM: 7.0711 +- 1.0000 (arcsec)']
@@ -602,6 +616,12 @@ def test_pointing_info(filtered_map2d, gaussian_source):
     info = g.pointing_info(image)
 
     assert info == ['Peak: 2.00000 Jy (S/N ~ 2.00000)',
+                    'Integral: inf Jy',
+                    'FWHM: 3.0000']
+
+    g.peak = np.inf
+    info = g.pointing_info(image)
+    assert info == ['Peak: inf Jy (S/N ~ inf)',
                     'Integral: inf Jy',
                     'FWHM: 3.0000']
 

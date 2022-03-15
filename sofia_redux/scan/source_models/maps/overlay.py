@@ -48,66 +48,6 @@ class Overlay(Image):
         super().__init__(blanking_value=blanking_value, dtype=dtype,
                          shape=shape, unit=unit)
 
-    @property
-    def data(self):
-        return self.basis.data
-
-    @data.setter
-    def data(self, values):
-        self.basis.data = values
-
-    @property
-    def flag(self):
-        return self.basis.flag
-
-    @flag.setter
-    def flag(self, values):
-        self.basis.flag = values
-
-    @property
-    def valid(self):
-        return self.basis.valid
-
-    @property
-    def blanking_value(self):
-        return self.basis.blanking_value
-
-    @blanking_value.setter
-    def blanking_value(self, value):
-        self.basis.blanking_value = value
-
-    @property
-    def fixed_index(self):
-        return self.basis.fixed_index
-
-    @fixed_index.setter
-    def fixed_index(self, values):
-        self.basis.fixed_index = values
-
-    @property
-    def dtype(self):
-        return self.basis.dtype
-
-    @dtype.setter
-    def dtype(self, value):
-        self.basis.dtype = value
-
-    @property
-    def shape(self):
-        return self.basis.shape
-
-    @shape.setter
-    def shape(self, new_shape):
-        self.set_data_shape(new_shape)
-
-    @property
-    def size(self):
-        return self.basis.size
-
-    @property
-    def ndim(self):
-        return self.basis.ndim
-
     def copy(self, with_contents=True):
         """
         Return a copy of the overlay.
@@ -122,6 +62,205 @@ class Overlay(Image):
         Overlay
         """
         return super().copy(with_contents=with_contents)
+
+    @property
+    def data(self):
+        """
+        Return the basis image data array.
+
+        Returns
+        -------
+        data : np.ndarray or None
+        """
+        return self.basis.data
+
+    @data.setter
+    def data(self, values):
+        """
+        Set the basis image data array.
+
+        Parameters
+        ----------
+        values : np.ndarray
+
+        Returns
+        -------
+        None
+        """
+        self.basis.data = values
+
+    @property
+    def flag(self):
+        """
+        Return the associated data flags of the basis image.
+
+        Returns
+        -------
+        flags : numpy.ndarray (int)
+        """
+        return self.basis.flag
+
+    @flag.setter
+    def flag(self, values):
+        """
+        Set the data flags for the basis image.
+
+        Parameters
+        ----------
+        values : numpy.ndarray (int)
+
+        Returns
+        -------
+        None
+        """
+        self.basis.flag = values
+
+    @property
+    def valid(self):
+        """
+        Return a boolean mask array of valid data elements in the basis image.
+
+        Valid elements are neither NaN, set to the blanking value, or
+        flagged as the validating_flags.
+
+        Returns
+        -------
+        numpy.ndarray (bool)
+           A boolean mask where `True` indicates a valid element.
+        """
+        return self.basis.valid
+
+    @property
+    def blanking_value(self):
+        """
+        Return the blanking value for the basis image.
+
+        The blanking value is that which defines an invalid value.
+
+        Returns
+        -------
+        blanking_value : int or float or None
+        """
+        return self.basis.blanking_value
+
+    @blanking_value.setter
+    def blanking_value(self, value):
+        """
+        Set the blanking value for the basis image.
+
+        Parameters
+        ----------
+        value : int or float or None
+
+        Returns
+        -------
+        None
+        """
+        self.basis.blanking_value = value
+
+    @property
+    def fixed_index(self):
+        """
+        Return the fixed indices of the basis image elements.
+
+        The fixed indices are designed to be constant irrespective of any
+        operations, deletions, etc and provide a reverse lookup onto the
+        original data set.
+
+        Returns
+        -------
+        fixed_index : numpy.ndarray (int)
+        """
+        return self.basis.fixed_index
+
+    @fixed_index.setter
+    def fixed_index(self, values):
+        """
+        Set the fixed index values of the basis image elements.
+
+        Parameters
+        ----------
+        values : numpy.ndarray (int)
+
+        Returns
+        -------
+        None
+        """
+        self.basis.fixed_index = values
+
+    @property
+    def dtype(self):
+        """
+        Return the data type for the basis image data array.
+
+        Returns
+        -------
+        dtype : type
+        """
+        return self.basis.dtype
+
+    @dtype.setter
+    def dtype(self, value):
+        """
+        Set the data type for the basis image data array.
+
+        Parameters
+        ----------
+        value : type
+
+        Returns
+        -------
+        None
+        """
+        self.basis.dtype = value
+
+    @property
+    def shape(self):
+        """
+        Return the shape of the basis image data array.
+
+        Returns
+        -------
+        tuple (int)
+        """
+        return self.basis.shape
+
+    @shape.setter
+    def shape(self, new_shape):
+        """
+        Set the data shape for the basis image data array.
+
+        Parameters
+        ----------
+        new_shape : tuple (int)
+
+        Returns
+        -------
+        None
+        """
+        self.set_data_shape(new_shape)
+
+    @property
+    def size(self):
+        """
+        Return the size of the basis image data array.
+
+        Returns
+        -------
+        int
+        """
+        return self.basis.size
+
+    @property
+    def ndim(self):
+        """
+        Return the number of dimensions in the basis image.
+
+        Returns
+        -------
+        int
+        """
+        return self.basis.ndim
 
     def set_basis(self, basis):
         """

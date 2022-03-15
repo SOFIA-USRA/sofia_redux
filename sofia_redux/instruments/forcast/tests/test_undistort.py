@@ -4,16 +4,18 @@ import re
 
 from astropy.io import fits
 import numpy as np
-import pytest
 
 import sofia_redux.instruments.forcast.configuration as dripconfig
 import sofia_redux.instruments.forcast.undistort as u
+from sofia_redux.toolkit.image.warp import warp_image
 
 
 def fake_data():
-    """This is hard to test as I'm not sure what the expected
+    """
+    This is hard to test as I'm not sure what the expected
     results should be.  It depends on the algorithm.  For now
-    test contraction warp.  At least that way I know what to expect"""
+    test contraction warp.  At least that way I know what to expect
+    """
     imgnx, imgny = 256, 256  # make it 2^n
     nx, ny = 12, 12  # something that does not integer divide imgnx, imgny
     yy, xx = np.mgrid[:imgny, :imgnx]
@@ -82,6 +84,7 @@ class TestUndistort(object):
         assert isinstance(results['angle'], (int, float))
 
     def test_get_pinpos_integrity(self):
+        dripconfig.load()
         dripconfig.configuration['fpinhole'] = 'pinhole_locs.txt'
         drip_header = fits.header.Header()
         default_header = fits.header.Header()
@@ -186,77 +189,6 @@ class TestUndistort(object):
         assert not (pp['model'] == pinpos['model']).all()
         assert (pp['model'] == expect).all()
 
-    def test_warp_data(self):
-        fake = fake_data()
-        data, expected = fake['data'], fake['expected']
-        imgny, imgnx = fake['imgny'], fake['imgnx']
-        xin, yin, xout, yout = \
-            fake['xin'], fake['yin'], fake['xout'], fake['yout']
-
-        # test transforms
-        for transform in ['polynomial', 'piecewise-affine']:
-            dout = u.warp_data(data, xin, yin, xout, yout, transform=transform)
-            assert not np.isnan(dout).all()
-            assert np.isnan(dout).any()
-            assert np.allclose(np.nanmax(dout), 1, atol=1e-6)
-            assert np.allclose(np.nanmin(np.abs(dout)), 0, atol=1e-6)
-            delta = np.abs(expected - dout)
-            assert np.allclose(np.nanmax(delta), 0, atol=1e-6)
-
-        # test NaN handling
-        nandata = data.copy()
-        for iy in range(imgny // 5):
-            for ix in range(imgnx // 5):
-                nandata[iy * 5, ix * 5] = np.nan
-        reference = u.warp_data(nandata, xin, yin, xout, yout)
-        assert np.isnan(reference).any()
-        assert not np.isnan(reference).all()
-
-        nan0pt5 = np.isnan(reference).sum()
-        dout1 = u.warp_data(nandata, xin, yin, xout, yout, missing_frac=1)
-        nan1 = np.isnan(dout1).sum()
-        dout0 = u.warp_data(nandata, xin, yin, xout, yout, missing_frac=1e-16)
-        nan0 = np.isnan(dout0).sum()
-        assert nan1 > nan0pt5
-        assert nan0 < nan0pt5
-
-        # test cval
-        dout = u.warp_data(nandata, xin, yin, xout, yout,
-                           cval=-9999, extrapolate=True)
-        assert not np.isnan(dout).any()
-        assert np.min(dout) == -9999
-
-        # test order
-        dout_order0 = u.warp_data(nandata, xin, yin, xout, yout,
-                                  order=0, extrapolate=True)
-        assert not (dout_order0 == reference).all()
-
-        # test edge mode
-        dout_reflect = u.warp_data(data, xin, yin, xout, yout,
-                                   mode='reflect', extrapolate=True)
-        assert not np.isnan(dout_reflect).any()
-
-        # test transform (this is the inverse transform)
-        # pump in xout and see if we get xin
-        dout, transform = u.warp_data(
-            data, xin, yin, xout, yout,
-            get_transform=True, extrapolate=True)
-        cin = transform(
-            np.stack((np.array(xout), np.array(yout)), axis=1))
-        testx = list(cin[:, 0])
-        testy = list(cin[:, 1])
-        for x1, x2 in zip(testx, xin):
-            assert np.allclose(x1, x2, atol=1e-6)
-        for y1, y2 in zip(testy, yin):
-            assert np.allclose(y1, y2, atol=1e-6)
-
-        # test interpolation order - this is rather pointless since we are
-        # re-binning by integer factors using a square test.  However,
-        # it should fail if interpolation order is not between 0 and 5
-        with pytest.raises(Exception):
-            u.warp_data(data, xin, yin, xout, yout,
-                        interpolation_order=6)
-
     def test_find_pixat11(self):
         for ttype in ['polynomial', 'piecewise-affine']:
             test = fake_data()
@@ -268,8 +200,8 @@ class TestUndistort(object):
             yrange = 0, imgny - 1
             eps = 1e-6
             x0, y0 = imgnx / 2, imgny / 2
-            _, transform = u.warp_data(data, xin, yin, xout, yout,
-                                       get_transform=True, transform=ttype)
+            _, transform = warp_image(data, xin, yin, xout, yout, order=4,
+                                      get_transform=True, transform=ttype)
 
             p11 = u.find_pixat11(transform, x0, y0, epsilon=eps,
                                  xrange=xrange, yrange=yrange)
@@ -317,8 +249,8 @@ class TestUndistort(object):
             test['xin'], test['yin'], test['xout'], test['yout']
         imgnx, imgny = test['imgnx'], test['imgny']
         x0, y0 = imgnx / 2, imgny / 2
-        _, transform = u.warp_data(data, xin, yin, xout, yout,
-                                   get_transform=True)
+        _, transform = warp_image(data, xin, yin, xout, yout, order=4,
+                                  get_transform=True)
         header = fits.header.Header()
         dxy = u.update_wcs('a', transform)
         assert dxy is None

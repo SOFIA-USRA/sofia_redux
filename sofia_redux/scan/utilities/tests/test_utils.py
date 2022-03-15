@@ -484,6 +484,47 @@ def test_dict_difference():
     assert 'value1' not in result['level1']['level2']
 
 
+def test_to_header_quantity():
+    unknown = utils.UNKNOWN_FLOAT_VALUE
+    ud = units.dimensionless_unscaled
+    for value in [unknown, np.nan, np.inf, 'NaN', None]:
+        assert utils.to_header_quantity(value) == unknown
+        assert utils.to_header_quantity(value, unit=3 * ud) == unknown
+        if value != 'NaN' and value is not None:
+            assert np.isclose(utils.to_header_quantity(value, keep=True),
+                              value, equal_nan=True)
+            assert np.isclose(utils.to_header_quantity(
+                value, unit=3 * ud, keep=True), value, equal_nan=True)
+
+    with pytest.raises(ValueError) as err:
+        _ = utils.to_header_quantity(complex(1, 1))
+    assert 'Value must be' in str(err.value)
+
+    assert utils.to_header_quantity(1, 'arcsec') == 1 * units.Unit('arcsec')
+    d = utils.to_header_quantity(1 * units.Unit('arcmin'), unit='arcsec')
+    assert d.value == 60 and d.unit == 'arcsec'
+
+    d = utils.to_header_quantity(2 * ud)
+    assert isinstance(d, float) and d == 2
+
+    d = utils.to_header_quantity(1 * units.Unit('arcsec'))
+    assert d.unit == 'arcsec' and d.value == 1
+
+    d = utils.to_header_quantity(1 * units.Unit('arcmin'),
+                                 unit=2 * units.Unit('arcsec'))
+    assert d.unit == 'arcsec' and d.value == 120
+
+    d = utils.to_header_quantity(1 * units.Unit('arcsec'), unit=ud)
+    assert d.unit == 'arcsec' and d.value == 1
+
+    d = utils.to_header_quantity(np.nan * units.Unit('arcsec'))
+    assert d == -9999 * units.Unit('arcsec')
+    d = utils.to_header_quantity(np.nan * units.Unit('arcsec'), unit=ud)
+    assert d == -9999 * units.Unit('arcsec')
+    d = utils.to_header_quantity(np.nan, unit='arcsec')
+    assert d == -9999 * units.Unit('arcsec')
+
+
 def test_to_header_float():
     unknown = utils.UNKNOWN_FLOAT_VALUE
     assert np.allclose(utils.to_header_float(None), unknown)

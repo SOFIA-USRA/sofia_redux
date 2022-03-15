@@ -627,6 +627,8 @@ class FlaggedArray(FlaggedData):
             # added values are in the form of a regular array e.g., (ny, nx)
             # but need to be flattened with invalid points removed.
             add_values = add_values[keep]
+        else:
+            indices = np.asarray(indices)
 
         if factor is not None:
             add_values = add_values * factor
@@ -1824,6 +1826,8 @@ class FlaggedArray(FlaggedData):
             d0, d1, d2 = data[slice_index]
             v1 = 0.5 * (d2 + d0) - d1
             v2 = 0.5 * (d2 - d0)
+            if v1 == 0:
+                continue
             v = -0.5 * v2 / v1
             if np.abs(v) <= 0.5:
                 increment[dimension] = v

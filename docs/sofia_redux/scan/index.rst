@@ -489,7 +489,6 @@ sofia_redux.scan.source_models
    :headings: ~^
 .. automodapi:: sofia_redux.scan.source_models.sky_dip_model
    :headings: ~^
-
 .. automodapi:: sofia_redux.scan.source_models.beams.asymmetry_2d
    :headings: ~^
 .. automodapi:: sofia_redux.scan.source_models.beams.elliptical_source
@@ -500,12 +499,8 @@ sofia_redux.scan.source_models
    :headings: ~^
 .. automodapi:: sofia_redux.scan.source_models.beams.instant_focus
    :headings: ~^
-
-.. automodapi:: sofia_redux.scan.source_models.catalogs.source_catalog
-   :headings: ~^
 .. automodapi:: sofia_redux.scan.source_models.fits_properties.fits_properties
    :headings: ~^
-
 .. automodapi:: sofia_redux.scan.source_models.maps.exposure_map
    :headings: ~^
 .. automodapi:: sofia_redux.scan.source_models.maps.fits_data

@@ -5,6 +5,8 @@ import numpy as np
 
 from sofia_redux.scan.source_models.beams.gaussian_source import GaussianSource
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.utilities.utils import (
+    to_header_quantity, UNKNOWN_FLOAT_VALUE)
 
 __all__ = ['EllipticalSource']
 
@@ -274,7 +276,7 @@ class EllipticalSource(GaussianSource):
 
     def edit_header(self, header, fits_id='', beam_name=None, size_unit=None):
         """
-        Edit a FITS header with the beam parameters.
+        Edit a FITS header with the elliptical beam parameters.
 
         Parameters
         ----------
@@ -294,64 +296,53 @@ class EllipticalSource(GaussianSource):
         """
         super().edit_header(header, fits_id=fits_id, beam_name=beam_name,
                             size_unit=size_unit)
+
+        unknown = UNKNOWN_FLOAT_VALUE
         major, major_rms = self.major_fwhm, self.major_fwhm_rms
         minor, minor_rms = self.minor_fwhm, self.minor_fwhm_rms
-        ud = units.dimensionless_unscaled
 
+        major = to_header_quantity(major, unit=size_unit)
+        minor = to_header_quantity(minor, unit=size_unit)
         if size_unit is None and isinstance(major, units.Quantity):
             size_unit = major.unit
 
-        if isinstance(size_unit, units.Quantity):
-            scaling = size_unit.value
-            size_unit = size_unit.unit
+        major_rms = to_header_quantity(major_rms, unit=size_unit)
+        minor_rms = to_header_quantity(minor_rms, unit=size_unit)
+        if size_unit is None and isinstance(
+                major_rms, units.Quantity):  # pragma: no cover
+            # Cannot reach during normal operation
+            size_unit = major_rms.unit
+            major = to_header_quantity(major, unit=size_unit)
+            minor = to_header_quantity(minor, unit=size_unit)
+
+        if isinstance(major, units.Quantity):
+            major = major.value
+            minor = minor.value
+            major_rms = major_rms.value
+            minor_rms = minor_rms.value
+            size_comment = f'({size_unit}) '
         else:
-            scaling = 1.0
+            size_comment = ''
 
-        if isinstance(size_unit, units.Unit) and size_unit == ud:
-            size_unit = None
-
-        if size_unit is None:
-            if isinstance(major, units.Quantity):
-                major = major.value
-                minor = minor.value
-            if isinstance(major_rms, units.Quantity):
-                major_rms = major_rms.value
-                minor_rms = minor_rms.value
-        else:
-            if isinstance(major, units.Quantity):
-                major = major.to(size_unit).value
-                minor = minor.to(size_unit).value
-            if isinstance(major_rms, units.Quantity):
-                major_rms = major_rms.to(size_unit).value
-                minor_rms = minor_rms.to(size_unit).value
-
-        if scaling != 1:
-            major *= scaling
-            minor *= scaling
-            major_rms *= scaling
-            minor_rms *= scaling
-
-        angle = self.position_angle.to('degree').value
-        angle_rms = self.angle_rms.to('degree').value
+        angle = to_header_quantity(self.position_angle, unit='degree').value
+        angle_rms = to_header_quantity(self.angle_rms, unit='degree').value
         has_error = self.fwhm_weight != 0 and np.isfinite(self.fwhm_weight)
 
-        size_comment = '' if size_unit is None else f'({size_unit}) '
-
-        if np.isfinite(major):
+        if np.isfinite(major) and major != unknown:
             header['SRCMAJ'] = major, size_comment + 'source major axis.'
-            if has_error and np.isfinite(major_rms):
+            if has_error and np.isfinite(major_rms) and major != unknown:
                 header['SRCMAJER'] = (
                     major_rms, size_comment + 'major axis error.')
 
-        if np.isfinite(minor):
+        if np.isfinite(minor) and minor != unknown:
             header['SRCMIN'] = minor, size_comment + 'source minor axis.'
-            if has_error and np.isfinite(minor_rms):
+            if has_error and np.isfinite(minor_rms) and minor_rms != unknown:
                 header['SRCMINER'] = (
                     minor_rms, size_comment + 'minor axis error.')
 
-        if np.isfinite(angle):
+        if np.isfinite(angle) and angle != unknown:
             header['SRCPA'] = angle, '(deg) source position angle.'
-            if np.isfinite(angle_rms):
+            if np.isfinite(angle_rms) and angle != unknown:
                 header['SRCPAERR'] = angle_rms, '(deg) source angle error.'
 
     def pointing_info(self, map2d):
@@ -369,23 +360,39 @@ class EllipticalSource(GaussianSource):
         info = super().pointing_info(map2d)
         size_unit = map2d.display_grid_unit  # A quantity, not unit
 
-        major = self.major_fwhm
-        minor = self.minor_fwhm
-        major_rms = self.major_fwhm_rms
-        minor_rms = self.minor_fwhm_rms
-        angle = self.angle
+        major = to_header_quantity(self.major_fwhm, unit=size_unit)
+        minor = to_header_quantity(self.minor_fwhm, unit=size_unit)
 
-        unit = size_unit.unit
-        unit_value = size_unit.value
+        if size_unit is None and isinstance(major, units.Quantity):
+            size_unit = major.unit
+
+        major_rms = to_header_quantity(self.major_fwhm_rms, unit=size_unit)
+        minor_rms = to_header_quantity(self.minor_fwhm_rms, unit=size_unit)
+        if size_unit is None and isinstance(
+                major_rms, units.Quantity):  # pragma: no cover
+            # Cannot reach during normal operation
+            size_unit = major_rms.unit
+            major = to_header_quantity(self.major_fwhm, unit=size_unit)
+            minor = to_header_quantity(self.minor_fwhm, unit=size_unit)
+
         if isinstance(major, units.Quantity):
-            major = (major.to(unit) * unit_value).value
-            minor = (minor.to(unit) * unit_value).value
-            major_rms = (major_rms.to(unit) * unit_value).value
-            minor_rms = (minor_rms.to(unit) * unit_value).value
-        angle = angle.to('degree').value
+            unit_str = f' {major.unit}'
+            major = major.value
+            minor = minor.value
+            major_rms = major_rms.value
+            minor_rms = minor_rms.value
+        else:
+            unit_str = ''
 
-        info.append(f'(a={major:.6f}+-{major_rms:.6f} {unit}, '
-                    f'b={minor:.6f}+-{minor_rms:.6f} {unit}, '
+        angle = to_header_quantity(self.angle, unit='degree').value
+        values = [major, minor, major_rms, minor_rms, angle]
+        for i, value in enumerate(values):
+            if value == UNKNOWN_FLOAT_VALUE:
+                values[i] = np.nan
+        major, minor, major_rms, minor_rms, angle = values
+
+        info.append(f'(a={major:.6f}+-{major_rms:.6f}{unit_str}, '
+                    f'b={minor:.6f}+-{minor_rms:.6f}{unit_str}, '
                     f'angle={angle:.6f} deg)')
         return info
 
@@ -517,19 +524,10 @@ class EllipticalSource(GaussianSource):
         dict
         """
         data = super().get_data(map2d, size_unit=size_unit)
-        convert_size = size_unit is not None
-        a = self.major_fwhm
-        b = self.minor_fwhm
-        da = self.major_fwhm_rms
-        db = self.minor_fwhm_rms
-        if convert_size:
-            size_unit = units.Unit(size_unit)
-            if isinstance(a, units.Quantity):
-                a, b = a.to(size_unit), b.to(size_unit)
-                da, db = da.to(size_unit), db.to(size_unit)
-            else:
-                a, b = a * size_unit, b * size_unit
-                da, db = da * size_unit, db * size_unit
+        a = to_header_quantity(self.major_fwhm, unit=size_unit, keep=True)
+        b = to_header_quantity(self.minor_fwhm, unit=size_unit, keep=True)
+        da = to_header_quantity(self.major_fwhm_rms, unit=size_unit, keep=True)
+        db = to_header_quantity(self.minor_fwhm_rms, unit=size_unit, keep=True)
         angle = self.angle.to('degree')
         angle_rms = self.angle_rms.to('degree')
         data['a'] = a

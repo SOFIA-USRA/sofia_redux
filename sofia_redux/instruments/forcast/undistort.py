@@ -11,6 +11,7 @@ from skimage import transform as tf
 
 from sofia_redux.toolkit.utilities.fits import add_history_wrap, hdinsert, kref
 from sofia_redux.toolkit.image.adjust import frebin
+from sofia_redux.toolkit.image.warp import warp_image
 
 from sofia_redux.instruments.forcast.distcorr_model import distcorr_model
 from sofia_redux.instruments.forcast.getpar import getpar
@@ -19,7 +20,7 @@ from sofia_redux.instruments.forcast.readmode import readmode
 
 addhist = add_history_wrap('Distortion')
 
-__all__ = ['default_pinpos', 'get_pinpos', 'warp_data',
+__all__ = ['default_pinpos', 'get_pinpos',
            'find_pixat11', 'update_wcs', 'transform_image',
            'rebin_image', 'frame_image', 'find_source',
            'undistort']
@@ -211,111 +212,6 @@ def get_pinpos(header, pinpos=None, rotate=False):
     return pp
 
 
-def warp_data(data, xin, yin, xout, yout, order=4,
-              transform='polynomial', interpolation_order=3,
-              mode='constant', cval=np.nan, output_shape=None,
-              get_transform=False, missing_frac=0.5, extrapolate=False):
-    """
-    Warp data using transformation defined by two sets of coordinates
-
-    Parameters
-    ----------
-    data : np.ndarray
-        input data (nrow, ncol)
-    xin : array-like
-        source x coordinate
-    yin : array-like
-        source y coorindate
-    xout : array-like
-        destination x coordinate
-    yout : array-like
-        destination y coordinate
-    order : int, optional
-        polynomial order if transform='polynomial'
-    interpolation_order : int, optional
-        order of interpolation for reconstruction.  must be in the
-        range 0-5.
-    cval : float, optional
-        values outside input boundaries to be replaced with cval if
-        mode='constant'.
-    mode : str, optional
-        Points outside input boundaries are filled according to the
-        given mode.  cval
-    output_shape : tuple of int
-        (rows, cols) If None, the input shape is preserved
-    transform : str, optional
-        See scikit.image.transform for all available transform types
-    get_transform : bool, optional
-        if True, return the transformation object as the second element
-        of a 2-tuple in the return value
-    missing_frac : float, optional
-        value between 0 and 1.  1 = fully weighted by real values.
-        0 = fully weighted by NaNs.  Any pixel weighted by less than
-        this fraction will be replaced with cval.
-
-    Returns
-    -------
-    numpy.ndarray
-        data (nrow, ncol)
-        data, transform (if get_transform=True)
-    """
-
-    xi, yi = np.array(xin), np.array(yin)
-    xo, yo = np.array(xout), np.array(yout)
-    minx, maxx = int(np.ceil(np.min(xo))), int(np.floor(np.max(xo)))
-    miny, maxy = int(np.ceil(np.min(yo))), int(np.floor(np.max(yo)))
-    if transform != 'polynomial':
-        # Add corner pins to allow extrapolation
-        xc = [0, 0, data.shape[1] - 1, data.shape[1] - 1]
-        yc = [0, data.shape[1] - 1, 0, data.shape[0] - 1]
-        xi, yi = np.append(xi, xc), np.append(yi, yc)
-        xo, yo = np.append(xo, xc), np.append(yo, yc)
-
-    co = np.stack((xo, yo), axis=1)
-    ci = np.stack((xi, yi), axis=1)
-    if transform == 'polynomial':
-        # This is the inverse transform (out -> in)
-        coordinate_transform = tf.estimate_transform(
-            'polynomial', co, ci, order=order)
-        func = coordinate_transform
-    else:
-        coordinate_transform = tf.estimate_transform(transform, co, ci)
-        func = coordinate_transform
-
-    nans = np.isnan(data)
-    if not nans.any():
-        dout = tf.warp(data.copy(), func, order=interpolation_order,
-                       mode=mode, cval=cval, preserve_range=True,
-                       output_shape=output_shape)
-        wout = (~np.isnan(dout)).astype(float)
-    else:
-        weights = (~nans).astype(float)
-        dw = data.copy()
-        dw[nans] = 0
-        wout = tf.warp(weights, func, order=interpolation_order,
-                       mode=mode, cval=cval, preserve_range=True,
-                       output_shape=output_shape)
-        dout = tf.warp(dw, func, order=interpolation_order,
-                       mode=mode, cval=cval, preserve_range=True,
-                       output_shape=output_shape)
-        wout[np.isnan(wout)] = 0
-        dividx = wout >= missing_frac
-        dout[dividx] = dout[dividx] / wout[dividx]
-    cutidx = wout < missing_frac
-    dout[cutidx] = cval
-
-    if not extrapolate:
-        dout[:miny, :] = cval
-        dout[:, :minx] = cval
-        dout[maxy:, :] = cval
-        dout[:, maxx:] = cval
-
-    if get_transform:
-        return dout, func
-    else:
-        return dout
-
-
 def find_pixat11(transform, x0, y0, epsilon=1e-8,
                  xrange=(0, 255), yrange=(0, 255),
                  method=None, maxiter=None, verbose=False,
@@ -345,7 +241,7 @@ def find_pixat11(transform, x0, y0, epsilon=1e-8,
     Parameters
     ----------
     transform : skimage.transform.PolynomialTransform
-        as returned by warp_data with get_transform=True.
+        as returned by warp_image with get_transform=True.
     x0 : float
         input x coordinate
     y0 : float
@@ -541,7 +437,7 @@ def transform_image(data, xin, yin, xout, yout, header=None, variance=None,
         - warped variance (nrow, ncol)
         - dxy, optional output from update_wcs
     """
-    image, transform = warp_data(
+    image, transform = warp_image(
         data.copy(), xin, yin, xout, yout, transform=transform_type,
         order=order, mode='constant', cval=np.nan, get_transform=True,
         extrapolate=extrapolate)
@@ -552,9 +448,9 @@ def transform_image(data, xin, yin, xout, yout, header=None, variance=None,
         addhist(header, msg)
         log.error(msg)
     if dovar:
-        var = warp_data(var, xin, yin, xout, yout, transform=transform_type,
-                        order=order, mode='constant', cval=np.nan,
-                        extrapolate=extrapolate)
+        var = warp_image(var, xin, yin, xout, yout, transform=transform_type,
+                         order=order, mode='constant', cval=np.nan,
+                         extrapolate=extrapolate)
     addhist(header, 'correction model uses order %s' % order)
     log.info("distortion solution order: %s" % order)
     dxy = update_wcs(header, transform)

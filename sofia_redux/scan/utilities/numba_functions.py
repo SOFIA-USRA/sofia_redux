@@ -1476,7 +1476,7 @@ def sequential_array_add(array, add_values, at_indices, valid_array=None,
     n_dimensions = array.ndim
     flat_added_to = added_to.ravel()
 
-    n_add = flat_add.size
+    n_add = int(np.prod(np.array(at_indices.shape[1:])))
     valid = np.full(n_add, True)
     flat_indices = np.zeros(n_add, dtype=nb.int64)
 

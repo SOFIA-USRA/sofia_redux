@@ -13,7 +13,8 @@ __all__ = ['warp_image', 'polywarp', 'polywarp_image']
 def warp_image(data, xin, yin, xout, yout, order=3,
                transform='polynomial', interpolation_order=3,
                mode='constant', cval=np.nan, output_shape=None,
-               get_transform=False, missing_frac=0.5):
+               get_transform=False, missing_frac=0.5,
+               extrapolate=True):
     """
     Warp data using transformation defined by two sets of coordinates
 
@@ -61,6 +62,8 @@ def warp_image(data, xin, yin, xout, yout, order=3,
 
     xi, yi = np.array(xin).ravel(), np.array(yin).ravel()
     xo, yo = np.array(xout).ravel(), np.array(yout).ravel()
+    minx, maxx = int(np.ceil(np.min(xo))), int(np.floor(np.max(xo)))
+    miny, maxy = int(np.ceil(np.min(yo))), int(np.floor(np.max(yo)))
 
     if transform != 'polynomial':
         # Add corner pins to allow extrapolation
@@ -101,6 +104,12 @@ def warp_image(data, xin, yin, xout, yout, order=3,
         dout[dividx] = dout[dividx] / wout[dividx]
     cutidx = np.abs(wout) < missing_frac
     dout[cutidx] = cval
+
+    if not extrapolate:
+        dout[:miny, :] = cval
+        dout[:, :minx] = cval
+        dout[maxy:, :] = cval
+        dout[:, maxx:] = cval
 
     if get_transform:
         return dout, func

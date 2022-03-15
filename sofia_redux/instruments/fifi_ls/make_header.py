@@ -166,7 +166,7 @@ def get_keyword_comments_table(filename=None):
     log.debug("Using keyword comment file %s" % filename)
     table = pandas.read_csv(
         filename, comment='#', index_col=0, names=['comment'],
-        converters={'comment': str.strip})
+        converters={'comment': str.strip}, skipinitialspace=True)
     table.index = table.index.str.upper().str.strip()
     return table
 

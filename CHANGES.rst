@@ -1,5 +1,5 @@
-1.2.2
-=====
+1.2.2 (2022-03-15)
+==================
 
 - Updated FORCAST and FIFI-LS calibration files.
 - Increased test coverage and minor bug fixes for the scan module.

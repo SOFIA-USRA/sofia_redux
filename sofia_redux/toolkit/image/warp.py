@@ -1,20 +1,27 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+from abc import ABC
+import numba as nb
 import numpy as np
-from skimage.transform import estimate_transform, warp
 
 from sofia_redux.toolkit.fitting.polynomial import poly2d
 from sofia_redux.toolkit.interpolate.interpolate import Interpolate
+from sofia_redux.toolkit.resampling.resample_utils import (
+    polynomial_exponents, polynomial_terms)
+from sofia_redux.toolkit.image.utilities import (
+    map_coordinates)
 
 
-__all__ = ['warp_image', 'polywarp', 'polywarp_image']
+__all__ = ['warp_image', 'polywarp', 'polywarp_image',
+           'is_homography_transform', 'full_transform', 'warp_terms',
+           'estimate_polynomial_transform', 'warp_coordinates',
+           'warp_array_elements', 'warp', 'PolynomialTransform']
 
 
 def warp_image(data, xin, yin, xout, yout, order=3,
-               transform='polynomial', interpolation_order=3,
-               mode='constant', cval=np.nan, output_shape=None,
-               get_transform=False, missing_frac=0.5,
-               extrapolate=True):
+               interpolation_order=3, mode='constant', cval=np.nan,
+               output_shape=None, missing_frac=0.5, extrapolate=True,
+               get_transform=False):
     """
     Warp data using transformation defined by two sets of coordinates
 
@@ -25,7 +32,7 @@ def warp_image(data, xin, yin, xout, yout, order=3,
     xin : array-like
         source x coordinate
     yin : array-like
-        source y coorindate
+        source y coordinate
     xout : array-like
         destination x coordinate
     yout : array-like
@@ -43,62 +50,46 @@ def warp_image(data, xin, yin, xout, yout, order=3,
         given mode.  cval
     output_shape : tuple of int
         (rows, cols) If None, the input shape is preserved
-    transform : str, optional
-        See scikit.image.transform for all available transform types
-    get_transform : bool, optional
-        if True, return the transformation object as the second element
-        of a 2-tuple in the return value
     missing_frac : float, optional
         value between 0 and 1.  1 = fully weighted by real values.
         0 = fully weighted by NaNs.  Any pixel weighted by less than
         this fraction will be replaced with cval.
+    extrapolate : bool, optional
+        If `False`, values outside of the rectangular range of `xout` and
+        `yout` will be set to `cval`.
+    get_transform : bool, optional
+        If `True`, return the polynomial transform in addition to the results.
 
     Returns
     -------
-    numpy.ndarray
-        data (nrow, ncol)
-        data, transform (if get_transform=True)
+    warped, [transform] : numpy.ndarray, [PolynomialTransform]
+        The warped data of shape (nrow, ncol) and the polynomial transform
+        if `get_transform` is `True`.
     """
-
     xi, yi = np.array(xin).ravel(), np.array(yin).ravel()
     xo, yo = np.array(xout).ravel(), np.array(yout).ravel()
-    minx, maxx = int(np.ceil(np.min(xo))), int(np.floor(np.max(xo)))
-    miny, maxy = int(np.ceil(np.min(yo))), int(np.floor(np.max(yo)))
-
-    if transform != 'polynomial':
-        # Add corner pins to allow extrapolation
-        xc = [0, 0, data.shape[1] - 1, data.shape[1] - 1]
-        yc = [0, data.shape[1] - 1, 0, data.shape[0] - 1]
-        xi, yi = np.append(xi, xc), np.append(yi, yc)
-        xo, yo = np.append(xo, xc), np.append(yo, yc)
-
-    co = np.stack((xo, yo), axis=1)
-    ci = np.stack((xi, yi), axis=1)
-    if transform == 'polynomial':
-        # This is the inverse transform (out -> in)
-        coordinate_transform = estimate_transform(
-            'polynomial', co, ci, order=order)
-        func = coordinate_transform
-    else:
-        coordinate_transform = estimate_transform(transform, co, ci)
-        func = coordinate_transform
-
+    co = np.stack((yo, xo))
+    ci = np.stack((yi, xi))
     nans = np.isnan(data)
     if not nans.any():
-        dout = warp(data.copy(), func, order=interpolation_order,
-                    mode=mode, cval=cval, preserve_range=True,
-                    output_shape=output_shape)
+        dout, transform = warp(data.copy(), co, ci, order=order,
+                               interpolation_order=interpolation_order,
+                               mode=mode, cval=cval,
+                               output_shape=output_shape,
+                               get_transform=True)
         wout = (~np.isnan(dout)).astype(float)
     else:
         weights = (~nans).astype(float)
         dw = data.copy()
         dw[nans] = 0
-        wout = warp(weights, func, order=interpolation_order,
-                    mode=mode, cval=cval, preserve_range=True,
-                    output_shape=output_shape)
-        dout = warp(dw, func, order=interpolation_order,
-                    mode=mode, cval=cval, preserve_range=True,
-                    output_shape=output_shape)
+        wout, transform = warp(weights, co, ci, order=order,
+                               interpolation_order=interpolation_order,
+                               mode=mode, cval=cval,
+                               output_shape=output_shape,
+                               get_transform=True)
+        dout = warp(dw, co, ci, order=order,
+                    interpolation_order=interpolation_order,
+                    mode=mode, cval=cval, output_shape=output_shape)
         wout[np.isnan(wout)] = 0
         dividx = np.abs(wout) >= missing_frac
         dout[dividx] = dout[dividx] / wout[dividx]
@@ -106,13 +97,15 @@ def warp_image(data, xin, yin, xout, yout, order=3,
     dout[cutidx] = cval
 
     if not extrapolate:
+        minx, maxx = int(np.ceil(np.min(xo))), int(np.floor(np.max(xo)))
+        miny, maxy = int(np.ceil(np.min(yo))), int(np.floor(np.max(yo)))
         dout[:miny, :] = cval
         dout[:, :minx] = cval
         dout[maxy:, :] = cval
         dout[:, maxx:] = cval
 
     if get_transform:
-        return dout, func
+        return dout, transform
     else:
         return dout
 
@@ -245,3 +238,530 @@ def polywarp_image(image, x0, y0, x1, y1, order=1, method='cubic',
                                cubic=cubic, ignorenans=ignorenans, mode=mode)
     result = interpolator(xi, yi)
     return (result, interpolator) if get_transform else result
+
+
+@nb.njit(cache=True, parallel=False, fastmath=True)
+def is_homography_transform(transform, n_dimensions):  # pragma: no cover
+    """
+    Check if a transform is homographic.
+
+    Parameters
+    ----------
+    transform : numpy.ndarray (float)
+        An array of shape (>=n_dimensions, >=n_dimensions).
+    n_dimensions : int
+        The number of coordinate dimensions to which the transform will be
+        applied.
+
+    Returns
+    -------
+    homographic : bool
+    """
+    if transform.shape[0] <= n_dimensions:
+        return False
+    if transform[n_dimensions, n_dimensions] != 1:
+        return True
+    for i in range(n_dimensions):
+        if transform[n_dimensions, i] != 0 or transform[i, n_dimensions] != 0:
+            return True
+    return False
+
+
+@nb.njit(cache=True, parallel=False, fastmath=False)
+def full_transform(coordinates, transform):  # pragma: no cover
+    """
+    Apply a metric transform to the supplied coordinates.
+
+    A standard correlation matrix transform, or homography (planar) transform
+    may be applied.  For 2-dimensions, the homography transform is given as::
+
+        | x' |     |x|   |h11 h12 h13| |x|
+        | y' | = H |y| = |h21 h22 h23| |y|
+        | 1  |     |1|   |h31 h32 h33| |1|
+
+    where H is the transform matrix.  The h13 and h23 elements represent a
+    translation, and the h31 and h32 represent relative scaling.  The h33
+    element provides and overall scaling factor to the results.  For the
+    standard transformation h11, h12, h31, h32 are zero, and h33 is 1.
+    Alternatively, the standard transform may be invoked by supplying a matrix
+    of shape (n_dimensions, n_dimensions).
+
+    Parameters
+    ----------
+    coordinates : numpy.ndarray (float)
+        An array of shape (n_dimensions, shape) where shape may be arbitrary.
+    transform : numpy.ndarray (float)
+        The transform array of shape (n_dimensions + 1, n_dimensions + 1) to
+        fully represent a homography transform.
+
+    Returns
+    -------
+    transformed_coordinates : numpy.ndarray (float)
+        The `coordinates` transformed by `transform` with the same shape as
+        `coordinates`.  Note however, that if a one-dimensional `coordinates`
+        was supplied, the output will be of shape (1, coordinates.size).
+    """
+    coordinates = np.atleast_2d(coordinates)
+    n_dimensions = coordinates.shape[0]
+    n_coordinates = coordinates[0].size
+    homographic = is_homography_transform(transform, n_dimensions)
+    o = np.zeros((n_dimensions, n_coordinates), dtype=nb.float64)
+
+    # Flatten the input coordinates
+    c = np.empty((n_dimensions, n_coordinates), dtype=nb.float64)
+    for dim in range(n_dimensions):
+        c[dim] = coordinates[dim].ravel()
+
+    if homographic:
+        scale_x = transform[n_dimensions, :n_dimensions]
+        scale_add = transform[n_dimensions, n_dimensions]
+        offset = transform[:n_dimensions, n_dimensions]
+    else:
+        scale_x = np.empty(0, dtype=nb.float64)
+        scale_add = 0.0
+        offset = np.empty(0, dtype=nb.float64)
+
+    # Need to do it this way round for precision
+    for k in range(n_coordinates):
+        for i in range(n_dimensions):
+            scaling = 0.0
+            xt = 0.0
+            for j in range(n_dimensions):
+                xj = c[j, k]
+                if xj == 0:
+                    continue
+                xt += transform[i, j] * xj
+                if homographic:
+                    scaling += scale_x[j] * xj
+            if homographic:
+                xt += offset[i]
+                xt /= scaling + scale_add
+
+            o[i, k] = xt
+
+    # Reshape and set to float
+    output = np.empty_like(coordinates, dtype=nb.float64)
+    for i in range(n_dimensions):
+        dimension_line = output[i].flat
+        for k in range(n_coordinates):
+            dimension_line[k] = o[i, k]
+    return output
+
+
+@nb.njit(cache=True, parallel=False, fastmath=False)
+def warp_terms(terms, coefficients):  # pragma: no cover
+    """
+    Apply coefficients to polynomial terms.
+
+    Parameters
+    ----------
+    terms : numpy.ndarray (float)
+        The polynomial terms of shape (n_coefficients, n).
+    coefficients : numpy.ndarray (float)
+        The polynomial coefficients of shape (n_dimensions, n_coefficients,).
+
+    Returns
+    -------
+    values : numpy.ndarray (float)
+        The fitted values of shape (n_dimensions, n).
+    """
+    n_coefficients, n = terms.shape
+    n_dimensions = coefficients.shape[0]
+    warped = np.empty((n_dimensions, n), dtype=nb.float64)
+    for dimension in range(n_dimensions):
+        c_line = coefficients[dimension]
+        for i in range(n):
+            fit = 0.0
+            for j in range(n_coefficients):
+                fit += c_line[j] * terms[j, i]
+
+            warped[dimension, i] = fit
+
+    return warped
+
+
+def estimate_polynomial_transform(source, destination, order=2,
+                                  get_exponents=False):
+    """
+    Estimate the polynomial transform for (x, y) coordinates.
+
+    Parameters
+    ----------
+    source : numpy.ndarray
+        The source coordinates of shape (n_dimensions, n).
+    destination : numpy.ndarray
+        The destination coordinates of shape (n_dimensions, n).
+    order : int, optional
+        The polynomial order (number of coefficients is order + 1).
+    get_exponents : bool, optional
+        If `True`, return the polynomial exponents used to derive the
+        coefficients.
+
+    Returns
+    -------
+    coefficients, [exponents] : numpy.ndarray (float), numpy.ndarray (float)
+        The derived polynomial coefficients of shape (n_dimensions, n_coeffs),
+        and the optionally returned exponents of shape
+        (n_coeffs, n_dimensions).
+    """
+    exponents = polynomial_exponents(order, ndim=source.shape[0])
+    n_coefficients, n_dimensions = exponents.shape
+    n = source[0].size
+
+    amat = np.zeros((n * n_dimensions,
+                     (n_coefficients * n_dimensions) + 1), dtype=float)
+
+    coordinates = np.empty((n_dimensions, n), dtype=float)
+    for i in range(n_dimensions):
+        start_row = i * n
+        end_row = start_row + n
+        coordinates[i] = source[i].ravel()
+        amat[start_row:end_row, -1] = destination[i].ravel()
+
+    terms = polynomial_terms(coordinates, exponents).T
+    for i in range(n_dimensions):
+        start_row = i * n
+        end_row = start_row + n
+        start_col = i * n_coefficients
+        end_col = start_col + n_coefficients
+        amat[start_row:end_row, start_col:end_col] = terms
+
+    _, _, v = np.linalg.svd(amat)
+    # solution is right singular vector that corresponds to smallest
+    # singular value
+    coefficients = -v[-1, :-1] / v[-1, -1]
+    coefficients = coefficients.reshape(
+        (n_dimensions, n_coefficients))
+
+    if get_exponents:
+        return coefficients, exponents
+    else:
+        return coefficients
+
+
+def warp_coordinates(coordinates, source, destination, order=2):
+    """
+    Apply the warping between two sets of coordinates to another.
+
+    Parameters
+    ----------
+    coordinates : numpy.ndarray
+        The coordinates to warp of shape (n_dimensions, shape,).
+    source : numpy.ndarray
+        The reference source coordinates of shape (n_dimensions, shape2,).
+        Used in conjunction with `destination` to define the warping transform.
+    destination : numpy.ndarray
+        The reference destination coordinates of shape (n_dimensions, shape2,).
+        Used in conjunction with `source` to define the warping transform.
+    order : int, optional
+        The order of polynomial used to model the transformation between
+        `source` and `destination`.
+
+    Returns
+    -------
+    warped_coordinates : numpy.ndarray (float)
+        The `coordinates` warped by estimating the transform between
+        `source` and `destination`.
+    """
+    coefficients, exponents = estimate_polynomial_transform(
+        source, destination, order=order, get_exponents=True)
+    terms = polynomial_terms(coordinates, exponents)
+    warped_coordinates = warp_terms(terms, coefficients)
+    return warped_coordinates
+
+
+def warp_array_elements(source, destination, shape, order=2,
+                        get_transform=False):
+    """
+    Warp the indices of an array with a given shape using a polynomial.
+
+    Note that all dimensions should be supplied using the Numpy (y, x) ordering
+    convention.
+
+    Parameters
+    ----------
+    source : numpy.ndarray
+        The reference source coordinates of shape (n_dimensions, shape2,).
+        Used in conjunction with `destination` to define the warping transform.
+    destination : numpy.ndarray
+        The reference destination coordinates of shape (n_dimensions, shape2,).
+        Used in conjunction with `source` to define the warping transform.
+    shape : tuple (int)
+        The shape of the output array with len(shape) equal to n_dimensions.
+    order : int, optional
+        The order of polynomial used to model the transformation between
+        `source` and `destination`.
+    get_transform : bool, optional
+        If `True`, return the polynomial transform in addition to the results.
+
+    Returns
+    -------
+    warped_coordinates, [transform] : np.ndarray (float), PolynomialTransform
+        The warped array indices of shape (n_dimensions, shape,).
+    """
+    n_dimensions = len(shape)
+    coordinates = np.empty((n_dimensions,) + tuple(shape), dtype=float)
+    # In (y, x) order
+    indices = np.indices(shape, dtype=float).reshape(n_dimensions, -1)
+    transform = PolynomialTransform(source, destination, order=order)
+    warped = transform(indices)
+    for i in range(n_dimensions):
+        coordinates[i].flat = warped[i]
+
+    if get_transform:
+        return coordinates, transform
+    else:
+        return coordinates
+
+
+def warp(data, source, destination, order=2,
+         interpolation_order=3, mode='constant', output_shape=None,
+         cval=np.nan, clip=True, get_transform=False, threshold=0.5):
+    """
+    Warp an n-dimensional image according to a given coordinate transform.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        The data to warp of with n_dimensions of shape (shape,).  The data
+        must not contain any NaN values.
+    source : numpy.ndarray
+        The input coordinates of shape (n_dimensions, shape,).  Dimensions
+        should be ordered using the Numpy convention (y, x).
+    destination : numpy.ndarray
+        The warped coordinates of shape (n_dimensions, shape,).  Dimensions
+        should be ordered using the Numpy convention (y, x).
+    order : int, optional
+        The order of polynomial coefficients used to model the warping.
+    interpolation_order : int, optional
+        The order of interpolation.
+    mode : str, optional
+        May take values of {'constant', 'edge', 'symmetric', 'reflect',
+        'wrap'}.  Points outside the boundaries of the input are filled
+        according to the given mode.  Modes match the behavior of
+        :func:`np.pad`.
+    output_shape : tuple (int), optional
+        Shape of the output array generated.  By default the shape of the
+        input array is preserved.  Dimensions should be ordered using the
+        Numpy convention (y, x).
+    cval : float, optional
+        Used in conjunction with the 'constant' mode, and is the value set
+        outside the image boundaries.
+    clip : bool, optional
+        Whether to clip the output to the range of values of the input array.
+        This is enabled by default, since higher order interpolation may
+        produce values outside the given input range.
+    get_transform : bool, optional
+        If `True`, return the polynomial transform in addition to the results.
+
+    Returns
+    -------
+    warped : numpy.ndarray (float)
+        The warped data of shape (shape,).
+    """
+    data = data.astype(float)
+    if output_shape is None:
+        output_shape = data.shape
+
+    warped_coordinates, transform = warp_array_elements(
+        source, destination, output_shape, order=order, get_transform=True)
+
+    warped = map_coordinates(
+        data, warped_coordinates, order=interpolation_order, mode=mode,
+        cval=cval, clip=clip, threshold=threshold)
+
+    if get_transform:
+        return warped, transform
+    else:
+        return warped
+
+
+class PolynomialTransform(ABC):
+
+    def __init__(self, source=None, destination=None, order=2):
+        """
+        Initialize a polynomial transform.
+
+        Parameters
+        ----------
+        source : numpy.ndarray, optional
+            The source coordinates from which to base the transform of shape
+            (n_dimensions, shape,)
+        destination : numpy.ndarray, optional
+            The destination coordinates from which to base the transform of
+            shape (n_dimensions, shape,).
+        order : int, optional
+            The order of polynomial fit.
+        """
+        self.coefficients = None
+        self.exponents = None
+        self.inverse_coefficients = None
+        self.order = None
+        self.estimate_transform(source, destination, order=order)
+
+    @property
+    def ndim(self):
+        """
+        Return the number of dimensions in the fit.
+
+        Returns
+        -------
+        int
+        """
+        if self.coefficients is None:
+            return 0
+        return self.coefficients.shape[0]
+
+    @property
+    def n_coeffs(self):
+        """
+        Return the number of coefficients for the fit.
+
+        Returns
+        -------
+        int
+        """
+        if self.coefficients is None:
+            return 0
+        return self.coefficients.shape[1]
+
+    def estimate_transform(self, source=None, destination=None, order=2):
+        """
+        Estimate the transform given source and destination coordinates.
+
+        Parameters
+        ----------
+        source : numpy.ndarray, optional
+            The source coordinates from which to base the transform of shape
+            (n_dimensions, shape,)
+        destination : numpy.ndarray, optional
+            The destination coordinates from which to base the transform of
+            shape (n_dimensions, shape,).
+        order : int, optional
+            The order of polynomial fit.
+
+        Returns
+        -------
+        None
+        """
+        self.order = order
+        self.coefficients = None
+        self.exponents = None
+        self.inverse_coefficients = None
+        if source is None or destination is None:
+            return
+
+        source = np.asarray(source)
+        destination = np.asarray(destination)
+
+        if source.ndim == 1:
+            source = source[None]
+        if destination.ndim == 1:
+            destination = destination[None]
+        if source.shape != destination.shape:
+            raise ValueError(f"Source and destination coordinates do not "
+                             f"have the same shape {source.shape} != "
+                             f"{destination.shape}.")
+
+        coefficients, exponents = estimate_polynomial_transform(
+            source, destination, order=order, get_exponents=True)
+        self.coefficients = coefficients
+        self.exponents = exponents
+        self.inverse_coefficients = estimate_polynomial_transform(
+            destination, source, order=order, get_exponents=False)
+
+    def transform(self, coordinates, inverse=False):
+        """
+        Transform a given set of coordinates using the stored polynomial.
+
+        Parameters
+        ----------
+        coordinates : numpy.ndarray or float
+            The coordinates to transform of shape (n_dimensions, shape,),
+            (n_dimensions,) or a float if one-dimensional.
+        inverse : bool, optional
+            If `True`, perform the inverse transform instead.
+
+        Returns
+        -------
+        warped_coordinates : numpy.ndarray (float)
+        """
+        if self.coefficients is None:
+            raise ValueError("No polynomial fit has been determined.")
+
+        if inverse:
+            coefficients = self.inverse_coefficients
+        else:
+            coefficients = self.coefficients
+
+        coordinates = np.asarray(coordinates)
+        if coordinates.ndim == 0:
+            if self.ndim == 1:
+                singular_value = True
+            else:
+                raise ValueError(f"Incompatible input dimensions of "
+                                 f"{coordinates.shape} for {self.ndim}-D fit.")
+        elif coordinates.ndim == 1:
+            if self.ndim > 1:
+                if coordinates.size == self.ndim:
+                    coordinates = coordinates[:, None]
+                    singular_value = True
+                else:
+                    raise ValueError(f"Incompatible input dimensions of "
+                                     f"{coordinates.shape} for {self.ndim}-D "
+                                     f"fit.")
+            else:
+                singular_value = coordinates.shape == ()
+        elif coordinates.shape[0] != self.ndim:
+            raise ValueError(f"Incompatible input dimensions of "
+                             f"{coordinates.shape} for {self.ndim}-D "
+                             f"fit.")
+        else:
+            singular_value = False
+
+        coordinates = np.atleast_2d(coordinates)
+        ndim = coordinates.shape[0]
+
+        if coordinates.ndim > 2:
+            flat_coordinates = np.empty(
+                (coordinates.shape[0], coordinates[0].size), dtype=float)
+            for i in range(ndim):
+                flat_coordinates[i] = coordinates[i].ravel()
+            reshape = True
+        else:
+            flat_coordinates = coordinates
+            reshape = False
+
+        terms = polynomial_terms(flat_coordinates, self.exponents)
+        warped_coordinates = warp_terms(terms, coefficients)
+        if reshape:
+            warped = np.empty(coordinates.shape, dtype=float)
+            for i in range(ndim):
+                warped[i].flat = warped_coordinates[i]
+        else:
+            warped = warped_coordinates
+
+        if singular_value:
+            if self.ndim > 1:
+                return warped[:, 0]
+            else:
+                return warped.ravel()[0]
+        else:
+            return warped
+
+    def __call__(self, coordinates, inverse=False):
+        """
+        Transform a given set of coordinates using the stored polynomial.
+
+        Parameters
+        ----------
+        coordinates : numpy.ndarray
+            The coordinates to transform of shape (n_dimensions, shape,).
+        inverse : bool, optional
+            If `True`, perform the inverse transform instead.
+
+        Returns
+        -------
+        warped_coordinates : numpy.ndarray (float)
+        """
+        return self.transform(coordinates, inverse=inverse)

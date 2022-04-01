@@ -11,22 +11,30 @@ from sofia_redux.scan.utilities.utils import insert_info_in_header
 
 __all__ = ['SofiaAircraftInfo']
 
+assert imperial
+
 
 class SofiaAircraftInfo(InfoBase):
 
-    knots = imperial.kn
-    ft = imperial.ft
+    units.imperial.enable()
+    knots = units.Unit('kn')
+    ft = units.Unit('ft')
     kft = 1000 * ft
 
     def __init__(self):
+        """
+        Initialize the SOFIA aircraft information.
+
+        Contains information on SOFIA location and flight path.
+        """
         super().__init__()
         self.altitude = BracketedValues(unit=self.kft)
         self.latitude = BracketedValues(unit='degree')
         self.longitude = BracketedValues(unit='degree')
         self.air_speed = np.nan * self.knots
         self.ground_speed = np.nan * self.knots
-        self.heading = np.nan * units.Unit('deg')
-        self.track_ang = np.nan * units.Unit('deg')
+        self.heading = np.nan * units.Unit('degree')
+        self.track_ang = np.nan * units.Unit('degree')
 
     @property
     def log_id(self):
@@ -42,6 +50,13 @@ class SofiaAircraftInfo(InfoBase):
         return 'ac'
 
     def apply_configuration(self):
+        """
+        Update aircraft information with the FITS header configuration data.
+
+        Returns
+        -------
+        None
+        """
         if self.options is None:
             return
         options = self.options

@@ -190,59 +190,57 @@ class TestUndistort(object):
         assert (pp['model'] == expect).all()
 
     def test_find_pixat11(self):
-        for ttype in ['polynomial', 'piecewise-affine']:
-            test = fake_data()
-            data = test['data']
-            xin, yin, xout, yout = \
-                test['xin'], test['yin'], test['xout'], test['yout']
-            imgnx, imgny = test['imgnx'], test['imgny']
-            xrange = 0, imgnx - 1
-            yrange = 0, imgny - 1
-            eps = 1e-6
-            x0, y0 = imgnx / 2, imgny / 2
-            _, transform = warp_image(data, xin, yin, xout, yout, order=4,
-                                      get_transform=True, transform=ttype)
 
-            p11 = u.find_pixat11(transform, x0, y0, epsilon=eps,
-                                 xrange=xrange, yrange=yrange)
-            assert np.allclose(p11['x1ref'], test['newx0'], atol=eps)
-            assert np.allclose(p11['y1ref'], test['newy0'], atol=eps)
-            assert np.allclose(abs(p11['x01'] - p11['x0']), test['factor'])
-            assert np.allclose(abs(p11['y01'] - p11['y0']), test['factor'])
+        test = fake_data()
+        data = test['data']
+        xin, yin, xout, yout = \
+            test['xin'], test['yin'], test['xout'], test['yout']
+        imgnx, imgny = test['imgnx'], test['imgny']
+        xrange = 0, imgnx - 1
+        yrange = 0, imgny - 1
+        eps = 1e-6
+        x0, y0 = imgnx / 2, imgny / 2
+        _, transform = warp_image(data, xin, yin, xout, yout, order=4,
+                                  get_transform=True)
 
-            # one iteration -- fails
-            p11 = u.find_pixat11(transform, x0, y0, epsilon=eps, xrange=xrange,
-                                 yrange=yrange, maxiter=1, direct=False)
-            assert p11 is None
+        p11 = u.find_pixat11(transform, x0, y0, epsilon=eps,
+                             xrange=xrange, yrange=yrange)
+        assert np.allclose(p11['x1ref'], test['newx0'], atol=eps)
+        assert np.allclose(p11['y1ref'], test['newy0'], atol=eps)
+        assert np.allclose(abs(p11['x01'] - p11['x0']), test['factor'])
+        assert np.allclose(abs(p11['y01'] - p11['y0']), test['factor'])
 
-            # test xrange, yrange
-            t1 = 100
-            t2 = 150
-            p11 = u.find_pixat11(transform, x0, y0, epsilon=eps,
-                                 xrange=(t1, t2), yrange=(t1, t2),
-                                 maxiter=100, direct=False)
-            assert t1 <= p11['x1ref'] <= t2
-            assert t1 <= p11['y1ref'] <= t2
-            assert not np.allclose(p11['x1ref'], test['newx0'], atol=eps)
-            assert not np.allclose(p11['y1ref'], test['newy0'], atol=eps)
+        # one iteration -- fails
+        p11 = u.find_pixat11(transform, x0, y0, epsilon=eps, xrange=xrange,
+                             yrange=yrange, maxiter=1, direct=False)
+        assert p11 is None
 
-            # test epsilon
-            p11 = u.find_pixat11(transform, x0, y0, epsilon=0.1,
-                                 direct=False,
-                                 xrange=xrange, yrange=yrange)
-            assert int(p11['x1ref']) == p11['x1ref']
+        # test xrange, yrange
+        t1 = 100
+        t2 = 150
+        p11 = u.find_pixat11(transform, x0, y0, epsilon=eps,
+                             xrange=(t1, t2), yrange=(t1, t2),
+                             maxiter=100, direct=False)
+        assert t1 <= p11['x1ref'] <= t2
+        assert t1 <= p11['y1ref'] <= t2
+        assert not np.allclose(p11['x1ref'], test['newx0'], atol=eps)
+        assert not np.allclose(p11['y1ref'], test['newy0'], atol=eps)
 
-            # xrange, yrange None => no bound
-            from astropy import log
-            log.error(ttype)
-            p11_ub = u.find_pixat11(transform, x0, y0, epsilon=eps,
-                                    direct=False,
-                                    xrange=None, yrange=None)
-            # will either fail or be correct (bounds are recommended!)
-            assert (p11_ub is None) or \
-                   (np.allclose(p11['x1ref'], test['newx0'], atol=eps))
+        # test epsilon
+        p11 = u.find_pixat11(transform, x0, y0, epsilon=0.1,
+                             direct=False,
+                             xrange=xrange, yrange=yrange)
+        assert int(p11['x1ref']) == p11['x1ref']
 
-    def test_update_wcs(self):
+        # xrange, yrange None => no bound
+        p11_ub = u.find_pixat11(transform, x0, y0, epsilon=eps,
+                                direct=False,
+                                xrange=None, yrange=None)
+        # will either fail or be correct (bounds are recommended!)
+        assert (p11_ub is None) or \
+               (np.allclose(p11['x1ref'], test['newx0'], atol=eps))
+
+    def test_update_wcs(self, mocker, capsys):
         test = fake_data()
         data = test['data']
         xin, yin, xout, yout = \
@@ -279,6 +277,13 @@ class TestUndistort(object):
         assert dxy['update_cdelt']
         assert header['CDELT1'] == dxy['x01'] - dxy['x0']
         assert header['CDELT2'] == dxy['y01'] - dxy['y0']
+
+        # pixat11 failure
+        mocker.patch('sofia_redux.instruments.forcast.undistort.find_pixat11',
+                     return_value=None)
+        dxy = u.update_wcs(header, transform)
+        capt = capsys.readouterr()
+        assert 'CRPIX values not found after transform' in capt.err
 
     def test_transform_image(self):
         test = fake_data()
@@ -449,25 +454,34 @@ class TestUndistort(object):
         pinpos = fake_data()['pinpos']
         variance = np.full_like(data, 2)
 
-        # Check the two algorithms
-        header1 = fits.header.Header()
-        header2 = fits.header.Header()
-        result1, var1 = u.undistort(
-            data, header1, pinhole=pinpos,
-            transform_type='piecewise-affine')
-        result2, var2 = u.undistort(
-            data, header2, pinhole=pinpos,
-            transform_type='polynomial', variance=variance)
-        assert result1.shape == result2.shape
-        assert var2.shape == result2.shape
-        assert var1 is None
-        assert 'PRODTYPE' in header1
+        header = fits.header.Header()
+        result, var = u.undistort(
+            data, header, pinhole=pinpos, variance=variance)
+
+        # Check the border and results
+        assert result.shape == (362, 362)
+        assert var.shape == result.shape
+        mask = np.isfinite(result)
+        assert np.allclose(np.isfinite(var), mask)
+        inds = np.nonzero(mask)
+        assert inds[0].min() == 91 and inds[0].max() == 179
+        assert inds[1].min() == 0 and inds[1].max() == 177
+        assert np.allclose(var[inds], 2, atol=1e-3)
+        # Check the values of around a single undistorted point
+        y, x = 142, 102
+        d = result[y - 1:y + 2, x - 1:x + 2]
+        assert np.allclose(d, [[0, 0, 0],
+                               [0.184, 0.651, 0.202],
+                               [0, 0, 0]], atol=1e-3)
+        assert 'PRODTYPE' in header
 
     def test_undistort_errors(self, mocker, capsys):
         testdata = fake_data()
         data = testdata['data'].copy()
         pinpos = testdata['pinpos']
         header = fits.header.Header()
+
+        dripconfig.load()
         dripconfig.configuration['fpinhole'] = 'pinhole_locs.txt'
 
         # bad header

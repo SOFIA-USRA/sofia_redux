@@ -195,7 +195,7 @@ class Dependents(ABC):
             return self.for_frame.copy()
 
         elif hasattr(channels_or_frames, 'data'):
-            self.get(channels_or_frames.data)
+            return self.get(channels_or_frames.data)
 
         else:
             raise ValueError(f"Must be {ChannelData} or {Frames}.")

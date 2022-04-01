@@ -15,12 +15,11 @@ class GeocentricCoordinates(SphericalCoordinates):
 
     def __init__(self, coordinates=None, unit='degree', copy=True):
         """
-        Initialize a set of Geocentric coordinates.
+        Initialize geocentric coordinates.
 
         Geocentric coordinates (also known as the Earth-centered, Earth-fixed
         coordinate system, or ECEF) represent locations on the Earth surface as
         longitude latitude positions.
-
 
         Parameters
         ----------

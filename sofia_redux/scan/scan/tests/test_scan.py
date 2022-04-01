@@ -23,7 +23,7 @@ from sofia_redux.toolkit.utilities.fits import set_log_level
 
 # make a test class to implement abstract method but not
 # override everything else
-class DemoScanClass(Scan):
+class DemoScanClass(Scan):  # pragma: no cover
     def read(self, filename, read_fully=True):
         pass
 
@@ -479,7 +479,7 @@ class TestScan(object):
             result = populated_scan.get_table_entry(name)
             try:
                 assert np.allclose(result, value)
-            except TypeError:
+            except TypeError:  # pragma: no cover
                 assert result == value
 
         # most values are None for scan with no integrations
@@ -499,7 +499,7 @@ class TestScan(object):
             result = populated_scan.get_table_entry(name)
             try:
                 assert np.allclose(result, value)
-            except TypeError:
+            except TypeError:  # pragma: no cover
                 assert result == value
 
     def test_get_table_entry_config(self, populated_scan):
@@ -510,7 +510,7 @@ class TestScan(object):
             result = populated_scan.get_table_entry(name)
             try:
                 assert np.allclose(result, value)
-            except TypeError:
+            except TypeError:  # pragma: no cover
                 assert result == value
 
     def test_get_table_entry_weather(self, initialized_hawc_scan):
@@ -525,16 +525,16 @@ class TestScan(object):
             result = initialized_hawc_scan.get_table_entry(name)
             try:
                 assert np.allclose(result, value, equal_nan=True)
-            except TypeError:
+            except TypeError:  # pragma: no cover
                 assert result == value
 
     def test_get_table_entry_source_model(self, pointing_scan):
         expected = [('model.test', None),
                     ('model.system', 'EQ'),
                     ('pnt.test', None),
-                    ('pnt.X', -0.147642 * units.arcsec),
+                    ('pnt.X', -0.20525371 * units.arcsec),
                     ('src.test', None),
-                    ('src.peak', 0.118942 * units.ct),
+                    ('src.peak', 0.12229778 * units.ct),
                     ('peak', None),
                     ('system', 'EQ')
                     ]
@@ -542,7 +542,7 @@ class TestScan(object):
             result = pointing_scan.get_table_entry(name)
             try:
                 assert np.allclose(result, value, equal_nan=True)
-            except TypeError:
+            except TypeError:  # pragma: no cover
                 assert result == value
 
     def test_report_pointing(self, capsys, pointing_scan):
@@ -668,20 +668,20 @@ class TestScan(object):
         assert 'No pointing data' in str(err)
 
         # expected values
-        expected = {'dX': -0.14764207 * units.arcsec,
-                    'dY': -0.11323433 * units.arcsec,
-                    'X': -0.14764207 * units.arcsec,
-                    'Y': -0.11323433 * units.arcsec,
-                    'asymX': 0.3364783 * units.Unit('percent'),
-                    'asymY': 0.10495604 * units.Unit('percent'),
-                    'dasymX': 0.0085857 * units.Unit('percent'),
-                    'dasymY': 0.00857513 * units.Unit('percent'),
-                    'elong': 11.97763979 * units.Unit('percent'),
-                    'delong': 29.43201024 * units.Unit('percent'),
-                    'angle': 88.36674344 * units.deg,
-                    'dangle': 88.36674344 * units.deg,
-                    'elongX': -8.22818287 * units.Unit('percent'),
-                    'delongX': 2446.21584057 * units.Unit('percent')}
+        expected = {'dX': -0.20525371 * units.arcsec,
+                    'dY': -0.00835914 * units.arcsec,
+                    'X': -0.20525371 * units.arcsec,
+                    'Y': -0.00835914 * units.arcsec,
+                    'asymX': 0.23971891 * units.Unit('percent'),
+                    'asymY': -0.23920352 * units.Unit('percent'),
+                    'dasymX': 0.00854381 * units.Unit('percent'),
+                    'dasymY': 0.00851165 * units.Unit('percent'),
+                    'elong': 11.91085287 * units.Unit('percent'),
+                    'delong': 29.42170285 * units.Unit('percent'),
+                    'angle': 89.06352589 * units.deg,
+                    'dangle': 89.06352589 * units.deg,
+                    'elongX': -7.96938089 * units.Unit('percent'),
+                    'delongX': 2580.48263804 * units.Unit('percent')}
 
         pointing_scan.pointing = ptg
         result = pointing_scan.get_pointing_data()
@@ -692,10 +692,10 @@ class TestScan(object):
         # mock a nasmyth mount
         mount = pointing_scan.info.instrument.mount
         pointing_scan.info.instrument.mount = Mount.LEFT_NASMYTH
-        expected.update({'dNasX': -0.10669246 * units.arcsec,
-                         'dNasY': -0.15243658 * units.arcsec,
-                         'NasX': -0.10669246 * units.arcsec,
-                         'NasY': -0.15243658 * units.arcsec})
+        expected.update({'dNasX': -0.19321008 * units.arcsec,
+                         'dNasY': -0.06977699 * units.arcsec,
+                         'NasX': -0.19321008 * units.arcsec,
+                         'NasY': -0.06977699 * units.arcsec})
         result = pointing_scan.get_pointing_data()
         assert set(result.keys()) == set(expected.keys())
         for name, value in expected.items():
@@ -727,24 +727,24 @@ class TestScan(object):
         pointing_scan.source_model = src
         result = pointing_scan.get_source_asymmetry(region)
         assert isinstance(result, Asymmetry2D)
-        assert np.allclose(result.x, 0.0033648)
-        assert np.allclose(result.y, 0.00104956)
+        assert np.allclose(result.x, 0.00239719)
+        assert np.allclose(result.y, -0.00239204)
 
         # not ground based, equatorial - angle set to zero
         mocker.patch.object(pointing_scan.astrometry, 'ground_based',
                             False)
         result = pointing_scan.get_source_asymmetry(region)
         assert isinstance(result, Asymmetry2D)
-        assert np.allclose(result.x, 0.0034936)
-        assert np.allclose(result.y, -0.00046702)
+        assert np.allclose(result.x, 0.001165103)
+        assert np.allclose(result.y, -0.003179761)
 
         # horizontal
         mocker.patch.object(src.grid, 'is_horizontal',
                             return_value=True)
         result = pointing_scan.get_source_asymmetry(region)
         assert isinstance(result, Asymmetry2D)
-        assert np.allclose(result.x, 0.0027889)
-        assert np.allclose(result.y, -0.0010091)
+        assert np.allclose(result.x, 4.54741103e-5)
+        assert np.allclose(result.y, -0.0043333)
 
     def test_get_focus_string(self, capsys, pointing_scan):
         ptg = pointing_scan.pointing
@@ -810,8 +810,8 @@ class TestScan(object):
 
         # default, already equatorial
         result = s.get_equatorial_pointing(ptg)
-        assert np.allclose(result.x, 0.181621 * units.arcsec)
-        assert np.allclose(result.y, -0.040425 * units.arcsec)
+        assert np.allclose(result.x, 0.18964185 * units.arcsec)
+        assert np.allclose(result.y, 0.07896387 * units.arcsec)
 
         # different epoch
         ptg.coordinates.epoch = B1950
@@ -845,8 +845,8 @@ class TestScan(object):
     def test_get_native_pointing(self, pointing_scan):
         ptg = pointing_scan.pointing
         result = pointing_scan.get_native_pointing(ptg)
-        assert np.allclose(result.x, -0.14764 * units.arcsec)
-        assert np.allclose(result.y, -0.11323 * units.arcsec)
+        assert np.allclose(result.x, -0.20525371 * units.arcsec)
+        assert np.allclose(result.y, -0.00835914 * units.arcsec)
 
         # add in a default offset
         c = Coordinate2D()
@@ -854,8 +854,8 @@ class TestScan(object):
         c.y = -2 * units.arcsec
         pointing_scan.pointing_correction = c
         result = pointing_scan.get_native_pointing(ptg)
-        assert np.allclose(result.x, -1.14764 * units.arcsec)
-        assert np.allclose(result.y, -2.11323 * units.arcsec)
+        assert np.allclose(result.x, -1.20525371 * units.arcsec)
+        assert np.allclose(result.y, -2.00835914 * units.arcsec)
 
     def test_get_native_pointing_increment(self, pointing_scan,
                                            focal_pointing_scan):
@@ -867,8 +867,8 @@ class TestScan(object):
 
         # default: both equatorial
         result = s.get_native_pointing_increment(ptg)
-        assert np.allclose(result.x, -0.14764 * units.arcsec)
-        assert np.allclose(result.y, -0.11323 * units.arcsec)
+        assert np.allclose(result.x, -0.20525371 * units.arcsec)
+        assert np.allclose(result.y, -0.00835914 * units.arcsec)
 
         # one horizontal: raises error
         ptg.coordinates = ptg.coordinates.to_horizontal(s.site, s.lst)
@@ -879,8 +879,8 @@ class TestScan(object):
         # both horizontal
         s.source_model.reference = src.reference.to_horizontal(s.site, s.lst)
         result = s.get_native_pointing_increment(ptg)
-        assert np.allclose(result.x, -0.14764 * units.arcsec, rtol=.005)
-        assert np.allclose(result.y, -0.11323 * units.arcsec, rtol=.005)
+        assert np.allclose(result.x, -0.20522921 * units.arcsec, rtol=.005)
+        assert np.allclose(result.y, -0.00896124 * units.arcsec, rtol=.005)
 
         ptg = ptg_copy.copy()
         s.source_model = src_copy.copy()
@@ -897,14 +897,14 @@ class TestScan(object):
         ptg.coordinates = gal
 
         result = s.get_native_pointing_increment(ptg)
-        assert np.allclose(result.x, -0.14764 * units.arcsec, rtol=.5)
-        assert np.allclose(result.y, -0.11323 * units.arcsec, rtol=.5)
+        assert np.allclose(result.x, -0.20525371 * units.arcsec, rtol=.5)
+        assert np.allclose(result.y, -0.00835914 * units.arcsec, rtol=.5)
 
         # both focal plane
         ptg = focal_pointing_scan.pointing
         result = focal_pointing_scan.get_native_pointing_increment(ptg)
-        assert np.allclose(result.x, 0.2607 * units.arcsec, rtol=.001)
-        assert np.allclose(result.y, -0.091 * units.arcsec, rtol=.001)
+        assert np.allclose(result.x, -0.015027 * units.arcsec, rtol=.001)
+        assert np.allclose(result.y, -0.401688 * units.arcsec, rtol=.001)
 
     def test_offset_errors(self, mocker, initialized_scan):
         # raises error if not equatorial

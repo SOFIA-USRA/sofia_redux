@@ -66,24 +66,18 @@ Example
 -------
 
 The following example simply uses :func:`combine_images` to display the
-sum, mean, median, and error of the combined RGB frames of a color image.
-This is a combined stereo image, so the result is weird but interesting.
+sum, mean, median, and error of the combined frames of volumetric data.
 
 .. plot::
     :include-source:
 
     import matplotlib.pyplot as plt
-    from skimage.data import stereo_motorcycle
+    import imageio
     import numpy as np
     from sofia_redux.toolkit.image.combine import combine_images
     from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-    left, right, _ = stereo_motorcycle()
-    images = []
-    for i in range(3):
-        images.append(left[..., i].astype(float))
-        images.append(right[..., i].astype(float))
-
+    images = imageio.imread('imageio:stent.npz').astype(float)
     sum_image, variance = combine_images(images, method='sum')
     error = np.sqrt(variance)
     mean_image = combine_images(images, method='mean', returned=False)
@@ -100,4 +94,3 @@ This is a combined stereo image, so the result is weird but interesting.
         fig.colorbar(img2, cax=cax)
 
     plt.tight_layout()
-

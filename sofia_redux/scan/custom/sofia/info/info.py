@@ -38,6 +38,9 @@ class SofiaInfo(WeatherInfo, CameraInfo):
         """
         Initialize a SofiaInfo object.
 
+        The SOFIA information contains metadata on various parts of an
+        observation that are specific to SOFIA.
+
         Parameters
         ----------
         configuration_path : str, optional
@@ -105,7 +108,8 @@ class SofiaInfo(WeatherInfo, CameraInfo):
         super().read_configuration(configuration_file=configuration_file,
                                    validate=validate)
         config_files = self.configuration.config_files
-        if config_files is None:
+        if config_files is None:  # pragma: no cover
+            # Very hard to hit this code
             return
         config_files = list(np.unique(config_files))
         for config_file in config_files:
@@ -113,7 +117,7 @@ class SofiaInfo(WeatherInfo, CameraInfo):
 
     def get_name(self):
         """
-        Return the name of the information.
+        Return the name of the instrument.
 
         Returns
         -------
@@ -171,8 +175,8 @@ class SofiaInfo(WeatherInfo, CameraInfo):
 
         Parameters
         ----------
-        message : str
-            The history message to add.
+        message : str or list (str)
+            The history message(s) to add.
 
         Returns
         -------
@@ -241,6 +245,17 @@ class SofiaInfo(WeatherInfo, CameraInfo):
         header['UTCSTART'] = utc_str[0], 'UTC start of first scan'
         header['UTCEND'] = utc_str[1], 'UTC end of last scan'
 
+        # SOFIA INSTRUMENT keys
+        self.instrument.exposure_time = self.get_total_exposure_time(
+            scans=scans)
+
+        # SOFIA array keys
+        if self.detector_array is not None and len(scans) == 1:
+            self.detector_array.boresight_index = (
+                first_scan.info.detector_array.boresight_index)
+
+        self.edit_header(header)
+
         # SOFIA observation keys
         first_scan.info.observation.edit_header(header)
 
@@ -253,7 +268,7 @@ class SofiaInfo(WeatherInfo, CameraInfo):
             origin.organization = self.configuration.get_string('organization')
         origin.creator = 'sofscan'
         origin.filename = None  # FILENAME fills automatically at writing.
-        origin.edit_image_header(header)
+        origin.edit_header(header)
 
         # SOFIA environmental keys
         environment = first_scan.info.environment.copy()
@@ -269,17 +284,6 @@ class SofiaInfo(WeatherInfo, CameraInfo):
         telescope = first_scan.info.telescope.copy()
         telescope.merge(last_scan.info.telescope)
         telescope.edit_header(header)
-
-        # SOFIA INSTRUMENT keys
-        self.instrument.exposure_time = self.get_total_exposure_time(
-            scans=scans)
-
-        # SOFIA array keys
-        if self.detector_array is not None and len(scans) == 1:
-            self.detector_array.boresight_index = (
-                first_scan.info.detector_array.boresight_index)
-
-        self.edit_header(header)
 
         # SOFIA collection keys
         first_scan.info.mode.edit_header(header)
@@ -456,7 +460,11 @@ class SofiaInfo(WeatherInfo, CameraInfo):
         """
         self.history = []
         if 'HISTORY' in header:
-            self.history = list(header['HISTORY'])
+            history = header['HISTORY']
+            if isinstance(history, str):
+                self.history = [history]
+            else:
+                self.history = list(history)
 
         if len(self.history) > 0:
             log.debug(f"Processing History: "
@@ -551,29 +559,6 @@ class SofiaInfo(WeatherInfo, CameraInfo):
                 self.set_pointing(first_scan)
         super().validate_scans(scans)
 
-    @abstractmethod
-    def get_si_pixel_size(self):
-        """
-        Get the science instrument pixel size.
-
-        Returns
-        -------
-        size : Coordinate2D
-            The (x, y) pixel sizes, each of which is a units.Quantity.
-        """
-        pass
-
-    @abstractmethod
-    def get_file_id(self):
-        """
-        Return the file ID.
-
-        Returns
-        -------
-        str
-        """
-        pass
-
     @staticmethod
     def get_plate_scale(angular_size, physical_size):
         """
@@ -604,3 +589,26 @@ class SofiaInfo(WeatherInfo, CameraInfo):
             return result.to(rpm)
         else:
             return result * rpm
+
+    @abstractmethod
+    def get_si_pixel_size(self):  # pragma: no cover
+        """
+        Get the science instrument pixel size.
+
+        Returns
+        -------
+        size : Coordinate2D
+            The (x, y) pixel sizes, each of which is a units.Quantity.
+        """
+        pass
+
+    @abstractmethod
+    def get_file_id(self):  # pragma: no cover
+        """
+        Return the file ID.
+
+        Returns
+        -------
+        str
+        """
+        pass

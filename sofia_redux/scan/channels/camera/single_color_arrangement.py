@@ -6,7 +6,11 @@ __all__ = ['SingleColorArrangement']
 
 
 class SingleColorArrangement(ColorArrangement):
-
+    """
+    Expands upon the color arrangement channels by defining each pixel as a
+    detector that receives only a single stream of data.  For example, a
+    gray scale camera, rather than a multi-wavelength receiver.
+    """
     def get_pixel_count(self):
         """
         Return the number of pixels.

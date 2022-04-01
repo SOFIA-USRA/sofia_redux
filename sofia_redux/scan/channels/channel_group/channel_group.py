@@ -61,7 +61,7 @@ class ChannelGroup(FlaggedDataGroup, ChannelData):
             if value is None:
                 return None
             elif self.indices is None:
-                return
+                return None
             else:
                 return value[self.indices[:, None], self.indices[None]]
         else:
@@ -97,6 +97,9 @@ class ChannelGroup(FlaggedDataGroup, ChannelData):
             super().__setattr__(attribute, value)
             return
 
+        # special attributes other than overlaps should not be
+        # set by the group: they should have specific handling coded
+        # in the child class
         if attribute == 'overlaps':
             parent_value[self.indices[:, None], self.indices[None]] = value
 
@@ -228,7 +231,7 @@ class ChannelGroup(FlaggedDataGroup, ChannelData):
             f"Not implemented for {self.__class__} class.")
 
     @abstractmethod
-    def read_channel_data_file(self, filename):
+    def read_channel_data_file(self, filename):  # pragma: no cover
         """
         Read a channel data file and return the information within.
 

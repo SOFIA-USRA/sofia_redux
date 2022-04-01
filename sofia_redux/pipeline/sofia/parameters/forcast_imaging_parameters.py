@@ -81,16 +81,6 @@ IMAGE_DEFAULT = {
          'description': 'Text file containing x,y locations to model',
          'dtype': 'str',
          'wtype': 'pick_file'},
-        {'key': 'transform_type',
-         'name': 'Transform type',
-         'wtype': 'combo_box',
-         'options': ['piecewise-affine', 'polynomial'],
-         'option_index': 1,
-         'description': 'Select the warping algorithm used to '
-                        'apply the distortion correction. \nThe '
-                        'polynomial algorithm is more traditional; \n'
-                        'the piecewise-affine algorithm may '
-                        'be more accurate for central regions.'},
         {'key': 'extrapolate',
          'name': 'Extrapolate solution',
          'value': True,

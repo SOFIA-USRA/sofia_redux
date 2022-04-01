@@ -22,6 +22,19 @@ class TestEyeLogger(object):
         record = elog.makeRecord(*args)
         return record
 
+    def test_reset(self):
+        elog = logger.EyeLogger('test')
+        h1 = logger.StreamLogger()
+        elog.addHandler(h1)
+        elog.addHandler(logger.StreamLogger())
+        assert len(elog.handlers) == 2
+
+        # reset to defaults: removes existing handlers
+        elog._set_defaults()
+        assert len(elog.handlers) == 1
+        assert elog.handlers[0] is not h1
+        assert isinstance(elog.handlers[0], logger.StreamLogger)
+
     def test_eye_logger_record(self, mocker):
         elog = logger.EyeLogger('test')
 

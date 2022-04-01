@@ -409,6 +409,12 @@ class Spline(object):
             list(itertools.permutations(np.arange(self.n_dimensions))))
         self.check_array_inputs()
 
+        if not self.exact and reduce_degrees:
+            nx = np.asarray([np.unique(x).size for x in self.coordinates])
+            max_degrees = (nx // 2) - 1
+            self.degrees = np.clip(self.degrees, None, max_degrees)
+            self.k1 = self.degrees + 1
+
         if not (0 < eps < 1):
             raise ValueError(f"eps not in range (0 < eps < 1): {eps}")
         self.eps = float(eps)

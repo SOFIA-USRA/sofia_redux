@@ -391,7 +391,7 @@ def wrap_function(func, args, kwargs=None, logger=None, log_directory=None):
     else:
         logger_id = id((logger, args))
         tmp_fh, tmp_fname = tempfile.mkstemp(
-                prefix=f'multitask_logger_{logger_id}', suffix='.p')
+            prefix=f'multitask_logger_{logger_id}', suffix='.p')
         os.close(tmp_fh)
         pickle_file = pickle_object(logger, tmp_fname)
     multi_func = _wrap_function_with_logger(
@@ -545,7 +545,7 @@ def _parallel(jobs, func, args, kwargs, iterable, skip=None,
         except ImportError:  # pragma: no cover
             have_joblib = False
             delayed = Parallel = None
-    else:
+    else:  # pragma: no cover
         reason = 'not available on Windows'
         have_joblib = False
         delayed = Parallel = None
@@ -629,7 +629,7 @@ def _parallel(jobs, func, args, kwargs, iterable, skip=None,
         [p.pid for p in current_process.children(recursive=True)])
     terminate = (subprocesses_after - subprocesses_before)
 
-    if in_windows_os():
+    if in_windows_os():  # pragma: no cover
         for subprocess in terminate:
             try:
                 os.kill(subprocess, signal.CTRL_BREAK_EVENT)

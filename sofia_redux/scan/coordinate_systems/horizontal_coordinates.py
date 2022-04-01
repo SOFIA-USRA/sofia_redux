@@ -15,6 +15,32 @@ __all__ = ['HorizontalCoordinates']
 class HorizontalCoordinates(SphericalCoordinates):
 
     def __init__(self, coordinates=None, unit='degree', copy=True):
+        """
+        Initialize horizontal coordinates.
+
+        The horizontal coordinate system uses the observer's local horizon
+        as the fundamental plane defining the altitude (latitude) and
+        longitude (azimuth) in spherical coordinates.  The altitude (or
+        elevation) is the angle between the object and the observer's local
+        horizon, usually measured between 0 and 90 degrees.  The azimuth is
+        the angle of the object around the horizon, measured from north to
+        east.
+
+        Parameters
+        ----------
+        coordinates : list or tuple or array-like or units.Quantity, optional
+            The coordinates used to populate the object during initialization.
+            The first (0) value or index should represent longitudinal
+            coordinates, and the second should represent latitude.
+        unit : units.Unit or str, optional
+            The angular unit for the spherical coordinates.  The default is
+            'degree'.
+        copy : bool, optional
+            Whether to explicitly perform a copy operation on the input
+            coordinates when storing them into these coordinates.  Note that it
+            is extremely unlikely for the original coordinates to be passed in
+            as a reference due to the significant checks performed on them.
+        """
         super().__init__(coordinates=coordinates, unit=unit, copy=copy)
 
     def setup_coordinate_system(self):

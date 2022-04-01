@@ -17,6 +17,9 @@ class SingleGaussian(SimulatedSource):
         """
         Initialize a SingleGaussian simulated source.
 
+        Models the source as a single Gaussian that may be applied to any
+        2-dimensional coordinates with the exception of horizontal type.
+
         Parameters
         ----------
         kwargs : dict
@@ -26,6 +29,7 @@ class SingleGaussian(SimulatedSource):
         """
         super().__init__()
         self.model = None
+        self.name = 'single_gaussian'
         self.initialize_model(**kwargs)
 
     def initialize_model(self, **kwargs):
@@ -65,9 +69,10 @@ class SingleGaussian(SimulatedSource):
 
         if 'info' in options and ('x_stddev' not in options
                                   or 'y_stddev' not in options):
-            info = options['info']
-            options['x_stddev'] = info.instrument.resolution
-            options['y_stddev'] = info.instrument.resolution
+            resolution = options['info'].instrument.resolution
+            stddev = resolution * gaussian_fwhm_to_sigma
+            options['x_stddev'] = stddev
+            options['y_stddev'] = stddev
 
         final_options = {}
         valid_options = ['amplitude', 'x_mean', 'y_mean', 'x_stddev',
@@ -88,7 +93,8 @@ class SingleGaussian(SimulatedSource):
 
         Parameters
         ----------
-        offsets : Coordinate2D.
+        offsets : Coordinate2D
+            Equatorial native offsets.
 
         Returns
         -------
@@ -96,3 +102,20 @@ class SingleGaussian(SimulatedSource):
             The modelled data of the source given the offsets.
         """
         return self.model(offsets.x, offsets.y)
+
+    def apply_to_horizontal(self, horizontal):
+        """
+        Apply the source model to a set of 2-D offsets.
+
+        Parameters
+        ----------
+        horizontal : HorizontalCoordinates
+            HorizontalCoordinates.
+
+        Returns
+        -------
+        data : numpy.ndarray
+            The modelled data of the source given the offsets.
+        """
+        raise NotImplementedError("Cannot determine model from horizontal "
+                                  "coordinates.")

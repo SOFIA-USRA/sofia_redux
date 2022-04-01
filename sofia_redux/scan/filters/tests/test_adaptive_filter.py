@@ -6,7 +6,7 @@ import pytest
 from sofia_redux.scan.filters.adaptive_filter import AdaptiveFilter
 
 
-class WorkingFilter(AdaptiveFilter):
+class WorkingFilter(AdaptiveFilter):  # pragma: no cover
     def get_id(self):
         return 'A'
 

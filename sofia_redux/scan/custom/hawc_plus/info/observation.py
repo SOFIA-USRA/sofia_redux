@@ -15,4 +15,4 @@ class HawcPlusObservationInfo(SofiaObservationInfo):
         -------
         valid : bool
         """
-        return super().is_aor_valid() & self.aor_id != '0'
+        return super().is_aor_valid() and (self.aor_id != '0')

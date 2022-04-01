@@ -77,11 +77,11 @@ class CorrelatedMode(Mode):
         """
         gains = super().get_gains(validate=validate)
         self.normalize_gains(gains)
-        if isinstance(self.gain, units.Quantity):
+        if isinstance(self.gain, units.Quantity):  # pragma: no cover
             if self.gain.unit == units.dimensionless_unscaled:
                 self.gain = self.gain.value
 
-        if isinstance(gains, units.Quantity):
+        if isinstance(gains, units.Quantity):  # pragma: no cover
             if gains.unit == units.dimensionless_unscaled:
                 return gains.value
 
@@ -151,10 +151,11 @@ class CorrelatedMode(Mode):
         average_gain = self.channel_group.get_typical_gain_magnitude(
             gain, discard_flag=discard_flags)
 
-        if average_gain == 1:
+        if average_gain == 1:  # pragma: no cover
             return 1.0
 
-        gain /= average_gain  # Gain updated in-place
+        # Gain updated in-place
+        gain /= average_gain
         return average_gain
 
     def get_valid_channels(self):

@@ -682,7 +682,3 @@ def test_get_data(filtered_map2d, grid_gaussian_source):
     assert np.isclose(data['intS2N'], 0)
     assert np.isclose(data['FWHM'], 3 * arcsec)
     assert np.isclose(data['dFWHM'], 1 * arcsec)
-
-
-
-

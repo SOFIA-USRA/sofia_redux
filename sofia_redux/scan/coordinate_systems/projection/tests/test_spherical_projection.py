@@ -65,7 +65,7 @@ def test_eq():
     p = CP()
     p.celestial_pole = SphericalCoordinates([0, 90])
     assert p == p
-    assert p is not None
+    assert p != 1
     p2 = p.copy()
     assert p == p2
     p2.reference = SphericalCoordinates([1, 2])

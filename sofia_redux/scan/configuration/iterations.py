@@ -1,9 +1,9 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 import configobj
-import numpy as np
 
 from sofia_redux.scan.configuration.options import Options
+from sofia_redux.scan.utilities.utils import round_values
 
 __all__ = ['IterationOptions']
 
@@ -15,13 +15,20 @@ class IterationOptions(Options):
 
     def __init__(self, allow_error=False, verbose=True, max_iteration=None):
         """
-        Initialize an IterationOptions object.
+        Initialize the configuration iteration options.
 
-        The iterations options object contains configuration settings
-        pertaining to the current SOFSCAN iteration number.
+        The iteration options store and apply configuration settings for the
+        main reduction configuration that depend on the current reduction
+        iteration.  It is also where the maximum number of iterations for the
+        reduction is stored and defined in all cases.
 
         Parameters
         ----------
+        allow_error : bool, optional
+            If `True`, allow poorly formatted options to be skipped rather than
+            raising an error.
+        verbose : bool, optional
+            If `True`, issues a warning when a poorly option is encountered.
         max_iteration : int, optional
             The maximum number of iterations available for a SOFSCAN reduction.
         """
@@ -316,7 +323,7 @@ class IterationOptions(Options):
             if self.max_iteration is None:
                 return None
             else:
-                return int(np.round(self.max_iteration * iteration))
+                return round_values(self.max_iteration * iteration)
         if isinstance(iteration, int):
             if iteration < 0:
                 if self.max_iteration is None:

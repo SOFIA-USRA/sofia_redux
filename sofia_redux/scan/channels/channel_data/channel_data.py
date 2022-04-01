@@ -21,6 +21,17 @@ class ChannelData(FlaggedData):
     flagspace = ChannelFlags
 
     def __init__(self, channels=None):
+        """
+        Initialize channel data.
+
+        The channel data is a :class:`FlaggedData` collection containing
+        parameters relating to each individual channel (pixel or detector)
+        of a given instrument.
+
+        Parameters
+        ----------
+        channels : sofia_redux.scan.channels.channels.Channels
+        """
         super().__init__()
         # These are all arrays of equal size
         self.channel_id = None
@@ -95,6 +106,31 @@ class ChannelData(FlaggedData):
 
     @property
     def default_field_types(self):
+        """
+        Return the default values for the channel attributes.
+
+        These are used during the initial creation of the data arrays to
+        populate each of the attribute arrays with a default value.  The field
+        types are returned as a dictionary {attribute (str): value}.  If a
+        simple initialized value is supplied, that attribute of the data
+        will default to a numpy array filled with that value.  Other options
+        are::
+
+          - (value, shape): will create arrays of shape (n, shape,) filled with
+            value.
+          - type or class: will create empty arrays of the given type
+
+        Special handling are provided for `units.Quantity`, `units.Unit` and
+        the :class:`sofia_redux.scan.coordinate_systems.coordinate.Coordinate`
+        classes.  For the coordinate type classes, a field value also may be
+        provided as (class, value, shape) to create filled coordinates of shape
+        (n, shape,) with the value.  Here, n is the size of the data.
+
+        Returns
+        -------
+        defaults : dict
+            A dictionary of the form {name (str): value}.
+        """
         defaults = super().default_field_types
         defaults.update({
             'source_phase': 0,
@@ -207,7 +243,7 @@ class ChannelData(FlaggedData):
 
         flags = self.configuration.get_list('pixels.criticalflags',
                                             default=None)
-        if flags is None:
+        if flags is None or len(flags) == 0:
             critical_flags = self.flagspace.critical_flags()
             if critical_flags is None:
                 return
@@ -239,7 +275,7 @@ class ChannelData(FlaggedData):
         self.variance = variance
 
     @abstractmethod
-    def read_channel_data_file(self, filename):
+    def read_channel_data_file(self, filename):  # pragma: no cover
         """
         Read a channel data file and return the information within.
 
@@ -268,7 +304,7 @@ class ChannelData(FlaggedData):
         """
         self.hardware_gain = np.full(self.size, info.instrument.gain)
 
-    def read_wiring_data(self, filename):
+    def read_wiring_data(self, filename):  # pragma: no cover
         pass
 
     def kill_channels(self, flag=None):
@@ -422,7 +458,7 @@ class ChannelData(FlaggedData):
         -------
         None
         """
-        indices = self.find_fixed_indices(utils.to_int_list(channel_list),
+        indices = self.find_fixed_indices(utils.get_int_list(channel_list),
                                           cull=True)
         log.debug(f"Flagging {indices.size} channels.")
         self.set_flags(self.flagspace.flags.DEAD, indices=indices)
@@ -612,7 +648,7 @@ class ChannelData(FlaggedData):
         self.dependents -= dependents
 
     @abstractmethod
-    def get_overlap_indices(self, radius):
+    def get_overlap_indices(self, radius):  # pragma: no cover
         """
         Return a cross-array indicating overlapping indices.
 
@@ -633,7 +669,7 @@ class ChannelData(FlaggedData):
         pass
 
     @abstractmethod
-    def get_overlap_distances(self, overlap_indices):
+    def get_overlap_distances(self, overlap_indices):  # pragma: no cover
         """
         Calculates the overlap distances.
 
@@ -659,7 +695,8 @@ class ChannelData(FlaggedData):
         """
         pass
 
-    def calculate_overlap_values(self, overlap_distances, point_size):
+    def calculate_overlap_values(self, overlap_distances,
+                                 point_size):  # pragma: no cover
         """
         Calculates the overlap values based on overlap distances.
 
@@ -684,7 +721,7 @@ class ChannelData(FlaggedData):
         pass
 
     @abstractmethod
-    def get_pixel_count(self):
+    def get_pixel_count(self):  # pragma: no cover
         """
         Return the number of pixels in the arrangement.
 
@@ -695,7 +732,7 @@ class ChannelData(FlaggedData):
         pass
 
     @abstractmethod
-    def get_pixels(self):
+    def get_pixels(self):  # pragma: no cover
         """
         Return the pixels in the arrangement.
 
@@ -707,7 +744,8 @@ class ChannelData(FlaggedData):
 
     @abstractmethod
     def get_mapping_pixels(self, indices=None, name=None, keep_flag=None,
-                           discard_flag=None, match_flag=None):
+                           discard_flag=None,
+                           match_flag=None):  # pragma: no cover
         """
         Creates and returns mapping pixels.
 
@@ -762,7 +800,7 @@ class ChannelData(FlaggedData):
         else:
             return df.to_csv(sep='\t', index=False)
 
-    def get_rcp_string(self, indices=None):
+    def get_rcp_string(self, indices=None):  # pragma: no cover
         """
         Return a string representation for the RCP of ALL channels.
 

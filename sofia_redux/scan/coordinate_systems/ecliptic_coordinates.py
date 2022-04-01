@@ -23,6 +23,30 @@ class EclipticCoordinates(PrecessingCoordinates):
 
     def __init__(self, coordinates=None, unit='degree',
                  copy=True, epoch=J2000):
+        """
+        Initialize ecliptic coordinates.
+
+        The ecliptic coordinates contain precessing celestial coordinates,
+        generally used for representation of Solar system objects with respect
+        to the Earth's ecliptic plane of orbit about the Sun.
+
+        Parameters
+        ----------
+        coordinates : list or tuple or array-like or units.Quantity, optional
+            The coordinates used to populate the object during initialization.
+            The first (0) value or index should represent longitudinal
+            coordinates, and the second should represent latitude.
+        unit : units.Unit or str, optional
+            The angular unit for the spherical coordinates.  The default is
+            'degree'.
+        copy : bool, optional
+            Whether to explicitly perform a copy operation on the input
+            coordinates when storing them into these coordinates.  Note that it
+            is extremely unlikely for the original coordinates to be passed in
+            as a reference due to the significant checks performed on them.
+        epoch : Epoch or str or int or float or Time or fits.Header, optional
+            Information from which to set the epoch for these coordinates.
+        """
         super().__init__(coordinates=coordinates, unit=unit, copy=copy,
                          epoch=epoch)
 

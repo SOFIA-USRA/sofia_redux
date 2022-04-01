@@ -17,6 +17,9 @@ class SignificanceMap(Overlay):
         """
         Create a significance map overlay of an observation.
 
+        The exposure map overlay returns and operates on the data and weight
+        images of the Observation2D basis.
+
         Parameters
         ----------
         observation : Observation2D, optional
@@ -28,6 +31,8 @@ class SignificanceMap(Overlay):
         """
         Set the default unit for the map significance.
 
+        The default unit will always be dimensionless (a number).
+
         Returns
         -------
         None
@@ -38,9 +43,12 @@ class SignificanceMap(Overlay):
         """
         Set the unit for the map (Not available for S2N map).
 
+        The signal-to-noise ratio will always be expressed in dimensionless
+        units (as a number).
+
         Parameters
         ----------
-        unit : astropy.units.Unit or astropy.units.Quantity
+        unit : str or units.Unit or units.Quantity
 
         Returns
         -------
@@ -53,12 +61,19 @@ class SignificanceMap(Overlay):
         """
         Return the data values of the significance map.
 
+        The significance (S2N or signal-to-noise ratio) is given by::
+
+            s2n = data * sqrt(weight)
+
+        where weight should be equivalent to 1/variance.
+
         Returns
         -------
         numpy.ndarray
         """
+
         weight = self.basis.weight
-        if weight is None:
+        if weight is None or weight.data is None:
             return None
         data = self.basis.data
         if data is None:
@@ -71,6 +86,13 @@ class SignificanceMap(Overlay):
         """
         Set the significance data values.
 
+        This results in the basis image data being set to::
+
+            data = noise * significance
+
+        where noise is calculated as the 1/sqrt(weight) values of the
+        basis observation.
+
         Parameters
         ----------
         significance : numpy.ndarray or FlaggedArray
@@ -80,7 +102,7 @@ class SignificanceMap(Overlay):
         None
         """
         noise = NoiseMap(self.basis).data
-        if noise is None:
+        if noise is None:  # pragma: no cover
             return
         if isinstance(significance, FlaggedArray):
             data = noise * significance.data

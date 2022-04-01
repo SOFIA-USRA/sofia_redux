@@ -3,9 +3,9 @@
 from astropy import log
 import numpy as np
 from scipy.ndimage import interpolation, affine_transform
-from skimage.transform import resize
 
 from sofia_redux.toolkit.image.fill import image_naninterp
+from sofia_redux.toolkit.image.resize import resize
 from sofia_redux.toolkit.interpolate.interpolate import line_shift
 
 

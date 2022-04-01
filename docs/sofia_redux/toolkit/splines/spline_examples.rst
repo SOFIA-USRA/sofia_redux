@@ -46,10 +46,11 @@ of the data where the spacing between each point is set to 1.
 
     import numpy as np
     import matplotlib.pyplot as plt
-    from skimage.data import coins
+    import imageio
     from sofia_redux.toolkit.splines.spline import Spline
 
-    noisy_image = coins()[165:225,70:130].astype(float)
+    image = imageio.imread('imageio:coins.png')
+    noisy_image = image[165:225,70:130].astype(float)
     noisy_image -= noisy_image.min()
     noisy_image /= noisy_image.max()
 

@@ -94,6 +94,13 @@ class Modality(ABC):
 
     @property
     def fields(self):
+        """
+        Return the available channel data fields.
+
+        Returns
+        -------
+        set (str)
+        """
         if self.size == 0:
             return set([])
         else:
@@ -301,7 +308,7 @@ class Modality(ABC):
         if self.modes is None:
             return
         for mode in self.modes:
-            mode.set_name(self.name + ':' + mode.channel_group.name)
+            mode.set_name(f'{self.name}:{mode.channel_group.name}')
 
     def set_options(self, configuration, branch=None):
         """

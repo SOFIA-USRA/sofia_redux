@@ -1,5 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-
+import warnings
 from contextlib import contextmanager
 import os
 from typing import (Dict, List, Optional, Sequence,
@@ -11,8 +11,9 @@ import matplotlib.backend_bases as mbb
 
 from sofia_redux.visualization import log
 from sofia_redux.visualization import signals as vs
-from sofia_redux.visualization.display import figure, pane, fitting_results
-from sofia_redux.visualization.models import high_model
+from sofia_redux.visualization.display import (figure, pane, fitting_results,
+                                               reference_window)
+from sofia_redux.visualization.models import high_model, reference_model
 from sofia_redux.visualization.utils.eye_error import EyeError
 
 
@@ -24,7 +25,7 @@ try:
 except ImportError:
     HAS_PYQT5 = False
     QtGui, cl, QTreeWidgetItem = None, None, None
-    Event = TypeVar('Error', mbb.MouseEvent, mbb.LocationEvent)
+    Event = TypeVar('Event', mbb.MouseEvent, mbb.LocationEvent)
 
     # duck type parents to allow class definition
     class QtWidgets:
@@ -106,6 +107,8 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         self.signals = signals
         self.cid = dict()
         self.model_collection = list()
+        self.reference_models = reference_model.ReferenceData()
+        self.reference_window = None
         self.timer = None
         self.fit_results = None
         self.cursor_location_window = None
@@ -332,10 +335,6 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
     def axis_scale_changed(self) -> None:
         """Change axis scales."""
         scales = self._pull_scale_from_gui()
-        # if self.all_axes_button.isChecked():
-        #     panes = 'all'
-        # else:
-        #     panes = None
         targets = self.selected_target_axis()
         self.figure.set_scales(scales, target=targets)
         self.signals.atrophy_bg_partial.emit()
@@ -370,10 +369,6 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         """Change axis units."""
         log.debug('Received signal axis unit changed.')
         units = self._pull_units_from_gui()
-        # if self.all_axes_button.isChecked():
-        #     panes = 'all'
-        # else:
-        #     panes = None
         targets = self.selected_target_axis()
         self.figure.change_axis_unit(units=units, target=targets)
         if self.fit_results:
@@ -407,10 +402,6 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         """Change the axis field displayed."""
         log.debug('Received signal axis field changed.')
         fields = self._pull_fields_from_gui()
-        # if self.all_axes_button.isChecked():
-        #     panes = 'all'
-        # else:
-        #     panes = None
         targets = self.selected_target_axis()
         self.figure.change_axis_field(fields=fields, target=targets)
         # clear any active selection states
@@ -478,18 +469,20 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
                     bin_data.append(values["bin"])
 
         # average values for quick look
-        if x_data:
-            x_bin_label = f'{np.nanmean(x_data):.3g}'
-        else:
-            x_bin_label = '-'
-        if y_data:
-            y_bin_label = f'{np.nanmean(y_data):.3g}'
-        else:
-            y_bin_label = '-'
-        if bin_data:
-            bin_label = f'{np.nanmean(bin_data):.3g}'
-        else:
-            bin_label = '-'
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            if x_data:
+                x_bin_label = f'{np.nanmean(x_data):.3g}'
+            else:
+                x_bin_label = '-'
+            if y_data:
+                y_bin_label = f'{np.nanmean(y_data):.3g}'
+            else:
+                y_bin_label = '-'
+            if bin_data:
+                bin_label = f'{np.nanmean(bin_data):.3g}'
+            else:
+                bin_label = '-'
 
         self.cursor_wave_label.setText(x_bin_label)
         self.cursor_flux_label.setText(y_bin_label)
@@ -1485,8 +1478,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
     # Mouse events
     ####
     def clear_guides(self) -> None:
-        """Clear all guide artists."""
-        # all_panes = self.all_axes_button.isChecked()
+        """Clear all guide gallery."""
         targets = self.selected_target_axis()
         self.figure.clear_lines(flags='a',
                                 all_panes=targets)
@@ -1533,8 +1525,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         self.clear_selection()
 
     def clear_fit(self) -> None:
-        """Clear fit overlay artists."""
-        # all_panes = self.all_axes_button.isChecked()
+        """Clear fit overlay gallery."""
         targets = self.selected_target_axis()
         self.figure.clear_lines(flags=['fit'],
                                 all_panes=targets)
@@ -1551,6 +1542,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         else:
             self.fit_results = fitting_results.FittingResults(self)
             self.fit_results.show()
+        self.fit_results.raise_()
 
     def clear_selection(self) -> None:
         """Reset selection mode."""
@@ -1576,6 +1568,22 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         for cid in cids:
             self.figure_widget.canvas.mpl_disconnect(self.cid[cid])
             del self.cid[cid]
+
+    def open_ref_data(self) -> None:
+        if self.reference_window is None:
+            self.reference_window = reference_window.ReferenceWindow(self)
+            self.reference_window.show()
+        else:
+            if not self.reference_window.isVisible():
+                self.reference_window.show()
+        self.reference_window.raise_()
+
+    def update_reference_lines(self) -> None:
+        self.figure.update_reference_lines(self.reference_models)
+
+    def unload_reference_model(self) -> None:
+        self.reference_models.unload_data()
+        self.figure.unload_reference_model(self.reference_models)
 
     def toggle_controls(self) -> None:
         """Toggle control panel visibility."""

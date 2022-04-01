@@ -157,13 +157,17 @@ def test_add_local_unit(fits_data):
     assert f.alternate_unit_names == {'Jy': 'Jy', 'Jansky': 'Jy',
                                       'jansky': 'Jy', 'K': 'K', 'Kelvin': 'K',
                                       'foo': 'K', 'bar': 'K'}
+    f.local_units = None
+    f.add_local_unit(k)
+    assert f.local_units == {'K': 1 * units.Unit('K')}
 
 
 def test_add_alternate_unit_names():
     f = FitsData()
     assert f.alternate_unit_names == {'': ''}
+    f.alternate_unit_names = None
     f.add_alternate_unit_names('foo', 'bar')
-    assert f.alternate_unit_names == {'': '', 'bar': 'foo', 'foo': 'foo'}
+    assert f.alternate_unit_names == {'bar': 'foo', 'foo': 'foo'}
 
 
 def test_get_unit():
@@ -304,13 +308,13 @@ def test_add(fits_data):
     f.clear()
     f.add(1)
     assert np.allclose(f.data, 1)
-    assert f.history[-1] == 'add 1'
+    assert f.history[-1] == 'added 1'
     mask = np.full(f.shape, False)
     mask[:2] = True
     f.add(1, indices=mask, factor=2)
     assert np.allclose(f.data[:2], 3)
     assert np.allclose(f.data[2:], 1)
-    assert f.history[-1] == 'add 2'
+    assert f.history[-1] == 'added 2'
     f.fill(1)
     f2 = f.copy()
     indices = np.asarray(np.nonzero(mask))[::-1]  # For FITS (x, y) order
@@ -320,8 +324,7 @@ def test_add(fits_data):
     assert f.history[-1] == 'added FitsData'
     f.fill(1)
     f.add(np.ones(f.shape), factor=3)
-    assert f.history[-1].startswith(
-        'add [[3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3.]\n')
+    assert f.history[-1] == 'added scaled (10, 11) array (3x)'
     f.fill(1)
     f.add(f2, indices=indices, factor=3)
     assert np.allclose(f.data[:2], 4)
@@ -578,4 +581,4 @@ def test_get_refined_peak_index(ones):
 def test_crop(ones):
     f = ones.copy()
     f.crop(np.array([[4, 8], [2, 4]]))
-    assert f.shape == (2, 4)
+    assert f.shape == (3, 5)

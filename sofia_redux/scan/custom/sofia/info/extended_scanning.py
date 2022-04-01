@@ -20,6 +20,12 @@ __all__ = ['SofiaExtendedScanningInfo']
 class SofiaExtendedScanningInfo(SofiaScanningInfo):
 
     def __init__(self):
+        """
+        Initialize the SOFIA extended scanning information.
+
+        Contains information on additional scanning information that may be
+        required to describe SOFIA specific observations.
+        """
         super().__init__()
         self.pattern = ''
         self.coordinate_system = ''
@@ -53,6 +59,36 @@ class SofiaExtendedScanningInfo(SofiaScanningInfo):
         return 'scan'
 
     def apply_configuration(self):
+        """
+        Update scanning information with FITS header information.
+
+        Updates the scanning information by taking the following keywords from
+        the FITS header::
+
+          SCNPATT - The scanning pattern (str)
+          SCNCRSYS - The scanning coordinate system (str)
+          SCNAMPXL - The scanning x-elevation scanning amplitude (arcsec)
+          SCNAMPEL - The scanning elevation scanning amplitude (arcsec)
+          SCNANGLC - The current scanning angle (degree)
+          SCNANGLS - The initial scanning angle (degree)
+          SCNANGLF - The final scanning angle (degree)
+          SCNDUR - The scan duration (seconds)
+          SCNITERS - The number of scanning iterations (int)
+          SCNNSUBS - The number of sub-scans (int)
+          SCNLEN - The raster scan length (arcsec)
+          SCNSTEP - The raster scan step size (arcsec)
+          SCNSTEPS - The number of raster scan steps (int)
+          SCNCROSS - Whether the scan is cross-scanning (bool)
+          SCNFQRAT - The Lissajous y/x frequency ratio (float)
+          SCNPHASE - The Lissajous y/x relative phase (degree)
+          SCNTOFF - The Lissajous time offset (seconds)
+          SCNTWAIT - The track relock time window (seconds)
+          SCNTRKON - Whether tracking is on/off (0/1) (int)
+
+        Returns
+        -------
+        None
+        """
         super().apply_configuration()
         options = self.options
         if options is None:

@@ -25,10 +25,9 @@ prior to interpolation.
   :include-source:
 
   from sofia_redux.toolkit.image.smooth import fiterpolate
-  from skimage.data import camera
   import matplotlib.pyplot as plt
 
-  image = camera().astype(float)
+  image = imageio.imread('imageio:camera.png').astype(float)
   image -= image.min()
   image /= image.max()
 

@@ -26,7 +26,7 @@ class GeodeticCoordinates(SphericalCoordinates):
 
     def __init__(self, coordinates=None, unit='degree', copy=True):
         """
-        Initialize a set of Geodetic coordinates.
+        Initialize geodetic coordinates.
 
         Geodetic coordinates are based on a reference ellipsoid model of the
         Earth using geodetic longitude, latitude, and height.

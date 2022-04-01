@@ -96,9 +96,8 @@ class CorrelatedModality(Modality):
             self.solve_signal = not configuration.get_bool(
                 f'{branch}.nosignals')
         elif isinstance(configuration, dict):
-            self.solve_signal = ~utils.get_bool(configuration.get('nosignals'))
-        else:
-            return
+            self.solve_signal = not utils.get_bool(
+                configuration.get('nosignals'))
 
     def set_skip_flags(self, gain_skip_flag):
         """
@@ -134,11 +133,11 @@ class CorrelatedModality(Modality):
         -------
         None
         """
-        for mode in self.modes[::-1]:  # TODO: reset to forward order (not -1)
+        for mode in self.modes:
             if not np.isnan(self.resolution):
                 mode.resolution = self.resolution
                 try:
                     mode.update_signals(integration, robust=robust)
                 except Exception as err:
                     log.error(err)
-                    raise err  # TODO: remove this line
+                    raise err

@@ -10,6 +10,12 @@ __all__ = ['ExampleInstrumentInfo']
 class ExampleInstrumentInfo(CameraInstrumentInfo):
 
     def __init__(self):
+        """
+        Initialize the instrument information for the example instrument.
+
+        The example instrument is set to a Cassegrain mount with a resolution
+        of 10 arc seconds and a sampling interval of 100 ms.
+        """
         super().__init__()
         self.name = 'example'
         self.set_mount("CASSEGRAIN")

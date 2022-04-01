@@ -2,6 +2,7 @@
 
 from abc import abstractmethod
 from astropy import units
+import inspect
 import numpy as np
 
 from sofia_redux.scan.flags.frame_flags import FrameFlags
@@ -65,14 +66,26 @@ class Frames(FlaggedData):
 
     @property
     def referenced_attributes(self):
-        """Referenced attributes are those that are referenced during copy."""
+        """
+        Referenced attributes are those that are referenced during copy.
+
+        Returns
+        -------
+        set (str)
+        """
         refs = super().referenced_attributes
         refs.add('integration')
         return refs
 
     @property
     def readout_attributes(self):
-        """Attributes that will be operated on by the `shift` method."""
+        """
+        Returns attributes that will be operated on by the `shift` method.
+
+        Returns
+        -------
+        set (str)
+        """
         return {'data'}
 
     @property
@@ -196,6 +209,8 @@ class Frames(FlaggedData):
         -------
         AstrometryInfo
         """
+        if self.info is None:
+            return None
         return self.info.astrometry
 
     @property
@@ -208,6 +223,8 @@ class Frames(FlaggedData):
         equatorial : EquatorialCoordinates
             The equatorial coordinates (single RA/DEC) of the scan.
         """
+        if self.astrometry is None:
+            return None
         return self.astrometry.equatorial
 
     @property
@@ -334,43 +351,33 @@ class Frames(FlaggedData):
                 setattr(self, key, np.empty(shape, dtype=value))
             elif isinstance(value, units.Quantity):
                 setattr(self, key, np.full(shape, value.value) * value.unit)
-            elif isinstance(value, units.Unit):
+            elif isinstance(value, units.UnitBase):
                 setattr(self, key, np.empty(shape, dtype=float) * value)
 
             elif isinstance(value, tuple):
-                if issubclass(value[0], Coordinate2D):
-                    coordinate_class, value = value[0], value[1]
+                # only handle coordinate2D tuples
+                if (inspect.isclass(value[0])
+                        and issubclass(value[0], Coordinate2D)):
+                    coordinate_class, fill_value = value[0], value[1]
                     coordinate_shape = (2,) + shape
-                    if isinstance(value, units.Quantity):
-                        unit = value.unit
+
+                    if isinstance(fill_value, units.Quantity):
+                        unit = fill_value.unit
                         fill_values = np.full(
-                            coordinate_shape, value.value) * unit
-                    elif isinstance(value, units.Unit):
-                        unit = value
+                            coordinate_shape, fill_value.value) * unit
+                    elif isinstance(fill_value, units.UnitBase):
+                        unit = fill_value
                         fill_values = np.empty(
-                            coordinate_shape, dtype=float * unit)
-                    elif isinstance(value, str):
-                        unit = units.Unit(value)
+                            coordinate_shape, dtype=float) * unit
+                    elif isinstance(fill_value, str):
+                        unit = units.Unit(fill_value)
                         fill_values = np.empty(
                             coordinate_shape, dtype=float) * unit
                     else:
-                        fill_values = np.full(coordinate_shape, value)
-                    setattr(
-                        self, key, coordinate_class(fill_values, copy=False))
+                        fill_values = np.full(coordinate_shape, fill_value)
 
-                elif isinstance(value, units.Quantity):
                     setattr(self, key,
-                            np.full(shape, value.value) * value.unit)
-
-                elif isinstance(value, units.Unit):
-                    setattr(self, key, np.empty(shape, dtype=float) * value)
-
-                elif isinstance(value, type):
-                    setattr(self, key, np.empty(shape, dtype=value))
-
-                else:
-                    setattr(self, key, np.full(shape, value))
-
+                            coordinate_class(fill_values, copy=False))
             else:
                 setattr(self, key, np.full(shape, value))
 
@@ -642,7 +649,8 @@ class Frames(FlaggedData):
             equatorial = self.equatorial.empty_copy()
             if equatorial.epoch.singular:
                 equatorial.epoch = self.equatorial.epoch.copy()
-            else:
+            else:  # pragma: no cover
+                # not commonly used
                 equatorial.epoch = self.equatorial.epoch[indices].copy()
 
         native_offsets = self.get_native_xy(offsets, indices=indices)
@@ -716,9 +724,16 @@ class Frames(FlaggedData):
         -------
         equatorial_offsets : Coordinate2D
         """
-        offset = self.equatorial.get_native_offset_from(
-            self.scan_equatorial, indices=indices, offset=offset)
-        return offset
+
+        if indices is None:
+            indices = slice(None)
+
+        if self.is_singular:
+            equatorial = self.equatorial
+        else:
+            equatorial = self.equatorial[indices]
+        return equatorial.get_native_offset_from(self.scan_equatorial,
+                                                 offset=offset)
 
     def get_base_native_offset(self, indices=None, offset=None):
         """
@@ -827,10 +842,11 @@ class Frames(FlaggedData):
             apparent = equatorial.copy()
         else:
             apparent.copy_coordinates(equatorial)
-        return apparent.transform_to(self.astrometry.apparent_epoch)
+        self.info.astrometry.to_apparent.precess(apparent)
+        return apparent
 
     @abstractmethod
-    def get_absolute_native_coordinates(self):
+    def get_absolute_native_coordinates(self):  # pragma: no cover
         """
         Get absolute spherical (including chopper) coords in telescope frame.
 
@@ -843,7 +859,7 @@ class Frames(FlaggedData):
         pass
 
     @abstractmethod
-    def get_absolute_native_offsets(self):
+    def get_absolute_native_offsets(self):  # pragma: no cover
         """
         Return absolute spherical offsets in telescope frame.
 
@@ -963,9 +979,15 @@ class Frames(FlaggedData):
             indices = slice(None)
 
         if self.is_singular:
-            return np.arctan2(self.sin_a, self.cos_a) * rad
+            angle = np.arctan2(self.sin_a, self.cos_a)
         else:
-            return np.arctan2(self.sin_a[indices], self.cos_a[indices]) * rad
+            angle = np.arctan2(self.sin_a[indices], self.cos_a[indices]) * rad
+
+        if isinstance(angle, units.Quantity):
+            angle = angle.to(rad)
+        else:
+            angle *= rad
+        return angle
 
     def set_rotation(self, angle, indices=None):
         """
@@ -1078,7 +1100,7 @@ class Frames(FlaggedData):
     def get_native_xy(self, focal_plane_position, indices=None,
                       coordinates=None):
         """
-        Return the native y coordinates from a given focal plane position.
+        Return the native x/y coordinates from a given focal plane position.
 
         Rotates the focal plane positions by the stored cos(a) and sin(a)
         frame positions.
@@ -1132,6 +1154,9 @@ class Frames(FlaggedData):
     def add_data_from(self, other_frames, scaling=1.0, indices=None):
         """
         Add data from other frames to these.
+
+        The other frames' data must match the shape of the indices
+        specified, or the current frames' full data array if indices=None.
 
         Parameters
         ----------
@@ -1320,6 +1345,7 @@ class Frames(FlaggedData):
         if equatorial is None:
             equatorial = EquatorialCoordinates(epoch=J2000)
         equatorial.copy_coordinates(native)
+        return equatorial
 
     def equatorial_to_native(self, equatorial, indices=None, native=None):
         """
@@ -1596,7 +1622,7 @@ class Frames(FlaggedData):
 
     def remove_dependents(self, dependents, start=None, end=None):
         """
-        Add dependents from frame data.
+        Remove dependents from frame data.
 
         Parameters
         ----------

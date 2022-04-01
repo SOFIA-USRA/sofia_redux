@@ -9,6 +9,13 @@ __all__ = ['SofiaObservationInfo']
 class SofiaObservationInfo(ObservationInfo):
 
     def __init__(self):
+        """
+        Initialize the SOFIA observation information.
+
+        The observation information includes details on the type of
+        observation, the source, and identifiers such as the AOR ID and file
+        groupings.
+        """
         super().__init__()
         self.data_source = None
         self.obs_type = None
@@ -25,7 +32,23 @@ class SofiaObservationInfo(ObservationInfo):
 
     def apply_configuration(self):
         """
-        Read and apply the configuration.
+        Update observation information with FITS header information.
+
+        Updates the information by taking the following keywords from the
+        FITS header::
+
+          DATASRC - The data source category (str)
+          OBSTYPE - The type of observation (str)
+          SRCTYPE - The AOR source type (str)
+          KWDICT - The SOFIA keyword dictionary version (str)
+          OBS_ID - The SOFIA observation ID (str)
+          IMAGEID - The image ID within an observation (str)
+          AOT_ID - The unique Astronomical Observation Template ID (str)
+          AOR_ID - The unique Astronomical Observation Request ID (str)
+          FILEGPID - The user ID for grouping files together (str)
+          FILEGP_R - The user ID for grouping red filter files together (str)
+          FILEGP_B - The user ID for grouping blue filter files together (str)
+          OBJECT - The object catalog name (str)
 
         Returns
         -------
@@ -126,7 +149,7 @@ class SofiaObservationInfo(ObservationInfo):
         if name == 'aor':
             return self.aor_id
         elif name == 'aot':
-            return self.aor_id
+            return self.aot_id
         elif name == 'obsid':
             return self.obs_id
         elif name == 'src':

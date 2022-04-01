@@ -15,6 +15,11 @@ class SofiaChoppingInfo(InfoBase):
     volts_to_angle = 33.394 * units.Unit('arcsec') / units.Unit('V')
 
     def __init__(self):
+        """
+        Initialize the SOFIA chopping information.
+
+        Contains information on the SOFIA chop parameters.
+        """
         super().__init__()
         self.chopping = None
         self.frequency = np.nan * units.Unit('Hz')
@@ -23,7 +28,7 @@ class SofiaChoppingInfo(InfoBase):
         self.amplitude = np.nan * units.Unit('arcsec')
         self.amplitude2 = np.nan * units.Unit('arcsec')
         self.coordinate_system = None
-        self.angle = np.nan * units.Unit('deg')
+        self.angle = np.nan * units.Unit('degree')
         self.tip = np.nan * units.Unit('arcsec')
         self.tilt = np.nan * units.Unit('arcsec')
         self.phase = np.nan * units.Unit('ms')
@@ -42,6 +47,28 @@ class SofiaChoppingInfo(InfoBase):
         return 'chop'
 
     def apply_configuration(self):
+        """
+        Update chopping information with FITS header information.
+
+        Updates the chopping information by taking the following keywords from
+        the FITS header::
+
+          CHOPPING - Whether chopping is enabled for the scan (bool)
+          CHPFREQ - The chopping frequency in Hz
+          CHPPROF - The 2-POINT or 3-POINT point chopping profile (str)
+          CHPSYM - Whether the chopping is symmetrical or asymmetric (str)
+          CHPAMP1 - The first chop amplitude in arcseconds
+          CHPAMP2 - The second chop amplitude in arcseconds
+          CHPCRSYS - The MCCS chopping coordinate system (str)
+          CHPANGLE - The angle in the sky coordinate reference frame (degrees)
+          CHPTIP - The tip in the sky coordinate reference frame (arcseconds)
+          CHPTILT - The tilt in the sky coordinate reference frame (arcseconds)
+          CHPPHASE - The chopping phase in milliseconds.
+
+        Returns
+        -------
+        None
+        """
         options = self.options
         if options is None:
             return
@@ -87,7 +114,7 @@ class SofiaChoppingInfo(InfoBase):
              '(arcsec) Chop tilt on sky.'),
             ('CHPPROF', self.profile_type, 'Chop profile from MCCS.'),
             ('CHPSYM', self.symmetry_type, 'Chop symmetry mode.'),
-            ('SHPCRSYS', self.coordinate_system, 'Chop coordinate system.'),
+            ('CHPCRSYS', self.coordinate_system, 'Chop coordinate system.'),
             ('CHPPHASE', to_header_float(self.phase, 'ms'), '(ms) Chop phase.')
         ]
         insert_info_in_header(header, info, delete_special=True)

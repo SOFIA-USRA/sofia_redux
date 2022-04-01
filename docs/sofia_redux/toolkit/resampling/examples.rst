@@ -88,10 +88,10 @@ coordinate mappings with all other sets.
     :include-source:
 
     from sofia_redux.toolkit.resampling import Resample
-    from skimage.data import chelsea
+    import imageio
     import numpy as np
 
-    image = chelsea().astype(float)
+    image = imageio.imread('imageio:chelsea.png').astype(float)
     s = image.shape
     rand = np.random.RandomState(42)
     bad_pix = rand.rand(*s) < 0.7  # 70 percent corruption
@@ -111,7 +111,7 @@ coordinate mappings with all other sets.
 
     resampler = Resample(coordinates, data, window=10, order=2)
     good = resampler(xout, yout, smoothing=0.1, relative_smooth=True,
-                     order_algorithm='extrapolate')
+                     order_algorithm='extrapolate', jobs=-1)
 
     # get it b1ack into the correct shape and RGB format for plotting
     good = np.clip(np.moveaxis(good, 0, -1).astype(int), 0, 255)
@@ -158,10 +158,10 @@ has been used to preserve detail.
     :include-source:
 
     from sofia_redux.toolkit.resampling import Resample
-    from skimage.data import coins
+    import imageio
     import numpy as np
 
-    image = coins()
+    image = imageio.imread('imageio:coins.png')
     image = image / image.max()
     image = image[12:76, 303:367]  # 64 x 64 pixel image
 
@@ -177,12 +177,14 @@ has been used to preserve detail.
 
     # Default uses "bounded" order algorithm
     bounded_mode = resampler(xout, yout, smoothing=0.05,
-                             relative_smooth=True, order_algorithm='bounded')
+                             relative_smooth=True, order_algorithm='bounded',
+                             jobs=-1)
     extrap_mode = resampler(xout, yout, smoothing=0.05,
-                            relative_smooth=True, order_algorithm='extrapolate')
+                            relative_smooth=True,
+                            order_algorithm='extrapolate', jobs=-1)
     com_edges = resampler(xout, yout, smoothing=0.05,
                           order_algorithm='extrapolate',
-                          edge_threshold=0.8, relative_smooth=True)
+                          edge_threshold=0.8, relative_smooth=True, jobs=-1)
 
     plt.figure(figsize=(10, 10))
     plt.subplot(221)
@@ -229,12 +231,13 @@ dimensions for a second order polynomial (requires `order` + 1).
 
     from sofia_redux.toolkit.resampling import Resample
     from astropy.stats import gaussian_fwhm_to_sigma
-    from skimage.data import hubble_deep_field
+    import imageio
     import matplotlib.pyplot as plt
     import numpy as np
 
     # Cut out a section of the image for analysis
-    image = hubble_deep_field()[325:475, 45:195].sum(axis=-1).astype(float)
+    image = imageio.imread('imageio:hubble_deep_field.png')
+    image = image[325:475, 45:195].sum(axis=-1).astype(float)
     image -= image.min()
     image /= image.max()
     y, x = np.mgrid[:image.shape[0], :image.shape[1]]
@@ -252,17 +255,18 @@ dimensions for a second order polynomial (requires `order` + 1).
     low, low_weights = resampler(xout, yout,
                                  smoothing=3 * sigma,
                                  get_distance_weights=True,
-                                 order_algorithm='extrapolate')
+                                 order_algorithm='extrapolate', jobs=-1)
 
     high, high_weights = resampler(xout, yout, smoothing=sigma / 3,
                                    get_distance_weights=True,
-                                   order_algorithm='extrapolate')
+                                   order_algorithm='extrapolate', jobs=-1)
 
     adaptive, adaptive_weights = resampler(xout, yout,
                                            smoothing=sigma,
                                            adaptive_threshold=1,
                                            get_distance_weights=True,
-                                           order_algorithm='extrapolate')
+                                           order_algorithm='extrapolate',
+                                           jobs=-1)
 
     fig, axs = plt.subplots(2, 3, figsize=(12, 8))
     for ax in axs.ravel():

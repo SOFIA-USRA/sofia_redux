@@ -90,6 +90,9 @@ class QADPlotForTest(object):
     def show(self):
         pass
 
+    def hide(self):
+        pass
+
     def raise_(self):
         pass
 
@@ -396,6 +399,7 @@ class TestQADImView(object):
         assert result['cs'] == 'image'
         assert result['wcs'] is None
         assert result['pix_scale'] == 1.0
+        assert result['filename'] == ''
 
         # throw error from WCS class, verify wcs is none
         class BadClass(object):
@@ -415,7 +419,9 @@ class TestQADImView(object):
                            'NAXIS2': 10,
                            'NAXIS3': 10,
                            'CTYPE1': 'RA---TAN',
-                           'CTYPE2': 'DEC--TAN'})
+                           'CTYPE2': 'DEC--TAN',
+                           'FILENAME': 'test.fits',
+                           'EXTNAME': 'test_ext'})
         MockDS9.get_test['fits header'] = hdr.tostring(sep='\n')
 
         # result should be a WCS object, with pixel scale
@@ -423,6 +429,9 @@ class TestQADImView(object):
         result = imviewer.retrieve_data(5, 5)
         assert isinstance(result['wcs'], WCS)
         assert result['pix_scale'] == 3600
+
+        # filename should be set with extension
+        assert result['filename'] == 'test.fits [test_ext]'
 
         # set a cube instead; verify result is the same
         # (takes current slice only)
@@ -1382,7 +1391,7 @@ class TestQADImView(object):
 
         # verify stats are printed each time
         capt = capsys.readouterr()
-        assert capt.out.count(f'Histogram at: {x0 + 1},{y0 + 1}') == 3
+        assert capt.out.count(f'Histogram at x={x0 + 1}, y={y0 + 1}') == 3
         assert capt.out.count('Using the analysis window') == 3
         assert capt.out.count('Total pixels: 400') == 3
         assert capt.out.count('Min, max, sum') == 3
@@ -1461,7 +1470,7 @@ class TestQADImView(object):
         imviewer.histogram(x0 + 1, y0 + 1)
         assert len(imviewer.histogram_data) == 0
         capt = capsys.readouterr()
-        assert 'Error in retrieving data' in capt.out
+        assert 'Error in retrieving' in capt.out
         assert 'Total pixels' not in capt.out
 
     def test_histogram_summary_stats(self, mocker, capsys, gaussian_data):
@@ -1589,7 +1598,8 @@ class TestQADImView(object):
 
         # verify message are printed each time for each frame
         capt = capsys.readouterr()
-        assert capt.out.count(f'Pixel comparison at: {x0 + 1},{y0 + 1}') == 6
+        assert capt.out.count(f'Pixel comparison at '
+                              f'x={x0 + 1}, y={y0 + 1}') == 6
         assert capt.out.count('Using the analysis window') == 6
 
         # reset and run again with full image
@@ -1647,7 +1657,7 @@ class TestQADImView(object):
         imviewer.pix2pix(x0 + 1000, y0 + 1000)
         capt = capsys.readouterr()
         assert 'WCS position retrieval failed' in capt.out
-        assert f'Pixel comparison at: {x0 + 1000},{y0 + 1000}' in capt.out
+        assert f'Pixel comparison at x={x0 + 1000}, y={y0 + 1000}' in capt.out
 
         # mock an unloaded frame: nothing happens
         imviewer.p2p_data = []
@@ -1662,4 +1672,4 @@ class TestQADImView(object):
         imviewer.pix2pix(x0 + 1, y0 + 1)
         assert len(imviewer.p2p_data) == 0
         capt = capsys.readouterr()
-        assert 'Error in retrieving data' in capt.out
+        assert 'Error in retrieving' in capt.out

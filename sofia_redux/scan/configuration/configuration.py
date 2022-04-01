@@ -1877,8 +1877,8 @@ class Configuration(Options):
         -------
         locked : bool
         """
-        return (self.dot_key_in_set(key, self.locked) or
-                self.dot_key_in_set(f'{key}.value', self.locked))
+        return (self.dot_key_in_set(key, self.locked)
+                or self.dot_key_in_set(f'{key}.value', self.locked))
 
     def is_disabled(self, key):
         """

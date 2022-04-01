@@ -616,14 +616,6 @@ class Gaussian2D(ABC):
         self.position_angle = position_angle
         self.set_xy_fwhm(major_fwhm, minor_fwhm)
 
-        # if minor_fwhm > major_fwhm:  # pragma: no cover
-        #     self.x_fwhm = minor_fwhm
-        #     self.y_fwhm = major_fwhm
-        #     position_angle += (np.pi / 2) * units.Unit('radian')
-        # else:
-        #     self.x_fwhm = major_fwhm
-        #     self.y_fwhm = minor_fwhm
-
     def convolve_with(self, psf):
         """
         Convolve with a given PSF.

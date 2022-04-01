@@ -21,7 +21,10 @@ __all__ = ['atran_params', 'atran_name', 'atran_hdul', 'atran_file',
            'forcast_fits_image', 'exes_fits_image', 'multi_order_filenames',
            'spectral_filenames', 'spectral_hduls', 'split_order_hdul',
            'combined_order_hdul', 'spectrum_hdu', 'image_hdu', 'loaded_eye',
-           'loaded_eye_with_alt', 'empty_eye_app', 'empty_view', 'open_mock']
+           'loaded_eye_with_alt', 'empty_eye_app', 'empty_view', 'open_mock',
+           'line_list', 'line_list_flipped', 'line_list_simple',
+           'line_list_duplicates', 'line_list_whitespace',
+           'line_list_csv', 'line_list_pipe', 'line_list_empty']
 
 
 @pytest.fixture(scope='function')
@@ -601,3 +604,98 @@ def single_gauss_params(single_gauss_fit):
               'visible': False, 'lower_limit': 5,
               'upper_limit': 15}
     return {'model_id_name': {1: params}}
+
+
+@pytest.fixture(scope='function')
+def line_list():
+    lines = {'H 10-5': '3.0392023',
+             'He II 7-6': '3.0916927',
+             'H 9-5': '3.2969917',
+             'H 8-5': '3.7405565',
+             'H 5-4': '4.0522623',
+             '[MgIV]': ' 4.486680',
+             '[ArVI]': '4.529520 ',
+             '[K III]': '4.618020',
+             'H 7-5': '4.6537781'}
+    return lines
+
+
+@pytest.fixture(scope='function')
+def line_list_flipped():
+    lines = {'3.0392023 H 10-5',
+             '3.0916927 He II 7-6',
+             '3.2969917 H 9-5',
+             '3.7405565 H 8-5',
+             '4.0522623 H 5-4',
+             '4.486680 [MgIV]'}
+    return lines
+
+
+@pytest.fixture(scope='function')
+def line_list_duplicates():
+    lines = {'3.0392023  H 10-5',
+             '3.0916927  He II 7-6',
+             '3.2522623  H 5-4',
+             '3.2969917  H 9-5',
+             '3.7405565  H 8-5',
+             '4.0522623  H 5-4',
+             ' 4.486680  [MgIV]',
+             '4.0916927  He II 7-6',
+             '4.529520   [ArVI]',
+             '4.618020   [K III]',
+             '4.6537781  H 7-5',
+             '5.529520   [ArVI]',
+             '5.618020   [K III]'}
+    return lines
+
+
+@pytest.fixture(scope='function')
+def line_list_whitespace(line_list, tmp_path):
+    filename = 'line_list.txt'
+    filename = str(tmp_path / filename)
+    with open(filename, 'w') as f:
+        f.write('# Vacuum Wavelength     ID\n')
+        for transition, wavelength in line_list.items():
+            f.write(f'{wavelength:13s}{transition}\n')
+    return filename
+
+
+@pytest.fixture(scope='function')
+def line_list_pipe(line_list, tmp_path):
+    filename = 'line_list.txt'
+    filename = str(tmp_path / filename)
+    with open(filename, 'w') as f:
+        f.write('# Vacuum Wavelength  |  ID\n')
+        for transition, wavelength in line_list.items():
+            f.write(f'{wavelength:11s} | {transition}\n')
+    return filename
+
+
+@pytest.fixture(scope='function')
+def line_list_csv(line_list, tmp_path):
+    filename = 'line_list.txt'
+    filename = str(tmp_path / filename)
+    with open(filename, 'w') as f:
+        f.write('# Vacuum Wavelength  ,  ID\n')
+        for transition, wavelength in line_list.items():
+            f.write(f'{wavelength:11s} , {transition}\n')
+    return filename
+
+
+@pytest.fixture(scope='function')
+def line_list_simple(line_list, tmp_path):
+    filename = 'line_list.txt'
+    filename = str(tmp_path / filename)
+    with open(filename, 'w') as f:
+        for _, wavelength in line_list.items():
+            f.write(f'{wavelength}\n')
+    return filename
+
+
+@pytest.fixture(scope='function')
+def line_list_empty(tmp_path):
+    filename = 'line_list.txt'
+    filename = str(tmp_path / filename)
+    with open(filename, 'w') as f:
+        f.write('')
+    return filename

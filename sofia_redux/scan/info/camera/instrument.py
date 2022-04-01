@@ -11,6 +11,12 @@ __all__ = ['CameraInstrumentInfo']
 class CameraInstrumentInfo(InstrumentInfo):
 
     def __init__(self):
+        """
+        Initialize camera instrument information.
+
+        The camera instrument also includes rotation on the sky and parses the
+        beam resolution from FITS headers.
+        """
         self.rotation = 0.0 * units.Unit('deg')
         super().__init__()
 

@@ -15,9 +15,14 @@ class Pipeline(ABC):
         """
         Initialize a reduction pipeline.
 
+        The reduction pipeline is responsible for actually performing the
+        reduction tasks at each iteration.  This generally involves
+        performing the tasks on all integrations in all scans, and updating
+        the iteration source model.
+
         Parameters
         ----------
-        reduction : Reduction
+        reduction : sofia_redux.scan.reduction.reduction.Reduction
         """
         self.reduction = reduction
         self.scans = None

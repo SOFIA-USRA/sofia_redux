@@ -13,8 +13,21 @@ class ExampleFrames(HorizontalFrames):
     flagspace = ExampleFrameFlags
 
     def __init__(self):
+        """
+        Initialize frames for the example instrument.
+        """
         super().__init__()
         self.default_info = None
+
+    def copy(self):
+        """
+        Return a copy of the frames for the example instrument.
+
+        Returns
+        -------
+        ExampleFrames
+        """
+        return super().copy()
 
     @property
     def info(self):
@@ -54,9 +67,6 @@ class ExampleFrames(HorizontalFrames):
         -------
         None
         """
-        # hourangle = units.Unit('hourangle')
-        # deg = units.Unit('degree')
-
         table = hdu.data
 
         if 'DAC' in table.columns.names:
@@ -74,26 +84,4 @@ class ExampleFrames(HorizontalFrames):
 
         self.info.set_frames_coordinates(self, table)
         self.chopper_position.zero()
-
-        # self.mjd[:] = table['DMJD']
-        # self.lst[:] = table['LST'] * hourangle
-        # ra = table['RA'] * hourangle
-        # dec = table['DEC'] * deg
-        #
-        # equatorial = EquatorialCoordinates(
-        #     np.stack((ra, dec)),
-        #     epoch=self.info.astrometry.epoch, copy=False)
-        # self.equatorial[:] = equatorial
-        #
-        # horizontal = HorizontalCoordinates(np.stack(
-        #     (table['AZ'], table['EL'])), unit='degree', copy=False)
-        # self.horizontal[:] = horizontal
-        #
-        # self.calculate_parallactic_angle()
-        # horizontal_offset = equatorial.get_native_offset_from(
-        #     self.info.astrometry.equatorial)
-        # self.equatorial_native_to_horizontal_offset(
-        #     horizontal_offset, in_place=True)
-        # self.horizontal_offset[:] = horizontal_offset
-
         self.valid[:] = True

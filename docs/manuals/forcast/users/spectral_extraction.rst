@@ -107,6 +107,17 @@ See |ref_eye_controls| and the table below for a quick summary.
    | Change the feature or baseline    | *Analysis -> Feature,*    |  --                    |
    | fit model                         | *Background*              |                        |
    +-----------------------------------+---------------------------+------------------------+
+   | Load a spectral line list for     | *Analysis -> Reference*   |  --                    |
+   | overplot display                  | *Data: Open, Load List*   |                        |
+   |                                   |                           |                        |
+   |                                   | Select a one- or two-     |                        |
+   |                                   | column text file          |                        |
+   |                                   | containing wavelengths in |                        |
+   |                                   | microns and (optionally)  |                        |
+   |                                   | labels for the values.    |                        |
+   |                                   | Columns may be comma,     |                        |
+   |                                   | space, or '\|' separated. |                        |
+   +-----------------------------------+---------------------------+------------------------+
    | Clear zoom or fit mode            | --                        |  In the plot window,   |
    |                                   |                           |  press *c* to clear    |
    |                                   |                           |  guides and return to  |

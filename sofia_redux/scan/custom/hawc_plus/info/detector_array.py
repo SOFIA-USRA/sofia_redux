@@ -43,6 +43,11 @@ class HawcPlusDetectorArrayInfo(SofiaDetectorArrayInfo):
     default_boresight_index = Coordinate2D([33.5, 19.5], unit=None)
 
     def __init__(self):
+        """
+        Initialize the HAWC+ detector array information.
+
+        Contains information specific to the HAWC+ detector array.
+        """
         super().__init__()
         self.dark_squid_correction = False
         self.dark_squid_lookup = None
@@ -80,7 +85,7 @@ class HawcPlusDetectorArrayInfo(SofiaDetectorArrayInfo):
         if options is None:
             return
 
-        self.dark_squid_correction = self.configuration.has_option(
+        self.dark_squid_correction = self.configuration.get_bool(
             'darkcorrect')
 
         mce_map = options.get_string("MCEMAP")
@@ -168,7 +173,7 @@ class HawcPlusDetectorArrayInfo(SofiaDetectorArrayInfo):
             if len(config_pixel_sizes) >= 1:
                 pixel_sizes.x = config_pixel_sizes[0]
             if len(config_pixel_sizes) >= 2:
-                pixel_sizes.y = config_pixel_sizes[0]
+                pixel_sizes.y = config_pixel_sizes[1]
             else:
                 pixel_sizes.y = pixel_sizes.x
 
@@ -236,23 +241,19 @@ class HawcPlusDetectorArrayInfo(SofiaDetectorArrayInfo):
 
             if pol == 'R':
                 pol_array = self.R0
-                requested_subarrays.append('R0')
-
             elif pol == 'T':
                 pol_array = self.T0
-                requested_subarrays.append('T0')
-
             else:
-                pol_array = -1
-
-            if pol_array < 0:
                 log.warning(f"Invalid subarray selection: {subarray}")
                 continue
 
             if sub is None:
                 index = slice(pol_array, pol_array + self.pol_subarrays)
+                for sub_index in range(self.pol_subarrays):
+                    requested_subarrays.append(f'{pol}{sub_index}')
             else:
                 index = pol_array + sub
+                requested_subarrays.append(f'{pol}{sub}')
 
             self.has_subarray[index] = old_has_subarray[index]
 
@@ -286,7 +287,7 @@ class HawcPlusDetectorArrayInfo(SofiaDetectorArrayInfo):
                 self.detector_bias[sub] = bias
                 found += 1
             else:
-                if sub != 3:
+                if sub < 3:
                     log.warning(f"Missing TES bias values for subarray {sub}")
                 break
         log.debug(f"Parsing HAWC+ TES bias. Found for {found} MCEs")
@@ -363,6 +364,28 @@ class HawcPlusDetectorArrayInfo(SofiaDetectorArrayInfo):
     def initialize_channel_data(self, data):
         """
         Apply this information to create and populate the channel data.
+
+        The following attributes are determined from the detector::
+
+          - col: The column on the subarray (index mod sub_cols)
+          - row: The row on the array (index div sub_cols)
+          - sub: The subarray index (index div sub_pixels)
+          - pol: The polarization index of the subarray (sub // 2)
+          - fits_row: The FITS row index (row mod detector_rows)
+          - fits_col: The FITS column index (sub * sub_cols) + col
+          - subrow: The row on the subarray (row mod detector_rows)
+          - mux: Multiplexer readout index (sub * sub_cols) + col
+          - bias_line: The SQUID detector bias index (row // 2)
+          - series_array: The second stage SQUID series array (mux // 4)
+          - fits_index: The index on the FITS file (fits_row * 128) + fits_row
+
+        Additionally, the channel string ID is set to::
+
+          <SubPolID>[<subrow>,<col>]
+
+        where subrow and col are described above and SubPolID may be one of
+        {R0, R1, T0, R1} where R relates to sub=0 and T relates to sub=1, and
+        the second character represents pol.
 
         Parameters
         ----------

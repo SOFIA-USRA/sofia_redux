@@ -14,6 +14,12 @@ __all__ = ['SofiaScanningInfo']
 class SofiaScanningInfo(InfoBase):
 
     def __init__(self):
+        """
+        Initialize the SOFIA scanning information.
+
+        Contains information on the SOFIA scanning parameters such as range of
+        coordinate values, the speed, and type of scan.
+        """
         super().__init__()
         self.scanning = None
         self.ra = BracketedValues(np.nan, np.nan, unit='hourangle')
@@ -36,6 +42,25 @@ class SofiaScanningInfo(InfoBase):
         return 'scan'
 
     def apply_configuration(self):
+        """
+        Update scanning information with FITS header information.
+
+        Updates the information by taking the following keywords from the
+        FITS header::
+
+          SCANNING - Whether scanning was enabled for the scan (bool)
+          SCNRA0 - The initial scan RA (str or hourangle)
+          SCNRAF - The final scan RA (str or hourangle)
+          SCNDEC0 - The initial scan DEC (str or degrees)
+          SCNDECF - The final scan DEC (str or degrees)
+          SCNRATE - The commanded slew rate on sky (arcseconds/second)
+          SCNDIR - The scan direction on sky (degrees)
+          SCANTYPE - The scan type (str)
+
+        Returns
+        -------
+        None
+        """
         options = self.options
         if options is None:
             return
@@ -68,9 +93,9 @@ class SofiaScanningInfo(InfoBase):
              '(hour) Initial scan RA.'),
             ('SCNDEC0', to_header_float(self.dec.start, 'degree'),
              '(deg) Initial scan DEC.'),
-            ('SCNRAF', to_header_float(self.ra.start, 'hourangle'),
+            ('SCNRAF', to_header_float(self.ra.end, 'hourangle'),
              '(hour) Final scan RA.'),
-            ('SCNDECF', to_header_float(self.dec.start, 'degree'),
+            ('SCNDECF', to_header_float(self.dec.end, 'degree'),
              '(deg) Final scan DEC.'),
             ('SCNRATE', to_header_float(self.speed, 'arcsec/second'),
              '(arcsec/s) Commanded slew rate on sky.'),

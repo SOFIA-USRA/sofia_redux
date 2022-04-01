@@ -8,6 +8,9 @@ __all__ = ['ExampleTelescopeInfo']
 class ExampleTelescopeInfo(TelescopeInfo):
 
     def __init__(self):
+        """
+        Initialize the telescope information for the example instrument.
+        """
         super().__init__()
         self.telescope = "Example Telescope"
 

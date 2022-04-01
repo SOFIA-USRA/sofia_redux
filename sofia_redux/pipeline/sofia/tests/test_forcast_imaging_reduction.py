@@ -765,8 +765,8 @@ class TestFORCASTImagingReduction(object):
         assert r2[0].header['CRVAL2'] == r1[0].header['CRVAL2']
 
         # output shapes are different
-        assert r1[0].data.shape == (21, 21)
-        assert r2[0].data.shape == (22, 23)
+        assert np.allclose(r1[0].data.shape, (21, 21), atol=1)
+        assert np.allclose(r2[0].data.shape, (22, 23), atol=1)
 
     def test_fluxcal(self, tmpdir, capsys, mocker):
         ffile, red, idx = self.standard_setup(tmpdir, 'fluxcal')

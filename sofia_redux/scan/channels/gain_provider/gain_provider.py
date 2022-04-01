@@ -5,9 +5,13 @@ from abc import ABC, abstractmethod
 __all__ = ['GainProvider']
 
 
-class GainProvider(ABC):
+class GainProvider(ABC):  # pragma: no cover
 
     def __init__(self):
+        """
+        The gain provider is an abstract class template, used to extract and
+        set gain values for channel data.
+        """
         pass
 
     @abstractmethod

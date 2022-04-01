@@ -10,6 +10,21 @@ __all__ = ['ExampleChannelGroup']
 class ExampleChannelGroup(ExampleChannelData, ChannelGroup):
 
     def __init__(self, channel_data, indices=None, name=None):
+        """
+        Initialize a channel group for the example instrument.
+
+        Parameters
+        ----------
+        channel_data : ExampleChannelData or ExampleChannelGroup or object
+            The channel data to reference.  If an object is supplied, it must
+            have a valid `data` attribute.
+        indices : numpy.ndarray (int), optional
+            The indices of the parent data that will belong to the channel
+            group.  If no indices are supplied, the entire data will be
+            referenced.
+        name : str, optional
+            The name of the channel group.
+        """
         ChannelGroup.__init__(self, channel_data, indices=indices, name=name)
 
     def set_channel_data(self, index, channel_info):

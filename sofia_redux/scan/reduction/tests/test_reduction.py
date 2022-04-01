@@ -1110,6 +1110,12 @@ class TestReduction(object):
         reduction.add_user_configuration(**kwargs)
         assert 'object' not in reduction.configuration.locked
 
+        reduction.configuration.parse_key_value('somebranch.value', 'foo')
+        kwargs = {'somebranch': 'bar'}
+        reduction.add_user_configuration(**kwargs)
+        assert reduction.configuration['somebranch'] == 'bar'
+        assert 'somebranch.value' in reduction.configuration.locked
+
     def test_pickle_sub_reductions(self, capsys):
         reduction = Reduction('example')
 

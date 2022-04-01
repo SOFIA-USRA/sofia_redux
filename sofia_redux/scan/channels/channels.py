@@ -53,10 +53,14 @@ class Channels(ABC):
 
         Parameters
         ----------
+        name : str, optional
+            The name for the channels.
         parent : object, optional
             The owner of the channels such as a Reduction, Scan or Integration.
         info : Info, optional
             The channel information.
+        size : int, optional
+            The number of stored channels.
         """
         self.info = None
         self.data = None
@@ -142,6 +146,8 @@ class Channels(ABC):
         -------
         Flags
         """
+        if self.data is None:
+            return None
         return self.data.flagspace
 
     @property
@@ -153,6 +159,8 @@ class Channels(ABC):
         -------
         Configuration
         """
+        if self.info is None:
+            return None
         return self.info.configuration
 
     @property
@@ -164,6 +172,8 @@ class Channels(ABC):
         -------
         int
         """
+        if self.data is None:
+            return 0
         return self.data.size
 
     @property
@@ -175,6 +185,8 @@ class Channels(ABC):
         -------
         flag : enum.Enum
         """
+        if self.flagspace is None:
+            return None
         return self.flagspace.sourceless_flags()
 
     @property
@@ -186,6 +198,8 @@ class Channels(ABC):
         -------
         flag : enum.Enum
         """
+        if self.flagspace is None:
+            return None
         return self.flagspace.non_detector_flags()
 
     @property
@@ -306,6 +320,8 @@ class Channels(ABC):
         -------
         None
         """
+        if self.data is None:
+            raise IndexError('No data loaded')
         return self.data[indices]
 
     def set_parent(self, parent):
@@ -502,7 +518,7 @@ class Channels(ABC):
         flag_branch = self.configuration.get_branch('flag', default=None)
         if flag_branch is not None:
             self.flag_fields(flag_branch)
-        self.data.set_flags('BLIND', indices=self.data.weight == 0)
+        self.data.set_flags('BLIND', indices=(self.data.weight == 0))
         self.set_channel_flag_defaults()
 
     def set_channel_flag_defaults(self):
@@ -562,6 +578,8 @@ class Channels(ABC):
         -------
         Scan
         """
+        if self.info is None:
+            raise ValueError("Info must be set before acquiring scan.")
         scan_class = self.info.get_scan_class()
         scan = scan_class(self.copy())
         scan.info.scan = scan
@@ -601,6 +619,8 @@ class Channels(ABC):
         -------
         pixels : int
         """
+        if self.data is None:
+            return 0
         return self.data.get_pixel_count()
 
     def get_pixels(self):
@@ -611,14 +631,16 @@ class Channels(ABC):
         -------
         ChannelData
         """
+        if self.data is None:
+            return None
         return self.data.get_pixels()
 
     def get_perimeter_pixels(self, sections=None):
         """
         Return the pixels at the perimeter positions.
 
-        To algorithm to determine perimeter pixels divides the pixel array into
-        `sections` angular slices about the mean pixel position, and then
+        The algorithm to determine perimeter pixels divides the pixel array
+        into `sections` angular slices about the mean pixel position, and then
         returns the furthest pixel from the central position for that slice.
         If no pixels exist in that slice, the slice is excluded.
 
@@ -963,7 +985,7 @@ class Channels(ABC):
             if isinstance(modality, CorrelatedModality):
                 configured = self.configuration.has_option(
                     f'correlated.{name}')
-                log.info(f" {'(*)' if configured else '  '} {name}")
+                log.info(f" {'(*)' if configured else '   '} {name}")
 
     def print_response_modalities(self):
         """
@@ -1443,9 +1465,9 @@ class Channels(ABC):
                                "'-forget=gains'.")
         if self.configuration.has_option('despike'):
             suggestions.append(" * Disable despiking with '-forget=despike'.")
-        if self.configuration.has_option('weighting.noiseRange'):
+        if self.configuration.has_option('weighting.noiserange'):
             suggestions.append(" * Adjust noise flagging via "
-                               "'weighting.noiseRange'.")
+                               "'weighting.noiserange'.")
         return suggestions
 
     def flag_field(self, field, specs):
@@ -1880,10 +1902,11 @@ class Channels(ABC):
             return
 
         for group_name, channel_strings in add_groups.items():
-            fixed_indices = utils.get_int_list(channel_strings, default=None)
+            value = channel_strings.get('value', None)
+            fixed_indices = utils.get_int_list(value, default=None)
             if fixed_indices is None:
                 raise ValueError(
-                    f"Could not parse group: {group_name}={channel_strings}")
+                    f"Could not parse group: {group_name}={value}")
             indices = self.data.find_fixed_indices(fixed_indices, cull=True)
             indices = np.unique(indices)
             indices = indices[self.data.is_unflagged(flags.DEAD)[indices]]
@@ -2013,7 +2036,8 @@ class Channels(ABC):
                 if 'temperature_gain' not in division[0].fields:
                     log.warning(f"{division[0]} has no 'temperature_gain' "
                                 f"field for blind correction.")
-                else:
+                else:  # pragma: no cover
+                    # not used for any current instruments
                     blind_modality = CorrelatedModality(
                         name='blinds',
                         identity='Bl',
@@ -2044,7 +2068,8 @@ class Channels(ABC):
                     continue
                 identity = options.get('id', division_name)
                 gain_field = options.get('gainfield')
-                if gain_field is not None:
+                if gain_field is not None:  # pragma: no cover
+                    # not used in current instruments
                     gain_field = str(gain_field)
                     if gain_field not in division.fields:
                         log.warning(
@@ -2055,7 +2080,8 @@ class Channels(ABC):
                     CorrelatedModality(name=division_name, identity=identity,
                                        gain_provider=gain_field,
                                        channel_division=division))
-                if 'gainflag' in options:
+                if 'gainflag' in options:  # pragma: no cover
+                    # not used in current instruments
                     try:
                         gain_flag = int(options['gainflag'])
                     except ValueError:

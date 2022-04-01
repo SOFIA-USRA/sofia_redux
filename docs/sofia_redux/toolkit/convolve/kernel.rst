@@ -39,10 +39,10 @@ Basic Functionality
 
     import numpy as np
     import matplotlib.pyplot as plt
-    from skimage.data import coffee
+    import imageio
     from sofia_redux.toolkit.convolve.kernel import BoxConvolve
 
-    image = coffee().sum(axis=2)  # Set to gray scale
+    image = imageio.imread('imageio:coffee.png').sum(axis=2)  # Gray scale
     image = (image - image.min()) / (np.ptp(image))  # normalize for plotting
     mean_smooth = BoxConvolve(image, 11)  # an 11 x 11 box filter
 
@@ -65,10 +65,10 @@ defined Sobel filter to enhance edges in the image:
 
     import numpy as np
     import matplotlib.pyplot as plt
-    from skimage.data import coffee
+    import imageio
     from sofia_redux.toolkit.convolve.kernel import KernelConvolve
 
-    image = coffee().sum(axis=2)  # Set to gray scale
+    image = imageio.imread('imageio:coffee.png').sum(axis=2)  # Gray scale
     image = (image - image.min()) / (np.ptp(image))  # normalize for plotting
 
     # Create a Sobel filter
@@ -196,13 +196,14 @@ the other conditions described in robust outlier rejection for
 .. plot::
     :include-source:
 
-    from skimage.data import microaneurysms
+    import imageio
     import numpy as np
     import matplotlib.pyplot as plt
     from sofia_redux.toolkit.convolve.kernel import SavgolConvolve
 
     # Normalize for plotting
-    image = microaneurysms().astype(float)
+    image = imageio.imread('imageio:immunohistochemistry.png').astype(float)
+    image = image.sum(axis=-1)
     image -= image.min()
     image /= image.max()
 
@@ -236,25 +237,22 @@ Output::
 
              Statistics
     --------------------------------
-    Number of original points : 10404
+    Number of original points : 262144
                Number of NaNs : 0
-           Number of outliers : 126
-         Number of points fit : 10278
-           Degrees of freedom : 10278
-                  Chi-Squared : 38.986402
-          Reduced Chi-Squared : 0.003793
+           Number of outliers : 420
+         Number of points fit : 261724
+           Degrees of freedom : 261724
+                  Chi-Squared : 1841.870250
+          Reduced Chi-Squared : 0.007037
           Goodness-of-fit (Q) : 0.000000
-         RMS deviation of fit : 0.020882
+         RMS deviation of fit : 0.028076
       Outlier sigma threshold : 5
       eps (delta_sigma/sigma) : 0.01
-                   Iterations : 4
-        Iteration termination : delta_rms/rms = 0.003644
+                   Iterations : 3
+        Iteration termination : delta_rms/rms = 0.001941
+
 
 The above example shows an artificially corrupted image, the effects of
 convolution without removing outliers, a convolution with outliers removed,
 and the resulting errors from the robust convolution algorithm.  Visually,
-all outliers have been removed.  However, it appears as though 26 extra points
-were also falsely rejected.  This may be likely near edges, so the user will
-have to find a balance between the rejection threshold for outliers and the
-properties of the data.
-
+all outliers have been removed.

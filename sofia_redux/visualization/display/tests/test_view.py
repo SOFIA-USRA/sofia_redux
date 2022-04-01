@@ -3,7 +3,8 @@
 import logging
 import pytest
 from sofia_redux.visualization.display import (view, figure, cursor_location,
-                                               pane, fitting_results)
+                                               pane, fitting_results,
+                                               reference_window)
 from sofia_redux.visualization.utils import eye_error
 from sofia_redux.visualization import signals, log
 from sofia_redux.visualization.models import high_model, mid_model
@@ -437,8 +438,6 @@ class TestView(object):
         mocker.patch.object(figure.Figure, 'get_selection_results',
                             return_value=results)
         show_mock = mocker.patch.object(QtWidgets.QDialog, 'show')
-        # add_mock = mocker.patch.object(fitting_results.FittingResults,
-        #                                'add_results')
         clear_mock = mocker.patch.object(view.View, 'clear_selection')
         blank_view.cid[fit_mode] = None
         if fit_results:
@@ -546,3 +545,32 @@ class TestView(object):
             with pytest.raises(eye_error.EyeError) as err:
                 blank_view.selected_target_axis()
             assert 'Unknown target axis' in str(err)
+
+    def test_open_ref_data(self, mocker, blank_view):
+        m1 = mocker.patch.object(reference_window.ReferenceWindow, 'show')
+        m2 = mocker.patch.object(reference_window.ReferenceWindow, 'raise_')
+
+        # first open
+        blank_view.open_ref_data()
+        m1.assert_called_once()
+        m2.assert_called_once()
+        rw = blank_view.reference_window
+        assert isinstance(rw, reference_window.ReferenceWindow)
+
+        # second open: show, raise called but instance not replaced
+        blank_view.open_ref_data()
+        assert blank_view.reference_window is rw
+        assert m1.call_count == 2
+        assert m2.call_count == 2
+
+    def test_update_reference_lines(self, mocker, blank_view):
+        m1 = mocker.patch.object(blank_view.figure, 'update_reference_lines')
+        blank_view.update_reference_lines()
+        m1.assert_called_once()
+
+    def test_unload_reference_model(self, mocker, blank_view):
+        m1 = mocker.patch.object(blank_view.reference_models, 'unload_data')
+        m2 = mocker.patch.object(blank_view.figure, 'unload_reference_model')
+        blank_view.unload_reference_model()
+        m1.assert_called_once()
+        m2.assert_called_once()

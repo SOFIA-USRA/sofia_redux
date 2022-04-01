@@ -2,10 +2,12 @@
 
 from abc import ABC
 from astropy import log, units
+from copy import deepcopy
 import numpy as np
 from scipy.optimize import curve_fit, OptimizeWarning
 import warnings
 
+from sofia_redux.scan.configuration.configuration import Configuration
 from sofia_redux.scan.utilities.range import Range
 
 __all__ = ['SkyDipModel']
@@ -29,6 +31,9 @@ class SkyDipModel(ABC):
     def __init__(self):
         """
         Initialize a sky dip model.
+
+        The skydip model is used to fit elevation vs. data to determine the
+        best fit parameters and error estimates.
         """
         self.configuration = None
         self.initial_guess = self.default_initial_guess.copy()
@@ -49,6 +54,16 @@ class SkyDipModel(ABC):
         self.p_opt = None
         self.p_cov = None
 
+    def copy(self):
+        """
+        Return a copy of the skydip model.
+
+        Returns
+        -------
+        SkyDipModel
+        """
+        return deepcopy(self)
+
     def set_configuration(self, configuration):
         """
         Set the sky dip model configuration
@@ -61,6 +76,9 @@ class SkyDipModel(ABC):
         -------
         None
         """
+        if not isinstance(configuration, Configuration):
+            raise ValueError(f"Configuration must be {Configuration} "
+                             f"instance. Received {configuration}.")
         self.configuration = configuration
         if self.configuration.is_configured('skydip.elrange'):
             self.el_range = self.configuration.get_range(
@@ -85,9 +103,26 @@ class SkyDipModel(ABC):
         """
         Initialize the fitting parameters.
 
+        The initial fitting parameters are determined by the following logic::
+
+          - tsky: The 'skydip.tsky' configuration value, or the skydip model
+            tamb attribute if it has a non-zero weight.  Otherwise the default
+            is 273 Kelvins.
+          - offset: If the current initial value is non-finite, is taken to be
+            the midpoint of the skydip model signal range.  If this cannot be
+            determined, defaults to zero.
+          - kelvin: If the current initial value is non-finite, is taken to
+            be the span of the skydip model signal range divided by the tsky
+            value (above).  If this cannot be determined, defaults to one.
+          - tau: If the initial value for kelvin (above) is finite, tau is
+            determined as -log(1-x) where x = s / (am * tsky * kelvin) and
+            s is the span of the signal range, am is the span of the air mass
+            range, and the other parameters are described above.  If x is
+            negative, tau is set to 0.1, or 1 if x > 1.
+
         Parameters
         ----------
-        skydip : SkyDip
+        skydip : sofia_redux.scan.source_models.sky_dip.SkyDip
             The SkyDip model to fit.
 
         Returns
@@ -124,6 +159,8 @@ class SkyDipModel(ABC):
             kelvin = self.initial_guess['kelvin']
             am_range = skydip.get_air_mass_range()
             x = signal_range.span / (am_range.span * tsky * kelvin)
+            if isinstance(x, units.Quantity):
+                x = x.value
             if x < 0:
                 tau = 0.1
             elif x >= 1:
@@ -142,7 +179,7 @@ class SkyDipModel(ABC):
 
         Parameters
         ----------
-        skydip : SkyDip
+        skydip : sofia_redux.scan.source_models.sky_dip.SkyDip
 
         Returns
         -------
@@ -216,7 +253,7 @@ class SkyDipModel(ABC):
         self.sigma = sigma
 
         self.has_converged = np.isfinite(p_opt).all()
-        if not self.has_converged:
+        if not self.has_converged:  # pragma: no cover
             log.warning("Skydip fit did not converge!")
         errors = np.sqrt(np.diag(p_cov))
 
@@ -252,22 +289,30 @@ class SkyDipModel(ABC):
 
         Returns
         -------
-        fit : units.Quantity
-            The fit in Kelvin
+        fit : float or numpy.ndarray
+            The fit to the elevation in Kelvins
         """
         if self.p_opt is None:
-            return elevation * np.nan
-        return self.value_at(elevation, *self.p_opt)
+            result = elevation * np.nan
+        else:
+            result = self.value_at(elevation, *self.p_opt)
+        if isinstance(result, units.Quantity):
+            result = result.value
+        return result
 
     @staticmethod
     def value_at(elevation, tau, offset, kelvin, tsky):
         """
         Return the result of the fitted value.
 
+        The returned value is given as::
+
+          data = offset - ((exp(-tau / sin(elevation)) - 1) * tsky * kelvin)
+
         Parameters
         ----------
-        elevation : float
-            The elevation in radians.
+        elevation : float or units.Quantity
+            The elevation in radians (float) or as an angle quantity.
         tau : float
             The tau value.
         offset : float
@@ -279,9 +324,13 @@ class SkyDipModel(ABC):
 
         Returns
         -------
-        value : float
+        value : float or units.Quantity
+            The fitted value.  If any quantities are passed in, the result
+            will also be a quantity.
         """
-        eps = -(np.exp(-tau / np.sin(elevation)) - 1)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', RuntimeWarning)
+            eps = -(np.exp(-tau / np.sin(elevation)) - 1)
         t_obs = eps * tsky
         return offset + (t_obs * kelvin)
 

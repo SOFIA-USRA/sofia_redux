@@ -58,7 +58,7 @@ def test_copy():
 
 def test_eq(b2j, j2b):
     assert b2j == b2j
-    assert b2j is not None
+    assert b2j != 1
     assert b2j != j2b
     b2 = Precession(b2j.from_epoch, b2j.from_epoch)
     assert b2 != b2j

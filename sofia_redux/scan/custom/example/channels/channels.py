@@ -12,7 +12,31 @@ __all__ = ['ExampleChannels']
 class ExampleChannels(SingleColorArrangement):
 
     def __init__(self, parent=None, info=None, size=0, name='example'):
+        """
+        Initialize channels for the example instrument.
+
+        Parameters
+        ----------
+        parent : object, optional
+            The owner of the channels such as a Reduction, Scan or Integration.
+        info : sofia_redux.scan.custom.example.info.info.ExampleInfo, optional
+            The information object from which to create the channels.
+        size : int, optional
+            The number of channels to be stored.
+        name : str, optional
+            A name for the channels.
+        """
         super().__init__(name=name, parent=parent, info=info, size=size)
+
+    def copy(self):
+        """
+        Create and return a copy.
+
+        Returns
+        -------
+        ExampleChannels
+        """
+        return super().copy()
 
     def init_divisions(self):
         """
@@ -81,6 +105,17 @@ class ExampleChannels(SingleColorArrangement):
         """
         pass
 
+    def get_si_pixel_size(self):
+        """
+        Return the science instrument pixel size
+
+        Returns
+        -------
+        pixel_size : Coordinate2D
+            The (x, y) pixel sizes
+        """
+        return self.info.detector_array.pixel_sizes
+
     def load_channel_data(self):
         """
         Load the channel data.
@@ -117,14 +152,3 @@ class ExampleChannels(SingleColorArrangement):
                             "Specific channel divisions not established.")
             else:
                 self.read_wiring_data(wiring_data_file)
-
-    def get_si_pixel_size(self):
-        """
-        Return the science instrument pixel size
-
-        Returns
-        -------
-        x, y : Coordinate2D
-            The (x, y) pixel sizes
-        """
-        return self.info.detector_array.pixel_sizes

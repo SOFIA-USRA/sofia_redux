@@ -15,6 +15,24 @@ __all__ = ['Index2D']
 class Index2D(Coordinate2D):
 
     def __init__(self, coordinates=None, copy=True):
+        """
+        Initialize 2-dimensional indexing coordinates.
+
+        The indexing coordinates are used to represent integer (column,
+        row) indices on a 2-dimensional array.  As an extension of the
+        :class:`Coordinate2D`, x represents columns and y represents rows.
+        Invalid indices are usually represented by an entry of -1.
+
+        Parameters
+        ----------
+        coordinates : list or tuple or array-like, optional
+            The coordinates used to populate the object during initialization.
+            The first (0) value or index should represent column
+            coordinates, and the second should represent the rows.
+        copy : bool, optional
+            Whether to explicitly perform a copy operation on the input
+            coordinates when storing them into these coordinates.
+        """
         super().__init__(coordinates=coordinates, copy=copy, unit=None)
         if self.coordinates is not None:
             self.coordinates = round_values(coordinates)

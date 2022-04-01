@@ -14,6 +14,11 @@ __all__ = ['SofiaDitheringInfo']
 class SofiaDitheringInfo(InfoBase):
 
     def __init__(self):
+        """
+        Initialize the SOFIA dithering information.
+
+        Contains information on the SOFIA dither parameters.
+        """
         super().__init__()
         self.dithering = None
         self.coordinate_system = None
@@ -36,6 +41,24 @@ class SofiaDitheringInfo(InfoBase):
         return 'dither'
 
     def apply_configuration(self):
+        """
+        Update dithering information with FITS header information.
+
+        Updates the chopping information by taking the following keywords from
+        the FITS header::
+
+          DITHER - Whether dithering is enabled for the scan (bool)
+          DTHCRSYS - The MCCS chopping coordinate system (str)
+          DTHPATT - The approximate pattern for dithering (str)
+          DTHXOFF - The x-offset for dithering (arcseconds)
+          DTHYOFF - The y-offset for dithering (arcseconds)
+          DTHNPOS - The number of dithering positions (int)
+          DTHINDEX - The dither position index (int)
+
+        Returns
+        -------
+        None
+        """
         options = self.options
         if options is None:
             return
@@ -44,6 +67,7 @@ class SofiaDitheringInfo(InfoBase):
         self.coordinate_system = options.get_string("DTHCRSYS")
         self.pattern_shape = options.get_string("DTHPATT")
         self.offset.x = options.get_float('DTHXOFF')
+        self.offset.y = options.get_float('DTHYOFF')
         self.positions = options.get_int("DTHNPOS")
         self.index = options.get_int("DTHINDEX")
 

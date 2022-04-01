@@ -934,7 +934,7 @@ def get_covariance(signal_values, frame_data, frame_valid,
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def get_ml_gain_increment(frame_data, signal_wc, signal_wc2, sample_flags,
-                          channel_indices, valid_frames):
+                          channel_indices, valid_frames):  # pragma: no cover
     """
     Return the maximum-likelihood gain increment.
 

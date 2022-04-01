@@ -1,13 +1,6 @@
 .. currentmodule:: sofia_redux.toolkit.image.warp
 
-There are currently two methods available for warping images.  The first is
-to use one of the transforms available in the :mod:`skimage.transform` module,
-and the second is to fit a polynomial followed by interpolation.  The first
-method is generally faster and allows customization.  The second was created
-in order to provide support for the old IDL polywarp function along with a way
-to evaluate the fit.
-
-Image Warping through skimage.transform classes
+Image Warping through polynomial transformation
 ===============================================
 Image warping can be achieved using the :func:`warp_image` function.  Here, two
 sets of coordinates should be provided: one indicating a standard set of (x, y)
@@ -21,10 +14,10 @@ from the center:
 
     import numpy as np
     import matplotlib.pyplot as plt
-    from skimage.data import checkerboard
+    import imageio
     from sofia_redux.toolkit.image.warp import warp_image
 
-    image = checkerboard()
+    image = imageio.imread('imageio:checkerboard.png')
     sy, sx = image.shape
 
     # Define some original grid positions
@@ -100,9 +93,9 @@ original image onto a newly defined warped set of coordinates.  For example:
 
     from sofia_redux.toolkit.image.warp import polywarp_image
     import matplotlib.pyplot as plt
-    from skimage.data import camera
+    import imageio
 
-    image = camera()
+    image = imageio.imread('imageio:camera.png')
     # Define warp based on corners of image for this example
     x0 = [0, 0, 511, 511]
     y0 = [511, 0, 0, 511]

@@ -130,7 +130,7 @@ class TestReduxViewer(object):
         assert ev.first_display
         ev.display()
         assert open_mock.called
-        assert 'Added 1 models to panes' in caplog.text
+        assert 'Added model to panes' in caplog.text
         assert not ev.first_display
 
         # display again

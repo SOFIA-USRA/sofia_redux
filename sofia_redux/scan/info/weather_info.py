@@ -7,8 +7,11 @@ from sofia_redux.scan.info.info import Info
 __all__ = ['WeatherInfo']
 
 
-class WeatherInfo(Info):
-
+class WeatherInfo(Info):  # pragma: no cover
+    """
+    An abstract class used to retrieve information on environmental conditions
+    such as temperature, pressure, and wind.
+    """
     @abstractmethod
     def get_ambient_kelvins(self):
         """

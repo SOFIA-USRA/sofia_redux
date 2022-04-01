@@ -3,25 +3,15 @@
 from sofia_redux.toolkit.resampling.resample_kernel import ResampleKernel
 
 import numpy as np
-import pytest
 from scipy.ndimage import convolve
-from skimage.data import page
 
 
-@pytest.fixture
-def data_coordinates_2d():
-    data = page().astype(float)
-    data -= data.min()
-    data /= data.max()
+def test_regular_2d():
+    rand = np.random.RandomState(42)
+    data = rand.rand(128, 128)
     y, x = np.mgrid[:data.shape[0], :data.shape[1]]
     coords = np.stack([x.ravel(), y.ravel()])
-    return coords, data
 
-
-def test_regular_2d(data_coordinates_2d):
-    coords, data = data_coordinates_2d
-    # data = np.zeros_like(data)
-    # data[100, 100] = 1.0
     kernel = np.ones((3, 3))
     resampler = ResampleKernel(coords, data.ravel(), kernel, degrees=2,
                                kernel_spacing=1)

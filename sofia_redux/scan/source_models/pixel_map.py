@@ -12,6 +12,7 @@ from sofia_redux.scan.coordinate_systems.projector.astro_projector import \
     AstroProjector
 from sofia_redux.scan.source_models import source_numba_functions as snf
 from sofia_redux.scan.utilities import numba_functions
+from sofia_redux.scan.utilities.utils import round_values
 from sofia_redux.toolkit.utilities import multiprocessing
 
 __all__ = ['PixelMap']
@@ -20,19 +21,46 @@ __all__ = ['PixelMap']
 class PixelMap(AstroModel2D):
 
     def __init__(self, info, reduction=None):
+        """
+        Initialize a PixelMap source model.
+
+        The pixel map source model consists of a collection of
+        :class:`AstroIntensityMap` models, each containing a astronomical map
+        generated from a single pixel of the observing instrument.  They are
+        primarily designed to measure pixel offsets from a known source.
+
+        Parameters
+        ----------
+        info : sofia_redux.scan.info.info.Info
+            The Info object which should belong to this source model.
+        reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
+            The reduction for which this source model should be applied.
+        """
         super().__init__(info, reduction=reduction)
         self.pixel_maps = {}
         self.template = AstroIntensityMap(info, reduction=reduction)
 
-    def is_adding_to_master(self):
+    def copy(self, with_contents=True):
         """
-        Return whether this map is adding to a master map during accumulation.
+        Return a copy of the pixel map.
+
+        Parameters
+        ----------
+        with_contents : bool, optional
+            If `True`, include all pixel maps in the copy.
 
         Returns
         -------
-        bool
+        PixelMap
         """
-        return True
+        new = super().copy()
+        pixel_maps = {}
+        if with_contents:
+            for pixel, pixel_map in self.pixel_maps.items():
+                if isinstance(pixel_map, AstroIntensityMap):
+                    pixel_maps[pixel] = pixel_map.copy()
+        new.pixel_maps = pixel_maps
+        return new
 
     @property
     def referenced_attributes(self):
@@ -78,27 +106,15 @@ class PixelMap(AstroModel2D):
         """
         self.template.shape = new_shape
 
-    def copy(self, with_contents=True):
+    def is_adding_to_master(self):
         """
-        Return a copy of the pixel map.
-
-        Parameters
-        ----------
-        with_contents : bool, optional
-            If `True`, include all pixel maps in the copy.
+        Return whether this map is adding to a master map during accumulation.
 
         Returns
         -------
-        PixelMap
+        bool
         """
-        new = super().copy()
-        pixel_maps = {}
-        if with_contents:
-            for pixel, pixel_map in self.pixel_maps.items():
-                if isinstance(pixel_map, AstroIntensityMap):
-                    pixel_maps[pixel] = pixel_map.copy()
-        new.pixel_maps = pixel_maps
-        return new
+        return True
 
     def clear_process_brief(self):
         """
@@ -159,6 +175,9 @@ class PixelMap(AstroModel2D):
         """
         Reset the source processing.
 
+        Reset the source processing for the full source model and all
+        individual pixel maps.
+
         Returns
         -------
         None
@@ -170,7 +189,7 @@ class PixelMap(AstroModel2D):
 
     def clear_content(self):
         """
-        Clear the data.
+        Clear the data in all pixel maps.
 
         Returns
         -------
@@ -227,7 +246,7 @@ class PixelMap(AstroModel2D):
         offsets = frames.project(central_position, projector)
 
         map_indices = self.grid.offset_to_index(offsets)
-        map_indices.coordinates = np.round(map_indices.coordinates).astype(int)
+        map_indices.coordinates = round_values(map_indices.coordinates)
         frames.map_index.coordinates = map_indices.coordinates
         frames.source_index = self.pixel_index_to_source_index(
             map_indices.coordinates)
@@ -307,7 +326,7 @@ class PixelMap(AstroModel2D):
 
         msg = f"Updating {n_pixels} pixel maps"
         jobs = self.reduction.available_reduction_jobs
-        if jobs > 1:
+        if jobs > 1:  # pragma: no cover
             msg += f" in parallel using {jobs} threads"
         msg += ' (This may take a while).'
         log.debug(msg)
@@ -489,8 +508,8 @@ class PixelMap(AstroModel2D):
         n_pixels = pixels.size
         msg = f"Syncing gains in {n_pixels} pixel maps"
         jobs = self.reduction.available_reduction_jobs
-        if jobs > 1:
-            msg += f" in parallel using {jobs} threads"
+        if jobs > 1:  # pragma: no cover
+            msg += f" in parallel using {jobs} threads"  # pragma: no cover
         msg += ' (This may take a while).'
         log.debug(msg)
 
@@ -529,7 +548,6 @@ class PixelMap(AstroModel2D):
         channel_frame_data : numpy.ndarray (float)
             The synced frame data for `pixel_number` of shape (n_frames,).
         """
-        # TODO: test to see if this can be updated in place with threading.
         (pixel_maps, frames, pixels, frame_gains,
          source_gains, sync_gains) = args
         fixed_index = pixels.fixed_index[pixel_number]
@@ -588,26 +606,29 @@ class PixelMap(AstroModel2D):
         Parameters
         ----------
         path : str
-            The file path to write to.
+            The directory in which to write the output products.
 
         Returns
         -------
         None
         """
+        fits_properties = self.template.map.fits_properties
         if self.has_option('pixelmap.writemaps'):
             try:
                 pixels = self.configuration.get_int_list('pixelmap.writemaps')
-            except ValueError:
+            except ValueError:  # pragma: no cover
                 pixels = None
             if pixels is None:
                 if self.configuration.get_bool('pixelmap.writemaps'):
                     pixels = list(self.pixel_maps.keys())
-            for pixel in pixels:
-                pixel_map = self.pixel_maps.get(pixel)
-                if isinstance(pixel_map, AstroIntensityMap):
-                    pixel_map.write(path)
+            if pixels is not None:
+                for pixel in pixels:
+                    pixel_map = self.pixel_maps.get(pixel)
+                    if isinstance(pixel_map, AstroIntensityMap):
+                        pixel_map.map.fits_properties = fits_properties
+                        pixel_map.write(path)
         self.calculate_pixel_data(smooth=False)
-        self.write_pixel_data()
+        self.write_pixel_data(path=path)
 
     def write_fits(self, filename):
         """
@@ -629,6 +650,10 @@ class PixelMap(AstroModel2D):
         """
         Process the source model.
 
+        Processes each pixel map separately.  If 'pixelmap.process' is True
+        in the configuration, each pixel map will be fully processed.
+        Otherwise, the results are only accumulated.
+
         Returns
         -------
         None
@@ -647,7 +672,14 @@ class PixelMap(AstroModel2D):
         Calculate pixel position offsets and couplings.
 
         Pixel positions and couplings will be stored in the channel data of the
-        first scan in the source model.
+        first scan in the source model.  Fits to the peak are calculated using
+        :func:`AstroIntensityMap.get_peak_source` to determine the x and y
+        position of the peak as well as the amplitude.  The couplings are
+        determined as::
+
+            coupling = peak.amplitude / median(peak.amplitude)
+
+        taking the median over all available instrument pixels.
 
         Parameters
         ----------
@@ -665,13 +697,15 @@ class PixelMap(AstroModel2D):
         n_pixels = len(self.pixel_maps)
         msg = f"Fitting {n_pixels} pixel positions to source map"
         jobs = self.reduction.available_reduction_jobs
-        if jobs > 1:
+        if jobs > 1:  # pragma: no cover
             msg += f" in parallel using {jobs} threads"
         msg += '.'
         log.debug(msg)
 
         point_size = self.info.instrument.get_point_size()
-        args = self.pixel_maps, smooth, point_size
+        degree = self.configuration.get_int('pointing.degree', default=3)
+        reduce_degrees = self.configuration.get_bool('pointing.reduce_degrees')
+        args = self.pixel_maps, smooth, point_size, degree, reduce_degrees
         kwargs = None
 
         peaks = multiprocessing.multitask(
@@ -707,7 +741,8 @@ class PixelMap(AstroModel2D):
         """
         Fit a peak to a single pixel.
 
-        This function is safe for :func:`multitask`.
+        This function is safe for :func:`multitask`.  The peak for any single
+        pixel is determined using :func:`AstroIntensityMap.get_peak_source`.
 
         Parameters
         ----------
@@ -716,6 +751,8 @@ class PixelMap(AstroModel2D):
                 args[0] - pixel_maps (dict)
                 args[1] - smooth (bool)
                 args[2] - point_size (units.Quantity)
+                args[3] - degree (int)
+                args[4] - reduce_degrees (bool)
         pixel_number : int
             The pixel fixed index for the pixel map.
 
@@ -723,7 +760,7 @@ class PixelMap(AstroModel2D):
         -------
         gaussian_model : EllipticalSource or None
         """
-        pixel_maps, smooth, point_size = args
+        pixel_maps, smooth, point_size, degree, reduce_degrees = args
 
         beam_map = pixel_maps.get(pixel_number)
         if beam_map is None or not beam_map.is_valid():
@@ -731,21 +768,29 @@ class PixelMap(AstroModel2D):
         obs_map = beam_map.map
         if smooth:
             obs_map.smooth_to(point_size)
-        source = beam_map.get_peak_source()
+        source = beam_map.get_peak_source(
+            degree=degree, reduce_degrees=reduce_degrees)
         return source
 
-    def write_pixel_data(self):
+    def write_pixel_data(self, path=None):
         """
         Write the pixel data to file.
+
+        Parameters
+        ----------
+        path : str, optional
+            The directory in which to write the pixel data.  The default is
+            the reduction work path.
 
         Returns
         -------
         None
         """
+        if path is None:
+            path = self.reduction.work_path
         channels = self.get_first_scan().channels
         source_gain = channels.get_source_gains(filter_corrected=False)
-        filename = os.path.join(self.reduction.work_path,
-                                f'{self.get_default_core_name()}.rcp')
+        filename = os.path.join(path, f'{self.get_default_core_name()}.rcp')
         channels.data.coupling = source_gain / channels.data.gain
 
         hdr = self.get_first_scan().get_first_integration().get_ascii_header()
@@ -920,7 +965,7 @@ class PixelMap(AstroModel2D):
 
         Parameters
         ----------
-        args : 2-tuple
+        args : 1-tuple
             A tuple of arguments where:
                 args[0] - pixel_maps (dict)
         pixel_index : int

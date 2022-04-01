@@ -1,6 +1,5 @@
 #  Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-
 import pytest
 import logging
 import astropy.units as u
@@ -9,11 +8,12 @@ from scipy import optimize as sco
 from matplotlib import figure as mpf
 from matplotlib import axes as mpa
 from matplotlib import lines as ml
+from matplotlib import collections as mc
 from matplotlib import backend_bases as mpb
 from matplotlib import artist as mart
 
-from sofia_redux.visualization.display import pane
-from sofia_redux.visualization.models import high_model
+from sofia_redux.visualization.display import pane, drawing
+from sofia_redux.visualization.models import high_model, reference_model
 from sofia_redux.visualization.utils import eye_error
 
 PyQt5 = pytest.importorskip('PyQt5')
@@ -21,8 +21,14 @@ PyQt5 = pytest.importorskip('PyQt5')
 
 class TestPane(object):
 
-    def test_init(self):
-        pass
+    def test_eq(self):
+        pane1 = pane.OneDimPane()
+        pane2 = pane.OneDimPane()
+        assert pane1 != 'test'
+        assert pane1 == pane1
+        assert pane1 == pane2
+        pane2.ax = 'test'
+        assert pane1 != pane2
 
     def test_set_border_visibility(self, blank_pane):
         blank_pane.set_border_visibility(True)
@@ -174,7 +180,7 @@ class TestPane(object):
         mocker.patch.object(blank_onedim, '_plot_cursor')
         mocker.patch.object(blank_onedim, '_convert_low_model_units')
         mocker.patch.object(blank_onedim, '_plot_single_line',
-                            return_value='line')
+                            return_value=ml.Artist())
 
         # okay fields
         blank_onedim.fields['x'] = 'wavepos'
@@ -209,15 +215,15 @@ class TestPane(object):
 
         blank_onedim.plot_type = 'scatter'
         lines = blank_onedim._plot_model(model)
+        line, cursor, error = tuple(lines)
 
-        assert all([isinstance(ln['line']['artist'], ml.Line2D)
-                    for ln in lines.values()])
-        assert all([ln['line']['artist'].get_marker() == marker
-                    for ln in lines.values()])
-        assert all([ln['line']['artist'].get_linestyle() == 'None'
-                    for ln in lines.values()])
-        assert all([not ln['line']['artist'].get_visible()
-                    for ln in lines.values()])
+        assert isinstance(line.get_artist(), ml.Line2D)
+        assert line.get_artist().get_marker() == marker
+        assert line.get_artist().get_linestyle() == 'None'
+        assert isinstance(cursor.get_artist(), mc.PathCollection)
+        assert isinstance(error.get_artist(), mc.PolyCollection)
+        assert all([not ln.get_artist().get_visible()
+                    for ln in lines])
 
     @pytest.mark.parametrize('name,unit,label',
                              [('flux', u.Jy, 'Flux [Jy]'),
@@ -309,10 +315,11 @@ class TestPane(object):
 
         assert not blank_onedim.data_changed
 
-        updates, err_update = blank_onedim.set_units(units, 'primary')
+        updates = blank_onedim.set_units(units, 'primary')
 
+        assert isinstance(updates, list)
+        assert len(updates) == 0
         assert not blank_onedim.data_changed
-        assert len(err_update) == 0
         for unit in units.values():
             assert f'Cannot convert units to {unit}' in caplog.text
 
@@ -396,7 +403,7 @@ class TestPane(object):
         arts, params = blank_onedim.perform_fit('fit_gauss_constant', limits)
         assert len(arts) == 0
         if mock_fit_1 or mock_fit_2 or xlow > 10:
-            # empty/failed fit still returns parameters but not artists
+            # empty/failed fit still returns parameters but not gallery
             assert len(params) == 1
         else:
             assert len(params) == 0
@@ -498,20 +505,20 @@ class TestPane(object):
 
         updates = blank_onedim._update_error_artists()
         assert len(updates) == 1
-        assert updates[0]['new_artist'].get_visible()
+        assert updates[0].updates['artist'].get_visible()
 
         # disable model: error artist should not be visible
         grism_model.enabled = False
         updates = blank_onedim._update_error_artists()
         assert len(updates) == 1
-        assert not updates[0]['new_artist'].get_visible()
+        assert not updates[0].updates['artist'].get_visible()
 
         # same for show_error = False
         grism_model.enabled = True
         blank_onedim.show_error = False
         updates = blank_onedim._update_error_artists()
         assert len(updates) == 1
-        assert not updates[0]['new_artist'].get_visible()
+        assert not updates[0].updates['artist'].get_visible()
 
     def test_overplot_no_op(self, blank_onedim):
         # todo: check if this is the desired behavior -
@@ -561,3 +568,164 @@ class TestPane(object):
         x, y = blank_onedim.xy_at_cursor(event)
         assert x == event.xdata
         assert np.allclose(y, altdata, atol=1e-4)
+
+    def test_update_reference_data(self, mocker, blank_onedim):
+        # no reference models existing or provided
+        assert blank_onedim.update_reference_data() is None
+
+        # provide an empty reference model
+        ref = reference_model.ReferenceData()
+        updates = blank_onedim.update_reference_data(reference_models=ref)
+        assert blank_onedim.reference is ref
+        assert len(updates) == 0
+
+        # plot true/false calls different functions
+        m1 = mocker.patch.object(blank_onedim, '_plot_reference')
+        m2 = mocker.patch.object(blank_onedim, '_current_reference_options')
+        blank_onedim.update_reference_data(plot=True)
+        blank_onedim.update_reference_data(plot=False)
+        m1.assert_called_once()
+        m2.assert_called_once()
+
+    def test_unload_ref_model(self, mocker, blank_onedim):
+        ref = reference_model.ReferenceData()
+        m1 = mocker.patch.object(ref, 'unload_data')
+
+        # no op if reference not loaded
+        blank_onedim.unload_ref_model()
+
+        # data unload called if is
+        blank_onedim.reference = ref
+        blank_onedim.unload_ref_model()
+        m1.assert_called_once()
+
+    def test_plot_reference_lines(self, blank_onedim, grism_hdul,
+                                  line_list_csv):
+        assert blank_onedim._plot_reference_lines() == list()
+
+        # load some data
+        fn = grism_hdul.filename()
+        grism_model = high_model.Grism(grism_hdul)
+        blank_onedim.models[fn] = grism_model
+        blank_onedim.orders[fn] = [0]
+        blank_onedim.markers[fn] = 'x'
+        blank_onedim.colors[fn] = 'blue'
+        ax = mpf.Figure().subplots(1, 1)
+        blank_onedim.ax = ax
+        blank_onedim._plot_model(grism_model)
+
+        # load a reference model
+        ref = reference_model.ReferenceData()
+        ref.add_line_list(line_list_csv)
+        blank_onedim.reference = ref
+
+        # all lines out of data range
+        lines = blank_onedim._plot_reference_lines()
+        assert len(lines) == 0
+
+        # make a little test function to check for created artists
+        def artist_count(lines):
+            count_line = 0
+            count_label = 0
+            for ln in lines:
+                assert isinstance(ln, drawing.Drawing)
+                if ln.kind == 'ref_line' and ln.artist is not None:
+                    count_line += 1
+                elif ln.kind == 'ref_label' and ln.artist is not None:
+                    count_label += 1
+            return count_line, count_label
+
+        # set limits to include 9 lines and labels
+        blank_onedim.set_limits({'x': [0, 5]})
+        lines = blank_onedim._plot_reference_lines()
+        assert len(lines) == 18
+        assert artist_count(lines) == (9, 9)
+
+        # hide labels and update
+        ref.set_visibility('ref_label', False)
+        lines = blank_onedim._plot_reference_lines()
+        assert len(lines) == 18
+        assert artist_count(lines) == (9, 0)
+
+        # hide lines and update: ignores both labels and lines
+        ref.set_visibility('ref_label', True)
+        ref.set_visibility('ref_line', False)
+        lines = blank_onedim._plot_reference_lines()
+        assert len(lines) == 18
+        assert artist_count(lines) == (0, 0)
+
+        # append a line with the same label as another line:
+        # both should be plotted
+        ref.line_list['H 7-5'] = [4.654, 4.781]
+        ref.set_visibility('ref_line', True)
+        lines = blank_onedim._plot_reference_lines()
+        assert len(lines) == 20
+        assert artist_count(lines) == (10, 10)
+
+    def test_current_reference_options(self, blank_onedim, line_list_csv):
+        ax = mpf.Figure().subplots(1, 1)
+        blank_onedim.ax = ax
+
+        # none without reference model
+        options = blank_onedim._current_reference_options()
+        assert len(options) == 0
+
+        # load a reference model
+        ref = reference_model.ReferenceData()
+        ref.add_line_list(line_list_csv)
+        blank_onedim.reference = ref
+
+        # all lines out of range
+        options = blank_onedim._current_reference_options()
+        assert len(options) == 0
+
+        # set limits to include 9 lines and labels
+        blank_onedim.set_limits({'x': [0, 5]})
+        options = blank_onedim._current_reference_options()
+        assert len(options) == 18
+
+        count_line = 0
+        count_label = 0
+        for opt in options:
+            assert isinstance(opt, dict)
+            if opt['model_id'] == 'ref_lines':
+                count_line += 1
+            elif opt['model_id'] == 'ref_labels':
+                count_label += 1
+        assert count_line == 9
+        assert count_label == 9
+
+    def test_set_units_reference(self, blank_onedim, grism_hdul):
+        # load some data
+        model = high_model.Grism(grism_hdul)
+        blank_onedim.models[model.filename] = model
+        blank_onedim.orders[model.filename] = [0]
+        blank_onedim.markers[model.filename] = 'x'
+        blank_onedim.colors[model.filename] = 'blue'
+        ax = mpf.Figure().subplots(1, 1)
+        blank_onedim.ax = ax
+
+        # units to change to/from
+        units1 = {'x': u.um, 'y': u.Jy}
+        units2 = {'x': u.nm, 'y': u.Jy}
+        blank_onedim.units = units1
+
+        # add a reference model with 3 lines in data range
+        ref = reference_model.ReferenceData()
+        ref.line_list = {'1': [5.1], '2': [6.3], '3': [7.4]}
+        ref.line_unit = u.um
+        ref.set_visibility('ref_line', True)
+        blank_onedim.reference = ref
+
+        # 2 plot updates (flux, error), 3 lines, 3 labels
+        updates = blank_onedim.set_units(units2, 'primary')
+        assert len(updates) == 8
+
+        label = 1
+        for ln in updates:
+            if ln.kind == 'ref_line':
+                # um value from line list should be converted to nm value
+                # in vline artist
+                assert np.allclose(ln.artist.get_data()[0],
+                                   ref.line_list[str(label)][0] * 1000)
+                label += 1

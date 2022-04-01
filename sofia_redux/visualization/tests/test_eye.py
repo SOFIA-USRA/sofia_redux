@@ -131,7 +131,7 @@ class TestEye(object):
                     for p in loaded_eye.view.figure.panes])
 
         # test with alt axis
-        with qtbot.wait_signal(loaded_eye.view.signals.atrophy_bg_full):
+        with qtbot.wait_signal(loaded_eye.view.signals.atrophy_bg_partial):
             qtbot.mouseClick(loaded_eye.view.enable_overplot_checkbox,
                              PyQt5.QtCore.Qt.LeftButton)
         loaded_eye.view.axes_selector.setCurrentText('Current Overplot')
@@ -161,7 +161,7 @@ class TestEye(object):
                         for p in loaded_eye.view.figure.panes])
 
     def test_change_fields_with_alt(self, loaded_eye, qtbot):
-        with qtbot.wait_signal(loaded_eye.view.signals.atrophy_bg_full):
+        with qtbot.wait_signal(loaded_eye.view.signals.atrophy_bg_partial):
             qtbot.mouseClick(loaded_eye.view.enable_overplot_checkbox,
                              PyQt5.QtCore.Qt.LeftButton)
         loaded_eye.view.axes_selector.setCurrentText('Current Overplot')
@@ -304,7 +304,7 @@ class TestEye(object):
                                  pos=point)
 
             qtbot.wait(1000)
-            assert len(loaded_eye.view.figure.artists.arts['guide']) == count
+            assert len(loaded_eye.view.figure.gallery.arts['guide']) == count
 
         new_limits = (loaded_eye.view.figure.panes[0].ax.get_xlim(),
                       loaded_eye.view.figure.panes[0].ax.get_ylim())
@@ -362,7 +362,7 @@ class TestEye(object):
                                  pos=point)
 
             qtbot.wait(1000)
-            assert len(loaded_eye.view.figure.artists.arts['guide']) == count
+            assert len(loaded_eye.view.figure.gallery.arts['guide']) == count
 
         new_limits = (loaded_eye.view.figure.panes[0].ax.get_xlim(),
                       loaded_eye.view.figure.panes[0].ax.get_ylim())
@@ -416,7 +416,7 @@ class TestEye(object):
 
         deltax = [1 / 4, 3 / 4]
         deltay = [1 / 2, 1 / 2]
-        assert len(loaded_eye.view.figure.artists.arts['fit']) == 0
+        assert len(loaded_eye.view.figure.gallery.arts['fit']) == 0
         for x, y in zip(deltax, deltay):
             point = PyQt5.QtCore.QPoint(int(p.x() + x * w),
                                         int(p.y() + y * h))
@@ -427,13 +427,13 @@ class TestEye(object):
                                  pos=point)
 
         qtbot.wait(1000)
-        assert len(loaded_eye.view.figure.artists.arts['fit']) == 2
+        assert len(loaded_eye.view.figure.gallery.arts['fit']) == 2
         assert len(loaded_eye.view.fit_results.model_fits) == 1
 
         with qtbot.wait_signal(loaded_eye.signals.atrophy):
             qtbot.keyClick(loaded_eye.view.figure_widget,
                            PyQt5.QtCore.Qt.Key_C)
-        assert len(loaded_eye.view.figure.artists.arts['fit']) == 0
+        assert len(loaded_eye.view.figure.gallery.arts['fit']) == 0
 
     def test_cursor_location(self, loaded_eye, qtbot, mocker):
         mocker.patch.object(cursor_location.CursorLocation, 'show')
@@ -458,8 +458,8 @@ class TestEye(object):
         qtbot.wait(100)
 
         assert all([label.text().strip() == '-' for label in loc_labels])
-        assert all([not art['artist'].get_visible()
-                    for art in loaded_eye.view.figure.artists.arts['cursor']])
+        assert all([not art.get_artist().get_visible()
+                    for art in loaded_eye.view.figure.gallery.arts['cursor']])
 
         # Turn on checkbox
         qtbot.mouseClick(loaded_eye.view.cursor_checkbox,
@@ -475,15 +475,15 @@ class TestEye(object):
             'motion_notify_event', event)
         qtbot.wait(100)
         assert all([label.text().strip() != '-' for label in loc_labels])
-        arts = loaded_eye.view.figure.artists.arts['cursor']
-        assert all([art['artist'].get_visible() for art in arts])
+        arts = loaded_eye.view.figure.gallery.arts['cursor']
+        assert all([art.get_visible() for art in arts])
 
         # Turn off checkbox
         qtbot.mouseClick(loaded_eye.view.cursor_checkbox,
                          PyQt5.QtCore.Qt.LeftButton)
         qtbot.wait(200)
         assert all([label.text().strip() == '-' for label in loc_labels])
-        assert all([not art['artist'].get_visible() for art in arts])
+        assert all([not art.get_artist().get_visible() for art in arts])
 
         # Pop out window
         qtbot.mouseClick(loaded_eye.view.cursor_popout_button,
@@ -496,7 +496,7 @@ class TestEye(object):
             'motion_notify_event', event)
         qtbot.wait(100)
         assert all([label.text().strip() == '-' for label in loc_labels])
-        assert all([art['artist'].get_visible() for art in arts])
+        assert all([art.get_artist().get_visible() for art in arts])
         assert window_mock.called_once()
 
     @pytest.mark.parametrize('index,label,color',
@@ -509,7 +509,7 @@ class TestEye(object):
         assert cycle == 'Accessible'
 
         if index:
-            line = loaded_eye.view.figure.artists.arts['line'][0]['artist']
+            line = loaded_eye.view.figure.gallery.arts['line'][0].get_artist()
             assert line.get_color() != color
             with qtbot.wait_signal(loaded_eye.view.signals.atrophy):
                 loaded_eye.view.color_cycle_selector.setCurrentIndex(index)
@@ -518,7 +518,7 @@ class TestEye(object):
         cycle = loaded_eye.view.color_cycle_selector.currentText()
         assert cycle == label
 
-        line = loaded_eye.view.figure.artists.arts['line'][0]['artist']
+        line = loaded_eye.view.figure.gallery.arts['line'][0].get_artist()
         assert line.get_color() == color
 
     @pytest.mark.parametrize('index,label,drawstyle,linestyle,marker',
@@ -539,14 +539,14 @@ class TestEye(object):
         current = loaded_eye.view.plot_type_selector.currentText()
         assert current == label
 
-        line = loaded_eye.view.figure.artists.arts['line'][0]['artist']
+        line = loaded_eye.view.figure.gallery.arts['line'][0].get_artist()
         assert line.get_drawstyle() == drawstyle
         assert line.get_linestyle() == linestyle
         assert str(line.get_marker()) == marker
 
     def test_show_markers(self, loaded_eye, qtbot):
         assert not loaded_eye.view.marker_checkbox.isChecked()
-        line = loaded_eye.view.figure.artists.arts['line'][0]['artist']
+        line = loaded_eye.view.figure.gallery.arts['line'][0].get_artist()
         assert str(line.get_marker()) == 'None'
 
         with qtbot.wait_signal(loaded_eye.view.signals.atrophy):
@@ -582,7 +582,8 @@ class TestEye(object):
 
     def test_show_errors(self, loaded_eye, qtbot):
         assert loaded_eye.view.error_checkbox.isChecked()
-        art = loaded_eye.view.figure.artists.arts['error_range'][0]['artist']
+        art = loaded_eye.view.figure.gallery.arts[
+            'error_range'][0].get_artist()
         assert art.get_visible()
 
         with qtbot.wait_signal(loaded_eye.view.signals.atrophy):
@@ -616,21 +617,25 @@ class TestEye(object):
 
     def test_show_overplot(self, loaded_eye, qtbot):
         assert not loaded_eye.view.enable_overplot_checkbox.isChecked()
-        assert len(loaded_eye.view.figure.artists.arts['line_alt']) == 0
+        assert len(loaded_eye.view.figure.gallery.arts['line_alt']) == 0
 
-        with qtbot.wait_signal(loaded_eye.view.signals.atrophy_bg_full):
+        with qtbot.wait_signal(loaded_eye.view.signals.atrophy_bg_partial):
             qtbot.mouseClick(loaded_eye.view.enable_overplot_checkbox,
                              PyQt5.QtCore.Qt.LeftButton)
         assert loaded_eye.view.enable_overplot_checkbox.isChecked()
-        assert len(loaded_eye.view.figure.artists.arts['line_alt']) == 1
-        art = loaded_eye.view.figure.artists.arts['line_alt'][0]['artist']
-        assert art.get_visible()
+        draws = loaded_eye.view.figure.gallery.arts['line']
+        alts = list(filter(lambda x: x.get_axes() == 'alt', draws))
+        assert len(alts) == 1
+        assert all([alt.get_visible() for alt in alts])
+        # assert len(loaded_eye.view.figure.gallery.arts['line_alt']) == 1
+        # art = loaded_eye.view.figure.gallery.arts['line_alt'][0].get_artist()
+        # assert art.get_visible()
 
-        with qtbot.wait_signal(loaded_eye.view.signals.atrophy_bg_full):
+        with qtbot.wait_signal(loaded_eye.view.signals.atrophy_bg_partial):
             qtbot.mouseClick(loaded_eye.view.enable_overplot_checkbox,
                              PyQt5.QtCore.Qt.LeftButton)
         assert loaded_eye.view.error_checkbox.isChecked()
-        assert len(loaded_eye.view.figure.artists.arts['line_alt']) == 0
+        assert len(loaded_eye.view.figure.gallery.arts['line_alt']) == 0
 
     def test_fit_results_window(self, loaded_eye, qtbot, mocker):
         show_mock = mocker.patch.object(fitting_results.FittingResults,

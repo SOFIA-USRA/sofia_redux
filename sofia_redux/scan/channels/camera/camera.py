@@ -20,7 +20,24 @@ class Camera(Channels):
 
     def __init__(self, name=None, parent=None, info=None, size=0):
         """
-        The Camera class contains additional rotation functionality.
+        Initialize camera channels.
+
+        The Camera class extends the :class:`Channels` class by including
+        additional handling of the channels with respect to their field of
+        view such as rotation with respect to a reference, correlated sky
+        gradient modalities, and how to read and apply the hardware file
+        containing channel data.
+
+        Parameters
+        ----------
+        name : str, optional
+            The name for the channels.
+        parent : object, optional
+            The owner of the channels such as a Reduction, Scan or Integration.
+        info : sofia_redux.scan.info.info.Info, optional
+            The channel information.
+        size : int, optional
+            The number of stored channels.
         """
         super().__init__(name=name, parent=parent, info=info, size=size)
 
@@ -33,6 +50,8 @@ class Camera(Channels):
         -------
         angle : units.Quantity
         """
+        if self.info is None:
+            return None
         return self.info.instrument.rotation
 
     @rotation.setter
@@ -48,6 +67,8 @@ class Camera(Channels):
         -------
         None
         """
+        if self.info is None:
+            return
         self.info.instrument.rotation = value
 
     def init_modalities(self):
@@ -123,7 +144,8 @@ class Camera(Channels):
                 log.warning("Cannot update pixel RCP data. Using values from "
                             "FITS.")
 
-        if isinstance(self, Rotating):
+        if isinstance(self, Rotating):  # pragma: no cover
+            # not used for any current instruments
             angle = self.get_rotation()
             if angle != 0.0:
                 self.rotate(angle)
@@ -138,6 +160,8 @@ class Camera(Channels):
         -------
         angle : astropy.units.Quantity
         """
+        if self.info is None:
+            return None
         return self.info.get_rotation_angle()
 
     @staticmethod
@@ -160,9 +184,6 @@ class Camera(Channels):
         rcp_information : pandas.DataFrame or None
             The RCP information.  `None` will be returned on failure.
         """
-        # This is a test file:
-        # /Users/dperera/mmoc_repo/awe/mine/resources/original/aszca/master.rcp
-
         if not isinstance(filename, str) or not os.path.isfile(filename):
             return None
 
@@ -220,6 +241,7 @@ class Camera(Channels):
         if rcp_df is None:
             log.warning("Cannot update pixel RCP data. Using values from "
                         "FITS.")
+            return
 
         # Channels not in the RCP file are assumed to be blind
         self.data.set_flags('BLIND')
@@ -261,7 +283,8 @@ class Camera(Channels):
 
         self.flag_invalid_positions()
 
-        rcp_center = self.configuration.float_list('rcp.center', default=None)
+        rcp_center = self.configuration.get_float_list(
+            'rcp.center', default=None)
         if rcp_center is not None:
             self.data.position.x -= rcp_center[0] * arcsec
             self.data.position.y -= rcp_center[1] * arcsec
@@ -275,7 +298,8 @@ class Camera(Channels):
         if rcp_zoom is not None:
             self.data.position.scale(rcp_zoom)
 
-    def get_rcp_header(self):
+    @staticmethod
+    def get_rcp_header():
         """
         Return the header for an RCP file.
 

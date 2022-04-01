@@ -13,6 +13,12 @@ __all__ = ['SofiaNoddingInfo']
 class SofiaNoddingInfo(InfoBase):
 
     def __init__(self):
+        """
+        Initialize the SOFIA nodding information.
+
+        Contains information on the SOFIA nodding parameters such as the nod
+        amplitude, angle, pattern, and timings.
+        """
         super().__init__()
         self.nodding = None
         self.dwell_time = np.nan * units.s
@@ -39,6 +45,27 @@ class SofiaNoddingInfo(InfoBase):
         return 'nod'
 
     def apply_configuration(self):
+        """
+        Update nodding information with FITS header information.
+
+        Updates the information by taking the following keywords from the
+        FITS header::
+
+          NODDING - Whether nodding was enabled for the scan (bool)
+          NODTIME - Total dwell time per nod position (seconds)
+          NODN - The number of nod cycles (int)
+          NODSETL - The nod settling time (seconds)
+          NODAMP - The nod amplitude on the sky (arcseconds)
+          NODANGLE - The nod angle on the sky (degrees)
+          NODBEAM - The nod beam position (str)
+          NODPATT - The pointing sequence for one nod cycle (str)
+          NODSTYLE - The nodding style (str)
+          NODCRSYS - The nodding coordinate system (str)
+
+        Returns
+        -------
+        None
+        """
         options = self.options
         if options is None:
             return
@@ -77,7 +104,7 @@ class SofiaNoddingInfo(InfoBase):
              '(s) Total dwell time per nod position.'),
             ('NODSETL', to_header_float(self.settling_time, 'second'),
              '(s) Nod settling time.'),
-            ('NODPATT', self.pattern, 'Ponting sequence for one nod cycle.'),
+            ('NODPATT', self.pattern, 'Pointing sequence for one nod cycle.'),
             ('NODCRSYS', self.coordinate_system, 'Nodding coordinate system.'),
             ('NODBEAM', self.beam_position, 'Nod beam position.'),
         ]

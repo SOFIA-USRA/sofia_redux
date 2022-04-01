@@ -6,7 +6,8 @@ import matplotlib.backends.backend_qt5agg as mb
 from matplotlib import figure
 import matplotlib.lines as ml
 
-from sofia_redux.visualization.display import blitting, artists
+from sofia_redux.visualization.display import blitting, gallery
+from sofia_redux.visualization import signals
 
 PyQt5 = pytest.importorskip('PyQt5')
 
@@ -17,11 +18,12 @@ class TestBlitManager(object):
 
         fig = figure.Figure()
         can = mb.FigureCanvasAgg(fig)
-        art = artists.Artists()
-        obj = blitting.BlitManager(can, art)
+        gal = gallery.Gallery()
+        sig = signals.Signals()
+        obj = blitting.BlitManager(can, gal, sig)
 
-        assert obj.canvas == can
-        assert obj._artists == art
+        assert obj._canvas == can
+        assert obj._gallery == gal
         assert obj._background is None
         assert isinstance(obj.draw_cid, int)
 
@@ -45,7 +47,7 @@ class TestBlitManager(object):
                                   fig=figure.Figure(), **attrs)
         draw_mock = mocker.patch.object(blitting.BlitManager,
                                         'safe_draw')
-        blank_blitter.canvas = canvas
+        blank_blitter._canvas = canvas
 
         blank_blitter.update_background()
 
@@ -73,7 +75,7 @@ class TestBlitManager(object):
         attrs = {'restore_region.return_value': None}
         canvas = mocker.MagicMock(spec=mb.FigureCanvasQTAgg,
                                   fig=figure.Figure(), **attrs)
-        blank_blitter.canvas = canvas
+        blank_blitter._canvas = canvas
         draw = mocker.patch.object(blitting.BlitManager, '_draw_animated')
 
         blank_blitter.blit()
@@ -86,15 +88,22 @@ class TestBlitManager(object):
         arts = [ml.Line2D([], []), ml.Line2D([], [])]
         caplog.set_level(logging.DEBUG)
         attrs = {'gather_artists.return_value': arts}
-        art_mocks = mocker.MagicMock(**attrs)
+        gal_mocks = mocker.MagicMock(**attrs)
         canvas = mocker.MagicMock(spec=mb.FigureCanvasQTAgg,
                                   fig=figure.Figure())
         draw = mocker.patch.object(figure.Figure, 'draw_artist')
 
         blank_blitter.canvas = canvas
-        blank_blitter._artists = art_mocks
+        blank_blitter._gallery = gal_mocks
 
         blank_blitter._draw_animated()
 
         assert f'Drawing {len(arts)} artists' in caplog.text
         assert draw.call_count == len(arts)
+
+    def test_catch_overlaps(self, blank_blitter, mocker, qtbot):
+        # check that partial bg signal is raised if overlaps are caught
+        mocker.patch.object(blank_blitter._gallery, 'catch_label_overlaps',
+                            return_value=True)
+        with qtbot.wait_signal(blank_blitter._signals.atrophy_bg_partial):
+            blank_blitter._catch_overlaps()

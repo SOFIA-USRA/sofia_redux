@@ -11,5 +11,11 @@ __all__ = ['HawcPlusChoppingInfo']
 class HawcPlusChoppingInfo(SofiaChoppingInfo):
 
     def __init__(self):
+        """
+        Initialize the HAWC+ chopping information.
+
+        Contains information on the SOFIA chop parameters with an additional
+        parameter for the minimum transit tolerance.
+        """
         super().__init__()
         self.transit_tolerance = np.nan * units.Unit('arcsec')

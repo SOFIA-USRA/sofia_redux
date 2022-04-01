@@ -5,7 +5,7 @@ from astropy.time import Time
 
 from sofia_redux.scan.info.astrometry import AstrometryInfo
 from sofia_redux.scan.utilities import utils
-from sofia_redux.scan.coordinate_systems.epoch.epoch import J2000
+from sofia_redux.scan.coordinate_systems.epoch.epoch import Epoch, J2000
 from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
     EquatorialCoordinates
 from sofia_redux.scan.coordinate_systems.horizontal_coordinates import \
@@ -21,6 +21,14 @@ class SofiaAstrometryInfo(AstrometryInfo):
     default_fits_date = "1970-01-01T00:00:00.0"
 
     def __init__(self):
+        """
+        Initialize astrometry information for SOFIA observations.
+
+        The SOFIA astrometry information should be relevant to all instruments
+        that may be mounted on SOFIA.  All equatorial observations use the
+        J2000 equinox.  Additionally, SOFIA is considered a ground-based
+        telescope since it still encounters atmospheric effects.
+        """
         super().__init__()
         self.date = None
         self.start_time = None
@@ -32,12 +40,38 @@ class SofiaAstrometryInfo(AstrometryInfo):
         self.ground_based = True
 
     def apply_configuration(self):
+        """
+        Update astrometry information with the FITS header configuration data.
+
+        Returns
+        -------
+        None
+        """
         if self.options is None:
             return
         self.parse_time()
         self.parse_astrometry()
 
     def parse_time(self):
+        """
+        Parse and apply time related keywords from the FITS header.
+
+        The following FITS header keywords are used::
+
+          KEY       DESCRIPTION
+          --------  -----------
+          DATE      Determines the file date (ISOT format, UTC scale)
+          DATE-OBS  The exposure start time (ISOT format, UTC scale)
+          UTCSTART  The UTC of the exposure start (hh:mm:ss.### UTC format)
+          UTCEND    The UTC of the exposure end (hh:mm:ss.### UTC format)
+
+        The modified Julian date (MJD) is calculated, and precessions are
+        initialized relative to the J2000 equinox.
+
+        Returns
+        -------
+        None
+        """
         options = self.options
         if options is None:
             return
@@ -58,7 +92,7 @@ class SofiaAstrometryInfo(AstrometryInfo):
             self.time_stamp = self.date
             self.date = self.time_stamp[:t_ind]
             start_time = self.time_stamp[(t_ind + 1):]
-        elif start_time is None:
+        elif start_time is not None:
             self.time_stamp = self.date + 'T' + start_time
         else:
             self.time_stamp = self.date
@@ -68,11 +102,29 @@ class SofiaAstrometryInfo(AstrometryInfo):
         self.calculate_precessions(J2000)
 
     def parse_astrometry(self):
+        """
+        Parse and apply coordinate related keywords from the FITS header.
+
+        The following FITS header keywords are used::
+
+          KEY       DESCRIPTION
+          --------  -----------
+          EQUINOX   The equinox of the observation (year)
+          OBSRA     The right-ascension of the observed source (hours)
+          OBSDEC    The declination of the observed source (degrees)
+
+        The modified Julian date (MJD) is calculated, and precessions are
+        initialized relative to the J2000 equinox.
+
+        Returns
+        -------
+        None
+        """
         options = self.options
         if options is None:
             return
         if "EQUINOX" in options:
-            self.epoch = utils.get_epoch(options.get_float("EQUINOX"))
+            self.epoch = Epoch.get_epoch(options.get_float("EQUINOX"))
 
         if "OBSRA" in options and "OBSDEC" in options:
             self.requested_equatorial = EquatorialCoordinates(epoch=self.epoch)
@@ -124,11 +176,11 @@ class SofiaAstrometryInfo(AstrometryInfo):
     @classmethod
     def coordinate_valid(cls, coordinate):
         """
-        Check whether a coordinate frame is valid.
+        Check whether a coordinate is valid.
 
         Parameters
         ----------
-        coordinate : SphericalCoordinates
+        coordinate : Coordinate2D
 
         Returns
         -------
@@ -160,14 +212,18 @@ class SofiaAstrometryInfo(AstrometryInfo):
         -------
         coordinates : EquatorialCoordinates
         """
-
         if self.coordinate_valid(self.object_coordinates):
             log.debug("Referencing scan to object coordinates OBJRA/OBJDEC.")
             return self.object_coordinates.copy()
 
         elif self.is_requested_valid(header=header):
             log.debug("Referencing scan to requested coordinates.")
-            return self.requested_equatorial.copy()
+            if self.requested_equatorial is not None:
+                return self.requested_equatorial.copy()
+            else:
+                return EquatorialCoordinates(
+                    [header['OBSRA'], header['OBSDEC']],
+                    epoch=header.get('EQUINOX', 'J2000'))
 
         elif telescope is not None and self.coordinate_valid(
                 telescope.boresight_equatorial):

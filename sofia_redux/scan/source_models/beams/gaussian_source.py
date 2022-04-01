@@ -10,7 +10,7 @@ from sofia_redux.scan.source_models.beams.gaussian_2d import Gaussian2D
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.coordinate_systems.index_2d import Index2D
 from sofia_redux.scan.utilities.utils import (
-    to_header_quantity, UNKNOWN_FLOAT_VALUE)
+    round_values, to_header_quantity, UNKNOWN_FLOAT_VALUE)
 
 __all__ = ['GaussianSource']
 
@@ -256,13 +256,20 @@ class GaussianSource(Gaussian2D):
             self.y_mean = peak_position
             self.coordinates = Coordinate2D([peak_position, peak_position])
 
-    def fit_map_least_squares(self, map2d):
+    def fit_map_least_squares(self, map2d, degree=3, reduce_degrees=False):
         """
         Fit the Gaussian to a given map using LSQ method (adaptTo).
 
         Parameters
         ----------
         map2d : Map2D or Observation2D
+        degree : int, optional
+            The spline degree used to fit the map peak value.
+        reduce_degrees : bool, optional
+            If `True`, allow the spline fit to reduce the number of degrees
+            in cases where there are not enough points available to perform
+            the spline fit of `degree`.  If `False`, a ValueError will be
+            raised if such a fit fails.
 
         Returns
         -------
@@ -297,7 +304,8 @@ class GaussianSource(Gaussian2D):
         self.fwhm = fwhm
 
         if image is not map2d:
-            self.set_peak_from(map2d)
+            self.set_peak_from(map2d, degree=degree,
+                               reduce_degrees=reduce_degrees)
             fwhm_rms = np.sqrt(2) * fwhm / self.peak_significance
             self.fwhm_weight = 1 / (fwhm_rms ** 2)
 
@@ -327,7 +335,7 @@ class GaussianSource(Gaussian2D):
         """
         peak_coordinates = self.find_peak(image, sign=0)
         x0, y0 = peak_coordinates.coordinates
-        amplitude = image.data[int(np.round(y0)), int(np.round(x0))]
+        amplitude = image.data[round_values(y0), round_values(x0)]
         pixel_size = self.grid.get_pixel_size().coordinates
         fwhm_pix = (self.fwhm / pixel_size.min()).decompose().value
         sigma_pix = gaussian_fwhm_to_sigma * fwhm_pix
@@ -375,7 +383,7 @@ class GaussianSource(Gaussian2D):
         return amplitude * np.exp(x1 + x2)
 
     def fit_map(self, map2d, max_iterations=40, radius_increment=1.1,
-                tolerance=0.05):
+                tolerance=0.05, degree=3, reduce_degrees=False):
         """
         Fit the Gaussian source to a given map.
 
@@ -396,6 +404,13 @@ class GaussianSource(Gaussian2D):
         tolerance : float, optional
             Stop the iterations if (1-tolerance) * last_sum <= sum <=
             (1+tolerance).
+        degree : int, optional
+            The spline degree used to determine the peak value if necessary.
+        reduce_degrees : bool, optional
+            If `True`, allow the spline fit to reduce the number of degrees
+            in cases where there are not enough points available to perform
+            the spline fit of `degree`.  If `False`, a ValueError will be
+            raised if such a fit fails.
 
         Returns
         -------
@@ -417,7 +432,7 @@ class GaussianSource(Gaussian2D):
                                 tolerance=tolerance)
 
         # Calculate the peak value and fwhm from the image (maybe significance)
-        self.set_peak_from(image)
+        self.set_peak_from(image, degree=degree, reduce_degrees=reduce_degrees)
         fwhm2 = np.abs(self.source_sum
                        * self.grid.get_pixel_area()
                        / self.peak)
@@ -427,7 +442,9 @@ class GaussianSource(Gaussian2D):
 
         # If the image is not the map, calculate the actual peak value.
         if image is not map2d:
-            self.set_peak_from(map2d)  # Sets the peak, peak weight, and unit.
+            # Sets the peak, peak weight, and unit.
+            self.set_peak_from(map2d, degree=degree,
+                               reduce_degrees=reduce_degrees)
             fwhm_rms = np.sqrt(2.0) * self.fwhm / self.peak_significance
             if fwhm_rms != 0 and not np.isnan(fwhm_rms):
                 self.fwhm_weight = 1.0 / (fwhm_rms ** 2)
@@ -671,7 +688,7 @@ class GaussianSource(Gaussian2D):
 
         return Coordinate2D(wd_sum / w_sum)
 
-    def set_peak_from(self, image, degree=3):
+    def set_peak_from(self, image, degree=3, reduce_degrees=False):
         """
         Set the peak value from a given image.
 
@@ -684,17 +701,24 @@ class GaussianSource(Gaussian2D):
         image : FlaggedArray or Map2D
         degree : int, optional
             The spline degree to fit.
+        reduce_degrees : bool, optional
+            If `True`, allow the spline fit to reduce the number of degrees
+            in cases where there are not enough points available to perform
+            the spline fit of `degree`.  If `False`, a ValueError will be
+            raised if such a fit fails.
 
         Returns
         -------
         None
         """
-        peak_value = image.value_at(self.center_index, degree=degree)
+        peak_value = image.value_at(self.center_index, degree=degree,
+                                    reduce_degrees=reduce_degrees)
         unit = getattr(image, 'unit', 1.0 * units.dimensionless_unscaled)
         self.peak = peak_value
         if hasattr(image, 'weight'):
-            self.peak_weight = image.get_weights().value_at(self.center_index,
-                                                            degree=degree)
+            self.peak_weight = image.get_weights().value_at(
+                self.center_index, degree=degree,
+                reduce_degrees=reduce_degrees)
         else:
             self.set_exact()  # peak weight set to infinity
 
@@ -990,8 +1014,8 @@ class GaussianSource(Gaussian2D):
 
         if np.isfinite(fwhm) and fwhm != UNKNOWN_FLOAT_VALUE:
             header['SRCFWHM'] = fwhm, size_comment + 'source FWHM.'
-        if (self.fwhm_weight > 0 and np.isfinite(fwhm_rms) and
-                fwhm_rms != UNKNOWN_FLOAT_VALUE):
+        if (self.fwhm_weight > 0 and np.isfinite(fwhm_rms)
+                and fwhm_rms != UNKNOWN_FLOAT_VALUE):
             header['SRCWERR'] = fwhm_rms, size_comment + 'FWHM error.'
 
     def get_integral(self, psf_area):

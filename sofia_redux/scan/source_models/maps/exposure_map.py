@@ -9,7 +9,10 @@ class ExposureMap(Overlay):
 
     def __init__(self, observation=None):
         """
-        Create a weight map overlay of an observation.
+        Create an exposure map overlay of an observation.
+
+        The exposure map overlay returns and operates on the exposure image of
+        the Observation2D basis.
 
         Parameters
         ----------
@@ -25,7 +28,7 @@ class ExposureMap(Overlay):
 
         Returns
         -------
-        numpy.ndarray
+        exposure_values : numpy.ndarray
         """
         exposure = self.basis.exposure
         if exposure is None:

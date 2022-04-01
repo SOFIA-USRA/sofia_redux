@@ -3,7 +3,6 @@
 import warnings
 from abc import abstractmethod
 from astropy import log, units
-from astropy.coordinates import FK5, SkyCoord
 from astropy.stats import gaussian_fwhm_to_sigma
 import numpy as np
 import os
@@ -12,16 +11,24 @@ import psutil
 from sofia_redux.toolkit.utilities import multiprocessing
 from sofia_redux.scan.source_models.source_model import SourceModel
 from sofia_redux.scan.utilities import numba_functions
+from sofia_redux.scan.utilities.utils import round_values
+from sofia_redux.scan.source_models.maps.map_2d import Map2D
 from sofia_redux.scan.source_models.maps.observation_2d import Observation2D
 from sofia_redux.scan.source_models import source_numba_functions as snf
+from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
+    SphericalCoordinates
 from sofia_redux.scan.coordinate_systems.projection.spherical_projection \
     import SphericalProjection
 from sofia_redux.scan.coordinate_systems.grid.spherical_grid import \
     SphericalGrid
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
+    EquatorialCoordinates
 from sofia_redux.scan.coordinate_systems.index_2d import Index2D
 from sofia_redux.scan.coordinate_systems.projector.astro_projector import \
     AstroProjector
+from sofia_redux.scan.coordinate_systems.epoch.epoch import J2000
+
 
 __all__ = ['AstroModel2D']
 
@@ -32,13 +39,26 @@ class AstroModel2D(SourceModel):
     MAX_X_OR_Y_SIZE = 5000
 
     def __init__(self, info, reduction=None):
+        """
+        Initialize an astronomical 2D model of the source.
+
+        The AstroModel2D is an abstract class that extends the
+        :class:`SourceModel` to represent an astronomical source.  This
+        includes a spherical grid onto which the source should be projected.
+
+        Parameters
+        ----------
+        info : sofia_redux.scan.info.info.Info
+            The Info object which should belong to this source model.
+        reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
+            The reduction for which this source model should be applied.
+        """
         super().__init__(info=info, reduction=reduction)
         self.grid = SphericalGrid()
         self.smoothing = 0.0 * units.Unit('arcsec')
         self.allow_indexing = True
         self.index_shift_x = 0
         self.index_mask_y = 0
-        self.max_x_or_y_size = 5000
         if self.has_option('grid'):
             resolution = self.configuration.get_float(
                 'grid') * self.info.instrument.get_size_unit()
@@ -46,6 +66,22 @@ class AstroModel2D(SourceModel):
             resolution = 0.2 * self.info.instrument.resolution
 
         self.grid.set_resolution(resolution)
+
+    def copy(self, with_contents=True):
+        """
+        Return a copy of the 2D astronomical model.
+
+        Parameters
+        ----------
+        with_contents : bool, optional
+            If `True`, return a true copy of the source model.  Otherwise, just
+            return a basic version with the necessary meta data.
+
+        Returns
+        -------
+        AstroModel2D
+        """
+        return super().copy(with_contents=with_contents)
 
     @property
     def projection(self):
@@ -67,53 +103,25 @@ class AstroModel2D(SourceModel):
 
         Parameters
         ----------
-        value : SphericalProjection
+        value : SphericalProjection or None
 
         Returns
         -------
         None
         """
+        if value is not None and not isinstance(value, SphericalProjection):
+            raise ValueError(f"Projection must be {SphericalProjection}")
         self.grid.projection = value
-
-    @property
-    def wcs(self):
-        """
-        Return the WCS projection.
-
-        Returns
-        -------
-        WCS
-        """
-        if self.grid is None:
-            return None
-        return self.grid.wcs
-
-    @wcs.setter
-    def wcs(self, value):
-        """
-        Set the WCS projection.
-
-        Parameters
-        ----------
-        value : WCS
-
-        Returns
-        -------
-        None
-        """
-        if self.grid is None:
-            return
-        self.grid.wcs = value
 
     @property
     def reference(self):
         """
-        Return the reference pixel of the source model WCS.
+        Return the reference coordinate for the source model grid.
 
         Returns
         -------
-        numpy.ndarray (float)
-            The (x, y) reference position of the source model.
+        SphericalCoordinates
+            The reference coordinates for the source model grid.
         """
         if self.grid is None:
             return None
@@ -122,12 +130,12 @@ class AstroModel2D(SourceModel):
     @reference.setter
     def reference(self, value):
         """
-        Set the reference pixel of the source model WCS.
+        Set the reference coordinate for the source model grid.
 
         Parameters
         ----------
-        value : numpy.ndarray (float)
-            The (x, y) reference position of the source model.
+        value : SphericalCoordinates or None
+            The new reference coordinates for the source model grid.
 
         Returns
         -------
@@ -135,96 +143,10 @@ class AstroModel2D(SourceModel):
         """
         if self.grid is None:
             return
+        if value is not None and not isinstance(value, SphericalCoordinates):
+            raise ValueError(f"Reference coordinates must be "
+                             f"{SphericalCoordinates}")
         self.grid.reference = value
-
-    @abstractmethod
-    def is_empty(self):
-        """
-        Return whether the source map is empty.
-
-        Returns
-        -------
-        bool
-        """
-        pass
-
-    @abstractmethod
-    def get_pixel_footprint(self):
-        """
-        Return the pixel footprint of the source model.
-
-        Returns
-        -------
-        int
-        """
-        pass
-
-    @abstractmethod
-    def base_footprint(self, pixels):
-        """
-        Return the base footprint of the source model.
-
-        Parameters
-        ----------
-        pixels : int
-
-        Returns
-        -------
-        int
-        """
-        pass
-
-    @abstractmethod
-    def process_final(self):
-        """
-        Don't know
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def write_fits(self, filename):
-        """
-        Write the results to a FITS file.
-
-        Parameters
-        ----------
-        filename : str
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def get_map_2d(self):
-        """
-        Return a 2-D map.
-
-        Returns
-        -------
-        Map
-        """
-        pass
-
-    @abstractmethod
-    def merge_accumulate(self, other):
-        """
-        Merge another source with this one.
-
-        Parameters
-        ----------
-        other : AstroModel2D
-
-        Returns
-        -------
-        None
-        """
-        pass
 
     @property
     def shape(self):
@@ -258,97 +180,6 @@ class AstroModel2D(SourceModel):
         int
         """
         return self.shape[0]
-
-    @abstractmethod
-    def set_data_shape(self, shape):
-        """
-        Set the data shape.
-
-        Parameters
-        ----------
-        shape : tuple (int)
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def covariant_points(self):
-        """
-        Return the covariant points.
-
-        Returns
-        -------
-        float
-        """
-        pass
-
-    @abstractmethod
-    def add_points(self, frames, pixels, frame_gains, source_gains):
-        """
-        Add points to the source model.
-
-        Parameters
-        ----------
-        frames : Frames
-            The frames to add to the source model.
-        pixels : ChannelGroup
-            The channels (pixels) to add to the source model.
-        frame_gains : numpy.ndarray (float)
-            The gain values for all frames of shape (n_frames,).
-        source_gains : numpy.ndarray (float)
-            The channel source gains for all channels of shape (all_channels,).
-
-        Returns
-        -------
-        mapping_frames : int
-            The number of valid mapping frames added for the model.
-        """
-        pass
-
-    @abstractmethod
-    def sync_source_gains(self, frames, pixels, frame_gains, source_gains,
-                          sync_gains):
-        """
-        Remove the source from all but the blind channels.
-
-        This is the same as sync(exposure, pixel, index, fg, sourcegain,
-        integration.sourcesyncgain).
-
-        Parameters
-        ----------
-        frames : Frames
-        pixels : Channels or ChannelGroup
-        frame_gains : numpy.ndarray (float)
-        source_gains : numpy.ndarray (float)
-        sync_gains : numpy.ndarray (float)
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def calculate_coupling(self, integration, pixels, source_gains,
-                           sync_gains):
-        """
-        Don't know
-
-        Parameters
-        ----------
-        integration
-        pixels
-        source_gains
-        sync_gains
-
-        Returns
-        -------
-        None
-        """
-        pass
 
     def get_memory_footprint(self, pixels):
         """
@@ -418,6 +249,10 @@ class AstroModel2D(SourceModel):
         """
         Reset the source processing.
 
+        Sets the source generation and integration time to zero, and resets the
+        smoothing to that referenced in the configuration under the 'smooth'
+        keyword value.
+
         Returns
         -------
         None
@@ -441,7 +276,7 @@ class AstroModel2D(SourceModel):
 
         Returns
         -------
-        str
+        filename : str
         """
         return os.path.join(self.reduction.work_path,
                             f'{self.get_source_name()}.fits')
@@ -452,7 +287,7 @@ class AstroModel2D(SourceModel):
 
         Returns
         -------
-        str
+        core_name : str
         """
         if self.has_option('name'):
             name = os.path.expandvars(self.configuration.get_string('name'))
@@ -500,6 +335,13 @@ class AstroModel2D(SourceModel):
         """
         Set the size of the source model.
 
+        Determines the grid resolution, the size of the grid dimensions in
+        (x, y) pixels, and the reference index of the grid.  The grid
+        resolution is determined from the 'grid' keyword value in the
+        configuration or one fifth of the instrument point size.  The map
+        size is determined from the span of coordinates over all scan
+        integrations.
+
         Returns
         -------
         None
@@ -527,8 +369,8 @@ class AstroModel2D(SourceModel):
         x_min, x_max = map_range.x
         y_min, y_max = map_range.y
 
-        ref_x = 0.5 - np.round((x_min / delta.x).decompose().value)
-        ref_y = 0.5 - np.round((y_min / delta.y).decompose().value)
+        ref_x = 0.5 - round_values((x_min / delta.x).decompose().value)
+        ref_y = 0.5 - round_values((y_min / delta.y).decompose().value)
         self.grid.reference_index = Coordinate2D([ref_x, ref_y])
 
         lower_corner_index = self.grid.offset_to_index(
@@ -547,14 +389,14 @@ class AstroModel2D(SourceModel):
         if x_size < 0 or y_size < 0:
             raise ValueError(f"Negative image size: {x_size} x {y_size}")
 
-        if not self.has_option('large'):
+        if not self.configuration.get_bool('large'):
             if (x_size >= self.MAX_X_OR_Y_SIZE
                     or y_size >= self.MAX_X_OR_Y_SIZE):
                 raise ValueError("Map too large.  Use 'large' option.")
 
         self.set_data_shape((y_size, x_size))
 
-    def search_corners(self):
+    def search_corners(self, determine_scan_range=False):
         """
         Determine the extent of the source model.
 
@@ -570,14 +412,25 @@ class AstroModel2D(SourceModel):
         This will also set the scan map range for each scan if 'map.size' is
         not set.
 
+        Parameters
+        ----------
+        determine_scan_range : bool, optional
+            If `True`, only determine the map ranges for all scans rather than
+            check for the 'map.size' configuration instruction.  I.e., do not
+            perform any flagging.
+
         Returns
         -------
-        map_range : astropy.units.Quantity (numpy.ndarray)
+        map_range : units.Quantity
             An array of shape (4,) containing [min(x), min(y), max(x), max(y)]
             in units of arcseconds.
         """
         map_range = Coordinate2D(unit='arcsec')
-        fix_size = self.has_option('map.size')
+
+        if determine_scan_range:
+            fix_size = False
+        else:
+            fix_size = self.has_option('map.size')
 
         n_integrations = 0
         integrations = []
@@ -642,7 +495,7 @@ class AstroModel2D(SourceModel):
                         if max_y > range_array.y[1]:
                             range_array.y[1] = max_y
 
-                scan.range = scan_range
+                scan.map_range = scan_range
 
         return map_range
 
@@ -680,6 +533,8 @@ class AstroModel2D(SourceModel):
         Flag points that are outside specified map range for an integration.
 
         This function is safe for use with :func:`multiprocessing.multitask`.
+        Flagging occurs by marking the integration frame samples with the
+        SAMPLE_SKIP frame flag.
 
         Parameters
         ----------
@@ -703,6 +558,9 @@ class AstroModel2D(SourceModel):
         """
         Flag points that are outside of the specified map range.
 
+        Integration frame samples that are outside of the supplied `map_range`
+        will be flagged with the SAMPLE_SKIP frame flag.
+
         Parameters
         ----------
         projection : Projection2D
@@ -720,6 +578,7 @@ class AstroModel2D(SourceModel):
 
         projector = AstroProjector(projection)
         integration.frames.project(channels.data.position, projector)
+        original_unit = map_range.unit
         map_range.change_unit(projector.offset.unit)
 
         skip_flag = integration.flagspace.flags.SAMPLE_SKIP
@@ -731,9 +590,16 @@ class AstroModel2D(SourceModel):
             skip_flag=skip_flag.value,
             map_range=map_range.coordinates.value)
 
+        if original_unit is not None:
+            map_range.change_unit(original_unit)
+
     def index(self):
         """
         Store the map indices for fast lookup later.
+
+        The map indices are stored in the `map_index` attribute of the
+        integration frames, and also as a 1-D map in the `source_index`
+        attribute of the integration frames.
 
         Returns
         -------
@@ -796,7 +662,7 @@ class AstroModel2D(SourceModel):
         projector = AstroProjector(self.projection)
         offsets = frames.project(pixels.position, projector)
         map_indices = self.grid.offset_to_index(offsets)
-        map_indices.coordinates = np.round(map_indices.coordinates).astype(int)
+        map_indices.coordinates = round_values(map_indices.coordinates)
 
         bad_samples = snf.validate_pixel_indices(
             indices=map_indices.coordinates,
@@ -820,13 +686,13 @@ class AstroModel2D(SourceModel):
         Parameters
         ----------
         pixel_indices : numpy.ndarray (int)
-            The pixel indices of shape (2, n_frames, n_channels) containing
+            The pixel indices of shape (2, shape,) containing
             the (x_index, y_index) pixel indices.
 
         Returns
         -------
         source_indices : numpy.ndarray (int)
-            The 1-D source indices of shape (n_frames, n_channels).
+            The 1-D source indices of shape (shape,).
         """
         return (pixel_indices[0] << self.index_shift_x) | pixel_indices[1]
 
@@ -837,12 +703,12 @@ class AstroModel2D(SourceModel):
         Parameters
         ----------
         source_indices : numpy.ndarray (int)
-            The source indices of shape (n_frames, n_channels).
+            The source indices of shape (shape,).
 
         Returns
         -------
         pixel_indices : numpy.ndarray (int)
-            The pixel indices of shape (n_frames, n_channels, 2) containing the
+            The pixel indices of shape (2, shape,) containing the
             (x_index, y_index) pixel indices.
         """
         px = source_indices >> self.index_shift_x
@@ -851,7 +717,7 @@ class AstroModel2D(SourceModel):
         invalid = np.nonzero(source_indices < 0)
         px[invalid] = -1
         py[invalid] = -1
-        return np.stack((px, py), axis=-1)
+        return np.stack((px, py), axis=0)
 
     def find_outliers(self, max_distance):
         """
@@ -862,7 +728,7 @@ class AstroModel2D(SourceModel):
 
         Parameters
         ----------
-        max_distance : astropy.units.Quantity
+        max_distance : units.Quantity
             The maximum angular separation from a scan from the median
             equatorial position of all scans.
 
@@ -871,31 +737,29 @@ class AstroModel2D(SourceModel):
         outlier_scans : list (Scan)
             A list of outlier scans.
         """
-        if self.n_scans == 1:
-            return []  # Can't check this
+        if self.n_scans <= 1:
+            return []  # Can only check for more than one scan
 
-        ra = np.empty(self.n_scans, dtype=float
-                      ) * self.grid.get_coordinate_unit()
-        dec = np.empty(self.n_scans, dtype=float
-                       ) * self.grid.get_coordinate_unit()
+        degree = units.Unit('degree')
+
+        ra = np.empty(self.n_scans, dtype=float) * degree
+        dec = np.empty(self.n_scans, dtype=float) * degree
 
         scan_equatorial_list = []
         for scan_index, scan in enumerate(self.scans):
-            equatorial = scan.equatorial.copy().transform_to(
-                FK5(equinox='J2000'))
+            equatorial = scan.equatorial.copy()
+            equatorial.precess(J2000)
             scan_equatorial_list.append(equatorial)
             ra[scan_index] = equatorial.ra
             dec[scan_index] = equatorial.dec
 
         median_ra = np.median(ra)
         median_dec = np.median(dec)
-
-        check = SkyCoord(
-            ra=median_ra, dec=median_dec, equinox='J2000')
+        center = EquatorialCoordinates([median_ra, median_dec], epoch=J2000)
 
         outlier_scans = []
         for scan_index, equatorial in enumerate(scan_equatorial_list):
-            if abs(check.separation(equatorial)) > max_distance:
+            if abs(center.distance_to(equatorial)) > max_distance:
                 outlier_scans.append(self.scans[scan_index])
 
         return outlier_scans
@@ -906,7 +770,7 @@ class AstroModel2D(SourceModel):
 
         Parameters
         ----------
-        max_distance : astropy.units.Quantity
+        max_distance : units.Quantity
             The maximum angular slew.  Any scans that have a map span greater
             than this limit will be added to the output scan list.
 
@@ -915,12 +779,12 @@ class AstroModel2D(SourceModel):
         slewing_scans : list (Scan)
             The scans with a slew greater than `max_distance`.
         """
+        self.search_corners(determine_scan_range=True)
         slews = []
-        cos_lat = np.cos(self.grid.reference.data.lat).value
+        cos_lat = np.cos(self.grid.reference.lat).value
         for scan in self.scans:
-            dx = scan.map_range[2] - scan.map_range[0]
-            dy = scan.map_range[3] - scan.map_range[1]
-            slew_distance = np.hypot(dx * cos_lat, dy)
+            span = scan.map_range.span
+            slew_distance = np.hypot(span.x * cos_lat, span.y)
             if slew_distance > max_distance:
                 slews.append(scan)
 
@@ -929,6 +793,10 @@ class AstroModel2D(SourceModel):
     def add_integration(self, integration, signal_mode=None):
         """
         Add an integration to the source model.
+
+        The integration NEFD is calculated, and then frames are added via
+        :func:`AstroModel2D.add_frames_from_integration`.  A filter correction
+        is applied on the first source generation only.
 
         Parameters
         ----------
@@ -1036,7 +904,8 @@ class AstroModel2D(SourceModel):
         """
         Add pixels to the source model.
 
-        As far as I can tell, this does exactly the same thing as `add_frames`.
+        This performs the same task as
+        :func:`AstroModel2D.add_frames_from_integration`.
 
         Parameters
         ----------
@@ -1100,7 +969,8 @@ class AstroModel2D(SourceModel):
 
         return n, data, gains, weights, indices
 
-    def set_sync_gains(self, integration, pixels, source_gains):
+    @staticmethod
+    def set_sync_gains(integration, pixels, source_gains):
         """
         Set the sync gains for the source model (set to current source gains).
 
@@ -1189,8 +1059,8 @@ class AstroModel2D(SourceModel):
             source_flag=frames.flagspace.convert_flag('SOURCE_FLAGS').value,
             n_points=n_points)
 
-        if integration.configuration.get_bool(
-                'crushbugs'):  # TODO: remove once resolved
+        # TODO: remove once resolved
+        if integration.configuration.get_bool('crushbugs'):
 
             # Only the first channel is applied in the clear operation
             i0 = pixels.indices[0]
@@ -1252,6 +1122,11 @@ class AstroModel2D(SourceModel):
 
         frame_gains = integration.gain * frames.get_source_gain(signal_mode)
 
+        if (integration.source_sync_gain is None
+                or integration.source_sync_gain.size != source_gains.size):
+            integration.source_sync_gain = np.zeros(
+                source_gains.size, dtype=float)
+
         # Remove source from all but blind channels
         self.sync_source_gains(
             frames=integration.frames,
@@ -1289,10 +1164,14 @@ class AstroModel2D(SourceModel):
         """
         Write the source to file.
 
+        Performing a write operation will write various products to the
+        `path` directory.  If any intermediate.<id>.fits file is found
+        it will be delete
+
         Parameters
         ----------
         path : str
-            The file path to write to.
+            The directory to write to.
 
         Returns
         -------
@@ -1312,7 +1191,7 @@ class AstroModel2D(SourceModel):
         if self.is_empty():
             source_name = ((self.id + ' ')
                            if self.id not in [None, ''] else '')
-            log.warning(f"Source {source_name} is empty. Skipping")
+            log.warning(f"Source {source_name}is empty. Skipping")
             if os.path.isfile(file_name):
                 os.remove(file_name)
             return
@@ -1328,7 +1207,7 @@ class AstroModel2D(SourceModel):
 
         Parameters
         ----------
-        map_2d : Fits2D
+        map_2d : Map2D
         file_name : str
             The file path to write the PNG to.
 
@@ -1338,47 +1217,46 @@ class AstroModel2D(SourceModel):
         """
         if not self.configuration.get_bool('write.png'):
             return
+        if not isinstance(map_2d, Map2D):
+            return
 
         smooth = self.configuration.get_string('write.png.smooth')
         if smooth is not None:
             fwhm = self.get_smoothing(smooth)
-            if fwhm == 0:
+            if fwhm == 0:  # pragma: no cover
                 fwhm = 0.5 * self.info.instrument.get_point_size()
             map_2d.smooth_to(fwhm)
 
         if self.has_option('write.png.crop'):
 
-            if self.configuration.get_string('write.png.crop') == 'auto':
-                offsets = []
-            else:
+            crop_range = None
+            if self.configuration.get_string('write.png.crop') != 'auto':
+
                 offsets = self.configuration.get_float_list(
                     'write.png.crop', default=[])
 
-            n = len(offsets)
-            if n == 0 or np.isnan(offsets[0]):
-                map_2d.auto_crop()
-                return
+                n = len(offsets)
+                if n > 0 and not np.isnan(offsets).any():
+                    if n == 1:
+                        dx_max = dy_max = offsets[0]
+                        dx_min = dy_min = -dx_max
+                    elif n == 2:
+                        dx_max, dy_max = offsets
+                        dx_min, dy_min = -dx_max, -dy_max
+                    elif n == 3:
+                        dx_min, dy_min, dx_max = offsets
+                        dy_max = -dy_min
+                    else:
+                        dx_min, dy_min, dx_max, dy_max = offsets[:4]
 
-            if n >= 4:
-                dx_min, dy_min, dx_max, dy_max = offsets[:4]
-            elif n == 1:
-                dx_max = dy_max = offsets[0]
-                dx_min = dy_min = -dx_max
-            elif n == 2:
-                dx_max, dy_max = offsets[0]
-                dx_min, dy_min = -dx_max, -dy_max
-            elif n == 3:
-                dx_min, dy_min, dx_max = offsets
-                dy_max = -dy_min
+                    size_unit = self.info.instrument.get_size_unit()
+                    crop_range = np.asarray(
+                        [[dx_min, dx_max], [dy_min, dy_max]]) * size_unit
+
+            if crop_range is None:
+                map_2d.auto_crop()
             else:
-                map_2d.auto_crop()
-                return
-
-            size_unit = self.info.instrument.get_size_unit()
-            map_2d.crop(dx_min * size_unit,
-                        dy_min * size_unit,
-                        dx_max * size_unit,
-                        dy_max * size_unit)
+                map_2d.crop(crop_range)
 
         if isinstance(map_2d, Observation2D) and self.has_option(
                 'write.png.plane'):
@@ -1398,15 +1276,18 @@ class AstroModel2D(SourceModel):
 
         self.write_image_png(values.get_image(), file_name)
 
-    def write_image_png(self, image, file_name):
+    def write_image_png(self, image, file_name, dpi=100):
         """
         Write a PNG of an image.
 
         Parameters
         ----------
-        image : Image
+        image : sofia_redux.scan.source_models.maps.image_2d.Image2D
+            The image to write as a PNG
         file_name : str
-           The file path to write the PNG to.
+            The file path to write the PNG to.
+        dpi : int or float, optional
+            The Dots-Per-Inch resolution for the PNG output.
 
         Returns
         -------
@@ -1414,7 +1295,7 @@ class AstroModel2D(SourceModel):
         """
         try:
             import matplotlib.pyplot as plt
-        except Exception as err:
+        except Exception as err:  # pragma: no cover
             log.warning(f"Could not import matplotlib: will not create png: "
                         f"{err}")
             return
@@ -1442,22 +1323,23 @@ class AstroModel2D(SourceModel):
             color = None
 
         interactive = plt.isinteractive()
-        if interactive:
+        if interactive:  # pragma: no cover
             plt.ioff()
         fig = plt.figure(frameon=False)
         # Set a max size of 10 inches
         dimensions = np.asarray([width, height])
         # Use a dpi of 100
         dpi = 100
-        fig_size = (dimensions / dpi).astype(int)
+        fig_size = dimensions / dpi
         fig.set_size_inches(fig_size)
         data = image.data.copy()
         data[~image.valid] = np.nan
         plt.imshow(data, cmap=color)
+        plt.tight_layout()
         plt.savefig(png_file, dpi=dpi, format='png')
         log.info(f"Saved png image to {png_file}")
         plt.close()
-        if interactive:
+        if interactive:  # pragma: no cover
             plt.ion()
 
     def get_smoothing(self, smooth):
@@ -1486,7 +1368,7 @@ class AstroModel2D(SourceModel):
 
         Returns
         -------
-        FWHM : astropy.units.Quantity
+        FWHM : units.Quantity
             The FWHM of the Gaussian smoothing kernel.
         """
         size_unit = self.info.instrument.get_size_unit()
@@ -1520,7 +1402,7 @@ class AstroModel2D(SourceModel):
 
         Parameters
         ----------
-        smoothing : astropy.units.Quantity
+        smoothing : units.Quantity
 
         Returns
         -------
@@ -1552,7 +1434,7 @@ class AstroModel2D(SourceModel):
 
         Returns
         -------
-        fwhm : astropy.units.Quantity
+        fwhm : units.Quantity
             The FWHM of the Gaussian smoothing kernel.
         """
         if smooth_spec in [None, '']:
@@ -1569,7 +1451,7 @@ class AstroModel2D(SourceModel):
 
         Returns
         -------
-        pixel_fwhm : astropy.units.Quantity
+        pixel_fwhm : units.Quantity
         """
         # Used to convert FWHM^2 to beam integral
         gaussian_area = 2 * np.pi * (gaussian_fwhm_to_sigma ** 2)
@@ -1581,7 +1463,7 @@ class AstroModel2D(SourceModel):
 
         Returns
         -------
-        astropy.units.Quantity
+        units.Quantity
         """
         smoothing = self.get_requested_smoothing(
             smooth_spec=self.configuration.get_string('smooth'))
@@ -1593,8 +1475,189 @@ class AstroModel2D(SourceModel):
 
         Returns
         -------
-        astropy.units.Quantity
+        units.Quantity
         """
         smoothing = self.get_requested_smoothing(
             smooth_spec=self.configuration.get_string('smooth'))
         return np.hypot(super().get_source_size(), smoothing)
+
+    @abstractmethod
+    def is_empty(self):  # pragma: no cover
+        """
+        Return whether the source map is empty.
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    @abstractmethod
+    def get_pixel_footprint(self):  # pragma: no cover
+        """
+        Return the pixel footprint of the source model.
+
+        Returns
+        -------
+        int
+        """
+        pass
+
+    @abstractmethod
+    def base_footprint(self, pixels):  # pragma: no cover
+        """
+        Return the base footprint of the source model.
+
+        Parameters
+        ----------
+        pixels : int
+
+        Returns
+        -------
+        int
+        """
+        pass
+
+    @abstractmethod
+    def process_final(self):  # pragma: no cover
+        """
+        Don't know
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def write_fits(self, filename):  # pragma: no cover
+        """
+        Write the results to a FITS file.
+
+        Parameters
+        ----------
+        filename : str
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def get_map_2d(self):  # pragma: no cover
+        """
+        Return a 2-D map.
+
+        Returns
+        -------
+        Map
+        """
+        pass
+
+    @abstractmethod
+    def merge_accumulate(self, other):  # pragma: no cover
+        """
+        Merge another source with this one.
+
+        Parameters
+        ----------
+        other : AstroModel2D
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def set_data_shape(self, shape):  # pragma: no cover
+        """
+        Set the data shape.
+
+        Parameters
+        ----------
+        shape : tuple (int)
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def covariant_points(self):  # pragma: no cover
+        """
+        Return the covariant points.
+
+        Returns
+        -------
+        float
+        """
+        pass
+
+    @abstractmethod
+    def add_points(self, frames, pixels, frame_gains, source_gains
+                   ):  # pragma: no cover
+        """
+        Add points to the source model.
+
+        Parameters
+        ----------
+        frames : Frames
+            The frames to add to the source model.
+        pixels : ChannelGroup
+            The channels (pixels) to add to the source model.
+        frame_gains : numpy.ndarray (float)
+            The gain values for all frames of shape (n_frames,).
+        source_gains : numpy.ndarray (float)
+            The channel source gains for all channels of shape (all_channels,).
+
+        Returns
+        -------
+        mapping_frames : int
+            The number of valid mapping frames added for the model.
+        """
+        pass
+
+    @abstractmethod
+    def sync_source_gains(self, frames, pixels, frame_gains, source_gains,
+                          sync_gains):  # pragma: no cover
+        """
+        Remove the source from all but the blind channels.
+
+        This is the same as sync(exposure, pixel, index, fg, sourcegain,
+        integration.sourcesyncgain).
+
+        Parameters
+        ----------
+        frames : Frames
+        pixels : Channels or ChannelGroup
+        frame_gains : numpy.ndarray (float)
+        source_gains : numpy.ndarray (float)
+        sync_gains : numpy.ndarray (float)
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def calculate_coupling(self, integration, pixels, source_gains,
+                           sync_gains):  # pragma: no cover
+        """
+        Don't know
+
+        Parameters
+        ----------
+        integration
+        pixels
+        source_gains
+        sync_gains
+
+        Returns
+        -------
+        None
+        """
+        pass

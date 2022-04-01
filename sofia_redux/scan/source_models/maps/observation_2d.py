@@ -1,5 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+from astropy import units
 import numpy as np
 
 from sofia_redux.scan.source_models.maps.map_2d import Map2D
@@ -19,9 +20,49 @@ __all__ = ['Observation2D']
 class Observation2D(Map2D):
 
     def __init__(self, data=None, blanking_value=np.nan, dtype=float,
-                 shape=None, unit=None, weight_dtype=float):
-        self.weight = Image2D(dtype=weight_dtype)
-        self.exposure = Image2D(dtype=weight_dtype)
+                 shape=None, unit=None, weight_dtype=float,
+                 weight_blanking_value=None):
+        """
+        Initialize an Observation2D object.
+
+        The 2-D observation is an extension of the :class:`Map2D` class that
+        includes weights and exposure times in addition to the observation data
+        values.
+
+        Parameters
+        ----------
+        data : numpy.ndarray, optional
+            Data to initialize the flagged array with.  If supplied, sets the
+            shape of the array.  Note that the data type will be set to that
+            defined by the `dtype` parameter.
+        blanking_value : int or float, optional
+            The blanking value defines invalid values in the data array.  This
+            is the equivalent of defining a NaN value.
+        dtype : type, optional
+            The data type of the data array.
+        shape : tuple (int), optional
+            The shape of the data array.  This will only be relevant if
+            `data` is not defined.
+        unit : str or units.Unit or units.Quantity, optional
+            The data unit.
+        weight_dtype : type, optional
+            Similar the `dtype`, except defines the data type for the
+            observation weights and exposure times.
+        weight_blanking_value : int or float, optional
+            The blanking value for the weight and exposure maps.  If `None`,
+            will be set to np.nan if `weight_dtype` is a float, and 0 if
+            `weight_dtype` is an integer.
+        """
+        if weight_blanking_value is None:
+            if weight_dtype == float:
+                weight_blanking_value = np.nan
+            else:
+                weight_blanking_value = 0.0
+
+        self.weight = Image2D(dtype=weight_dtype,
+                              blanking_value=weight_blanking_value,)
+        self.exposure = Image2D(dtype=weight_dtype,
+                                blanking_value=weight_blanking_value)
         self.noise_rescale = 1.0
         self.is_zero_weight_valid = False
         self.weight_dtype = weight_dtype
@@ -32,9 +73,43 @@ class Observation2D(Map2D):
             self.weight.shape = shape
             self.exposure.shape = shape
 
+    def copy(self, with_contents=True):
+        """
+        Return a copy of the map.
+
+        Returns
+        -------
+        Observation2D
+        """
+        return super().copy(with_contents=with_contents)
+
+    def __eq__(self, other):
+        """
+        Check if this Observation2D instance is equivalent to another.
+
+        Parameters
+        ----------
+        other : Observation2D
+
+        Returns
+        -------
+        equal : bool
+        """
+        if not super().__eq__(other):
+            return False
+        if self.weight != other.weight:
+            return False
+        if self.exposure != other.exposure:
+            return False
+        if self.noise_rescale != other.noise_rescale:
+            return False
+        if self.is_zero_weight_valid is not other.is_zero_weight_valid:
+            return False
+        return True
+
     def copy_processing_from(self, other):
         """
-        Copy the processing from another map.
+        Copy the processing from another 2-D observation.
 
         Parameters
         ----------
@@ -170,11 +245,11 @@ class Observation2D(Map2D):
         if data is None:
             data = Image2D(x_size=self.shape[1],
                            y_size=self.shape[0],
-                           blanking_value=self.blanking_value,
+                           blanking_value=self.weight.blanking_value,
                            dtype=self.weight_dtype)
         elif isinstance(data, np.ndarray):
             data = Image2D(data=data,
-                           blanking_value=self.blanking_value,
+                           blanking_value=self.weight.blanking_value,
                            dtype=self.weight_dtype)
         return data
 
@@ -360,7 +435,7 @@ class Observation2D(Map2D):
 
         Parameters
         ----------
-        ranges : numpy.ndarray (int,) or astropy.units.Quantity (numpy.ndarray)
+        ranges : numpy.ndarray (int,) or units.Quantity (numpy.ndarray)
             The ranges to set crop the data to.  Should be of shape
             (n_dimensions, 2) where ranges[0, 0] would give the minimum crop
             limit for the first dimension and ranges[0, 1] would give the
@@ -373,6 +448,11 @@ class Observation2D(Map2D):
         -------
         None
         """
+        if isinstance(ranges, units.Quantity):
+            ranges = self.convert_range_value_to_index(ranges)
+        else:
+            ranges = np.asarray(self.nearest_to_offset(ranges))
+
         self.get_weight_image().crop(ranges)
         self.get_exposure_image().crop(ranges)
         super().crop(ranges)
@@ -380,6 +460,11 @@ class Observation2D(Map2D):
     def accumulate(self, image, weight=1.0, gain=1.0, valid=None):
         """
         Add an observation image.
+
+        This is meant to be performed when the observation data array contains
+        the product of the actual data with the weights.  This is later reset
+        to the standard data, weight format by performing
+        :func:`Observation2D.end_accumulation`.
 
         Parameters
         ----------
@@ -548,6 +633,10 @@ class Observation2D(Map2D):
         -------
         None
         """
+        chi2 = self.get_chi2(robust=robust)
+        if chi2 == 0:
+            return
+
         weight_correction = 1.0 / self.get_chi2(robust=robust)
         self.get_weight_image().scale(weight_correction)
         self.noise_rescale *= 1.0 / np.sqrt(weight_correction)
@@ -630,7 +719,8 @@ class Observation2D(Map2D):
 
         Notes
         -----
-        This isn't fast compared to standard smooth.
+        This isn't fast compared to standard smooth as it requires an
+        additional spline interpolation step.
 
         Parameters
         ----------
@@ -703,7 +793,7 @@ class Observation2D(Map2D):
         """
         if reference is None:
             reference = self.significance_values()
-        self.undo_filter_correct(reference=reference, valid=valid)
+        super().undo_filter_correct(reference=reference, valid=valid)
 
     def fft_filter_above(self, fwhm, valid=None, weight=None):
         """
@@ -723,26 +813,38 @@ class Observation2D(Map2D):
             weight = self.weight
         super().fft_filter_above(fwhm, valid=valid, weight=weight)
 
-    def resample_from_map(self, map2d, weights=None):
+    def resample_from_map(self, obs2d, weights=None):
         """
         Resample from one map to another.
 
         Parameters
         ----------
-        map2d : Observation2D
+        obs2d : Observation2D
+            The map to resample from.
         weights : numpy.ndarray (float), optional
+            Optional weights to use during the resampling.  If not supplied,
+            defaults to the weights of the supplied observation.
 
         Returns
         -------
         None
         """
-        if weights is None:
-            weights = self.weight
+        if not isinstance(obs2d, Observation2D):
+            raise ValueError(f"{self.__class__} cannot be resampled from "
+                             f"{obs2d}.")
 
-        beam = self.get_anti_aliasing_beam_image_for(map2d)
-        map_indices = self.get_index_transform_to(map2d)
-        self.resample_from(map2d, map_indices, kernel=beam, weights=weights)
-        self.copy_processing_from(map2d)
+        if weights is None:
+            weights = obs2d.weight
+
+        beam = self.get_anti_aliasing_beam_image_for(obs2d)
+        map_indices = self.get_index_transform_to(obs2d)
+        self.resample_from(obs2d, map_indices, kernel=beam, weights=weights)
+        self.get_exposure_image().resample_from(
+            obs2d.get_exposure_image(), map_indices, kernel=beam,
+            weights=weights)
+        self.get_weight_image().resample_from(
+            obs2d.get_weight_image(), map_indices, kernel=beam, weights=None)
+        self.copy_processing_from(obs2d)
 
     def get_table_entry(self, name):
         """
@@ -750,7 +852,8 @@ class Observation2D(Map2D):
 
         Parameters
         ----------
-        name : str, optional
+        name : str
+            The name of the entry to retrieve.
 
         Returns
         -------
@@ -797,7 +900,7 @@ class Observation2D(Map2D):
         """
         info = super().get_info()
         if self.noise_rescale != 1.0:
-            info.append(f'Noise Re-scaling: {self.noise_rescale:.2f}x '
+            info.append(f'Noise re-scaling: {self.noise_rescale:.2f}x '
                         f'(from image variance).')
         return info
 

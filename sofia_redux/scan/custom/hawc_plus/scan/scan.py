@@ -12,6 +12,16 @@ __all__ = ['HawcPlusScan']
 class HawcPlusScan(SofiaScan):
 
     def __init__(self, channels, reduction=None):
+        """
+        Initialize a HAWC+ scan.
+
+        Parameters
+        ----------
+        channels : sofia_redux.scan.custom.sofia.channels.camera.SofiaCamera
+            The instrument channels for the scan.
+        reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
+            The reduction to which this scan belongs.
+        """
         self.prior_pipeline_step = None
         self.use_between_scans = False
         super().__init__(channels, reduction=reduction)
@@ -23,7 +33,8 @@ class HawcPlusScan(SofiaScan):
 
         Returns
         -------
-        astropy.units.Quantity
+        tolerance : units.Quantity
+            The angular transit tolerance, typically in arcseconds.
         """
         return self.info.chopping.transit_tolerance
 
@@ -34,7 +45,8 @@ class HawcPlusScan(SofiaScan):
 
         Returns
         -------
-        astropy.units.Quantity
+        offset : units.Quantity
+            The total focus offset, typically in um.
         """
         return self.info.telescope.focus_t_offset
 
@@ -203,7 +215,7 @@ class HawcPlusScan(SofiaScan):
         self.use_between_scans = self.configuration.has_option('betweenscans')
         super().validate()
 
-        if not self.have_valid_integrations():
+        if not self.have_valid_integrations():  # pragma: no cover
             return
 
         if self.is_nonsidereal:

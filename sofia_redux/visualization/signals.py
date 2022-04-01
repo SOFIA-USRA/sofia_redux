@@ -40,3 +40,5 @@ class Signals(QtCore.QObject):
     end_cursor_recording = QtCore.pyqtSignal()
     clear_fit = QtCore.pyqtSignal()
     toggle_fit_visibility = QtCore.pyqtSignal()
+    update_reference_lines = QtCore.pyqtSignal()
+    unload_reference_model = QtCore.pyqtSignal()

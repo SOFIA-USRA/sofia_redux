@@ -92,7 +92,7 @@ def test_copy(projector_celestial):
 def test_eq(projector_celestial, projector_equatorial, projector_horizontal):
     pc, pe, _ = projector_celestial, projector_equatorial, projector_horizontal
     assert pc == pc
-    assert pc is not None
+    assert pc != 1
     assert pc != pe
     projection2 = PlateCarreeProjection()
     projection2.reference = pe.coordinates.copy()

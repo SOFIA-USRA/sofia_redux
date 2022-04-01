@@ -15,6 +15,12 @@ class SofiaSpectroscopyInfo(InfoBase):
     velocity_unit = units.Unit('km') / units.Unit('s')
 
     def __init__(self):
+        """
+        Initialize the SOFIA spectroscopy information.
+
+        Contains information on SOFIA spectroscopic parameters such as the
+        bandwidth, resolution, frequencies, and velocities.
+        """
         super().__init__()
         self.front_end = None
         self.back_end = None
@@ -42,6 +48,28 @@ class SofiaSpectroscopyInfo(InfoBase):
         return 'spec'
 
     def apply_configuration(self):
+        """
+        Update spectroscopic information with FITS header information.
+
+        Updates the information by taking the following keywords from the
+        FITS header::
+
+          FRONTEND - The frontend device name (str)
+          BACKEND - The backend device name (str)
+          BANDWID - The total spectral bandwidth (MHz)
+          FREQRES - The spectral frequency resolution (MHz)
+          TSYS - The system temperature (K)
+          OBSFREQ - The observing frequency at the reference channel (MHz)
+          IMAGFREQ - The image frequency at the reference channel (MHz)
+          RESTFREQ - The rest frequency at the reference channel (MHz)
+          VELDEF - The velocity system definition (str)
+          VFRAME - Radial velocity of the reference frame wrt observer (km/s)
+          RVSYS - The source velocity wrt the observer (km/s)
+
+        Returns
+        -------
+        None
+        """
         options = self.options
         if options is None:
             return
@@ -59,6 +87,20 @@ class SofiaSpectroscopyInfo(InfoBase):
         self.source_velocity = options.get_float('RVSYS') * self.velocity_unit
 
     def get_redshift(self):
+        """
+        Return the redshift of the source determined from it's velocity.
+
+        The redshift is calculated as::
+
+            z = sqrt( (1 + v/c) / (1 - v/c) ) - 1
+
+        where v is the source velocity and c is the speed of light.  I.e., the
+        relativistic doppler shift along the line of sight.
+
+        Returns
+        -------
+        redshift : float
+        """
         v_over_c = (self.source_velocity / constants.c).decompose().value
         return np.sqrt((1.0 + v_over_c) / (1.0 - v_over_c)) - 1.0
 
@@ -80,6 +122,8 @@ class SofiaSpectroscopyInfo(InfoBase):
             ('FRONTEND', self.front_end, 'Frontend device name.'),
             ('BACKEND', self.back_end, 'Backend device name.'),
             ('BANDWID', to_header_float(self.bandwidth, 'MHz'),
+             '(MHz) Total spectral bandwidth.'),
+            ('FREQRES', to_header_float(self.frequency_resolution, 'MHz'),
              '(MHz) Spectral frequency resolution.'),
             ('TSYS', to_header_float(self.tsys, 'K'),
              '(K) System temperature.'),
@@ -87,7 +131,7 @@ class SofiaSpectroscopyInfo(InfoBase):
              '(MHz) Observing frequency at reference channel.'),
             ('IMAGFREQ', to_header_float(self.image_frequency, 'MHz'),
              '(MHz) Image frequency at reference channel.'),
-            ('RESTFREQ', to_header_float(self.image_frequency, 'MHz'),
+            ('RESTFREQ', to_header_float(self.rest_frequency, 'MHz'),
              '(MHz) Rest frequency at reference channel.'),
             ('VELDEF', self.velocity_type, 'Velocity system definition.'),
             ('VFRAME', to_header_float(self.frame_velocity, 'km/s'),

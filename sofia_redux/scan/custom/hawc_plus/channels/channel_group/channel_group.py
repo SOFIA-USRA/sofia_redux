@@ -10,6 +10,22 @@ __all__ = ['HawcPlusChannelGroup']
 class HawcPlusChannelGroup(HawcPlusChannelData, ChannelGroup):
 
     def __init__(self, channel_data, indices=None, name=None):
+        """
+        Initialize a HAWC+ channel group.
+
+        The channel group acts on a subset of the full channel data.
+
+        Parameters
+        ----------
+        channel_data : HawcPlusChannelData
+            The channel data on which to base the group.
+        indices : numpy.ndarray (int), optional
+            The indices of ChannelData that will belong to the ChannelGroup.
+            If no indices are supplied, the entire ChannelData will be
+            referenced.
+        name : str, optional
+            The name of the ChannelGroup.
+        """
         ChannelGroup.__init__(self, channel_data, indices=indices, name=name)
 
     def set_channel_data(self, index, channel_info):

@@ -10,7 +10,10 @@ __all__ = ['Coordinate2D']
 
 
 class Coordinate2D(Coordinate):
-
+    """
+    The Coordinate2D is a specialized extension of the `Coordinate` class
+    for 2-dimensional (x, y) data.
+    """
     default_dimensions = 2  # Used when setting up empty templates
 
     def empty_copy(self):

@@ -17,6 +17,14 @@ class SofiaDetectorArrayInfo(InfoBase):
     subarrays = 0
 
     def __init__(self):
+        """
+        Initialize the SOFIA detector array information.
+
+        Contains information on the generic detector array for SOFIA
+        instruments.  All SOFIA detectors are given a boresight index, a grid
+        (type assigned from FITS header information), and pixel size
+        information.
+        """
         super().__init__()
         self.detector_name = None
         self.detector_size_string = None
@@ -39,6 +47,24 @@ class SofiaDetectorArrayInfo(InfoBase):
         return 'sofscan/array'
 
     def apply_configuration(self):
+        """
+        Update detector array information with FITS header information.
+
+        Updates the detector information by taking the following keywords from
+        the FITS header::
+
+          DETECTOR - The name of the detector (str)
+          DETSIZE - The size of the detector (str)
+          PIXSCAL - The pixel size on the sky (arcsec)
+          SUBARRNO - The number of subarrays (int)
+          SIBS_X - The position of the boresight in the x-direction (pixels)
+          SIBS_Y - The position of the boresight in the y-direction (pixels)
+          CTYPE1/CTYPE2 - If both are present, determines the grid (str)
+
+        Returns
+        -------
+        None
+        """
         options = self.options
         if options is None:
             return
@@ -47,9 +73,9 @@ class SofiaDetectorArrayInfo(InfoBase):
         self.pixel_size = options.get_float("PIXSCAL") * units.Unit('arcsec')
 
         subarrays = options.get_int("SUBARRNO", default=0)
+        self.subarray_size = []
         if subarrays > 0:
-            self.subarray_size = []
-            for i in range(self.subarrays):
+            for i in range(subarrays):
                 key = f'SUBARR{str(i + 1).zfill(2)}'
                 value = options.get_string(key)
                 self.subarray_size.append(value)
@@ -99,8 +125,9 @@ class SofiaDetectorArrayInfo(InfoBase):
                     info.append((key, value, comment))
 
         if self.boresight_index is None:
-            self.boresight_index = Coordinate2D()
-        sx, sy = self.boresight_index.coordinates
+            sx, sy = np.nan, np.nan
+        else:
+            sx, sy = self.boresight_index.coordinates
 
         info.append(('SIBS_X', to_header_float(sx),
                      '(pixel) boresight pixel x.'))
@@ -126,8 +153,8 @@ class SofiaDetectorArrayInfo(InfoBase):
         value
         """
         if name == 'sibsx':
-            return self.boresight_index[0]
+            return self.boresight_index.x
         elif name == 'sibsy':
-            return self.boresight_index[1]
+            return self.boresight_index.y
         else:
             return super().get_table_entry(name)

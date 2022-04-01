@@ -17,6 +17,21 @@ class AstroData2D(AstroModel2D):
     FLAG_MASK = ArrayFlags.flags.MASK
 
     def __init__(self, info, reduction=None):
+        """
+        Initialize an astronomical 2D model of the source data.
+
+        The AstroData2D is an abstract class that extends the
+        :class:`AstroModel2D` to operate on the
+        :class:`sofia_redux.scan.source_models.map.observation_2d.Observaton2D`
+        class.
+
+        Parameters
+        ----------
+        info : sofia_redux.scan.info.info.Info
+            The Info object which should belong to this source model.
+        reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
+            The reduction for which this source model should be applied.
+        """
         super().__init__(info=info, reduction=reduction)
 
     def create_from(self, scans, assign_scans=True):
@@ -30,7 +45,7 @@ class AstroData2D(AstroModel2D):
 
         Parameters
         ----------
-        scans : list (Scan)
+        scans : list (sofia_redux.scan.scan.scan.Scan)
             A list of scans from which to create the model.
         assign_scans : bool, optional
             If `True`, assign the scans to this source model.  Otherwise,
@@ -66,177 +81,43 @@ class AstroData2D(AstroModel2D):
         """
         return self.flagspace.convert_flag(self.FLAG_MASK)
 
-    @abstractmethod
-    def get_data(self):
-        """
-        ???
-
-        Returns
-        -------
-
-        """
-        pass
-
-    @abstractmethod
-    def add_base(self):
-        """
-        ???
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def smooth_to(self, fwhm):
-        """
-        Smooth the map using a Gaussian kernel of a given FWHM.
-
-        Parameters
-        ----------
-        fwhm : astropy.units.Quantity
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def filter_source(self, filter_fwhm, filter_blanking=None, use_fft=False):
-        """
-        Filter (smooth) the source above a given FWHM.
-
-        Parameters
-        ----------
-        filter_fwhm : astropy.units.Quantity
-            The filter FWHM scale to filter above.
-        filter_blanking : float, optional
-        use_fft : bool, optional
-            If `True`, use FFT filtering.
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def set_filtering(self, fwhm):
-        """
-        Set the filtering FWHM.
-
-        Parameters
-        ----------
-        fwhm : astropy.units.Quantity
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def reset_filtering(self):
-        """
-        Reset the source filtering parameters.
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def filter_beam_correct(self):
-        """
-        ???
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def mem_correct(self, lg_multiplier):
-        """
-        ???
-
-        Parameters
-        ----------
-        lg_multiplier : float
-           The Lagrange multiplier (lambda).
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def update_mask(self, blanking_level=np.nan, min_neighbors=None):
-        """
-        Update the map mask based on significance levels and valid neighbors.
-
-        If a blanking level is supplied, significance values above or equal to
-        the blanking level will be masked.
-
-
-        Parameters
-        ----------
-        blanking_level : float, optional
-            The significance level used to mark the map.  If not supplied,
-            significance is irrelevant.  See above for more details.
-        min_neighbors : int, optional
-            The minimum number of neighbors including the pixel itself.
-            Therefore, the default of 2 excludes single pixels as this would
-            require a single valid pixel and one valid neighbor.
-
-        Returns
-        -------
-        None
-        """
-        pass
-
     def get_weights(self):
         """
-        ???
+        Return the weight map for the source model.
 
         Returns
         -------
-
+        weight_map : sofia_redux.scan.source_models.maps.weight_map.WeightMap
         """
         return self.get_data().get_weights()
 
     def get_noise(self):
         """
-        ???
+        Return the noise map for the source model.
 
         Returns
         -------
-
+        noise_map : sofia_redux.scan.source_models.maps.noise_map.NoiseMap
         """
         return self.get_data().get_noise()
 
     def get_significance(self):
         """
-        Return the data significance (signal-to-noise).
+        Return the data significance map (signal-to-noise).
 
         Returns
         -------
-        numpy.ndarray (float)
+        sofia_redux.scan.source_models.maps.significance_map.SignificanceMap
         """
         return self.get_data().get_significance()
 
     def get_exposures(self):
         """
-        ???
+        Return the exposure map for the source model.
 
         Returns
         -------
-
+        sofia_redux.scan.source_models.maps.exposure_map.ExposureMap
         """
         return self.get_data().get_exposures()
 
@@ -252,21 +133,25 @@ class AstroData2D(AstroModel2D):
 
     def get_executor(self):
         """
-        ???
+        Return the source map parallel executor.
+
+        The executor is not currently implemented in any way.
 
         Returns
         -------
-
+        executor : object
         """
-        return self.get_data().get_executor()
+        return self.get_data().executor
 
     def set_executor(self, executor):
         """
-        ???
+        Set the parallel executor for the source.
+
+        The executor is not currently implemented in any way.
 
         Parameters
         ----------
-        executor
+        executor : object
 
         Returns
         -------
@@ -282,7 +167,7 @@ class AstroData2D(AstroModel2D):
         -------
         threads : int
         """
-        return self.get_data().get_parallel()
+        return self.get_data().parallelism
 
     def set_parallel(self, threads):
         """
@@ -298,6 +183,16 @@ class AstroData2D(AstroModel2D):
         """
         self.get_data().set_parallel(threads)
 
+    def no_parallel(self):
+        """
+        Disable parallel processing for the model.
+
+        Returns
+        -------
+        None
+        """
+        self.get_data().set_parallel(0)
+
     def clear_content(self):
         """
         Clear the data.
@@ -307,16 +202,6 @@ class AstroData2D(AstroModel2D):
         None
         """
         self.get_data().clear()
-
-    def no_parallel(self):
-        """
-        Disable parallel processing for the model.
-
-        Returns
-        -------
-        None
-        """
-        self.get_data().no_parallel()
 
     def is_empty(self):
         """
@@ -366,23 +251,26 @@ class AstroData2D(AstroModel2D):
 
     def filter(self, allow_blanking=False):
         """
-        ???
+        Apply filtering to the source.
 
         Parameters
         ----------
         allow_blanking : bool, optional
+            If `True`, allow the blanking value to be determined from the
+            'source.filter.blank' configuration value.  Otherwise, the filter
+            blanking value will be set to NaN.  The filter blanking level
+            defines the range of values prior to filter smoothing that are
+            permitted during the convolution.  Any values > filter_level, or
+            values < filter_level will be marked as invalid and not included.
 
         Returns
         -------
         None
         """
-        if (not self.has_option('source.filter')
+        if (not self.configuration.get_bool('source.filter')
                 or self.get_source_size() <= 0):
             self.reset_filtering()
             return
-
-        mode = self.configuration.get_string('source.filter.type',
-                                             default='convolution')
 
         if allow_blanking:
             filter_blanking = self.configuration.get_float(
@@ -391,10 +279,11 @@ class AstroData2D(AstroModel2D):
             filter_blanking = np.nan
 
         filter_fwhm = self.get_filter_scale()
+        use_fft = self.configuration.get_string('source.filter.type') == 'fft'
         self.filter_source(
             filter_fwhm=filter_fwhm,
             filter_blanking=filter_blanking,
-            use_fft=mode == 'fft')
+            use_fft=use_fft)
 
     def get_filter_scale(self):
         """
@@ -405,7 +294,6 @@ class AstroData2D(AstroModel2D):
         filter_fwhm : astropy.units.Quantity
             The FWHM of the filter scale.
         """
-
         directive = self.configuration.get_string('source.filter.fwhm',
                                                   default='auto')
         try:
@@ -421,7 +309,7 @@ class AstroData2D(AstroModel2D):
 
         Parameters
         ----------
-        scan : Scan
+        scan : sofia_redux.scan.scan.scan.Scan
 
         Returns
         -------
@@ -434,7 +322,7 @@ class AstroData2D(AstroModel2D):
         if self.enable_level:
             self.level(robust=True)
 
-        if self.has_option('source.despike'):
+        if self.configuration.get_bool('source.despike'):
             despike_level = self.configuration.get_float(
                 'source.despike.level', default=10)
             data.despike(despike_level)
@@ -485,10 +373,10 @@ class AstroData2D(AstroModel2D):
         if self.enable_level:
             self.add_process_brief('{level} ')
 
-        if self.has_option('source.despike'):
+        if self.configuration.get_bool('source.despike'):
             self.add_process_brief('{despike} ')
 
-        if (self.has_option('source.filter')
+        if (self.configuration.get_bool('source.filter')
                 and self.get_source_size() > 0):
             self.add_process_brief('{filter} ')
 
@@ -517,7 +405,7 @@ class AstroData2D(AstroModel2D):
 
         # Apply the filtering to the final map, to reflect the correct blanking
         # level
-        if self.has_option('source.filter'):
+        if self.configuration.get_bool('source.filter'):
             self.add_process_brief('(filter) ')
             self.filter(allow_blanking=True)
             self.filter_beam_correct()
@@ -544,7 +432,7 @@ class AstroData2D(AstroModel2D):
             s2n_reject = Range(-clip_level, clip_level)
             if sign > 0:
                 s2n_reject.min = -np.inf
-            elif sign > 0:
+            elif sign < 0:
                 s2n_reject.max = np.inf
             self.get_significance().discard_range(s2n_reject)
 
@@ -604,3 +492,139 @@ class AstroData2D(AstroModel2D):
         log.info(f'Writing to {filename}')
         hdu_list.writeto(filename, overwrite=True)
         hdu_list.close()
+
+    @abstractmethod
+    def get_data(self):  # pragma: no cover
+        """
+        Return the data for the source model.
+
+        Returns
+        -------
+        data : sofia_redux.scan.source_models.maps.observation_2d.Observation2D
+        """
+        pass
+
+    @abstractmethod
+    def add_base(self):  # pragma: no cover
+        """
+        Add a base to the source model data.
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def smooth_to(self, fwhm):  # pragma: no cover
+        """
+        Smooth the map using a Gaussian kernel of a given FWHM.
+
+        Parameters
+        ----------
+        fwhm : astropy.units.Quantity
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def filter_source(self, filter_fwhm, filter_blanking=None, use_fft=False
+                      ):  # pragma: no cover
+        """
+        Filter (smooth) the source above a given FWHM.
+
+        Parameters
+        ----------
+        filter_fwhm : astropy.units.Quantity
+            The filter FWHM scale to filter above.
+        filter_blanking : float, optional
+        use_fft : bool, optional
+            If `True`, use FFT filtering.
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def set_filtering(self, fwhm):  # pragma: no cover
+        """
+        Set the filtering FWHM.
+
+        Parameters
+        ----------
+        fwhm : astropy.units.Quantity
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def reset_filtering(self):  # pragma: no cover
+        """
+        Reset the source filtering parameters.
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def filter_beam_correct(self):  # pragma: no cover
+        """
+        Apply the filter beam correction.
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def mem_correct(self, lg_multiplier):  # pragma: no cover
+        """
+        Apply maximum entropy correction to the map.
+
+        Parameters
+        ----------
+        lg_multiplier : float
+           The Lagrange multiplier (lambda).
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def update_mask(self, blanking_level=np.nan, min_neighbors=None
+                    ):  # pragma: no cover
+        """
+        Update the map mask based on significance levels and valid neighbors.
+
+        If a blanking level is supplied, significance values above or equal to
+        the blanking level will be masked.
+
+
+        Parameters
+        ----------
+        blanking_level : float, optional
+            The significance level used to mark the map.  If not supplied,
+            significance is irrelevant.  See above for more details.
+        min_neighbors : int, optional
+            The minimum number of neighbors including the pixel itself.
+            Therefore, the default of 2 excludes single pixels as this would
+            require a single valid pixel and one valid neighbor.
+
+        Returns
+        -------
+        None
+        """
+        pass

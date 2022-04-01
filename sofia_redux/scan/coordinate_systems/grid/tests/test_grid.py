@@ -11,7 +11,7 @@ from sofia_redux.scan.coordinate_systems.grid.grid import Grid
 system2d = CoordinateSystem(dimensions=2)
 
 
-class GridCheck(Grid):
+class GridCheck(Grid):  # pragma: no cover
     """An un-abstracted grid for testing"""
 
     def __init__(self):

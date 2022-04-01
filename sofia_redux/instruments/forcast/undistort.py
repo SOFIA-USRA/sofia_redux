@@ -7,11 +7,10 @@ from astropy import log
 from astropy.io import fits
 import numpy as np
 from scipy.optimize import minimize
-from skimage import transform as tf
 
 from sofia_redux.toolkit.utilities.fits import add_history_wrap, hdinsert, kref
 from sofia_redux.toolkit.image.adjust import frebin
-from sofia_redux.toolkit.image.warp import warp_image
+from sofia_redux.toolkit.image.warp import warp_image, PolynomialTransform
 
 from sofia_redux.instruments.forcast.distcorr_model import distcorr_model
 from sofia_redux.instruments.forcast.getpar import getpar
@@ -151,7 +150,7 @@ def get_pinpos(header, pinpos=None, rotate=False):
             pinpos = distcorr_model(pinhole=pinpos)
     fail, msg = False, ''
     if not isinstance(pinpos, dict):
-        fail, msg = True, "pinpos must be %s, None, or 'default'" % dict
+        fail, msg = True, f"pinpos must be {dict}, None, or 'default'"
     elif 'model' not in pinpos or 'pins' not in pinpos:
         fail, msg = True, "missing model or pin positions"
     elif not isinstance(pinpos['model'], np.ndarray):
@@ -179,7 +178,7 @@ def get_pinpos(header, pinpos=None, rotate=False):
         order = pp.get('order', -1)
         # angle is not required, but will be put in the header
         angle = pp.get('angle', 0.0)
-        hdinsert(header, 'PIN_MOD', '[%f,%f,%f,%i]' % (dx, dy, angle, order),
+        hdinsert(header, 'PIN_MOD', f'[{dx},{dy},{angle},{order}]',
                  comment='pinhole model coeffs', refkey=kref)
     else:
         # pp will be updated with header PIN_MOD coefficients
@@ -200,14 +199,18 @@ def get_pinpos(header, pinpos=None, rotate=False):
 
     angle = getpar(header, 'NODANGLE', dtype=float, default=0)
     if rotate and angle != 0:
-        # Note (x, y) convention, not the standard numpy (y, x)
+        # Note (x, y) FITS convention, not numpy (y, x)
         img_size = np.array([header['NAXIS1'], header['NAXIS2']])
         center = (img_size - 1) / 2
-        shift = tf.SimilarityTransform(translation=-center)
-        rot = tf.SimilarityTransform(rotation=np.deg2rad(angle))
-        recenter = tf.SimilarityTransform(translation=center)
-        pp['model'] = recenter(rot(shift(pp['model'].copy())))
-        addhist(header, 'Images rotate by NODANGLE=%f' % angle)
+        model = pp['model'].copy()
+        x, y = model[..., 0] - center[0], model[..., 1] - center[1]
+        radians = np.deg2rad(angle)
+        cos_a, sin_a = np.cos(radians), np.sin(radians)
+        xr = (cos_a * x) - (sin_a * y)
+        yr = (sin_a * x) + (cos_a * y)
+        model[..., 0], model[..., 1] = xr + center[0], yr + center[1]
+        pp['model'] = model
+        addhist(header, f'Images rotate by NODANGLE={angle}')
 
     return pp
 
@@ -240,8 +243,10 @@ def find_pixat11(transform, x0, y0, epsilon=1e-8,
 
     Parameters
     ----------
-    transform : skimage.transform.PolynomialTransform
-        as returned by warp_image with get_transform=True.
+    transform : PolynomialTransform or function or object
+        as returned by warp_image with get_transform=True or a user defined
+        function or object.  Should take in (y, x) coordinates as an argument
+        and return the transformed (y, x) coordinates.
     x0 : float
         input x coordinate
     y0 : float
@@ -272,7 +277,7 @@ def find_pixat11(transform, x0, y0, epsilon=1e-8,
          x1 -> float, y1 -> float,
          x1ref -> float, y1ref -> float}
     """
-    c0 = np.array([[x0, y0]])
+    c0 = np.array([y0, x0])
     if epsilon is None:
         decimals = 0
         eps = 1e-8
@@ -282,27 +287,26 @@ def find_pixat11(transform, x0, y0, epsilon=1e-8,
         eps = epsilon
 
     # Check if we can do direct inversion
-    if direct and hasattr(transform, 'inverse') and \
-            not isinstance(transform, tf.PolynomialTransform):
-        c1 = transform.inverse(c0)
+    if direct and isinstance(transform, PolynomialTransform):
+        c1 = transform(c0, inverse=True)
         c1p1 = transform(c1 + 1)
         return {'x0': x0, 'y0': y0,
-                'x1ref': np.round(float(c1[0][0]), decimals=decimals),
-                'y1ref': np.round(float(c1[0][1]), decimals=decimals),
-                'x01': np.round(float(c1p1[0][0]), decimals=decimals),
-                'y01': np.round(float(c1p1[0][1]), decimals=decimals)}
+                'x1ref': np.round(float(c1[1]), decimals=decimals),
+                'y1ref': np.round(float(c1[0]), decimals=decimals),
+                'x01': np.round(float(c1p1[1]), decimals=decimals),
+                'y01': np.round(float(c1p1[0]), decimals=decimals)}
 
     # Otherwise we have to do minimization
     if xrange is None and yrange is None:
         bounds = None
     else:
-        bounds = [xrange, yrange]
+        bounds = [yrange, xrange]
         if method is None:
             method = 'TNC'
 
     def transform_distance(params):
-        txy = transform(np.array([[params[0], params[1]]]))
-        return ((txy - c0) ** 2).sum()
+        tyx = transform(np.array([params[0], params[1]]))
+        return ((tyx - c0) ** 2).sum()
 
     options = {'disp': verbose}
     if isinstance(maxiter, int):
@@ -315,13 +319,13 @@ def find_pixat11(transform, x0, y0, epsilon=1e-8,
         except AttributeError:
             msg = str(p)
 
-        log.error("minimization failed: %s" % msg)
+        log.error(f"minimization failed: {msg}")
         return
-    x1ref, y1ref = p.x
+    y1ref, x1ref = p.x
 
     # Find the pixel in the initial image that is at (x1ref+1, y1ref+1)
     # in the resulting image
-    x01, y01 = transform(np.array([[x1ref + 1, y1ref + 1]]))[0]
+    y01, x01 = transform(np.array([y1ref + 1, x1ref + 1]))
 
     return {'x0': x0, 'y0': y0,
             'x1ref': np.round(float(x1ref), decimals=decimals),
@@ -340,7 +344,7 @@ def update_wcs(header, transform, eps=None):
         FITS header to update
     transform
         A function that transforms input coordinates to output
-        coordinates.  numpy.ndarray (N, 2) -> [N], [N]
+        coordinates.  numpy.ndarray (2, N) -> (2, N)
     eps : float, optional
         precision
 
@@ -356,29 +360,30 @@ def update_wcs(header, transform, eps=None):
         return
 
     if 'CRPIX1' not in header or 'CRPIX2' not in header:
-        addhist(header, 'CRPIX1 or CRPIX2 are not in header. '
-                        'Skipping WCS update')
+        addhist(header,
+                'CRPIX1 or CRPIX2 are not in header. Skipping WCS update')
         return
 
     crpix1 = header.get('CRPIX1', 1.0)
     crpix2 = header.get('CRPIX2', 1.0)
-    addhist(header, 'CRPIX from stack= [%s,%s]' % (crpix1, crpix2))
+    addhist(header, f'CRPIX from stack= [{crpix1},{crpix2}]')
 
     log.info("updating WCS")
     dxy = find_pixat11(transform, crpix1 - 1, crpix2 - 1, epsilon=eps)
+    if dxy is None:
+        log.warning('CRPIX values not found after transform')
+        return
 
-    addhist(header, 'CRPIX = [%s,%s]' % (
-        dxy['x0'] + 1, dxy['y0'] + 1))
-    addhist(header, 'CRPIX after transform = [%f,%f]' % (
-        dxy['x1ref'] + 1, dxy['y1ref'] + 1))
+    addhist(header, f"CRPIX = [{dxy['x0'] + 1},{dxy['y0'] + 1}]")
+    addhist(header, f"CRPIX after transform = "
+                    f"[{dxy['x1ref'] + 1},{dxy['y1ref'] + 1}]")
     hdinsert(header, 'CRPIX1', dxy['x1ref'] + 1, refkey=kref)
     hdinsert(header, 'CRPIX2', dxy['y1ref'] + 1, refkey=kref)
 
     # Update CDELT
-    addhist(header, 'CDELT from stack= [%s,%s]' % (
-        header.get('CDELT1', -1), header.get('CDELT2', -1)))
-    addhist(header,
-            'CROT from stack= [ - ,%s]' % header.get('CROTA2', -1))
+    cd1, cd2 = header.get('CDELT1', -1), header.get('CDELT2', -1)
+    addhist(header, f"CDELT from stack= [{cd1},{cd2}]")
+    addhist(header, f"CROT from stack= [ - ,{header.get('CROTA2', -1)}]")
     for key in ['CROTA2', 'CDELT1', 'CDELT2']:
         if key not in header:
             dxy['update_cdelt'] = False
@@ -387,8 +392,7 @@ def update_wcs(header, transform, eps=None):
             break
     else:
         dxy['update_cdelt'] = True
-        addhist(header, 'Ref CRPIX+1 = [%f,%f]' % (
-            dxy['x01'] + 1, dxy['y01'] + 1))
+        addhist(header, f"Ref CRPIX+1 = [{dxy['x01'] + 1},{dxy['y01'] + 1}]")
         header['CDELT1'] *= (dxy['x01'] - dxy['x0'])
         header['CDELT2'] *= (dxy['y01'] - dxy['y0'])
 
@@ -396,8 +400,7 @@ def update_wcs(header, transform, eps=None):
 
 
 def transform_image(data, xin, yin, xout, yout, header=None, variance=None,
-                    transform_type='polynomial', order=4, get_dxy=False,
-                    extrapolate=False):
+                    order=4, get_dxy=False, extrapolate=False):
     """
     Transform an image and update header using coordinte point mapping
 
@@ -422,13 +425,13 @@ def transform_image(data, xin, yin, xout, yout, header=None, variance=None,
         variance array to update in parallel with the data array
     header : astropy.io.fits.header.Header, optional
         FITS header to update WCS
-    transform_type : str, optional
-        see scikit.image.transform for a list of available transform
-        types.
     order : int, optional
-        Order to use if transform_type is 'polynomial'
+        Order of the polynomial used to warp the image.
     get_dxy : bool, optional
         If True
+    extrapolate : bool, optional
+        If `False`, values outside of the rectangular range of `xout` and
+        `yout` will be set to `cval`.
 
     Returns
     -------
@@ -438,9 +441,8 @@ def transform_image(data, xin, yin, xout, yout, header=None, variance=None,
         - dxy, optional output from update_wcs
     """
     image, transform = warp_image(
-        data.copy(), xin, yin, xout, yout, transform=transform_type,
-        order=order, mode='constant', cval=np.nan, get_transform=True,
-        extrapolate=extrapolate)
+        data.copy(), xin, yin, xout, yout, order=order, mode='constant',
+        cval=np.nan, get_transform=True, extrapolate=extrapolate)
     dovar = isinstance(variance, np.ndarray) and variance.shape == data.shape
     var = variance.copy() if dovar else None
     if not dovar and variance is not None:
@@ -448,11 +450,10 @@ def transform_image(data, xin, yin, xout, yout, header=None, variance=None,
         addhist(header, msg)
         log.error(msg)
     if dovar:
-        var = warp_image(var, xin, yin, xout, yout, transform=transform_type,
-                         order=order, mode='constant', cval=np.nan,
-                         extrapolate=extrapolate)
-    addhist(header, 'correction model uses order %s' % order)
-    log.info("distortion solution order: %s" % order)
+        var = warp_image(var, xin, yin, xout, yout, order=order,
+                         mode='constant', cval=np.nan, extrapolate=extrapolate)
+    addhist(header, f'correction model uses order {order}')
+    log.info(f"distortion solution order: {order}")
     dxy = update_wcs(header, transform)
 
     if get_dxy:
@@ -669,8 +670,7 @@ def find_source(image, header):
 
 
 def undistort(data, header=None, pinhole=None, rotate=False,
-              variance=None, transform_type='piecewise-affine',
-              default_platescale=0.768, extrapolate=False):
+              variance=None, default_platescale=0.768, extrapolate=False):
     """
     Corrects distortion due to camera optics.
 
@@ -702,14 +702,12 @@ def undistort(data, header=None, pinhole=None, rotate=False,
     variance : numpy.ndarray, optional
         Variance array (nrow, ncol) to update in parallel with the
         data array
-    transform_type : str, optional
-        See scikit.image.transform for available transformation types.
-        Recommended are 'polynomial' and 'piecewise-affine'.  Note that
-        if anything other that 'polynomial' is selected, virtual corner
-        pins are created to allow for extrapolation.
     default_platescale : float, optional
         If set, CDELT1 and CDELT2 will be set to this value. Set to
         None to automatically update.
+    extrapolate : bool, optional
+        If `False`, values outside of the rectangular range of `xout` and
+        `yout` will be set to `cval`.
 
     Returns
     -------
@@ -768,8 +766,8 @@ def undistort(data, header=None, pinhole=None, rotate=False,
     # Perform transformation
     corrected_image, var, dxy = transform_image(
         data.copy(), x_pos, y_pos, x_model, y_model, header=header,
-        variance=var, transform_type=transform_type, order=pinhole['order'],
-        get_dxy=True, extrapolate=extrapolate)
+        variance=var, order=pinhole['order'], get_dxy=True,
+        extrapolate=extrapolate)
 
     # Rebin image to square pixels
     if default_platescale is None:

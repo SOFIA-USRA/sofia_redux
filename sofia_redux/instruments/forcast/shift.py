@@ -66,7 +66,7 @@ def shift(data, offset, header=None, variance=None, order=None,
         The shifted variance (nrow, ncol) or None if not supplied
 
     Notes
-    ------
+    -----
     Please see sofia_redux.toolkit.image.adjust.shift for full descriptions of
     available kwargs.  The most useful parameters are listed below:
 

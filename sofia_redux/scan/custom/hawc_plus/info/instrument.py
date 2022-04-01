@@ -12,6 +12,12 @@ __all__ = ['HawcPlusInstrumentInfo']
 class HawcPlusInstrumentInfo(SofiaInstrumentInfo):
 
     def __init__(self):
+        """
+        Initialize the HAWC+ instrument information.
+
+        Contains information on the HAWC+ instrument parameters including band
+        and HWP details.
+        """
         super().__init__()
         self.name = 'hawc_plus'
         self.band_id = None
@@ -19,6 +25,18 @@ class HawcPlusInstrumentInfo(SofiaInstrumentInfo):
         self.hwp_telescope_vertical = 0.0 * units.Unit('deg')
 
     def apply_configuration(self):
+        """
+        Update HAWC+ instrument information with FITS header information.
+
+        Updates the chopping information by taking the following keywords from
+        the FITS header::
+
+          SMPLFREQ - The detector readout rate (Hz)
+
+        Returns
+        -------
+        None
+        """
         super().apply_configuration()
         options = self.options
         if options is None:
@@ -40,7 +58,7 @@ class HawcPlusInstrumentInfo(SofiaInstrumentInfo):
             self.band_id = '-'
 
         if 'filter' not in self.configuration:
-            filter_value = f'{self.wavelength.value}sum'
+            filter_value = f'{self.wavelength.value}um'
             self.configuration.put('filter', filter_value)
             log.info(f"HAWC+ Filter set to {self.configuration['filter']}.")
 

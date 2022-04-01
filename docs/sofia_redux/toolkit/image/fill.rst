@@ -167,10 +167,10 @@ Example
 
     import matplotlib.pyplot as plt
     import numpy as np
-    from skimage.data import camera
+    import imageio
     from sofia_redux.toolkit.image.fill import maskinterp
 
-    image = camera().astype(float)
+    image = imageio.imread('imageio:camera.png').astype(float)
     image /= image.max()
     original = image.copy()
     rand = np.random.RandomState(41)
@@ -235,10 +235,10 @@ A statistical function could be defined as shown in the following example:
 
     import matplotlib.pyplot as plt
     import numpy as np
-    from skimage.data import camera
+    import imageio
     from sofia_redux.toolkit.image.fill import maskinterp
 
-    image = camera().astype(float)
+    image = imageio.imread('imageio:camera.png').astype(float)
     image /= image.max()
     original = image.copy()
     rand = np.random.RandomState(41)

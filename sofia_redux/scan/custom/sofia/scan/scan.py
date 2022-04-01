@@ -19,11 +19,33 @@ class SofiaScan(Scan):
     DEFAULT_FITS_DATE = "1970-01-01T00:00:00.0"
 
     def __init__(self, channels, reduction=None):
+        """
+        Initialize a SOFIA scan.
+
+        The SOFIA scan is an abstract class general to all SOFIA instruments.
+
+        Parameters
+        ----------
+        channels : sofia_redux.scan.custom.sofia.channels.camera.SofiaCamera
+            The instrument channels for the scan.
+        reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
+            The reduction to which this scan belongs.
+        """
         self.hdul = None
         self.header_extension = 0
         self.header = None
         self.history = None
         super().__init__(channels, reduction=reduction)
+
+    def copy(self):
+        """
+        Return a copy of the scan.
+
+        Returns
+        -------
+        SofiaScan
+        """
+        return super().copy()
 
     @property
     def referenced_attributes(self):
@@ -53,16 +75,6 @@ class SofiaScan(Scan):
         """
         return super().info
 
-    def copy(self):
-        """
-        Return a copy of the SofiaScan.
-
-        Returns
-        -------
-        SofiaScan
-        """
-        return super().copy()
-
     @property
     def astrometry(self):
         """
@@ -81,7 +93,7 @@ class SofiaScan(Scan):
 
         Parameters
         ----------
-        scans : list (Scan)
+        scans : list (SofiaScan)
             A list of scans.
 
         Returns
@@ -89,11 +101,11 @@ class SofiaScan(Scan):
         QualityFlags.QualityFlagTypes
             The lowest quality flag type.
         """
-        lowest_quality = 0
+        lowest_quality = np.inf
         lowest_scan = None
         for scan in scans:
             if isinstance(scan, SofiaScan):
-                if scan.info.processing.quality_level.value > lowest_quality:
+                if scan.info.processing.quality_level.value < lowest_quality:
                     lowest_quality = scan.info.processing.quality_level.value
                     lowest_scan = scan
 
@@ -110,12 +122,12 @@ class SofiaScan(Scan):
 
         Parameters
         ----------
-        scans : list (Scan)
+        scans : list (SofiaScan)
             A list of scans.
 
         Returns
         -------
-        exposure_time : astropy.units.Quantity
+        exposure_time : units.Quantity
             The total exposure time from all scans in seconds.
         """
         exposure_time = 0.0 * units.Unit('s')
@@ -133,7 +145,7 @@ class SofiaScan(Scan):
 
         Parameters
         ----------
-        scans : list (Scan)
+        scans : list (SofiaScan)
             A list of scans.
 
         Returns
@@ -179,7 +191,7 @@ class SofiaScan(Scan):
         -------
         Scan
         """
-        return SofiaScan.time_order_scans(scans)[0]
+        return SofiaScan.time_order_scans(scans)[-1]
 
     def read(self, filename, read_fully=True):
         """
@@ -236,25 +248,10 @@ class SofiaScan(Scan):
         self.channels.validate_scan(self)
         self.integrations = []
         self.add_integrations_from_hdul(self.hdul)
-        self.info.instrument.sampling_interval = \
-            self[0].info.sampling_interval.copy()
-        self.info.instrument.integration_time = \
-            self[0].info.integration_time.copy()
-
-    @abstractmethod
-    def add_integrations_from_hdul(self, hdul):
-        """
-        Add integrations to this scan from a HDU list.
-
-        Parameters
-        ----------
-        hdul : fits.HDUList
-
-        Returns
-        -------
-        None
-        """
-        pass
+        if self.size == 0:
+            return
+        self.info.sampling_interval = self[0].info.sampling_interval.copy()
+        self.info.integration_time = self[0].info.integration_time.copy()
 
     def is_aor_valid(self):
         """
@@ -272,7 +269,7 @@ class SofiaScan(Scan):
 
         Parameters
         ----------
-        coordinate : SphericalCoordinates
+        coordinate : Coordinate2D
 
         Returns
         -------
@@ -286,7 +283,7 @@ class SofiaScan(Scan):
 
         Parameters
         ----------
-        header : astropy.io.fits.Header
+        header : fits.Header
 
         Returns
         -------
@@ -443,6 +440,8 @@ class SofiaScan(Scan):
         scan_number : int
             The scan number if found and -1 otherwise.
         """
+        if not isinstance(self.info.observation.obs_id, str):
+            return -1
         scan_number = re.search(r'-(\d+)', self.info.observation.obs_id)
         if scan_number is None:
             return -1
@@ -471,7 +470,7 @@ class SofiaScan(Scan):
             return self.astrometry.date
 
         for group_name, group in self.info.available_info.items():
-            if group is None:
+            if group is None:  # pragma: no cover
                 continue
             prefix = group.log_prefix
             if name.startswith(group.log_prefix):
@@ -580,7 +579,7 @@ class SofiaScan(Scan):
         native_pointing = self.get_native_pointing_increment(self.pointing)
         si_offset = self.get_si_pixel_offset(native_pointing)
         dx, dy = si_offset.x, si_offset.y
-        if isinstance(dx, units.Quantity):
+        if isinstance(dx, units.Quantity):  # pragma: no cover
             dx, dy = dx.decompose().value, dy.decompose().value
 
         offset = self.get_si_arcseconds_offset(native_pointing)
@@ -593,3 +592,18 @@ class SofiaScan(Scan):
         header['SIBS_DE'] = (
             to_header_float(el, 'arcsec'),
             "(arcsec) SIBS elevation offset")
+
+    @abstractmethod
+    def add_integrations_from_hdul(self, hdul):  # pragma: no cover
+        """
+        Add integrations to this scan from a HDU list.
+
+        Parameters
+        ----------
+        hdul : fits.HDUList
+
+        Returns
+        -------
+        None
+        """
+        pass

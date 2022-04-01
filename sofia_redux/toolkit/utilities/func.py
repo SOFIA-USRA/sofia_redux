@@ -631,13 +631,13 @@ def julia_fractal(sy, sx, c0=-0.4, c1=0.6, iterations=256,
     x = np.linspace(xrange[0], xrange[1], sx)[None]
     y = np.linspace(yrange[0], yrange[1], sy)[..., None]
     z = np.tile(x, (sy, 1)) + 1j * np.tile(y, (1, sx))
-    c = np.full((sy, sx), c0 + 1j * c1)
+    c = c0 + 1j * c1
     mask = np.full((sy, sx), True)
     result = np.zeros((sy, sx))
 
     for i in range(iterations):
         z[mask] *= z[mask]
-        z[mask] += c[mask]
+        z[mask] += c
         mask[np.abs(z) > 2] = False
         result[mask] = i
 

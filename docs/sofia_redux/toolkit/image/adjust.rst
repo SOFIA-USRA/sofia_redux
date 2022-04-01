@@ -127,10 +127,10 @@ Example of Shifting and Rotating
 
     import numpy as np
     import matplotlib.pyplot as plt
-    from skimage.data import camera
+    import imageio
     from sofia_redux.toolkit.image.adjust import shift, rotate
 
-    image = camera().astype(float)
+    image = imageio.imread('imageio:camera.png').astype(float)
     image /= image.max()
 
     # pad so we don't cut off information during rotation
@@ -313,10 +313,10 @@ accuracy of 0.1 pixels by upsampling by a factor of 10:
 
     import matplotlib.pyplot as plt
     import numpy as np
-    from skimage.data import coins
+    import imageio
     from sofia_redux.toolkit.image.adjust import register_image, shift
 
-    image = np.pad(coins().astype(float), 10)
+    image = np.pad(imageio.imread('imageio:coins.png').astype(float), 10)
     image -= np.median(image)
 
     offsets = [12.3, 45.6]

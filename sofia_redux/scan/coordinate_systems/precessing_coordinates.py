@@ -39,7 +39,7 @@ class PrecessingCoordinates(CelestialCoordinates):
             coordinates when storing them into these coordinates.  Note that it
             is extremely unlikely for the original coordinates to be passed in
             as a reference due to the significant checks performed on them.
-        epoch : Epoch or str or int or float or Time or fits.Header
+        epoch : Epoch or str or int or float or Time or fits.Header, optional
             Information from which to set the epoch for these coordinates.
         """
 

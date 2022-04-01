@@ -9,11 +9,35 @@ __all__ = ['SofiaOriginationInfo']
 class SofiaOriginationInfo(OriginationInfo):
 
     def __init__(self):
+        """
+        Initialize the SOFIA origination information.
+
+        Contains information on the SOFIA origin data such as the observer,
+        operator, software, and file.
+        """
         self.checksum = None
         self.checksum_version = None
         super().__init__()
 
     def apply_configuration(self):
+        """
+        Update the origination information with FITS header information.
+
+        Updates the information by taking the following keywords from the
+        FITS header::
+
+          ORIGIN - The creator organization or node (str)
+          OBSERVER - The name(s) of observer(s) (str)
+          CREATOR - The creator software or task (str)
+          OPERATOR - The name(s) of operator(s) (str)
+          FILENAME - The original file name (str)
+          DATASUM - The checksum of the data records (str)
+          CHECKVER - The version of checksum algorithm (str)
+
+        Returns
+        -------
+        None
+        """
         options = self.options
         if options is None:
             return

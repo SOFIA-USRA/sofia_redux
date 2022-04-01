@@ -1669,6 +1669,10 @@ class TestIntegration(object):
         integ.set_tau_value(6.0)
         assert np.allclose(integ.frames.transmission, np.exp(-6))
 
+        with pytest.raises(NotImplementedError) as err:
+            integ.set_zenith_tau(6.0)
+        assert "Only ground based" in str(err.value)
+
     def test_get_tau_coefficients(self, populated_integration):
         integ = populated_integration
 

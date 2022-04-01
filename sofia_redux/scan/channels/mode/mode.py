@@ -182,7 +182,7 @@ class Mode(ABC):
         elif gain_provider is None:
             self.gain_provider = None
         else:
-            raise ValueError(f"gain must be a {str} or {GainProvider}. "
+            raise ValueError(f"Gain must be a {str} or {GainProvider}. "
                              f"Received {type(gain_provider)}.")
 
     def add_coupled_mode(self, coupled_mode):
@@ -229,7 +229,7 @@ class Mode(ABC):
         if self.gain_provider is not None:
             self.apply_provider_gains(validate)
 
-        if isinstance(self.gain, units.Quantity):
+        if isinstance(self.gain, units.Quantity):  # pragma: no cover
             if self.gain.unit == units.dimensionless_unscaled:
                 self.gain = self.gain.value
 
@@ -256,9 +256,9 @@ class Mode(ABC):
             self.gain_provider.validate(self)
 
         gain = self.gain_provider.get_gain(self.channel_group)
-        if (isinstance(gain, units.Quantity)
-                and gain.unit == units.dimensionless_unscaled):
-            gain = gain.value
+        if isinstance(gain, units.Quantity):  # pragma: no cover
+            if gain.unit == units.dimensionless_unscaled:
+                gain = gain.value
         self.gain = gain
         self.gain[np.isnan(self.gain)] = 0.0
 
@@ -287,7 +287,7 @@ class Mode(ABC):
             any channels were flagged, just that it was attempted.
         """
         if self.gain_provider is None:
-            if isinstance(gain, units.Quantity):
+            if isinstance(gain, units.Quantity):  # pragma: no cover
                 if gain.unit == units.dimensionless_unscaled:
                     gain = gain.value
             self.gain = np.asarray(gain, dtype=float)

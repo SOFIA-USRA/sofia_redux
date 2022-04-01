@@ -26,7 +26,6 @@ from sofia_redux.scan.filters.kill_filter import KillFilter
 from sofia_redux.scan.filters.whitening_filter import WhiteningFilter
 from sofia_redux.scan.channels.modality.correlated_modality import (
     CorrelatedModality)
-from sofia_redux.scan.utilities.class_provider import get_integration_class
 from sofia_redux.scan.integration import integration_numba_functions as int_nf
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
@@ -35,12 +34,30 @@ from sofia_redux.scan.coordinate_systems.projector.astro_projector import \
     AstroProjector
 from sofia_redux.scan.reduction.version import ReductionVersion
 from sofia_redux.scan.signal.correlated_signal import CorrelatedSignal
+from sofia_redux.scan.utilities.class_provider import get_integration_class
+from sofia_redux.scan.utilities.utils import round_values
+
 __all__ = ['Integration']
 
 
 class Integration(ABC):
 
     def __init__(self, scan=None):
+        """
+        Initialize a scan integration.
+
+        An integration is used to represent a chunk of timestream data from
+        a given scan (frames).  A valid scan must contain one or more
+        integrations.  The integration class provides methods to operate on the
+        frame data for various reduction tasks, and also provides a link
+        between the timestream data, and the instrument channels.  Each
+        frame/channel combination is referred to as a sample.
+
+        Parameters
+        ----------
+        scan : sofia_scan.scan.scan.scan.Scan
+            The scan to which the integration belongs.
+        """
         self.scan = None
         self.channels = None
         self.frames = None
@@ -716,9 +733,9 @@ class Integration(ABC):
         if time is None or time > self.filter_time_scale:
             time = self.filter_time_scale
 
-        n_frames = (time / self.info.instrument.sampling_interval)
-        n_frames = np.round(n_frames.decompose().value)
-        n_frames = int(np.clip(n_frames, 1, self.size))
+        n_frames = time / self.info.instrument.sampling_interval
+        n_frames = round_values(
+            np.clip(n_frames.decompose().value, 1, self.size))
         return n_frames
 
     def power2_frames_for(self, time=None):
@@ -966,7 +983,11 @@ class Integration(ABC):
             weight = 1.0 / numba_functions.robust_mean(
                 dev.value, tails=0.1) * (1 / (speed_unit ** 2))
         else:
-            weight = 0.454937 / np.nanmedian(dev)
+            dev = np.nanmedian(dev)
+            if dev != 0:
+                weight = 0.454937 / np.nanmedian(dev)
+            else:
+                weight = np.inf
 
         return average_speed, weight
 
@@ -1318,7 +1339,7 @@ class Integration(ABC):
             # rare but possible to hit exactly 0.5
             window_size = int(np.ceil(window_size_float))
         else:
-            window_size = int(np.round(window_size_float))
+            window_size = round_values(window_size_float)
 
         window = scipy_windows.hann(window_size, sym=True)
         window /= np.sum(np.abs(window))
@@ -1400,7 +1421,7 @@ class Integration(ABC):
         measured_time = (self.frames.mjd - first_mjd) * units.Unit('day')
         expected_time = (self.frames.fixed_index - first_index) * dt
         gap_time = (measured_time - expected_time).decompose().to(dt.unit)
-        frame_gaps = np.round((gap_time / dt).decompose().value).astype(int)
+        frame_gaps = round_values((gap_time / dt).decompose().value)
         frame_gaps[~self.frames.valid] = 0
         gap_time[~self.frames.valid] = np.nan
         return frame_gaps, gap_time
@@ -2680,7 +2701,8 @@ class Integration(ABC):
             min_level_time = 5 * self.get_point_crossing_time()
 
         min_frames = int(
-            np.round(min_level_time / self.info.instrument.sampling_interval))
+            round_values(
+                min_level_time / self.info.instrument.sampling_interval))
         if min_frames < 2:
             min_frames = np.inf
 
@@ -3549,7 +3571,7 @@ class Integration(ABC):
         if isinstance(time_or_frames, units.Quantity):
             frame_shift = (time_or_frames
                            / self.info.sampling_interval).decompose().value
-            frame_shift = int(np.round(frame_shift))
+            frame_shift = round_values(frame_shift)
         else:
             frame_shift = int(time_or_frames)
 
@@ -3578,12 +3600,12 @@ class Integration(ABC):
         if name.startswith('tau.'):
             return self.get_tau(name[4:].lower())
         if name == 'scanspeed':
-            return self.average_scan_speed[0].to('arcsec/second').value
+            return self.average_scan_speed[0].to('arcsec/second')
         if name == 'rmsspeed':
             return (np.sqrt(1.0 / self.average_scan_speed[1])).to(
-                'arcsec/second').value
+                'arcsec/second')
         if name == 'hipass':
-            return self.filter_time_scale.to('second').value
+            return self.filter_time_scale.to('second')
         if name.startswith('chop'):
             chopper = getattr(self, 'chopper', None)
             if chopper is None:

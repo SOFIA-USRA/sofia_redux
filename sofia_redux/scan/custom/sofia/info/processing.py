@@ -24,6 +24,12 @@ class SofiaProcessingInfo(InfoBase):
     }
 
     def __init__(self):
+        """
+        Initialize the SOFIA processing information.
+
+        Contains information on the SOFIA processing parameters such as
+        associated data, processing level, software versions, and data quality.
+        """
         super().__init__()
         self.associated_aors = None
         self.associated_mission_ids = None
@@ -52,6 +58,28 @@ class SofiaProcessingInfo(InfoBase):
         return 'proc'
 
     def apply_configuration(self):
+        """
+        Update processing information with FITS header information.
+
+        Updates the information by taking the following keywords from the
+        FITS header::
+
+          PROCSTAT - The processing level for the data (str)
+          HEADSTAT - The header state (str)
+          DATAQUAL - The data quality level (str)
+          N_SPEC - The number of spectra included (int)
+          PIPELINE - The software that created the file (str)
+          PIPEVERS - The full software version info (str)
+          PRODTYPE - The type of product (str)
+          FILEREV - The file revision identifier (str)
+          ASSC_AOR - Any associated AOR IDs (str)
+          ASSC_MSN - Any associated missions IDs (str)
+          ASSC_FRQ - Any associated frequencies (str)
+
+        Returns
+        -------
+        None
+        """
         options = self.options
         if options is None:
             return
@@ -93,6 +121,18 @@ class SofiaProcessingInfo(InfoBase):
 
     @staticmethod
     def get_product_type(dims):
+        """
+        Return the processing product type for a given number of dimensions.
+
+        Parameters
+        ----------
+        dims : int
+            The number of dimensions.
+
+        Returns
+        -------
+        product_type : str
+        """
         if isinstance(dims, (int, float)):
             if dims == 0:
                 return "HEADER"
@@ -111,6 +151,17 @@ class SofiaProcessingInfo(InfoBase):
 
     @staticmethod
     def get_level_name(level):
+        """
+        Return the level name.
+
+        Parameters
+        ----------
+        level : str or int
+
+        Returns
+        -------
+        level_name : str
+        """
         return f"LEVEL_{level}"
 
     def get_comment(self, level):
@@ -149,8 +200,8 @@ class SofiaProcessingInfo(InfoBase):
             If the data are calibrated.
         dims : int
             The number of dimensions in the data.
-        quality_level : int
-            The quality level of the data.
+        quality_level : enum.Enum
+            The quality level of the data as a flag.
 
         Returns
         -------

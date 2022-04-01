@@ -63,7 +63,7 @@ class SofiaCamera(SingleColorArrangement):
         self.info.register_config_file(filename)
 
     @abstractmethod
-    def read_data(self, hdul):
+    def read_data(self, hdul):  # pragma: no cover
         """
         Read a FITS HDU list to populate channel data.
 

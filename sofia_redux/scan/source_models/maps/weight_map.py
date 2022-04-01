@@ -7,9 +7,12 @@ __all__ = ['WeightMap']
 
 class WeightMap(Overlay):
 
-    def __init__(self, observation):
+    def __init__(self, observation=None):
         """
         Create a weight map overlay of an observation.
+
+        The weight map overlay returns and operates on the weight image of
+        the Observation2D basis.
 
         Parameters
         ----------

@@ -39,7 +39,8 @@ __all__ = ['UNKNOWN_STRING_VALUE', 'UNKNOWN_FLOAT_VALUE',
            'encompass_beam', 'encompass_beam_fwhm', 'get_beam_area',
            'get_header_quantity', 'ascii_file_to_frame_data',
            'insert_into_header', 'insert_info_in_header', 'to_header_cards',
-           'clear_numba_cache', 'round_values', 'get_comment_unit']
+           'clear_numba_cache', 'round_values', 'get_comment_unit',
+           'safe_sidereal_time']
 
 UNKNOWN_STRING_VALUE = ''
 UNKNOWN_FLOAT_VALUE = -9999.0
@@ -649,7 +650,7 @@ def robust_mean(array, tails=None):
         return result if u is None else result * u
 
     array = np.asarray(array)
-    dn = int(np.round(array.size * tails))
+    dn = round_values(array.size * tails)
     result = bn.nanmean(np.sort(array)[dn:-dn])
     return result if u is None else result * u
 
@@ -822,10 +823,7 @@ def log2round(x):
     -------
     log2 : int or numpy.ndarray (int)
     """
-    result = np.round(np.log2(x))
-    if isinstance(result, np.ndarray):
-        return result.astype(int)
-    return int(result)
+    return round_values(np.log2(x))
 
 
 def pow2round(x):
@@ -1130,16 +1128,16 @@ def combine_beams(beam1, beam2, deconvolve=False):
 
     Parameters
     ----------
-    beam1 : astropy.modeling.functional_models.Gaussian2D
+    beam1 : beams.gaussian_2d.Gaussian2D or Gaussian2D
         The original beam to modify.
-    beam2 : astropy.modeling.functional_models.Gaussian2D or None
+    beam2 : Gaussian2D or None or beams.gaussian_2d.Gaussian2D
         The beam to modify `beam1` with.
     deconvolve : bool, optional
         If `True`, indicates a deconvolution rather than a convolution.
 
     Returns
     -------
-    astropy.modeling.functional_models.Gaussian2D
+    beams.gaussian_2d.Gaussian2D or Gaussian2D
         The combined beam.
     """
     if beam2 is None:
@@ -1216,14 +1214,14 @@ def convolve_beam(beam1, beam2):
 
     Parameters
     ----------
-    beam1 : astropy.modeling.functional_models.Gaussian2D
+    beam1 : beams.gaussian_2d.Gaussian2D or Gaussian2D
         The Gaussian beam to convolve.
-    beam2 : astropy.modeling.functional_models.Gaussian2D
+    beam2 : beams.gaussian_2d.Gaussian2D or Gaussian2D
         The Gaussian beam to convolve `beam1` with.
 
     Returns
     -------
-    beam : astropy.modeling.functional_models.Gaussian2D
+    beam : beams.gaussian_2d.Gaussian2D or Gaussian2D
     """
     return combine_beams(beam1, beam2, deconvolve=False)
 
@@ -1234,14 +1232,14 @@ def deconvolve_beam(beam1, beam2):
 
     Parameters
     ----------
-    beam1 : astropy.modeling.functional_models.Gaussian2D
+    beam1 : beams.gaussian_2d.Gaussian2D or Gaussian2D
         The Gaussian beam to deconvolve.
-    beam2 : astropy.modeling.functional_models.Gaussian2D
+    beam2 : beams.gaussian_2d.Gaussian2D or Gaussian2D
         The Gaussian beam to deconvolve `beam1` by.
 
     Returns
     -------
-    beam : astropy.modeling.functional_models.Gaussian2D
+    beam : beams.gaussian_2d.Gaussian2D or Gaussian2D
     """
     return combine_beams(beam1, beam2, deconvolve=True)
 
@@ -1252,14 +1250,14 @@ def encompass_beam(beam1, beam2):
 
     Parameters
     ----------
-    beam1 : astropy.modeling.functional_models.Gaussian2D
+    beam1 : beams.gaussian_2d.Gaussian2D or Gaussian2D
         The Gaussian beam to encompass.
-    beam2 : astropy.modeling.functional_models.Gaussian2D
+    beam2 : beams.gaussian_2d.Gaussian2D or Gaussian2D
         The Gaussian beam to encompass `beam1` with.
 
     Returns
     -------
-    beam : astropy.modeling.functional_models.Gaussian2D
+    beam : beams.gaussian_2d.Gaussian2D or Gaussian2D
     """
     delta_angle = beam2.theta - beam1.theta
     cos_a = np.cos(delta_angle)
@@ -1293,14 +1291,14 @@ def encompass_beam_fwhm(beam, fwhm):
 
     Parameters
     ----------
-    beam : astropy.modeling.functional_models.Gaussian2D or None
+    beam : beams.gaussian_2d.Gaussian2D or Gaussian2D or None
         The Gaussian beam to encompass.
     fwhm : float or units.Quantity
         The full-width-half-max to encompass `beam1` with.
 
     Returns
     -------
-    astropy.modeling.functional_models.Gaussian2D
+    beams.gaussian_2d.Gaussian2D or Gaussian2D
     """
     stddev = gaussian_fwhm_to_sigma * fwhm
     if beam is None:
@@ -1321,7 +1319,7 @@ def get_beam_area(psf):
 
     Parameters
     ----------
-    psf : astropy.modeling.functional_models.Gaussian2D or None
+    psf : beams.gaussian_2d.Gaussian2D or Gaussian2D or None
 
     Returns
     -------
@@ -1733,3 +1731,38 @@ def get_comment_unit(comment, default=None):
             continue
     else:
         return default
+
+
+def safe_sidereal_time(t, kind, longitude=None, model=None):
+    """
+    Calculate sidereal time, even if offline.
+
+    This is a wrapper around :func:`Time.sidereal_time` in cases where the IERS
+    table cannot be downloaded.
+
+    Parameters
+    ----------
+    t : Time
+        The time for which to calculate the sidereal time.
+    kind : str
+        May be one of {'mean', 'apparent'} i.e., accounting for precession
+        only, or also for nutation.
+    longitude : units.Quantity or float, optional
+        The longitude on the Earth at which to compute the Earth rotation
+        angle.  If a float is provided, it should be in degrees.
+    model : str, optional
+        The precession model to use.
+
+    Returns
+    -------
+    longitude : units.Quantity
+        The local sidereal time in hourangle units.
+    """
+    try:
+        return t.sidereal_time(kind, longitude=longitude, model=model)
+    except Exception as err:
+        log.warning(f"There was an error calculating sidereal time: {err}")
+
+    from astropy.utils.iers import iers
+    with iers.conf.set_temp('auto_max_age', None):  # An offline option
+        return t.sidereal_time(kind, longitude=longitude, model=model)

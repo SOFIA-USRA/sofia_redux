@@ -7,6 +7,8 @@ from sofia_redux.scan.info.astrometry import AstrometryInfo
 from sofia_redux.scan.coordinate_systems.epoch.epoch import J2000
 from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
     EquatorialCoordinates
+from sofia_redux.scan.utilities.utils import safe_sidereal_time
+
 
 __all__ = ['ExampleAstrometryInfo']
 
@@ -16,6 +18,12 @@ class ExampleAstrometryInfo(AstrometryInfo):
     default_fits_date = "1970-01-01T00:00:00.0"
 
     def __init__(self):
+        """
+        Initialize the astrometry info for the example instrument.
+
+        The example instrument is assumed to be ground based using equatorial
+        coordinates in the J2000 equinox.
+        """
         super().__init__()
         self.date = None
         self.epoch = J2000
@@ -24,6 +32,13 @@ class ExampleAstrometryInfo(AstrometryInfo):
         self.ground_based = True
 
     def apply_configuration(self):
+        """
+        Apply the configuration options related to the FITS header.
+
+        Returns
+        -------
+        None
+        """
         deg = units.Unit('degree')
         if self.options is None:
             return
@@ -50,8 +65,8 @@ class ExampleAstrometryInfo(AstrometryInfo):
         if 'LST' in self.options:
             self.lst = self.options.get_float('LST') * units.Unit('hourangle')
         else:
-            self.lst = date_obs.sidereal_time(
-                'mean', longitude=self.site.longitude)
+            self.lst = safe_sidereal_time(
+                date_obs, 'mean', longitude=self.site.longitude)
 
         log.info(f"Equatorial: {self.equatorial}")
         log.info(f"Site: {self.site}")

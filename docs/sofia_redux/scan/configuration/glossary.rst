@@ -86,6 +86,35 @@
      - An alias for all radiation-sensitive channels of the instrument, or set
        options for it.  See `correlated.<modality>`_ for further details.
 
+   * - .. _atran.altcoeffs:
+
+       | **atran.altcoeffs**
+       | Instrument: SOFIA
+     - atran.altcoeffs=<c0>,<c1>,<c2>,...<cN>
+     - The polynomial coefficients used to determine the altitude factor when
+       determining the atmospheric transmission correction.  Used to fit for
+       an altitude relative to 41 kft in units of kft.
+
+   * - .. _atran.amcoeffs:
+
+       | **atran.amcoeffs**
+       | Instrument: SOFIA
+     - atran.amcoeffs=<c0>,<c1>,<c2>,...<cN>
+     - The polynomial coefficients used to determine the air mass factor when
+       determining the atmospheric transmission correction.  Used to fit for
+       the air mass relative to sqrt(2) (an elevation of 45 degrees).
+
+   * - .. _atran.reference:
+
+       | **atran.reference**
+       | Instrument: SOFIA
+     - atran.reference=<X>
+     - The factor (f) used to provide the actual transmission value when
+       multiplied by the transmission correction value (c).  The
+       transmission (t) is given as t = f * c where c = am_factor * alt_factor
+       (see `atran.altcoeffs`_ and `atran.amcoeffs`_).  The transmission is
+       related to the opacity (tau) by t = exp(-tau * airmass).
+
    * - .. _beam:
 
        **beam**
@@ -394,6 +423,14 @@
        (realf0, imagf0, realf1, imagf1, realf2...), as determined by the filter_
        step, is subtracted from the timestream in addition to it's inverse
        transform (correct method of removal).
+
+   * - .. _darkcorrect:
+
+       | **darkcorrect**
+       | Instrument: HAWC+
+     - darkcorrect={True,False}
+     - Whether to perform the squid dark correction for blind channels.
+       Otherwise, all blind channels will be flagged as dead.
 
    * - .. _datapath:
 
@@ -1827,6 +1864,16 @@
 
        See point_.
 
+   * - .. _pointing.degree:
+
+       **pointing.degree**
+     - | [pointing]
+       | degree=<X>
+     - Sets the degree (integer <X>) of spline used to fit the peak source
+       amplitude value. This may be important for pixel maps where the map
+       coverage is not sufficient to provide the required number of points
+       for a third degree spline fit (default).
+
    * - .. _pointing.exposureclip:
 
        **pointing.exposureclip**
@@ -1870,6 +1917,14 @@
      - Restrict the pointing fit to a circular area, with radius X (arcseconds),
        around the nominal map center.  it may be useful for deriving pointing in
        a crowded field.  See `pointing.suggest`_.
+
+   * - .. _pointing.reduce_degrees:
+
+       **pointing.reduce_degrees**
+     - | [pointing]
+       | reduce_degrees={True, False}
+     - Allows the degree of spline fit to be lowered if there are insufficient
+       points to allow for the requested fit (see `pointing.degree`_).
 
    * - .. _pointing.significance:
 
@@ -2723,7 +2778,9 @@
 
        When lookup tables are used, the tau values will be interpolated for each
        scan, so long as the scan falls inside the interpolator's range.
-       Otherwise, a tau of 0.0 will be used.
+       Otherwise, a tau of 0.0 will be used.  For SOFIA instruments, <spec>
+       may also take the values {atran, pwvmodel}.  Please see
+       `atran.reference`_, `tau.pwvmodel`_, and `tau.<?>`_ for further details.
 
    * - .. _tau.pwvmodel:
 

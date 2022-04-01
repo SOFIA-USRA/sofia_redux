@@ -11,6 +11,28 @@ __all__ = ['FocalPlaneCoordinates']
 class FocalPlaneCoordinates(SphericalCoordinates):
 
     def __init__(self, coordinates=None, unit='degree', copy=True):
+        """
+        Initialize focal plane coordinates.
+
+        The focal plane coordinates are spherical coordinates used to
+        represent coordinates on the plane perpendicular to the axis
+        containing the focal point.
+
+        Parameters
+        ----------
+        coordinates : list or tuple or array-like or units.Quantity, optional
+            The coordinates used to populate the object during initialization.
+            The first (0) value or index should represent longitudinal
+            coordinates, and the second should represent latitude.
+        unit : units.Unit or str, optional
+            The angular unit for the spherical coordinates.  The default is
+            'degree'.
+        copy : bool, optional
+            Whether to explicitly perform a copy operation on the input
+            coordinates when storing them into these coordinates.  Note that it
+            is extremely unlikely for the original coordinates to be passed in
+            as a reference due to the significant checks performed on them.
+        """
         super().__init__(coordinates=coordinates, unit=unit, copy=copy)
 
     def copy(self):

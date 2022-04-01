@@ -1,5 +1,8 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+from copy import deepcopy
+
+from astropy import units
 import numpy as np
 
 from sofia_redux.scan.signal.signal import Signal
@@ -13,6 +16,20 @@ __all__ = ['CorrelatedSignal']
 class CorrelatedSignal(Signal):
 
     def __init__(self, integration, mode):
+        """
+        Initialize a correlated signal.
+
+        The correlated signal is used to extract a signal from the integration
+        defined by the supplied correlated mode.  The mode defines a set of
+        instrument channels, and how gain should be determined from them.
+
+        Parameters
+        ----------
+        integration : sofia_redux.scan.integration.integration.Integration
+            The integration to which this signal belongs.
+        mode : sofia_redux.scan.channels.mode.correlated_mode.CorrelatedMode
+            The correlated modality mode for this signal.
+        """
         super().__init__(integration, mode=mode)
         self.dependents = Dependents(integration, mode.name)
         self.debug = False
@@ -32,7 +49,13 @@ class CorrelatedSignal(Signal):
         -------
         CorrelatedSignal
         """
-        return super().copy()
+        new = self.__class__(self.integration, self.mode)
+        for key, value in self.__dict__.items():
+            if key in self.referenced_attributes:
+                setattr(new, key, value)
+            else:
+                setattr(new, key, deepcopy(value))
+        return new
 
     def weight_at(self, frame):
         """
@@ -68,6 +91,9 @@ class CorrelatedSignal(Signal):
         """
         Remove the mean value from the signal values.
 
+        The mean signal between a given start and end frame is calculated and
+        subtracted from the signal.  This value is returned to the user.
+
         Parameters
         ----------
         start_frame : int, optional
@@ -84,27 +110,22 @@ class CorrelatedSignal(Signal):
         average : float
             The average signal value that was removed.
         """
-        if start_frame is None and end_frame is None:
-            center = self.get_median() if robust else self.get_mean()
-            self.value -= center
-            return center
-
         if start_frame is None:
             start_frame = 0
         if end_frame is None:
             end_frame = self.integration.size
 
-        start_signal = start_frame // self.resolution
-        end_signal = numba_functions.roundup_ratio(end_frame, self.resolution)
-        select = slice(start_signal, end_signal)
-        x = self.value[select]
-        w = self.weight[select]
-        if robust:
-            center, _ = numba_functions.smart_median_1d(values=x, weights=w)
-        else:
-            center, _ = numba_functions.mean(values=x, weights=w)
-        self.value[select] -= center
-        return center
+        value = self.value
+        if isinstance(value, units.Quantity):
+            value = value.value
+
+        return snf.level(
+            values=value,
+            start_frame=start_frame,
+            end_frame=end_frame,
+            resolution=self.resolution,
+            weights=self.weight,
+            robust=robust)
 
     def get_median(self):
         """
@@ -321,7 +342,7 @@ class CorrelatedSignal(Signal):
         """
         frames = self.integration.frames
         if modeling_frames is None:
-            modeling_frames = frames.is_unflagged('MODELING_FLAGS')
+            modeling_frames = frames.is_flagged('MODELING_FLAGS')
         valid_frames = frames.valid & np.logical_not(modeling_frames)
 
         return snf.get_ml_correlated(
@@ -337,6 +358,11 @@ class CorrelatedSignal(Signal):
     def get_robust_correlated(self, channel_group, modeling_frames=None,
                               max_dependence=0.25):
         """
+        Get the median derived correlated gain increment and weight.
+
+        Derived in a very similar way to the `get_ml_correlated` method except
+        replacing the mean operation with a median.  Please see
+        :func:`snf.get_robust_correlated` for further details.
 
         Parameters
         ----------
@@ -354,7 +380,7 @@ class CorrelatedSignal(Signal):
         """
         frames = self.integration.frames
         if modeling_frames is None:
-            modeling_frames = frames.is_unflagged('MODELING_FLAGS')
+            modeling_frames = frames.is_flagged('MODELING_FLAGS')
         valid_frames = frames.valid & np.logical_not(modeling_frames)
 
         return snf.get_robust_correlated(

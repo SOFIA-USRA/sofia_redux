@@ -213,7 +213,7 @@ def spline(x, y, xout, sigma=1.0):
         `y` interpolated at `xout`.
 
     Notes
-    -------
+    -----
     Author:	Walter W. Jones, Naval Research Laboratory, Sept 26, 1976.
     Reviewer: Sidney Prahl, Texas Instruments.
     Adapted for IDL: DMS, March, 1983.

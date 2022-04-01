@@ -438,7 +438,6 @@ class FORCASTImagingReduction(FORCASTReduction):
         Correct for optical distortion.
 
         Calls `sofia_redux.instruments.forcast.undistort.undistort`.
-        The transformation algorithm may be specified in parameters.
         Detailed pinhole model parameters should be specified in the
         DRIP config file.
         """
@@ -474,7 +473,6 @@ class FORCASTImagingReduction(FORCASTReduction):
             # correct for optical distortion
             result = undistort(
                 data, header, variance=err**2,
-                transform_type=param.get_value('transform_type'),
                 extrapolate=param.get_value('extrapolate'),
                 pinhole=pinfile)
             if result is None:

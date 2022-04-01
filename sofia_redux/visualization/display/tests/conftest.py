@@ -7,8 +7,8 @@ from matplotlib import figure as mpf
 import matplotlib.backends.backend_qt5agg as mb
 from PyQt5 import QtWidgets
 
-from sofia_redux.visualization.display import (pane, blitting, artists,
-                                               figure, view)
+from sofia_redux.visualization.display import (pane, blitting, gallery,
+                                               figure, view, drawing)
 from sofia_redux.visualization.display.ui import mplwidget
 from sofia_redux.visualization.utils import model_fit
 from sofia_redux.visualization import signals
@@ -72,6 +72,19 @@ def fit(one_dim_pane):
 
 
 @pytest.fixture(scope='function')
+def patch(one_dim_pane):
+    rect = mpf.Rectangle((1, 1), 1, 1)
+    art = one_dim_pane.ax.add_patch(rect)
+    return art
+
+
+@pytest.fixture(scope='function')
+def text(one_dim_pane):
+    art = one_dim_pane.ax.text(1, 1, 'test')
+    return art
+
+
+@pytest.fixture(scope='function')
 def basic_arts(line, scatter, fit, guide):
     arts = {'line': [{'artist': line,
                       'model_id': 'model_1'}],
@@ -90,13 +103,26 @@ def basic_arts(line, scatter, fit, guide):
 
 
 @pytest.fixture(scope='function')
+def line_draw(line):
+    draw = drawing.Drawing(artist=line)
+    return draw
+
+
+@pytest.fixture(scope='function')
+def fill(ax):
+    art = ax.fill_between([2], [3], [4])
+    return art
+
+
+@pytest.fixture(scope='function')
 def blank_blitter(qtbot, qapp, mocker):
     mocker.patch.object(QtWidgets, 'QApplication',
                         return_value=qapp)
     fig = mpf.Figure()
     can = mb.FigureCanvasQTAgg(fig)
-    art = artists.Artists()
-    obj = blitting.BlitManager(can, art)
+    gal = gallery.Gallery()
+    sig = signals.Signals()
+    obj = blitting.BlitManager(can, gal, sig)
     return obj
 
 

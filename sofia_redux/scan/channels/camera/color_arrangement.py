@@ -10,6 +10,10 @@ __all__ = ['ColorArrangement']
 
 
 class ColorArrangement(Camera):
+    """
+    The color arrangement channels expand upon the camera channels by defining
+    each as a pixel with a distinct resolution.
+    """
 
     def apply_configuration(self):
         """
@@ -27,7 +31,7 @@ class ColorArrangement(Camera):
 
         elif self.configuration.has_option('beam'):
             alias = self.configuration.get_string('beam')
-            if not self.configuration.has_option('beam'):
+            if not self.configuration.has_option(alias):
                 log.warning(f"Could not parse 'beam' configuration value "
                             f"({alias}).")
                 return
@@ -71,7 +75,7 @@ class ColorArrangement(Camera):
         return np.nanmean(self.get_pixels().resolution)
 
     @abstractmethod
-    def get_pixel_count(self):
+    def get_pixel_count(self):  # pragma: no cover
         """
         Return the number of pixels.
 
@@ -82,7 +86,7 @@ class ColorArrangement(Camera):
         pass
 
     @abstractmethod
-    def get_pixels(self):
+    def get_pixels(self):  # pragma: no cover
         """
         Return the pixel data.
 
@@ -94,7 +98,7 @@ class ColorArrangement(Camera):
 
     @abstractmethod
     def get_mapping_pixels(self, discard_flag=None, keep_flag=None,
-                           match_flag=None):
+                           match_flag=None):  # pragma: no cover
         """
         Return the mapping pixels.
 

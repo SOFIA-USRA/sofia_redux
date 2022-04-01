@@ -235,8 +235,8 @@ class Image(FitsData):
             limit for the first dimension and ranges[0, 1] would give the
             maximum crop limit for the first dimension.  In this case, the
             'first' dimension is in numpy format.  i.e., (y, x) for a
-            2-D array. Also note that the upper crop limit is not inclusive
-            so a range of (0, 3) includes indices [0, 1, 2] but not 3.
+            2-D array. Also note that the upper crop limit is inclusive
+            so a range of (0, 3) includes indices [0, 1, 2, 3].
 
         Returns
         -------
@@ -264,8 +264,8 @@ class Image(FitsData):
         if self.data is None:
             return
         ranges = self.get_index_range()
-        if (ranges.shape != (self.ndim, 2) or
-                None in ranges):  # pragma: no cover
+        if (ranges.shape != (self.ndim, 2)
+                or None in ranges):  # pragma: no cover
             # Cannot reach during normal operation
             return  # invalid ranges
         elif (ranges[:, 0] == 0).all() and np.allclose(

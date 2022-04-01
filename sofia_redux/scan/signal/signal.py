@@ -25,9 +25,9 @@ class Signal(ABC):
 
         Parameters
         ----------
-        integration : Integration
+        integration : sofia_redux.scan.integration.integration.Integration
             The integration to which the signal belongs.
-        mode : Mode, optional
+        mode : sofia_redux.scan.channels.mode.mode.Mode, optional
             The channel mode for which to create the signal.
         values : numpy.ndarray (float), optional
             Optional signal values to apply.
@@ -120,7 +120,9 @@ class Signal(ABC):
         -------
         Configuration
         """
-        return self.integration.info.configuration
+        if self.info is None:
+            return None
+        return self.info.configuration
 
     def get_resolution(self):
         """

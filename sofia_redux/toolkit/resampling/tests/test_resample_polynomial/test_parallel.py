@@ -4,17 +4,16 @@ from sofia_redux.toolkit.resampling.resample_polynomial import \
 import numpy as np
 import psutil
 import pytest
-from skimage.data import chelsea
 
 
 @pytest.mark.skipif(psutil.cpu_count() < 2, reason='Require multiple CPUs')
 def test_parallel():
     # Testing parallel processing is extremely difficult in pytest, so just
     # make sure that the results are consistent.
-
-    image = chelsea().astype(float)
-    s = image.shape
+    s = (128, 128, 3)
     rand = np.random.RandomState(42)
+    image = np.round(rand.rand(*s) * 255)
+
     bad_pix = rand.rand(*s) < 0.7  # 70 percent corruption
     bad_image = image.copy()
     bad_image[bad_pix] = np.nan

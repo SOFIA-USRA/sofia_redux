@@ -65,7 +65,7 @@ class FieldResponse(Response):
         -------
         Signal
         """
-        values = getattr(integration.frames, self.field)
+        values = getattr(integration.frames, self.field, None)
         if values is None:
             values = np.zeros(integration.size, dtype=float)
             log.warning(f"No field named {self.field} in {integration} "

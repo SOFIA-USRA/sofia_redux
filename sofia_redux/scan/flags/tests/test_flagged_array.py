@@ -122,6 +122,9 @@ def test_eq(dummy_array):
     other.data[0, 0] += 1
     assert a != other
 
+    other = None
+    assert a != other
+
 
 def test_check_equal_contents(dummy_array):
     a = dummy_array
@@ -791,6 +794,30 @@ def test_get_fast_smoothed(dummy_array, smooth_convolve, smooth_step_2_2):
     assert np.allclose(s, es)
     assert np.allclose(w, ew)
 
+    a.data.fill(np.nan)
+    bad_weights = a.data.copy()
+    s, w = a.get_fast_smoothed(beam_map, steps + 1,
+                               weights=bad_weights,
+                               get_weights=True)
+    assert np.isnan(s).all()
+    assert np.allclose(w, 0)
+    a.data.fill(1)
+    s, w = a.get_fast_smoothed(beam_map, steps + 1,
+                               weights=bad_weights,
+                               get_weights=True)
+    assert np.allclose(s, 0)
+    assert np.allclose(w, 0)
+
+
+def test_get_valid_smoothed(dummy_array, smooth_convolve):
+    a = dummy_array.copy()
+    beam_map = np.ones((3, 3))
+    s = a.get_valid_smoothed(beam_map)
+    assert np.allclose(s, smooth_convolve[0])
+    s, w = a.get_valid_smoothed(beam_map, get_weights=True)
+    assert np.allclose(s, smooth_convolve[0])
+    assert np.allclose(w, smooth_convolve[1])
+
 
 def test_smooth(dummy_array, smooth_convolve):
     a = dummy_array.copy()
@@ -1026,14 +1053,22 @@ def test_get_refined_peak_index(dummy_array):
     peak_index = (6, 7)
     rp = a.get_refined_peak_index(peak_index)
     assert np.allclose(rp, [6, 7])
+    a.data.fill(0)
+    peak_index = (3, 3)
+    rp = a.get_refined_peak_index(peak_index)
+    assert np.allclose(rp, [3, 3])
 
 
 def test_crop(dummy_array):
     a = dummy_array.copy()
     ranges = np.array([[1, 5], [2, 4]])
     a.crop(ranges)
-    assert np.allclose(a.data, [[10, 11], [18, 19], [26, 27], [34, 35]])
-    assert a.flag.shape == (4, 2)
+    assert np.allclose(a.data, [[10, 11, 12],
+                                [18, 19, 20],
+                                [26, 27, 28],
+                                [34, 35, 36],
+                                [42, 43, 44]])
+    assert a.flag.shape == (5, 3)
     assert np.allclose(a.flag, 0)
     a = FlaggedArray()
     a.crop(ranges)
@@ -1044,7 +1079,7 @@ def test_get_cropped(dummy_array):
     a = dummy_array.copy()
     ranges = np.array([[1, 5], [2, 4]])
     b = a.get_cropped(ranges)
-    assert b.shape == (4, 2)
+    assert b.shape == (5, 3)
     a = FlaggedArray()
     b = a.get_cropped(ranges)
     assert b.data is None

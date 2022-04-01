@@ -6,6 +6,8 @@ import numpy as np
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.coordinate_systems.equatorial_coordinates import (
     EquatorialCoordinates)
+from sofia_redux.scan.simulation.scan_patterns.constant_speed import (
+    to_constant_speed)
 
 __all__ = ['lissajous_offset', 'lissajous_pattern_equatorial']
 
@@ -13,9 +15,22 @@ __all__ = ['lissajous_offset', 'lissajous_pattern_equatorial']
 def lissajous_offset(width, height, t_interval, ratio=np.sqrt(2),
                      delta=np.pi * units.Unit('radian') / 2,
                      n_oscillations=20,
-                     oscillation_period=10 * units.Unit('second')):
+                     oscillation_period=10 * units.Unit('second'),
+                     constant_speed=False):
     """
     Create a Lissajous scan pattern in offset coordinates.
+
+    The two-dimensions Lissajous pattern is of the following form::
+
+      x = width.sin(a + delta)
+      y = height.sin(b + delta)
+      a = 2.pi.t/oscillation_period
+      b = 2.pi.ratio.t/oscillation_period
+
+    The distance between samples (speed) is maximal at the origin and minimal
+    near the edges of the box, which also means the map is under-sampled
+    near the center.  An approximation of the pattern using a constant speed
+    for all samples can be achieved by setting `constant_speed` to `True`.
 
     Parameters
     ----------
@@ -39,6 +54,9 @@ def lissajous_offset(width, height, t_interval, ratio=np.sqrt(2),
     oscillation_period : units.Quantity, optional
         The time for the curve to complete a single oscillation.  Note that the
         scan length (time) will be `n_oscillations` * `oscillation_period`.
+    constant_speed : bool, optional
+        If `True`, return a pattern where the speed between each sample point
+        is equal.
 
     Returns
     -------
@@ -56,9 +74,13 @@ def lissajous_offset(width, height, t_interval, ratio=np.sqrt(2),
     rt = period_distance / oscillation_period
     ax = rt * fx * t
     ay = rt * fy * t
-    x = width * np.sin(ax + delta)
-    y = height * np.sin(ay + delta)
-    return Coordinate2D(np.stack([x, y]))
+    x = width * np.sin(ax + delta) / 2
+    y = height * np.sin(ay + delta) / 2
+    pattern = Coordinate2D(np.stack([x, y]))
+    if constant_speed:
+        pattern = to_constant_speed(pattern)
+
+    return pattern
 
 
 def lissajous_pattern_equatorial(center, t_interval, **kwargs):
@@ -107,12 +129,17 @@ def lissajous_pattern_equatorial(center, t_interval, **kwargs):
         oscillation_period = kwargs['oscillation_period']
     else:
         oscillation_period = 10 * units.Unit('second')
+    if 'constant_speed' in kwargs:
+        constant_speed = kwargs['constant_speed']
+    else:
+        constant_speed = False
 
     equatorial_offset = lissajous_offset(width, height, t_interval,
                                          ratio=ratio,
                                          delta=delta,
                                          n_oscillations=n_oscillations,
-                                         oscillation_period=oscillation_period)
+                                         oscillation_period=oscillation_period,
+                                         constant_speed=constant_speed)
     equatorial = EquatorialCoordinates(center)
     equatorial.add(equatorial_offset)
     return equatorial

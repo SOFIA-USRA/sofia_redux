@@ -43,7 +43,7 @@ class FieldGainProvider(GainProvider):
         gains : numpy.ndarray (float)
             The gain values.
         """
-        values = getattr(channel_data, self.field)
+        values = getattr(channel_data, self.field, None)
         if values is None:
             raise ValueError(f"Channel group {channel_data} does not contain "
                              f"{self.field} field.")
@@ -65,7 +65,8 @@ class FieldGainProvider(GainProvider):
         None
         """
         value = np.asarray(gain, dtype=float)
-        if isinstance(value, units.Quantity):
+        if isinstance(value, units.Quantity):  # pragma: no cover
+            # not normally reachable after np.asarray call
             if value.unit == units.dimensionless_unscaled:
                 value = value.value
 
@@ -76,7 +77,7 @@ class FieldGainProvider(GainProvider):
                              f"{self.field} field.")
         setattr(channel_data, self.field, value)
 
-    def validate(self, mode):
+    def validate(self, mode):  # pragma: no cover
         """
         The field gain provider does not validate a mode.
 

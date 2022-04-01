@@ -637,10 +637,11 @@ Default Behaviour (Over-fitting with composite peaks)
 
     import numpy as np
     import matplotlib.pyplot as plt
-    from skimage.data import hubble_deep_field
+    import imageio
     from sofia_redux.toolkit.fitting.fitpeaks1d import fitpeaks1d
 
-    y = hubble_deep_field()[400].sum(axis=1).astype(float)
+    image = imageio.imread('imageio:hubble_deep_field.png')
+    y = image[400].sum(axis=1).astype(float)
     x = np.arange(y.size)
     model = fitpeaks1d(x, y, npeaks=10)
 

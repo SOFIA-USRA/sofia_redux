@@ -19,6 +19,14 @@ class HawcPlusChannelData(SingleColorChannelData, SofiaChannelData):
     flagspace = HawcPlusChannelFlags
 
     def __init__(self, channels=None):
+        """
+        Initialize the channel data for the HAWC+ instrument.
+
+        Parameters
+        ----------
+        channels : HawcPlusChannels, optional
+            The full channel object on which to base the data.
+        """
         super().__init__(channels=channels)
         self.sub = None
         self.pol = None
@@ -39,8 +47,25 @@ class HawcPlusChannelData(SingleColorChannelData, SofiaChannelData):
         self.los_gain = None
         self.roll_gain = None
 
+    def copy(self):
+        """
+        Return a copy of the channel data.
+
+        Returns
+        -------
+        HawcPlusChannelData
+        """
+        return super().copy()
+
     @property
     def default_field_types(self):
+        """
+        Return the defaults for the various channel data parameters.
+
+        Returns
+        -------
+        defaults : dict
+        """
         result = super().default_field_types
         result.update({'jump': 0.0,
                        'has_jumps': False,
@@ -161,7 +186,29 @@ class HawcPlusChannelData(SingleColorChannelData, SofiaChannelData):
 
     def initialize_from_detector(self, detector):
         """
-        Apply this information to create and populate the channel data.
+        Apply detector information to create and populate the channel data.
+
+        The following attributes are determined from the detector::
+
+          - col: The column on the subarray (index mod sub_cols)
+          - row: The row on the array (index div sub_cols)
+          - sub: The subarray index (index div sub_pixels)
+          - pol: The polarization index of the subarray (sub // 2)
+          - fits_row: The FITS row index (row mod detector_rows)
+          - fits_col: The FITS column index (sub * sub_cols) + col
+          - subrow: The row on the subarray (row mod detector_rows)
+          - mux: Multiplexer readout index (sub * sub_cols) + col
+          - bias_line: The SQUID detector bias index (row // 2)
+          - series_array: The second stage SQUID series array (mux // 4)
+          - fits_index: The index on the FITS file (fits_row * 128) + fits_row
+
+        Additionally, the channel string ID is set to::
+
+          <SubPolID>[<subrow>,<col>]
+
+        where subrow and col are described above and SubPolID may be one of
+        {R0, R1, T0, R1} where R relates to sub=0 and T relates to sub=1, and
+        the second character represents pol.
 
         Parameters
         ----------
@@ -207,9 +254,12 @@ class HawcPlusChannelData(SingleColorChannelData, SofiaChannelData):
         """
         Apply information to the channel data.
 
+        This initializes the channel data and derives the channel positions
+        in relation to the SIBS pixel position.
+
         Parameters
         ----------
-        info : Info
+        info : sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo
 
         Returns
         -------

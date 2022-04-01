@@ -1,7 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from astropy import units
-from astropy.coordinates import Angle, FK5
+from astropy.coordinates import Angle
 from astropy.io import fits
 import numpy as np
 
@@ -30,8 +30,14 @@ from sofia_redux.scan.simulation.scan_patterns.daisy import (
     daisy_pattern_equatorial)
 from sofia_redux.scan.simulation.scan_patterns.lissajous import (
     lissajous_pattern_equatorial)
+from sofia_redux.scan.simulation.scan_patterns.skydip import (
+    skydip_pattern_equatorial)
 from sofia_redux.scan.simulation.source_models.simulated_source import (
     SimulatedSource)
+from sofia_redux.scan.simulation.source_models.sky import Sky
+from sofia_redux.scan.utilities.utils import (
+    safe_sidereal_time, get_hms_time, get_dms_angle)
+
 
 __all__ = ['SimulationInfo']
 
@@ -40,7 +46,7 @@ class SimulationInfo(CameraInfo):
 
     def __init__(self, configuration_path=None):
         """
-        Initialize an ExampleInfo object.
+        Initialize the example instrument simulation information object.
 
         Parameters
         ----------
@@ -130,9 +136,9 @@ class SimulationInfo(CameraInfo):
             The ID of the scan to be pla
         scan_pattern : str, optional
             The scanning pattern type.  Available patterns are {'daisy',
-            'lissajous'}.
+            'lissajous', 'skydip'}.
         source_type : str, optional
-            The source type.  Available types are {'single_gaussian'}.
+            The source type.  Available types are {'single_gaussian', 'sky'}.
         overwrite : bool, optional
             If `True`, allow `filename` to be overwritten if it already exists.
         kwargs : dict, optional
@@ -194,7 +200,8 @@ class SimulationInfo(CameraInfo):
             The scanning pattern type.  Available patterns are {'daisy',
             'lissajous'}.
         source_type : str, optional
-            The source type.  Available types are {'single_gaussian'}.
+            The source type.  Available types are {'single_gaussian',
+            'sky'}.
         kwargs : dict, optional
             Optional keyword arguments that are passed into the scan pattern
             simulation or simulated source data.
@@ -237,10 +244,12 @@ class SimulationInfo(CameraInfo):
         ----------
         object_name : str
             The name of the observed object.
-        ra : str or units.Quantity
-            The right-ascension of the observation.
-        dec : str or units.Quantity
-            The declination of the observation.
+        ra : str or units.Quantity or float
+            The right-ascension of the observation.  If a float value is
+            supplied, it should be in degrees.
+        dec : str or units.Quantity or float
+            The declination of the observation.  If a float value is
+            supplied, it should be in degrees.
         site_longitude : str or units.Quantity
             The site longitude.
         site_latitude : str or units.Quantity
@@ -265,8 +274,9 @@ class SimulationInfo(CameraInfo):
         obs_header['SCANPATT'] = scan_pattern, 'Scanning pattern.'
 
         if isinstance(ra, str):
-            center = FK5(ra=ra, dec=dec)
-            center = EquatorialCoordinates([center.ra, center.dec])
+            ra = get_hms_time(ra, angle=True).to('degree')
+            dec = get_dms_angle(dec)
+            center = EquatorialCoordinates([ra, dec])
         else:
             center = EquatorialCoordinates([ra, dec])
 
@@ -283,7 +293,8 @@ class SimulationInfo(CameraInfo):
         obs_header['SITELON'] = site.longitude.value, '(deg) Site longitude.'
         obs_header['SITELAT'] = site.latitude.value, '(deg) Site latitude.'
 
-        lst = date_obs.sidereal_time('mean', longitude=site.longitude)
+        lst = safe_sidereal_time(
+            date_obs, 'mean', longitude=site.longitude)
         horizontal = center.to_horizontal(site, lst)
         obs_header['LST'] = lst.value, '(hour) Local sidereal time.'
         obs_header['OBSAZ'] = (horizontal.az.to('degree').value,
@@ -317,18 +328,21 @@ class SimulationInfo(CameraInfo):
         site = GeodeticCoordinates([header['SITELON'], header['SITELAT']],
                                    unit='degree')
         dt = self.instrument.sampling_interval
+        date_obs = DateRange.to_time(header['DATE-OBS'])
 
         if scan_type == 'DAISY':
             equatorial = daisy_pattern_equatorial(center, dt, **kwargs)
         elif scan_type == 'LISSAJOUS':
             equatorial = lissajous_pattern_equatorial(center, dt, **kwargs)
+        elif scan_type == 'SKYDIP':
+            equatorial = skydip_pattern_equatorial(center, dt, site, date_obs,
+                                                   **kwargs)
         else:
             raise NotImplementedError(
                 f"{scan_type} scanning pattern not supported.")
 
-        date_obs = DateRange.to_time(header['DATE-OBS'])
         obs_time = dt * np.arange(equatorial.size) + date_obs
-        lst = obs_time.sidereal_time('mean', longitude=site.longitude)
+        lst = safe_sidereal_time(obs_time, 'mean', longitude=site.longitude)
         horizontal = equatorial.to_horizontal(site, lst)
 
         ra = fits.Column(name='RA', format='1D', unit='hourangle',
@@ -337,9 +351,7 @@ class SimulationInfo(CameraInfo):
                           array=equatorial.dec.to('degree').value)
         dmjd = fits.Column(name='DMJD', format='1D', unit='day',
                            array=obs_time.mjd)
-        lst = fits.Column(name='LST', format='1D', unit='hour',
-                          array=obs_time.sidereal_time(
-                              'mean', longitude=site.longitude))
+        lst = fits.Column(name='LST', format='1D', unit='hour', array=lst)
         az = fits.Column(name='AZ', format='1D', unit='degree',
                          array=horizontal.az.to('degree').value)
         el = fits.Column(name='EL', format='1D', unit='degree',
@@ -349,7 +361,21 @@ class SimulationInfo(CameraInfo):
         return hdu
 
     def set_frames_coordinates(self, frames, table):
+        """
+        Set the frame data from an HDU Binary table.
 
+        Parameters
+        ----------
+        frames : sofia_redux.scan.custom.example.frames.frames.ExampleFrames
+            The frames to populate with the HDU data.
+        table : astropy.table.Table or dict or fits.FITS_rec
+            The HDU table containing the the columns: DMJD, LST, RA, DEC, AZ,
+            and EL.
+
+        Returns
+        -------
+        None
+        """
         hourangle = units.Unit('hourangle')
         deg = units.Unit('degree')
 
@@ -447,7 +473,6 @@ class SimulationInfo(CameraInfo):
         dec = header['OBSDEC'] * units.Unit('degree')
         info.astrometry.equatorial = EquatorialCoordinates([ra, dec])
         info.astrometry.site = GeodeticCoordinates([lon, lat])
-
         frames = frames_instance_for('example')
         info.set_frames_coordinates(frames, table)
 
@@ -455,17 +480,22 @@ class SimulationInfo(CameraInfo):
         channel_data.default_info = info
 
         info.detector_array.initialize_channel_data(channel_data)
-        offsets = frames.get_equatorial_native_offset(channel_data.position)
+        if isinstance(source_model, Sky):
+            coordinates = frames.get_horizontal(channel_data.position)
+        else:
+            coordinates = frames.get_equatorial_native_offset(
+                channel_data.position)
 
         # Create the output data
         n_records = table.size
         n_row, n_col = info.detector_array.ROWS, info.detector_array.COLS
         data = np.empty((n_records, n_row, n_col), dtype=float)
-        data[:, channel_data.row, channel_data.col] = source_model(offsets)
+        data[:, channel_data.row, channel_data.col] = source_model(coordinates)
         self.modify_data(data, **kwargs)
         return data
 
-    def modify_data(self, data, **kwargs):
+    @staticmethod
+    def modify_data(data, **kwargs):
         """
         Add various properties to simulated scan data.
 

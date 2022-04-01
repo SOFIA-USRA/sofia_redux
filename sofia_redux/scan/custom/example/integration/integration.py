@@ -15,9 +15,19 @@ class ExampleIntegration(Integration):
 
         Parameters
         ----------
-        scan : ExampleScan
+        scan : sofia_redux.scan.custom.example.scan.scan.ExampleScan
         """
         super().__init__(scan=scan)
+
+    def copy(self):
+        """
+        Return a copy of the integration for the example instrument.
+
+        Returns
+        -------
+        ExampleIntegration
+        """
+        return super().copy()
 
     def read(self, hdul):
         """

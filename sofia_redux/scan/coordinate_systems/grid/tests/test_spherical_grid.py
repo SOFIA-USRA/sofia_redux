@@ -12,11 +12,6 @@ from sofia_redux.scan.coordinate_systems.grid.spherical_grid import \
     SphericalGrid
 
 
-@pytest.fixture
-def equatorial():
-    return SphericalGrid(reference=EquatorialCoordinates([45, 45]))
-
-
 def test_init():
     g = SphericalGrid()
     assert isinstance(g.reference, SphericalCoordinates)

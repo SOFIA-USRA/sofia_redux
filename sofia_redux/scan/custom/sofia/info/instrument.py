@@ -15,6 +15,11 @@ class SofiaInstrumentInfo(CameraInstrumentInfo):
     telescope_diameter = 2.5 * units.Unit('m')
 
     def __init__(self):
+        """
+        Initialize the SOFIA instrument information.
+
+        Contains information on the SOFIA instrument parameters.
+        """
         super().__init__()
         self.set_mount("NASMYTH_COROTATING")
         self.instrument_name = None
@@ -32,6 +37,30 @@ class SofiaInstrumentInfo(CameraInstrumentInfo):
         self.wavelength = np.nan * units.Unit('um')
 
     def apply_configuration(self):
+        """
+        Update SOFIA instrument information with FITS header information.
+
+        Updates the chopping information by taking the following keywords from
+        the FITS header::
+
+          INSTRUME - The name of the instrument (str)
+          DATATYPE - The data type (str)
+          INSTCFG - The instrument configuration (str)
+          INSTMODE - The instrument observing mode (str)
+          MCCSMODE - The MCCS mode (str)
+          SPECTEL1 - The first spectral element (str)
+          SPECTEL2 - The second spectral element (str)
+          SLIT - The instrument slit ID (str)
+          DETCHAN - The detector channel ID (str)
+          RESOLUN - The spectral resolution (float)
+          EXPTIME - The total effective on-source time (seconds)
+          TOTINT - The total integration time (seconds)
+          WAVECENT - The wavelength at the passband center (mircometers)
+
+        Returns
+        -------
+        None
+        """
         options = self.options
         if options is None:
             return

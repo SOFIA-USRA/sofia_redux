@@ -8,13 +8,19 @@ __all__ = ['ExampleObservationInfo']
 class ExampleObservationInfo(ObservationInfo):
 
     def __init__(self):
+        """
+        Initialize the observation information for the example instrument.
+        """
         super().__init__()
         self.scan_id = None
         self.obs_id = None
 
     def apply_configuration(self):
         """
-        Read and apply the configuration.
+        Read and apply the FITS options from the configuration.
+
+        Sets the source name from 'OBJECT' in the FITS header, and the scan ID
+        from 'SCANID' in the FITS header.
 
         Returns
         -------

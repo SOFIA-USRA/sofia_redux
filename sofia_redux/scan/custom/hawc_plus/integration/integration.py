@@ -15,7 +15,13 @@ class HawcPlusIntegration(SofiaIntegration):
 
     def __init__(self, scan=None):
         """
+
         Initialize a HAWC+ integration.
+
+        Parameters
+        ----------
+        scan : sofia_redux.scan.custom.hawc_plus.scan.scan.HawcPlusScan
+            The scan to which this integration belongs (optional).
         """
         self.fix_jumps = False
         self.min_jump_level_frames = 0
@@ -106,9 +112,9 @@ class HawcPlusIntegration(SofiaIntegration):
         value
         """
         if name == 'hwp':
-            return self.get_mean_hwp_angle().decompose().value
+            return self.get_mean_hwp_angle().to('degree')
         if name == 'pwv':
-            return self.get_mean_pwv().to('um').value
+            return self.get_mean_pwv().to('um')
         return super().get_table_entry(name)
 
     def shift_chopper(self, n_frames):
@@ -217,16 +223,20 @@ class HawcPlusIntegration(SofiaIntegration):
             log.warning("Scan has no jump counter data.")
             return
 
+        try:
+            start_counter = self.get_first_frame().jump_counter
+        except IndexError:
+            log.warning("No valid frames available to check jumps.")
+            return
+
         n_jumps = hawc_integration_numba_functions.check_jumps(
-            start_counter=self.get_first_frame().jump_counter,
+            start_counter=start_counter,
             jump_counter=self.frames.jump_counter,
             frame_valid=self.frames.valid,
             has_jumps=self.channels.data.has_jumps,
             channel_indices=np.arange(self.channels.size))
 
-        if n_jumps < 0:
-            log.warning("No valid frames available")
-        elif n_jumps == 0:
+        if n_jumps == 0:
             log.debug("---> All good!")
         else:
             log.debug(f"---> found jump(s) in {n_jumps} pixels.")
@@ -280,14 +290,10 @@ class HawcPlusIntegration(SofiaIntegration):
         det = self.info.detector_array
         self.fix_subarray = np.full(det.subarrays, False)
 
-        self.fix_subarray[det.R0] = self.configuration.is_configured(
-            'fixjumps.r0')
-        self.fix_subarray[det.R1] = self.configuration.is_configured(
-            'fixjumps.r1')
-        self.fix_subarray[det.T0] = self.configuration.is_configured(
-            'fixjumps.t0')
-        self.fix_subarray[det.T1] = self.configuration.is_configured(
-            'fixjumps.t1')
+        self.fix_subarray[det.R0] = self.configuration.get_bool('fixjumps.r0')
+        self.fix_subarray[det.R1] = self.configuration.get_bool('fixjumps.r1')
+        self.fix_subarray[det.T0] = self.configuration.get_bool('fixjumps.t0')
+        self.fix_subarray[det.T1] = self.configuration.get_bool('fixjumps.t1')
 
         self.min_jump_level_frames = self.frames_for(
             10 * self.get_point_crossing_time())
@@ -372,8 +378,9 @@ class HawcPlusIntegration(SofiaIntegration):
             The [flag_before, flag_after] number of frames to flag before and
             after each jump.
         """
-        blank_time = self.configuration.get_float_list('fixjumps.blank',
-                                                       default=None)
+        blank_time = self.configuration.get_float_list(
+            'fixjumps.blank', default=None)
+
         if blank_time is None:
             blank_frames = np.zeros(2, dtype=int)
         else:
@@ -452,7 +459,7 @@ class HawcPlusIntegration(SofiaIntegration):
         Parameters
         ----------
         frame_dependents : numpy.ndarray (float)
-        channels : ChannelGroup
+        channels : HawcPlusChannelGroup
         drift_size : int
             The size of the drift removal block size in frames.
 

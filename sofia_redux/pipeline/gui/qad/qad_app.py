@@ -2,7 +2,11 @@
 """Standalone front-end for QAD display tool."""
 
 import argparse
+import logging
 import sys
+import warnings
+
+from astropy import log
 
 from sofia_redux.pipeline.interface import Interface
 from sofia_redux.pipeline.gui.qad.qad_main_panel import QADMainWindow
@@ -58,27 +62,61 @@ def main():
     if not HAS_PYQT5:  # pragma: no cover
         raise ImportError('PyQt5 package is required for QAD.')
 
+    # suppress all runtime warnings
+    if not sys.warnoptions:
+        warnings.simplefilter("ignore")
+
     parser = argparse.ArgumentParser(
         description='Interactively display FITS data.')
     parser.add_argument('-l', '--loglevel', dest='loglevel', type=str,
                         action='store', default='INFO',
                         help='Log level.')
+    parser.add_argument('-o', '--logfile', dest='logfile', type=str,
+                        action='store', default=None,
+                        help='Log file name.')
+    parser.add_argument('-f', '--logformat', dest='logformat', type=str,
+                        action='store', default=None,
+                        help="Log format. Default is '%%(message)s' for "
+                             "INFO level, '%%(asctime)s - %%(origin)s - "
+                             "%%(levelname)s - %%(message)s' for any other "
+                             "level.")
 
     args = parser.parse_args()
 
     # format the log for pretty-printing to the terminal
-    Interface.tidy_log(args.loglevel.upper())
+    log_level = args.loglevel.upper()
+    Interface.tidy_log(log_level)
 
-    # Start application
+    # add a file handler if desired
+    if args.logfile is not None:
+        fhand = logging.FileHandler(args.logfile, 'at')
+        fhand.setLevel(log_level)
+
+        # set default log format by level
+        log_format = args.logformat
+        if log_format is None:
+            if log_level == 'INFO':
+                log_format = '%(message)s'
+            else:
+                log_format = '%(asctime)s - %(origin)s - ' \
+                             '%(levelname)s - %(message)s'
+
+        fhand.setFormatter(logging.Formatter(log_format))
+        log.addHandler(fhand)
+
+        # log the file name
+        log.info("Log file: {}".format(args.logfile))
+
+    # start application
     app = QtWidgets.QApplication(sys.argv)
 
-    # Start a timer to allow the python interpreter to run occasionally
+    # start a timer to allow the python interpreter to run occasionally
     # (without this, ctrl-c is swallowed by the event loop)
     timer = QtCore.QTimer()
     timer.start(200)
     timer.timeout.connect(lambda: None)
 
-    # Start up the main window and event loop
+    # start up the main window and event loop
     mw = QADMainWindow()
     mw.show()
     mw.raise_()

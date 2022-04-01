@@ -32,6 +32,12 @@ class Info(ABC):
         """
         Initialize an Info object.
 
+        The information object contains multiple :class:`InfoBase` objects
+        pertaining to specific types of information.  It is one of the most
+        high-level classes in the reduction, containing all the necessary
+        configuration options and information from scans, and should
+        therefore be used to direct the reduction process.
+
         Parameters
         ----------
         configuration_path : str, optional
@@ -104,17 +110,46 @@ class Info(ABC):
         return new
 
     def unlink_configuration(self):
-        """Ensure the configuration is not referenced."""
+        """
+        Create and set a separate copy of the configuration.
+
+        Ensures that the configuration is not referenced so that any changes
+        that occur do not impact other reduction objects unintentionally.
+
+        Returns
+        -------
+        None
+        """
         self.configuration = self.configuration.copy()
         for info in self.available_info.values():
             info.configuration = self.configuration
 
     def unlink_scan(self):
-        """Ensure the scan is not referenced."""
+        """
+        Create and set a separate copy of the scan.
+
+        Ensures that the scan associated with this information is not
+        referenced by any other reduction object in cases where we do not
+        want any updates to occur outside of the info scope.
+
+        Returns
+        -------
+        None
+        """
         self.scan = deepcopy(self.scan)
 
     @property
     def available_info(self):
+        """
+        Return all available specialized information.
+
+        Returns all contained :class:`InfoBase` objects and their name as a
+        dictionary of the form {name (`str`): info (`InfoBase`)}.
+
+        Returns
+        -------
+        dict
+        """
         result = {}
         for key, value in self.__dict__.items():
             if isinstance(value, InfoBase):
@@ -449,7 +484,7 @@ class Info(ABC):
             for config_file in config_files:
                 self.register_config_file(config_file)
 
-    def register_config_file(self, filename):
+    def register_config_file(self, filename):  # pragma: no cover
         """
         Register that a configuration file has been read.
 
@@ -587,10 +622,11 @@ class Info(ABC):
         -------
         None
         """
+        if not isinstance(self.configuration, Configuration):
+            raise ValueError(f"Configuration must be a "
+                             f"{Configuration} instance.")
         if self.configuration.instrument_name is None:
             self.configuration.set_instrument(self.name)
-        if not isinstance(self.configuration, Configuration):
-            raise ValueError(f"scan must be a {Configuration} instance.")
         for info in self.available_info.values():
             info.set_configuration(self.configuration)
 
@@ -609,7 +645,7 @@ class Info(ABC):
 
     def validate_scan(self, scan):
         """
-        Validate a
+        Validate a scan.
 
         Parameters
         ----------
@@ -674,7 +710,7 @@ class Info(ABC):
         for info in self.available_info.values():
             info.edit_scan_header(header, scans=scans)
 
-    def add_history(self, header, scans=None):
+    def add_history(self, header, scans=None):  # pragma: no cover
         """
         Add HISTORY messages to a FITS header.
 

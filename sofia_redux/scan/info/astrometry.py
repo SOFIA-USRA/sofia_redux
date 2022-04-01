@@ -24,6 +24,16 @@ __all__ = ['AstrometryInfo']
 class AstrometryInfo(InfoBase):
 
     def __init__(self):
+        """
+        Initialize the astrometry information.
+
+        The astrometry contains information on the overall astronomical
+        state of an observation such as the equatorial, apparent and horizontal
+        coordinates of the observed source, the location and time of the
+        observation, if the observation is non-sidereal or ground based,
+        and the pointing corrections.  Additionally, it contains precession
+        objects for the conversion of apparent coordinates to a defined epoch.
+        """
         super().__init__()
         self.mjd = np.nan
         self.lst = np.nan * units.Unit('hour')
@@ -78,7 +88,7 @@ class AstrometryInfo(InfoBase):
         -------
         None
         """
-        to_epoch = Precession(self.equatorial.epoch, epoch)
+        to_epoch = Precession(self.equatorial.epoch, Epoch(equinox=epoch))
         to_epoch.precess(self.equatorial)
         if scan is not None and scan.integrations is not None:
             for integration in scan.integrations:
@@ -199,6 +209,22 @@ class AstrometryInfo(InfoBase):
             return self.equatorial
 
     def apply_scan(self, scan):
+        """
+        Apply parameters taken from a scan to the astrometry.
+
+        A check is performed to see if the configuration specifies that the
+        source is 'moving' and if so, sets the information to reflect this
+        is a non-sidereal observation.
+
+        Parameters
+        ----------
+        scan : sofia_redux.scan.scan.scan.Scan
+            The scan to apply.
+
+        Returns
+        -------
+        None
+        """
         self.is_nonsidereal |= self.configuration.get_bool('moving')
 
     def set_mjd(self, mjd):

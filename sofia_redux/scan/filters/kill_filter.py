@@ -126,7 +126,8 @@ class KillFilter(FixedFilter):
         None
         """
         dft_freq = int(51 * self.count_parms() * self.size)
-        fft_freq = int(np.round(np.log10(self.nt) / np.log10(2))) * self.nt
+        fft_freq = utils.round_values(
+            np.log10(self.nt) / np.log10(2)) * self.nt
         fft_freq = 2 * ((31 * fft_freq) + (44 * self.nt))
         self.set_dft(dft_freq < fft_freq)
 

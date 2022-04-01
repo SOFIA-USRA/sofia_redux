@@ -6,7 +6,7 @@ import pytest
 from sofia_redux.scan.filters.fixed_filter import FixedFilter
 
 
-class SingleFilter(FixedFilter):
+class SingleFilter(FixedFilter):  # pragma: no cover
 
     def __init__(self, integration=None, data=None):
         super().__init__(integration=integration, data=data)

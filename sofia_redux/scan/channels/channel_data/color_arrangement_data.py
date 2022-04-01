@@ -10,7 +10,10 @@ __all__ = ['ColorArrangementData']
 
 
 class ColorArrangementData(ChannelData):
-
+    """
+    Expands upon the channel data by defining each channel as a pixel on a
+    camera with a distinct resolution.
+    """
     def set_beam_size(self, beam_size):
         """
         Sets the resolution of the channels to a specified beam size.
@@ -54,7 +57,7 @@ class ColorArrangementData(ChannelData):
                 resolution * self.info.instrument.get_size_unit())
 
     @abstractmethod
-    def get_pixel_count(self):
+    def get_pixel_count(self):  # pragma: no cover
         """
         Return the number of pixels in the channels.
 
@@ -65,7 +68,7 @@ class ColorArrangementData(ChannelData):
         pass
 
     @abstractmethod
-    def get_pixels(self):
+    def get_pixels(self):  # pragma: no cover
         """
         Return the pixels in the arrangement.
 
@@ -77,7 +80,8 @@ class ColorArrangementData(ChannelData):
 
     @abstractmethod
     def get_mapping_pixels(self, indices=None, name=None, keep_flag=None,
-                           discard_flag=None, match_flag=None):
+                           discard_flag=None,
+                           match_flag=None):  # pragma: no cover
         """
         Creates and returns mapping pixels.
 

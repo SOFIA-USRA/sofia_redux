@@ -103,6 +103,8 @@ class Setup(object):
         # analysis
         self.view.open_fit_results_button.clicked.connect(
             self.view.open_fits_results)
+        self.view.open_ref_data_button.clicked.connect(
+            self.view.open_ref_data)
 
     def setup_line_controls(self):
         """Connect control panel to plot callbacks."""
@@ -173,6 +175,10 @@ class Setup(object):
         self.view.signals.clear_fit.connect(self.view.clear_fit)
         self.view.signals.toggle_fit_visibility.connect(
             self.view.toggle_fit_visibility)
+        self.view.signals.update_reference_lines.connect(
+            self.view.update_reference_lines)
+        self.view.signals.unload_reference_model.connect(
+            self.view.unload_reference_model)
 
     def setup_messages(self):
         """Add filters to pass log messages to GUI handlers."""

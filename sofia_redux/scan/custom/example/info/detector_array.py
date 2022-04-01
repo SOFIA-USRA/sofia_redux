@@ -21,6 +21,9 @@ class ExampleDetectorArrayInfo(InfoBase):
     pixel_size = 2 * units.Unit('arcsec')  # Nyquist ish
 
     def __init__(self):
+        """
+        Initialize the detector array information for the example instrument.
+        """
         super().__init__()
         self.pixels = self.ROWS * self.COLS
         self.pixel_sizes = Coordinate2D([self.pixel_size, self.pixel_size])

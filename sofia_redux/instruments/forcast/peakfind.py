@@ -118,7 +118,13 @@ class PeakFinder(object):
                 simplefilter('ignore')
                 search_image = convolve_fft(
                     search_image, Gaussian2DKernel(self.sigma),
-                    normalize_kernel=True, preserve_nan=True)
+                    normalize_kernel=True,
+                    preserve_nan=True)
+
+        # always replace NaNs with median level: DAOStarFinder
+        # won't find sources with NaN on top
+        nval = np.isnan(search_image)
+        search_image[nval] = np.median(search_image[~nval])
 
         # always take absolute value for fitting purposes
         search_image = abs(search_image)
@@ -353,9 +359,11 @@ def peakfind(coadded, newimage=None,
         Format is [chop distance, nod distance]
     positive : bool, optional
         If set, only positive peaks will be returned.
-    return_object : bool
+    smooth : bool, optional
+        If True, the data will be smoothed before searching for peaks.
+    return_object : bool, optional
         If set, return the PeakFinder object rather than the DataFrame
-    coordinates : bool
+    coordinates : bool, optional
         If set, return tuples of (x, y) coordinates as a list
 
     Returns

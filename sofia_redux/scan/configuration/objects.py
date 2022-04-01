@@ -15,10 +15,18 @@ class ObjectOptions(Options):
 
     def __init__(self, allow_error=False, verbose=True):
         """
-        Initialize an ObjectOptions object.
+        Initialize the object options.
 
-        The object options contain configuration settings pertaining to the
-        observed source object.
+        The object options contain configuration updates that should be applied
+        when observing certain source objects.
+
+        Parameters
+        ----------
+        allow_error : bool, optional
+            If `True`, allow poorly formatted options to be skipped rather than
+            raising an error.
+        verbose : bool, optional
+            If `True`, issues a warning when a poorly option is encountered.
         """
         super().__init__(allow_error=allow_error, verbose=verbose)
         self.applied_objects = []

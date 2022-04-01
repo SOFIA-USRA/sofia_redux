@@ -143,6 +143,10 @@ def test_parse_inputs(blank_splrep_2d, tuple_args_2d):
     spline.parse_inputs(*args, degrees=5, exact=True, reduce_degrees=True)
     assert np.allclose(spline.degrees, [4, 4])
 
+    cut_args = np.arange(5), np.arange(5), np.arange(5)
+    spline.parse_inputs(*cut_args, degrees=5, exact=False, reduce_degrees=True)
+    assert np.allclose(spline.degrees, [1, 1])
+
     # Check eps
     for eps in [-0.1, 0, 1, 1.1]:
         with pytest.raises(ValueError) as err:

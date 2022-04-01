@@ -5,8 +5,9 @@ from scipy import signal
 
 from sofia_redux.scan.flags.array_flags import ArrayFlags
 from sofia_redux.scan.flags.flagged_data import FlaggedData
-from sofia_redux.scan.utilities.range import Range
 from sofia_redux.scan.utilities import numba_functions
+from sofia_redux.scan.utilities.range import Range
+from sofia_redux.scan.utilities.utils import round_values
 from sofia_redux.scan.flags import flag_numba_functions as fnf
 
 from sofia_redux.toolkit.splines.spline import Spline
@@ -983,7 +984,7 @@ class FlaggedArray(FlaggedData):
 
         Returns
         -------
-        mean, mean_weight : float, float
+        mean, mean_weight : 2-tuple (float)
         """
         if self.data is None:
             return np.nan
@@ -1009,7 +1010,7 @@ class FlaggedArray(FlaggedData):
 
         Returns
         -------
-        median, median_weight : float, float
+        median, median_weight : 2-tuple (float)
         """
         if self.data is None:
             return np.nan
@@ -1053,7 +1054,7 @@ class FlaggedArray(FlaggedData):
         if values.size == 0:
             return self.blanking_value
         values.sort()
-        index = np.clip(int(np.round(fraction * (values.size - 1))),
+        index = np.clip(round_values(fraction * (values.size - 1)),
                         0, values.size - 1)
         return values[index]
 
@@ -1396,7 +1397,8 @@ class FlaggedArray(FlaggedData):
         try:
             spline = Spline(course_weight, exact=True, weights=None,
                             reduce_degrees=True)
-        except ValueError:
+        except ValueError:  # pragma: no cover
+            # Hard to get to if the first fit was successful
             return self.get_valid_smoothed(
                 beam_map, reference_index=reference_index, weights=weights,
                 get_weights=get_weights)
@@ -1521,7 +1523,7 @@ class FlaggedArray(FlaggedData):
         invalid = invalid.reshape(self.shape)
         self.discard(invalid)
 
-    def value_at(self, index, degree=3):
+    def value_at(self, index, degree=3, reduce_degrees=False):
         """
         Return the data value at a given index.
 
@@ -1532,6 +1534,11 @@ class FlaggedArray(FlaggedData):
             order (numpy).
         degree : int
             The spline degree to fit.
+        reduce_degrees : bool, optional
+            If `True`, allow the spline fit to reduce the number of degrees
+            in cases where there are not enough points available to perform
+            the spline fit of `degree`.  If `False`, a ValueError will be
+            raised if such a fit fails.
 
         Returns
         -------
@@ -1560,7 +1567,8 @@ class FlaggedArray(FlaggedData):
         else:
             valid = None
 
-        spline = Spline(data, weights=valid, degrees=degree, smoothing=0.0)
+        spline = Spline(data, weights=valid, degrees=degree, smoothing=0.0,
+                        reduce_degrees=reduce_degrees)
 
         # From numpy to (x, y) ordering for spline
         xy_index = (index - from_index)[::-1]
@@ -1708,8 +1716,7 @@ class FlaggedArray(FlaggedData):
 
         kernel = np.ones(np.full(self.ndim, 3), dtype=float)
         kernel.ravel()
-        return np.round(signal.convolve(
-            valid, kernel, mode='same')).astype(int)
+        return round_values(signal.convolve(valid, kernel, mode='same'))
 
     def discard_min_neighbors(self, min_neighbors):
         """
@@ -1846,8 +1853,8 @@ class FlaggedArray(FlaggedData):
             limit for the first dimension and ranges[0, 1] would give the
             maximum crop limit for the first dimension.  In this case, the
             'first' dimension is in numpy format.  i.e., (y, x) for a 2-D
-            array. Also note that the upper crop limit is not inclusive so
-            a range of (0, 3) includes indices [0, 1, 2] but not 3.
+            array. Also note that the upper crop limit is inclusive so
+            a range of (0, 3) includes indices [0, 1, 2, 3].
 
         Returns
         -------
@@ -1858,7 +1865,7 @@ class FlaggedArray(FlaggedData):
         slicer = []
         for dimension in range(self.ndim):
             from_index, to_index = ranges[dimension]
-            slicer.append(slice(from_index, to_index))
+            slicer.append(slice(from_index, to_index + 1))
 
         slicer = tuple(slicer)
         data = self.data[slicer].copy()

@@ -30,6 +30,7 @@ from sofia_redux.scan.coordinate_systems.focal_plane_coordinates import \
 from sofia_redux.scan.source_models.beams.instant_focus import InstantFocus
 from sofia_redux.scan.utilities.range import Range
 from sofia_redux.scan.utilities.class_provider import get_integration_class
+from sofia_redux.scan.utilities.utils import round_values
 
 __all__ = ['Scan']
 
@@ -37,6 +38,32 @@ __all__ = ['Scan']
 class Scan(ABC):
 
     def __init__(self, channels, reduction=None):
+        """
+        Initialize a scan.
+
+        The scan is a high level class operated on by the reduction and
+        reduction pipeline containing all of the information from an
+        astronomical scan.  It contains a set of integrations (time stream
+        data) from the scan for all of the instrument channels as well as
+        it's own individual source model which may contribute to the overall
+        reduction source.
+
+        Notes
+        -----
+        The integration configurations are based off the scan configuration,
+        but are not linked and are distinct objects.  The scan configuration is
+        generally only accessed for scan specific operations or parameters.
+        Therefore, do not expect that modifying the scan configuration will
+        propagate down to the integrations, where the bulk of processing
+        occurs.
+
+        Parameters
+        ----------
+        channels : sofia_scan.scan.channels.channels.Channels
+            The instrument channels for this scan.
+        reduction : sofia_scan.scan.reduction.reduction.Reduction, optional
+            The reduction to which this scan belongs.
+        """
         self.serial_number = -1
         self.filename = None
         self.map_range = None
@@ -47,7 +74,8 @@ class Scan(ABC):
         self.source_model = None
         self.integrations = None
         self.gain = 1.0
-        self.map_range = np.zeros(4, dtype=float) * units.Unit('arcsec')
+        self.map_range = Coordinate2D(np.zeros((2, 2), dtype=float),
+                                      unit='arcsec')
         self.pointing_correction = Coordinate2D()
 
         self.channels = None
@@ -998,8 +1026,8 @@ class Scan(ABC):
         for integration in self.integrations[1:]:
             integration.trim(start=True, end=True)
             next_mjd = integration.frames.get_first_frame_value('mjd') * day
-            gap = int(np.round(((next_mjd
-                                 - last_mjd - dt) / dt).decompose().value))
+            gap = round_values(
+                ((next_mjd - last_mjd - dt) / dt).decompose().value)
             last_mjd = integration.frames.get_last_frame_value('mjd') * day
 
             if gap > 0:
@@ -2108,8 +2136,6 @@ class Scan(ABC):
         """
         result = []
         indices = np.argsort([scan.mjd for scan in scans])
-        print([scan.mjd for scan in scans])
-        print(indices)
         for index in indices:
             result.append(scans[index])
         return result

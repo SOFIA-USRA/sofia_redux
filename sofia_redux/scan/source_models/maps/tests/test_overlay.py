@@ -150,4 +150,4 @@ def test_crop(ones_overlay):
     overlay = ones_overlay.copy()
     ranges = np.array([[4, 6], [3, 7]])
     overlay.crop(ranges)
-    assert overlay.shape == (4, 2)
+    assert overlay.shape == (5, 3)

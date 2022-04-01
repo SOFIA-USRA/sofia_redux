@@ -87,5 +87,4 @@ class PositionResponse(MotionResponse):
         -------
         Signal
         """
-        return integration.get_position_signal(self.type, self.direction,
-                                               mode=self)
+        return integration.get_position_signal(self.type, direction, mode=self)

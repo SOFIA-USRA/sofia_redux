@@ -1,6 +1,6 @@
 from abc import ABC
 from astropy import units
-from astropy.coordinates import Angle, FK5
+from astropy.coordinates import Angle
 from astropy.io import fits
 from astropy.time import Time
 import getpass
@@ -22,7 +22,9 @@ from sofia_redux.scan.simulation.scan_patterns.lissajous import \
     lissajous_pattern_equatorial
 from sofia_redux.scan.simulation.source_models.simulated_source import (
     SimulatedSource)
-from sofia_redux.scan.utilities.utils import get_int_list
+from sofia_redux.scan.utilities.utils import (
+    get_int_list, round_values, safe_sidereal_time, get_hms_time,
+    get_dms_angle)
 from sofia_redux.scan.coordinate_systems.epoch.epoch import J2000
 from sofia_redux.scan.integration import integration_numba_functions as int_nf
 from sofia_redux.scan.coordinate_systems.projection.spherical_projection \
@@ -34,36 +36,37 @@ from sofia_redux.scan.coordinate_systems.projector.astro_projector import \
 class HawcPlusSimulation(ABC):
 
     # FITS header keys specific to this simulation or used to override defaults
-    sim_keys = {'CHPNOISE', 'SCNDRAD', 'SCNDPER', 'SCNDNOSC',
+    sim_keys = {'CHPNOISE', 'SCNCONST', 'SCNDRAD', 'SCNDPER', 'SCNDNOSC',
                 'SRCTYPE', 'SRCSIZE', 'SRCAMP', 'SRCS2N',
                 'JUMPCHAN', 'JUMPFRMS', 'JUMPSIZE',
                 'SPECTEL1', 'OBSRA', 'OBSDEC', 'DATE-OBS', 'LON_STA',
                 'LAT_STA'}
 
+    # Column definitions for the FITS binary HAWC+ table
     data_column_definitions = {
-        'FrameCounter': ('frames', '1K'),  # X
-        'Timestamp': ('seconds', '1D'),  # X
+        'FrameCounter': ('frames', '1K'),
+        'Timestamp': ('seconds', '1D'),
         'FluxJumps': ('jumps', '#I'),
         'SQ1Feedback': (None, '#J'),
-        'hwpCounts': ('counts', '1J'),  # X
-        'Flag': ('flag', '1J'),  # X
-        'AZ': ('degrees', '1D'),  # X
-        'EL': ('degrees', '1D'),  # X
-        'RA': ('hours', '1D'),  # X
-        'DEC': ('degrees', '1D'),  # X
-        'LST': ('hours', '1D'),  # X
-        'SIBS_VPA': ('degrees', '1D'),  # X
-        'TABS_VPA': ('degrees', '1D'),  # X
-        'Chop_VPA': ('degrees', '1D'),  # X
-        'LON': ('degrees', '1D'),  # X
-        'LAT': ('degrees', '1D'),  # X
-        'NonSiderealRA': ('hours', '1D'),  # X
-        'NonSiderealDec': ('degrees', '1D'),  # X
+        'hwpCounts': ('counts', '1J'),
+        'Flag': ('flag', '1J'),
+        'AZ': ('degrees', '1D'),
+        'EL': ('degrees', '1D'),
+        'RA': ('hours', '1D'),
+        'DEC': ('degrees', '1D'),
+        'LST': ('hours', '1D'),
+        'SIBS_VPA': ('degrees', '1D'),
+        'TABS_VPA': ('degrees', '1D'),
+        'Chop_VPA': ('degrees', '1D'),
+        'LON': ('degrees', '1D'),
+        'LAT': ('degrees', '1D'),
+        'NonSiderealRA': ('hours', '1D'),
+        'NonSiderealDec': ('degrees', '1D'),
         'sofiaChopR': ('volts', '1E'),
         'sofiaChopS': ('volts', '1E'),
-        'PWV': ('um', '1D'),  # X
-        'LOS': ('degrees', '1D'),  # X
-        'ROLL': ('degrees', '1D')  # X
+        'PWV': ('um', '1D'),
+        'LOS': ('degrees', '1D'),
+        'ROLL': ('degrees', '1D')
     }
 
     default_values = {
@@ -320,6 +323,7 @@ class HawcPlusSimulation(ABC):
         'MAPNYPOS': 'Number of map positions in Y',
         'MAPINTX': 'Map step interval in X [arcmin]',
         'MAPINTY': 'Map step interval in Y [arcmin]',
+        'SCNCONST': 'Scanned at constant speed',
         'SCNDRAD': 'Daisy scan radius [arcsec]',
         'SCNDPER': 'Daisy scan radial period [seconds]',
         'SCNDNOSC': 'Daisy scan number of oscillations',
@@ -536,40 +540,6 @@ class HawcPlusSimulation(ABC):
         self.update_primary_header_with_data_hdu()
         return self.hdul
 
-    def update_primary_header_with_data_hdu(self):
-        """
-        Fill in the missing values in the primary header using data values.
-
-        Returns
-        -------
-        None
-        """
-        h = self.primary_header
-        if 'TELVPA' not in h:
-            vpa = self.column_values['TABS_VPA'][0]
-            self.update_header_value(h, 'TELVPA', vpa)
-
-        if 'TELEL' not in h or 'TELXEL' not in h:
-            source_horizontal = self.source_equatorial.to_horizontal(
-                self.site, self.lst)
-            offset = self.horizontal.get_native_offset_from(source_horizontal)
-            if 'TELEL' not in h:
-                el = source_horizontal.el[0].to('degree').value
-                self.update_header_value(h, 'TELEL', el)
-            if 'TELXEL' not in h:
-                xel = offset[0].x.to('degree').value
-                self.update_header_value(h, 'TELXEL', xel)
-
-        if 'TELLOS' not in h:  # TODO: This is wrong, but not used.
-            self.update_header_value(h, 'TELLOS', -h['TELXEL'])
-
-        za = self.integration.frames.horizontal.za.to('degree').value
-        if 'ZA_START' not in h:
-            self.update_header_value(h, 'ZA_START', za[0])
-        if 'ZA_END' not in h:
-            self.update_header_value(h, 'ZA_END', za[-1])
-        self.hdul[0].header = h
-
     def create_basic_hdul(self,
                           ra='17h45m39.60213s',
                           dec='-29d00m22.0000s',
@@ -672,6 +642,91 @@ class HawcPlusSimulation(ABC):
 
         return self.primary_header
 
+    def create_configuration_hdu(self):
+        """
+        Create the configuration HDU for the simulated data.
+
+        Defines all bias lines as 5000 for subarrays 0->2.
+
+        Returns
+        -------
+        fits.ImageHDU
+        """
+        bias_lines = self.info.detector_array.MCE_BIAS_LINES
+        n_sub = self.info.detector_array.subarrays
+
+        header = fits.Header()
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', fits.verify.VerifyWarning)
+            for sub in range(n_sub - 1):  # Skip last subarray
+                bias = ','.join(['1'] * bias_lines)
+                key = f"MCE{sub}_TES_BIAS"
+                header[key] = bias
+
+        config_hdu = fits.ImageHDU(data=np.zeros(1, dtype=np.int32),
+                                   header=header, name='Configuration')
+        return config_hdu
+
+    def update_hdul_with_data(self):
+        """
+        Create the data HDU.
+
+        Returns
+        -------
+        None
+        """
+        self.scan = self.channels.get_scan_instance()
+        self.scan.info.parse_header(self.hdul[0].header)
+        self.scan.channels.read_data(self.hdul)
+        self.scan.channels.validate_scan(self)
+        self.scan.hdul = self.hdul
+        self.integration = self.scan.get_integration_instance()
+        self.update_non_astronomical_columns()
+        n_records = self.column_values['FrameCounter'].size
+        self.integration.frames.initialize(self.integration, n_records)
+        self.update_vpa_columns()
+        self.update_chopper()
+        self.update_astronomical_columns()
+        self.integration.frames.apply_hdu(self.get_data_hdu())
+        self.create_simulated_data()
+        self.create_simulated_jumps()
+        self.data_hdu = self.get_data_hdu()
+        self.hdul.append(self.data_hdu)
+
+    def update_primary_header_with_data_hdu(self):
+        """
+        Fill in the missing values in the primary header using data values.
+
+        Returns
+        -------
+        None
+        """
+        h = self.primary_header
+        if 'TELVPA' not in h:
+            vpa = self.column_values['TABS_VPA'][0]
+            self.update_header_value(h, 'TELVPA', vpa)
+
+        if 'TELEL' not in h or 'TELXEL' not in h:
+            source_horizontal = self.source_equatorial.to_horizontal(
+                self.site, self.lst)
+            offset = self.horizontal.get_native_offset_from(source_horizontal)
+            if 'TELEL' not in h:
+                el = source_horizontal.el[0].to('degree').value
+                self.update_header_value(h, 'TELEL', el)
+            if 'TELXEL' not in h:
+                xel = offset[0].x.to('degree').value
+                self.update_header_value(h, 'TELXEL', xel)
+
+        if 'TELLOS' not in h:
+            self.update_header_value(h, 'TELLOS', 0.0)
+
+        za = self.integration.frames.horizontal.za.to('degree').value
+        if 'ZA_START' not in h:
+            self.update_header_value(h, 'ZA_START', za[0])
+        if 'ZA_END' not in h:
+            self.update_header_value(h, 'ZA_END', za[-1])
+        self.hdul[0].header = h
+
     def default_primary_header(self, header_options):
         """
         Create a default primary header.
@@ -717,6 +772,7 @@ class HawcPlusSimulation(ABC):
         spec = header.get('SPECTEL1', 'HAW_A').split('_')
         if len(spec) <= 1:
             band = 'A'
+            del header['SPECTEL1']
         else:
             band = spec[-1].strip().upper()
 
@@ -756,6 +812,12 @@ class HawcPlusSimulation(ABC):
         """
         date = header.get('DATE-OBS', self.start_utc.isot).split('T')[0]
         prefix = f'{date}_HA_F999'
+
+        if 'PLANID' not in header:
+            header['PLANID'] = self.default_value('PLANID')
+        if 'SPECTEL1' not in header:
+            header['SPECTEL1'] = 'HAW_A'
+
         plan = ''.join(header['PLANID'].split('_'))
 
         if 'OBS_ID' not in header:
@@ -986,7 +1048,7 @@ class HawcPlusSimulation(ABC):
                 ('SCANNING', True), ('OBSMODE', 'Scan'), ('SCNPATT', 'Daisy'),
                 ('SCNCRSYS', 'TARF'), ('SCNITERS', 1), ('SCNANGLS', 0.0),
                 ('SCNANGLC', 0.0), ('SCNANGLF', 0.0), ('SCNTWAIT', 0.0),
-                ('SCNTRKON', 0), ('SCNRATE', 100.0)]:
+                ('SCNTRKON', 0), ('SCNRATE', 100.0), ('SCNCONST', False)]:
             if key not in header:
                 self.update_header_value(header, key, default)
 
@@ -1028,12 +1090,16 @@ class HawcPlusSimulation(ABC):
             x = y
         elif y is None and x is not None:
             y = x
+        elif x is not None and y is not None:
+            pass
         else:
             width = source_size * 5
             if extended:
                 width /= 2
             x = y = width
 
+        constant_speed = header.get('SCNCONST', False)
+        self.update_header_value(header, 'SCNCONST', constant_speed)
         self.update_header_value(header, 'SCNAMPXL', x)
         self.update_header_value(header, 'SCNAMPEL', y)
         if 'SCNFQRAT' not in header:
@@ -1082,6 +1148,9 @@ class HawcPlusSimulation(ABC):
         else:
             radial_period = header['SCNDPER']
             n_oscillations = header['SCNDNOSC']
+
+        constant_speed = header.get('SCNCONST', False)
+        self.update_header_value(header, 'SCNCONST', constant_speed)
         self.update_header_value(header, 'SCNDNOSC', n_oscillations)
         self.update_header_value(header, 'SCNDPER', radial_period)
 
@@ -1129,8 +1198,9 @@ class HawcPlusSimulation(ABC):
                     dec = dec * units.Unit('degree')
 
         if isinstance(ra, str):
-            center = FK5(ra=ra, dec=dec)
-            center = EquatorialCoordinates([center.ra, center.dec])
+            ra = get_hms_time(ra, angle=True)
+            dec = get_dms_angle(dec)
+            center = EquatorialCoordinates([ra, dec])
         else:
             center = EquatorialCoordinates([ra, dec])
         self.source_equatorial = center
@@ -1300,57 +1370,6 @@ class HawcPlusSimulation(ABC):
                     self.update_header_value(
                         header, key, pwv41k * np.exp(-b * (height - 41.0)))
 
-    def create_configuration_hdu(self):
-        """
-        Create the configuration HDU for the simulated data.
-
-        Defines all bias lines as 5000 for subarrays 0->2.
-
-        Returns
-        -------
-        fits.ImageHDU
-        """
-        bias_lines = self.info.detector_array.MCE_BIAS_LINES
-        n_sub = self.info.detector_array.subarrays
-
-        header = fits.Header()
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', fits.verify.VerifyWarning)
-            for sub in range(n_sub - 1):  # Skip last subarray
-                bias = ','.join(['1'] * bias_lines)
-                key = f"MCE{sub}_TES_BIAS"
-                header[key] = bias
-
-        config_hdu = fits.ImageHDU(data=np.zeros(1, dtype=np.int32),
-                                   header=header, name='Configuration')
-        return config_hdu
-
-    def update_hdul_with_data(self):
-        """
-        Create the data HDU.
-
-        Returns
-        -------
-        None
-        """
-        self.scan = self.channels.get_scan_instance()
-        self.scan.info.parse_header(self.hdul[0].header)
-        self.scan.channels.read_data(self.hdul)
-        self.scan.channels.validate_scan(self)
-        self.scan.hdul = self.hdul
-        self.integration = self.scan.get_integration_instance()
-        self.update_non_astronomical_columns()
-        n_records = self.column_values['FrameCounter'].size
-        self.integration.frames.initialize(self.integration, n_records)
-        self.update_vpa_columns()
-        self.update_chopper()
-        self.update_astronomical_columns()
-        self.integration.frames.apply_hdu(self.get_data_hdu())
-        self.create_simulated_data()
-        self.create_simulated_jumps()
-        self.data_hdu = self.get_data_hdu()
-        self.hdul.append(self.data_hdu)
-
     def update_non_astronomical_columns(self):
         """
         Create column values for the FITS data HDU that are not astronomical.
@@ -1383,7 +1402,8 @@ class HawcPlusSimulation(ABC):
         column_values['LAT'] = location[1]
 
         t = Time(utc, format='unix')
-        lst = t.sidereal_time('mean', location[0] * units.Unit('degree'))
+        lst = safe_sidereal_time(
+            t, 'mean', longitude=location[0] * units.Unit('degree'))
         self.mjd = t.mjd
         self.lst = lst
 
@@ -1578,10 +1598,6 @@ class HawcPlusSimulation(ABC):
 
         # Add noise to chopper position?
         if 'CHPNOISE' in self.primary_header:
-            # # A slight random walk
-            # noise = (np.random.random((2, n_frames)) - 0.5) * 0.2
-            # noise = np.cumsum(noise, axis=1)
-
             # Add normal randomness
             noise = np.random.normal(loc=0, scale=1, size=(2, n_frames))
             noise -= np.mean(noise, axis=1)[:, None]
@@ -1608,12 +1624,6 @@ class HawcPlusSimulation(ABC):
         if inverted:
             self.chopper_position.invert()
 
-        # # Must apply reverse chopper shift
-        # n = self.integration.configuration.get_int('chopper.shift',
-        #                                            default=0)
-        # if n != 0:
-        #     self.chopper_position.shift(-n, fill_value=0.0)
-
         voltages = self.chopper_position.coordinates / -volts_to_angle
         chop_s[...] = voltages[0].value
         chop_r[...] = voltages[1].value
@@ -1638,7 +1648,7 @@ class HawcPlusSimulation(ABC):
         if equatorial.size > n_frames:
             equatorial = equatorial[:n_frames]
         elif equatorial.size < n_frames:
-            coordinates = np.empty((2, n_frames), dtype=float)
+            coordinates = np.full((2, n_frames), np.nan)
             coordinates[:, :equatorial.size] = equatorial.coordinates.value
             last = equatorial[-1].coordinates.value
             coordinates[:, equatorial.size:] = last[:, None]
@@ -1711,11 +1721,13 @@ class HawcPlusSimulation(ABC):
         n_oscillations = self.primary_header['SCNDNOSC']
         radius = self.primary_header['SCNDRAD'] * units.Unit('arcsec')
         radial_period = self.primary_header['SCNDPER'] * units.Unit('second')
+        constant_speed = self.primary_header['SCNCONST']
         return daisy_pattern_equatorial(self.source_equatorial,
                                         self.scan.info.sampling_interval,
                                         n_oscillations=n_oscillations,
                                         radius=radius,
-                                        radial_period=radial_period)
+                                        radial_period=radial_period,
+                                        constant_speed=constant_speed)
 
     def get_lissajous_equatorial(self):
         """
@@ -1743,12 +1755,14 @@ class HawcPlusSimulation(ABC):
         oscillation_period = r / scan_rate
         n_oscillations = (scan_time / oscillation_period).decompose().value
 
+        constant_speed = self.primary_header['SCNCONST']
         equatorial = lissajous_pattern_equatorial(
             self.source_equatorial,
             self.scan.info.sampling_interval,
             width=width, height=height, delta=delta, ratio=ratio,
             n_oscillations=n_oscillations,
-            oscillation_period=oscillation_period)
+            oscillation_period=oscillation_period,
+            constant_speed=constant_speed)
 
         return equatorial
 
@@ -1786,8 +1800,8 @@ class HawcPlusSimulation(ABC):
             cols.append(column)
 
         key = 'SQ1Feedback'
-        values = self.column_values.get(key,
-                                        np.ones(data_shape, dtype='int32'))
+        values = self.column_values.get(
+            key, np.ones(data_shape, dtype='int32'))
         cols.append(fits.Column(
             name=key, format=f'{n_array}J', dim=dim, array=values))
 
@@ -1938,10 +1952,8 @@ class HawcPlusSimulation(ABC):
         if 'JUMPFRMS' not in self.primary_header:
             frame_indices = np.asarray([n // 2])  # One in the middle
         else:
-            frame_indices = get_int_list(self.primary_header['JUMPFRMS'])
-
-        if frame_indices.size == 0:
-            return
+            frame_indices = np.array(
+                get_int_list(self.primary_header['JUMPFRMS']))
 
         jumps = np.zeros((n, channels.size), dtype=int)
         start_jumps = jumps[0]
@@ -1951,7 +1963,7 @@ class HawcPlusSimulation(ABC):
         jump_size = self.primary_header.get('JUMPSIZE', 1)
         jump_correction = jump_size * channels.data.jump[channel_indices]
         data = self.column_values['SQ1Feedback']
-        jump_correction = np.round(jump_correction).astype(data.dtype)
+        jump_correction = round_values(jump_correction).astype(data.dtype)
 
         fits_col, fits_row = channels.data.fits_col, channels.data.fits_row
         col_i = fits_col[channel_indices]

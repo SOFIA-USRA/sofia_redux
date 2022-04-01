@@ -73,7 +73,7 @@ rst_epilog += """
 
 # NASA document number and revision
 docnumber = 'SCI-US-HBK-OP10-2003'
-docrev = 'J'
+docrev = 'K'
 
 # This does not *have* to match the package name, but typically does
 project = setup_cfg['name']

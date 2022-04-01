@@ -9,6 +9,11 @@ __all__ = ['SofiaMissionInfo']
 class SofiaMissionInfo(InfoBase):
 
     def __init__(self):
+        """
+        Initialize the SOFIA flight mission information.
+
+        Contains information on the SOFIA flight mission parameters.
+        """
         super().__init__()
         self.obs_plan_id = ''
         self.base = ''
@@ -29,6 +34,21 @@ class SofiaMissionInfo(InfoBase):
         return 'missn'
 
     def apply_configuration(self):
+        """
+        Update SOFIA flight mission information with FITS header information.
+
+        Updates the mission information by taking the following keywords from
+        the FITS header::
+
+          PLANID - The observing plan containing all AOR IDs (str)
+          DEPLOY - The SOFIA aircraft base of operations (str)
+          MISSN-ID - The mission plan ID (str)
+          FLIGHTLG - The flight leg identifier for the observation (int)
+
+        Returns
+        -------
+        None
+        """
         options = self.options
         if options is None:
             return

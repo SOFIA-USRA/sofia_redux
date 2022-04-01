@@ -10,6 +10,16 @@ __all__ = ['ExampleScan']
 class ExampleScan(Scan):
 
     def __init__(self, channels, reduction=None):
+        """
+        Initialize a scan for the example instrument.
+
+        Parameters
+        ----------
+        channels : ExampleChannels
+            The channels for the example instrument.
+        reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
+            The reduction to which the scan belongs.
+        """
         self.hdul = None
         super().__init__(channels, reduction=reduction)
 
@@ -80,7 +90,8 @@ class ExampleScan(Scan):
         hdul : fits.HDUList
             The FITS HDU list to read.
         read_fully : bool, optional
-            If `True` (default), fully read the file.
+            If `True` (default), fully read the file.  This is irrelevant for
+            the example instrument.
 
         Returns
         -------

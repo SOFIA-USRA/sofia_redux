@@ -16,8 +16,23 @@ For previously processed data, check the PIPEVERS keyword in the
 FITS header to determine the pipeline version used.
 
 
-FORCAST Redux v2.3.0
+FORCAST Redux v2.4.0
 ~~~~~~~~~~~~~~~~~~~~
+*User manual: Rev. K*
+
+Imaging
+^^^^^^^
+- Replace the scikit-image dependency with local implementations of warping
+  and image interpolation algorithms.
+
+Spectroscopy
+^^^^^^^^^^^^
+- Add a line list overplot feature to the spectral viewer for interactive
+  pipeline reductions.
+
+
+FORCAST Redux v2.3.0 (2021-06-14)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. J*
 
 Spectroscopy

@@ -18,11 +18,11 @@ class ZeroMeanGains(GainProvider):
         self.ave_g = 0.0
 
     @abstractmethod
-    def get_relative_gain(self, channel_data):
+    def get_relative_gain(self, channel_data):  # pragma: no cover
         pass
 
     @abstractmethod
-    def set_raw_gain(self, channel_data, gain):
+    def set_raw_gain(self, channel_data, gain):  # pragma: no cover
         pass
 
     def get_gain(self, channel_data):

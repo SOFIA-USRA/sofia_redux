@@ -9,6 +9,7 @@ from sofia_redux.scan.info.camera.instrument import CameraInstrumentInfo
 from sofia_redux.scan.source_models.pixel_map import PixelMap
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.flags.mounts import Mount
+from sofia_redux.scan.utilities.utils import to_header_float
 
 __all__ = ['CameraInfo']
 
@@ -99,7 +100,7 @@ class CameraInfo(Info):
         None
         """
         super().edit_image_header(header, scans=scans)
-        header['BEAM'] = (self.resolution.to('arcsec').value,
+        header['BEAM'] = (to_header_float(self.resolution, 'arcsec'),
                           'The instrument FWHM (arcsec) of the beam.')
 
     def set_pointing(self, scan=None):
@@ -155,13 +156,13 @@ class CameraInfo(Info):
             sin_a = np.sin(rotation_angle)
             cos_a = np.cos(rotation_angle)
             dp = self.get_pointing_center_offset()
-            offset.set_x((dp.x + (1.0 - cos_a)) + (dp.y * sin_a))
+            offset.set_x((dp.x * (1.0 - cos_a)) + (dp.y * sin_a))
             offset.set_y((dp.x * sin_a) + (dp.y * (1.0 - cos_a)))
 
         return offset
 
     @abstractmethod
-    def max_pixels(self):
+    def max_pixels(self):  # pragma: no cover
         """
         Return the maximum number of pixels.
 

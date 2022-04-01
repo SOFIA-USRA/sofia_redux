@@ -100,11 +100,11 @@ class EllipticalSource(GaussianSource):
         a = self.fwhm
         aw = self.fwhm_weight
 
-        if (isinstance(a, units.Quantity) and
-                not isinstance(aw, units.Quantity)):
+        if (isinstance(a, units.Quantity)
+                and not isinstance(aw, units.Quantity)):
             aw = aw / (a.unit ** 2)
-        elif (isinstance(aw, units.Quantity) and
-              not isinstance(a, units.Quantity)):  # pragma: no cover
+        elif (isinstance(aw, units.Quantity)
+              and not isinstance(a, units.Quantity)):  # pragma: no cover
             a = a / (aw.unit ** 2)
 
         b = self.elongation
@@ -423,20 +423,28 @@ class EllipticalSource(GaussianSource):
                                    tolerance=tolerance)
         self.measure_shape(image, min_radius_scale=0.0, max_radius_scale=1.5)
 
-    def fit_map_least_squares(self, map2d):
+    def fit_map_least_squares(self, map2d, degree=3, reduce_degrees=False):
         """
         Fit the Gaussian to a given map using LSQ method (adaptTo).
 
         Parameters
         ----------
         map2d : Map2D or Observation2D
+        degree : int, optional
+            The spline degree used to fir the map peak value.
+        reduce_degrees : bool, optional
+            If `True`, allow the spline fit to reduce the number of degrees
+            in cases where there are not enough points available to perform
+            the spline fit of `degree`.  If `False`, a ValueError will be
+            raised if such a fit fails.
 
         Returns
         -------
         data_sum : float
             The sum of the source withing the source radius.
         """
-        data_sum = super().fit_map_least_squares(map2d)
+        data_sum = super().fit_map_least_squares(
+            map2d, degree=degree, reduce_degrees=reduce_degrees)
         self.measure_shape(map2d, min_radius_scale=0.0, max_radius_scale=1.5)
         return data_sum
 

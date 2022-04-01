@@ -14,6 +14,9 @@ class NoiseMap(Overlay):
         """
         Create a noise map overlay of an observation.
 
+        The exposure map overlay returns and operates on the weight image of
+        the Observation2D basis in terms of noise.
+
         Parameters
         ----------
         observation : Observation2D, optional
@@ -26,9 +29,13 @@ class NoiseMap(Overlay):
         """
         Return the noise values as calculated from the basis weight.
 
+        The noise values are calculated as::
+
+            noise = 1 / sqrt(weight)
+
         Returns
         -------
-        numpy.ndarray
+        noise_values : numpy.ndarray
         """
         weight = self.basis.weight
         if weight is None:
@@ -44,6 +51,10 @@ class NoiseMap(Overlay):
     def data(self, values):
         """
         Set the weight values in the basis map from noise values.
+
+        The weight values in the basis map are set via::
+
+            weight = 1 / noise^2
 
         Parameters
         ----------

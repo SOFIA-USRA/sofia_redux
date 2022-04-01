@@ -6,7 +6,7 @@ from abc import abstractmethod
 __all__ = ['Response']
 
 
-class Response(Mode):
+class Response(Mode):  # pragma: no cover
 
     def __init__(self, channel_group=None, gain_provider=None, name=None):
         """

@@ -16,6 +16,14 @@ class ExampleChannelData(SingleColorChannelData):
     flagspace = ExampleChannelFlags
 
     def __init__(self, channels=None):
+        """
+        Initialize the channel data for the example instrument.
+
+        Parameters
+        ----------
+        channels : sofia_redux.scan.channels.channels.Channels, optional
+            The parent channels for the channel data.
+        """
         super().__init__(channels=channels)
         self.bias_line = None
         self.mux_gain = None
@@ -24,6 +32,15 @@ class ExampleChannelData(SingleColorChannelData):
 
     @property
     def default_field_types(self):
+        """
+        Return the default values for the data attributes.
+
+        Returns
+        -------
+        field_defaults : dict
+            Keys contain the name of the attribute and values contain the
+            value.
+        """
         result = super().default_field_types
         result.update({'mux_gain': 1.0,
                        'bias_gain': 1.0})
@@ -32,11 +49,11 @@ class ExampleChannelData(SingleColorChannelData):
     @property
     def info(self):
         """
-        Return the instrument information object.
+        Return the example instrument information object.
 
         Returns
         -------
-        ExampleInfo
+        info : sofia_redux.scan.custom.example.info.info.ExampleInfo
         """
         info = super().info
         if info is not None:
@@ -47,12 +64,32 @@ class ExampleChannelData(SingleColorChannelData):
         """
         Calculate the SIBS position for each pixel.
 
+        Pixels that are flagged as BLIND will have their positions set to NaN.
+
         Returns
         -------
         None
         """
-        self.position = self.info.detector_array.get_sibs_position(
-            self.row, self.col)
+        self.set_sibs_positions(self.info.detector_array)
+
+    def set_sibs_positions(self, detector_array):
+        """
+        Set the pixel positions based on detector array information.
+
+        BLIND channels will have NaN pixel positions.  The spatial units will
+        be those defined by the detector array for `pixel_xy_size`.  The
+        result will be to populate the `position` attribute with an (N, 2)
+        array of (x, y) positions.
+
+        Parameters
+        ----------
+        detector_array : ExampleDetectorArrayInfo
+
+        Returns
+        -------
+        None
+        """
+        self.position = detector_array.get_sibs_position(self.row, self.col)
         self.position.nan(self.is_flagged('BLIND'))
 
     def set_uniform_gains(self, field=None):
@@ -136,33 +173,10 @@ class ExampleChannelData(SingleColorChannelData):
         self.set_sibs_positions(detector_array)
         super().apply_info(info)
 
-    def set_sibs_positions(self, detector_array):
-        """
-        Set the pixel positions based on detector array information.
-
-        BLIND channels will have NaN pixel positions.  The spatial units will
-        be those defined by the detector array for `pixel_xy_size`.  The
-        result will be to populate the `position` attribute with an (N, 2)
-        array of (x, y) positions.
-
-        Parameters
-        ----------
-        detector_array : ExampleDetectorArrayInfo
-
-        Returns
-        -------
-        None
-        """
-        self.position = detector_array.get_sibs_position(self.row, self.col)
-        self.position.nan(self.is_flagged(self.flagspace.flags.BLIND))
-
     @classmethod
     def read_channel_data_file(cls, filename):
         """
         Read a channel data file and return the information within.
-
-        Returns a `pandas` DataFrame with the following columns:
-        {gain, weight, flag, coupling, mux_gain, idx, sub, row, col, unknown}.
 
         Parameters
         ----------
@@ -171,7 +185,8 @@ class ExampleChannelData(SingleColorChannelData):
 
         Returns
         -------
-        channel_info : pandas.DataFrame
+        channel_info : dict
+            A nested dictionary of the form {row,col: {key: value}}.
         """
         column_names = ['gain', 'weight', 'flag', 'coupling', 'mux_gain',
                         'bias_gain', 'fixed_id', 'row', 'col']
@@ -182,7 +197,13 @@ class ExampleChannelData(SingleColorChannelData):
         pixel_info = pd.read_csv(filename, delim_whitespace=True, comment='#',
                                  names=column_names, dtype=data_types,
                                  converters=converters).to_dict('index')
-        return pixel_info
+
+        info = {}
+        for entry in pixel_info.values():
+            pixel_id = f"{entry['row']},{entry['col']}"
+            info[pixel_id] = entry
+
+        return info
 
     def set_channel_data(self, index, channel_info):
         """

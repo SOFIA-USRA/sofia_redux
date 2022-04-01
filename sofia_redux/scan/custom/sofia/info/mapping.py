@@ -14,6 +14,11 @@ __all__ = ['SofiaMappingInfo']
 class SofiaMappingInfo(InfoBase):
 
     def __init__(self):
+        """
+        Initialize the SOFIA mapping information.
+
+        Contains information on the SOFIA mapping parameters.
+        """
         super().__init__()
         self.mapping = None
         self.coordinate_system = None
@@ -35,6 +40,23 @@ class SofiaMappingInfo(InfoBase):
         return 'map'
 
     def apply_configuration(self):
+        """
+        Update mapping information with FITS header information.
+
+        Updates the mapping information by taking the following keywords from
+        the FITS header::
+
+          MAPPING - Whether mapping is enabled for the scan (bool)
+          MAPCYSYS - The mapping coordinate system (str)
+          MAPNXPOS - The number of mapping positions in the x-direction (int)
+          MAPNYPOS - The number of mapping positions in the y-direction (int)
+          MAPINTX - The map step interval in the x-direction (arcminutes)
+          MAPINTY - The map step interval in the y-direction (arcminutes)
+
+        Returns
+        -------
+        None
+        """
         options = self.options
         if options is None:
             return

@@ -15,6 +15,28 @@ class Aliases(Options):
     substitute_pattern = r'(?<={\?).*?(?=})'
 
     def __init__(self, allow_error=False, verbose=True):
+        """
+        Initialize the configuration aliases.
+
+        Aliases in the configuration are shorthand names for certain
+        configuration keys such as 'sky' for 'correlated.sky' which may then
+        be used to access values in the configuration appropriately.  For
+        example, using the above alias example, sky.gain would always point to
+        correlated.sky.gain for any configuration operations.
+
+        Configuration values may also be aliased to other existing
+        configuration values using the {?<key>} format.  For example, if in the
+        configuration foo={?bar}, then the value for bar would be retrieved
+        when requesting foo.
+
+        Parameters
+        ----------
+        allow_error : bool, optional
+            If `True`, allow poorly formatted options to be skipped rather than
+            raising an error.
+        verbose : bool, optional
+            If `True`, issues a warning when a poorly option is encountered.
+        """
         super().__init__(allow_error=allow_error, verbose=verbose)
 
     def copy(self):

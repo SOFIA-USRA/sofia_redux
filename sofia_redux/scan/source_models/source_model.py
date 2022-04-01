@@ -12,6 +12,7 @@ import shutil
 from sofia_redux.toolkit.utilities import multiprocessing
 from sofia_redux.scan.utilities.class_provider import \
     info_class_for
+from sofia_redux.scan.utilities.utils import round_values
 from sofia_redux.scan.reduction.version import ReductionVersion
 
 __all__ = ['SourceModel']
@@ -22,6 +23,19 @@ class SourceModel(ABC):
     recycler = None
 
     def __init__(self, info, reduction=None):
+        """
+        Initialize a source model.
+
+        The source model is an abstract class used to represent the source for
+        a given reduction, and operate on its contents.
+
+        Parameters
+        ----------
+        info : sofia_redux.scan.info.info.Info
+            The Info object which should belong to this source model.
+        reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
+            The reduction for which this source model should be applied.
+        """
         self.info = None
         self.scans = None
         self.hdul = None
@@ -35,16 +49,48 @@ class SourceModel(ABC):
         self.reduction = reduction
         self.set_info(info)
 
+    def copy(self, with_contents=True):
+        """
+        Return a copy of the source model.
+
+        Parameters
+        ----------
+        with_contents : bool, optional
+            If `True`, return a true copy of the source model.  Otherwise, just
+            return a basic version with the necessary meta data.
+
+        Returns
+        -------
+        SourceModel
+        """
+        new = self.__class__(self.info, reduction=self.reduction)
+        referenced = self.referenced_attributes
+        for attribute, value in self.__dict__.items():
+            if attribute in referenced:
+                setattr(new, attribute, value)
+            elif not with_contents:
+                continue
+            elif hasattr(value, 'copy'):
+                setattr(new, attribute, value.copy())
+            else:
+                setattr(new, attribute, deepcopy(value))
+
+        new.process_brief = None
+        return new
+
     @property
     def referenced_attributes(self):
         """
         Return attributes that should be referenced during a copy.
 
+        For the basic source model, the reduction and any scans will be
+        copied as references to the original.
+
         Returns
         -------
         set (str)
         """
-        return {'channels', 'scans', 'reduction'}
+        return {'scans', 'reduction'}
 
     @classmethod
     def clear_recycler(cls):
@@ -78,12 +124,24 @@ class SourceModel(ABC):
         None
         """
         if size <= 0:
+            cls.clear_recycler()
             cls.recycler = None
-        cls.recycler = queue.Queue(maxsize=size)
+        else:
+            cls.recycler = queue.Queue(maxsize=size)
 
     def get_recycled_clean_local_copy(self, full=False):
         """
         Return a clean local copy of a source model.
+
+        If the recycler is active and contains free models, one of those will
+        be returned.  Otherwise, one will be generated using
+        :func:`SourceModel.get_clean_local_copy`.
+
+        Parameters
+        ----------
+        full : bool, optional
+            If True, copy additional parameters for stand-alone reductions
+            that would otherwise be referenced.
 
         Returns
         -------
@@ -104,7 +162,8 @@ class SourceModel(ABC):
         ----------
         full : bool, optional
             If True, copy additional parameters for stand-alone reductions
-            that would otherwise be referenced.
+            that would otherwise be referenced.  Not used for the basic
+            SourceModel.
 
         Returns
         -------
@@ -232,36 +291,8 @@ class SourceModel(ABC):
         """
         return self.configuration.is_configured(option)
 
-    def copy(self, with_contents=True):
-        """
-        Return a copy of the source model.
-
-        Parameters
-        ----------
-        with_contents : bool, optional
-            If `True`, return a true copy of the source model.  Otherwise, just
-            return a basic version with the necessary meta data.
-
-        Returns
-        -------
-        SourceModel
-        """
-        new = self.__class__(self.info, reduction=self.reduction)
-        referenced = self.referenced_attributes
-        for attribute, value in self.__dict__.items():
-            if attribute in referenced:
-                setattr(new, attribute, value)
-            elif not with_contents:
-                continue
-            elif hasattr(value, 'copy'):
-                setattr(new, attribute, value.copy())
-            else:
-                setattr(new, attribute, deepcopy(value))
-
-        new.process_brief = None
-        return new
-
-    def source_option(self, option_name):
+    @staticmethod
+    def source_option(option_name):
         """
         Return the name of the option in configuration specific to the source.
 
@@ -315,11 +346,15 @@ class SourceModel(ABC):
 
     def set_info(self, info):
         """
-        Set the channels for the source.
+        Set the primary Info object for the source model.
+
+        This sets the provided `info` as the primary Info object containing
+        the configuration and reduction information for the source model.
+        The source model will also take ownership of the `info`.
 
         Parameters
         ----------
-        info : Info
+        info : sofia_redux.info.info.Info
 
         Returns
         -------
@@ -416,6 +451,12 @@ class SourceModel(ABC):
         """
         Assign a reduction to the source model.
 
+        This method assigns the reduction to this source model, and the source
+        model to the reduction and also sets the info object to be equivalent
+        to the reduction info.  Any scans will be replaced by the reduction
+        scans.  The reduction configuration will also be updated by any
+        conditionals activated by the source name present in this source model.
+
         Parameters
         ----------
         reduction : Reduction
@@ -435,6 +476,16 @@ class SourceModel(ABC):
     def get_average_resolution(self):
         """
         Return the average resolution.
+
+        The average resolution is given by::
+
+           r = sqrt(sum(wg^2 * integration_resolution^2) / sum(wg^2))
+
+        where the sum occurs over all integrations in all scans, w is the
+        weight of the scan belonging to each integration, and g is the gain
+        factor for each integration.  If the denominator is zero, then the
+        resolution returned by the source model instrument info is returned
+        instead.
 
         Returns
         -------
@@ -459,6 +510,9 @@ class SourceModel(ABC):
     def renew(self):
         """
         Renew the source model.
+
+        Renewing the source model consists of resetting the processing and
+        clearing all content.
 
         Returns
         -------
@@ -519,7 +573,6 @@ class SourceModel(ABC):
 
         for scan in self.scans:
             for integration in scan.integrations:
-                # self.sync_integration(integration)
                 integration.source_generation += 1
                 integration.scan.source_points = n_parms
 
@@ -588,7 +641,8 @@ class SourceModel(ABC):
                     scan.integrations[scan_integration_number] = integration
 
     @classmethod
-    def parallel_safe_sync_integration(cls, args, integration_number):
+    def parallel_safe_sync_integration(cls, args, integration_number
+                                       ):  # pragma: no cover
         """
         Synchronize a single integration.
 
@@ -642,7 +696,7 @@ class SourceModel(ABC):
 
         Returns
         -------
-        astropy.units.Quantity
+        units.Quantity
         """
         return self.info.instrument.get_point_size()
 
@@ -652,27 +706,33 @@ class SourceModel(ABC):
 
         Returns
         -------
-        astropy.units.Quantity
+        units.Quantity
         """
         return self.info.instrument.get_source_size()
 
     def get_executor(self):
         """
-        ???
+        Get the parallel process executor for source processing.
+
+        The executor is not currently used for anything - this is a
+        placeholder.
 
         Returns
         -------
-
+        None
         """
         pass
 
     def set_executor(self, executor):
         """
-        ???
+        Set the parallel process executor for source processing.
+
+        The executor is not currently used for anything - this is a
+        placeholder.
 
         Parameters
         ----------
-        executor : ???
+        executor : object
 
         Returns
         -------
@@ -706,7 +766,9 @@ class SourceModel(ABC):
 
     def no_parallel(self):
         """
-        ???
+        Sets the number of parallel operations for the source to 1 (serial).
+
+        Not implemented for the basic SourceModel.
 
         Returns
         -------
@@ -731,9 +793,13 @@ class SourceModel(ABC):
 
         Returns
         -------
-        astropy.units.Quantity
+        units.Quantity
         """
-        return self.info.instrument.kelvin() * units.Unit('Kelvin')
+        kelvins = self.info.instrument.kelvin()
+        if isinstance(kelvins, units.Quantity):
+            return kelvins.to('Kelvin')
+        else:  # pragma: no cover
+            return kelvins * units.Unit('Kelvin')
 
     def get_canonical_source_name(self):
         """
@@ -757,8 +823,9 @@ class SourceModel(ABC):
         str
         """
         mjds = [scan.mjd for scan in self.scans]
-        first_scan = self.scans[np.argmin(mjds)]
-        last_scan = self.scans[np.argmax(mjds)]
+        sort_idx = np.argsort(mjds)
+        first_scan = self.scans[sort_idx[0]]
+        last_scan = self.scans[sort_idx[-1]]
         name = f'{self.get_canonical_source_name()}.{first_scan.get_id()}'
         if first_scan is not last_scan:
             if first_scan.get_id() != last_scan.get_id():
@@ -769,6 +836,14 @@ class SourceModel(ABC):
     def check_pixel_count(integration):
         """
         Check if an integration has enough mapping pixels to generate a map.
+
+        Checks are performed depending on whether the following configuration
+        keywords are present for the integration::
+
+            - mappingpixels: The number of integration mapping pixels must be
+                  greater than this value.
+            - mappingfraction: The ratio of mapping pixels to observing pixels
+                  must be greater than or equal to this fraction.
 
         Parameters
         ----------
@@ -781,17 +856,17 @@ class SourceModel(ABC):
             `True` if the integration has enough pixels, and `False` otherwise.
         """
         pixels = integration.channels.get_mapping_pixels(match_flag=0).size
-        n_obs = integration.channels.get_observing_channels().size
 
         if integration.has_option('mappingpixels'):
             # If there aren't enough good pixels in the scan, do not generate.
-            min_size = integration.configuration.get_int('mappingpixels',
-                                                         default=np.inf)
+            min_size = integration.configuration.get_int(
+                'mappingpixels', default=np.inf)
             if pixels < min_size:
                 integration.comments.append('(!ch)')
                 return False
 
         if integration.has_option('mappingfraction'):
+            n_obs = integration.channels.get_observing_channels().size
             mapping_fraction = integration.configuration.get_float(
                 'mappingfraction', default=np.inf)
             if pixels < (mapping_fraction * n_obs):
@@ -904,80 +979,6 @@ class SourceModel(ABC):
         for scan in self.scans:
             hdul.append(scan.get_summary_hdu(configuration=self.configuration))
 
-    @abstractmethod
-    def clear_content(self):
-        pass
-
-    @abstractmethod
-    def is_valid(self):
-        """
-        Return whether the source model is valid or not.
-
-        Returns
-        -------
-        bool
-        """
-        pass
-
-    @abstractmethod
-    def add_model_data(self, source_model, weight=1.0):
-        """
-        Add an increment source model data onto the current model.
-
-        Parameters
-        ----------
-        source_model : SourceModel
-            The source model increment.
-        weight : float, optional
-            The weight of the source model increment.
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def add_integration(self, integration):
-        """
-        Add an integration to the source model.
-
-        Parameters
-        ----------
-        integration : Integration
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def process(self):
-        """
-        Process the source model.
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def process_scan(self, scan):
-        """
-        Process a scan.
-
-        Parameters
-        ----------
-        scan : Scan
-
-        Returns
-        -------
-        None
-        """
-        pass
-
     def post_process_scan(self, scan):
         """
         Apply post processing steps to a scan.
@@ -992,62 +993,6 @@ class SourceModel(ABC):
         """
         pass
 
-    @abstractmethod
-    def sync_integration(self, integration, signal_mode=None):
-        """
-        Sync an integration.
-
-        Parameters
-        ----------
-        integration : Integration
-        signal_mode : FrameFlagTypes
-            The signal mode flag, indicating which signal should be used to
-            extract the frame source gains.  Typically, TOTAL_POWER.
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def set_base(self):
-        """
-        ???
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def write(self, path):
-        """
-        Write the source to file.
-
-        Parameters
-        ----------
-        path : str
-            The file path to write to.
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    @abstractmethod
-    def get_reference(self):
-        """
-        Return the reference (x, y) coordinate.
-
-        Returns
-        -------
-        2-tuple
-        """
-        pass
-
     def suggestions(self):
         """
         Write log messages with source reduction suggestions.
@@ -1058,15 +1003,16 @@ class SourceModel(ABC):
         """
         scanning_problem_only = False
         scans_with_few_pixels = 0
-        for scan in self.scans:
-            for integration in scan.integrations:
-                if not self.check_pixel_count(integration):
-                    scans_with_few_pixels += 1
-                    break
+        if self.scans is not None:
+            for scan in self.scans:
+                for integration in scan.integrations:
+                    if not self.check_pixel_count(integration):
+                        scans_with_few_pixels += 1
+                        break
 
         if scans_with_few_pixels > 0:
             scanning_problem_only = self.troubleshoot_few_pixels()
-        elif not self.is_valid() * self.generation > 0:
+        elif not (self.is_valid() and self.generation > 0):
             log.info(self.suggest_make_valid())
         else:
             return
@@ -1094,18 +1040,17 @@ class SourceModel(ABC):
 
         Returns
         -------
-        bool
-            `True` if scanning problems were detected; `False` otherwise.
+        speed_problem : bool
+            `True` if scanning problems are only related to scanning speed.
         """
         speed_problem_only = True
         for scan in self.scans:
             low_speed = False
             for integration in scan.integrations:
                 if not self.check_pixel_count(integration):
-                    drift_n = int(
-                        np.round(integration.filter_time_scale
-                                 / integration.info.sampling_interval))
-                    if drift_n <= 1:
+                    drift_n = (integration.filter_time_scale
+                               / integration.info.sampling_interval)
+                    if np.isfinite(drift_n) and round_values(drift_n) <= 1:
                         low_speed = True
                     else:
                         speed_problem_only = False
@@ -1135,12 +1080,12 @@ class SourceModel(ABC):
             return True
 
         messages = ["You may try:"]
-        if self.configuration.is_configured('deep'):
+        if self.configuration.get_bool('deep'):
             messages.append(" * Reduce with 'faint' instead of 'deep'.")
-        elif self.configuration.is_configured('faint'):
+        elif self.configuration.get_bool('faint'):
             messages.append(
                 " * Reduce with default settings instead of 'faint'.")
-        elif not self.configuration.is_configured('bright'):
+        elif not self.configuration.get_bool('bright'):
             messages.append(" * Reduce with 'bright'.")
 
         messages.extend(self.reduction.channels.troubleshoot_few_pixels())
@@ -1155,7 +1100,7 @@ class SourceModel(ABC):
         return False
 
     @abstractmethod
-    def count_points(self):
+    def count_points(self):  # pragma: no cover
         """
         Return the number of points in the model.
 
@@ -1166,7 +1111,7 @@ class SourceModel(ABC):
         pass
 
     @abstractmethod
-    def get_source_name(self):
+    def get_source_name(self):  # pragma: no cover
         """
         Return the source name for the source model.
 
@@ -1177,12 +1122,150 @@ class SourceModel(ABC):
         pass
 
     @abstractmethod
-    def get_unit(self):
+    def get_unit(self):  # pragma: no cover
         """
         Return the source model unit.
 
         Returns
         -------
         astropy.units.Quantity
+        """
+        pass
+
+    @abstractmethod
+    def clear_content(self):  # pragma: no cover
+        """
+        Clear the contents of the source model.
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def is_valid(self):  # pragma: no cover
+        """
+        Return whether the source model is valid or not.
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    @abstractmethod
+    def add_model_data(self, source_model, weight=1.0):  # pragma: no cover
+        """
+        Add an increment source model data onto the current model.
+
+        Parameters
+        ----------
+        source_model : SourceModel
+            The source model increment.
+        weight : float, optional
+            The weight of the source model increment.
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def add_integration(self, integration):  # pragma: no cover
+        """
+        Add an integration to the source model.
+
+        Parameters
+        ----------
+        integration : Integration
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def process(self):  # pragma: no cover
+        """
+        Process the source model.
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def process_scan(self, scan):  # pragma: no cover
+        """
+        Process a scan.
+
+        Parameters
+        ----------
+        scan : Scan
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def sync_integration(self, integration, signal_mode=None
+                         ):  # pragma: no cover
+        """
+        Sync an integration.
+
+        Parameters
+        ----------
+        integration : Integration
+        signal_mode : FrameFlagTypes
+            The signal mode flag, indicating which signal should be used to
+            extract the frame source gains.  Typically, TOTAL_POWER.
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def set_base(self):  # pragma: no cover
+        """
+        Set the base data for the source model.
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def write(self, path):  # pragma: no cover
+        """
+        Write the source to file.
+
+        Parameters
+        ----------
+        path : str
+            The file path to write to.
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    @abstractmethod
+    def get_reference(self):  # pragma: no cover
+        """
+        Return the reference (x, y) coordinate.
+
+        Returns
+        -------
+        2-tuple
         """
         pass

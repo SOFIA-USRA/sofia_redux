@@ -11,14 +11,15 @@ import numpy as np
 
 from sofia_redux.visualization import log
 from sofia_redux.visualization.signals import Signals
-from sofia_redux.visualization.models import high_model
-from sofia_redux.visualization.display import pane, blitting, artists
+from sofia_redux.visualization.models import high_model, reference_model
+from sofia_redux.visualization.display import pane, blitting, gallery, drawing
 from sofia_redux.visualization.utils.eye_error import EyeError
 from sofia_redux.visualization.utils.model_fit import ModelFit
 
 __all__ = ['Figure']
 
 MT = TypeVar('MT', bound=high_model.HighModel)
+RT = TypeVar('RT', bound=reference_model.ReferenceData)
 PT = TypeVar('PT', bound=pane.Pane)
 PID = TypeVar('PID', int, str)
 
@@ -85,9 +86,10 @@ class Figure(object):
         self._cursor_pane = None
         self._fit_params = list()
 
-        self.artists = artists.Artists()
+        self.gallery = gallery.Gallery()
         self.blitter = blitting.BlitManager(canvas=figure_widget.canvas,
-                                            artists=self.artists)
+                                            gallery=self.gallery,
+                                            signals=signals)
 
     @property
     def current_pane(self) -> int:
@@ -111,7 +113,7 @@ class Figure(object):
             True to show; False to hide.
         """
         self.highlight_pane = state
-        self.artists.set_pane_highlight_flag(pane_number=self.current_pane,
+        self.gallery.set_pane_highlight_flag(pane_number=self.current_pane,
                                              state=state)
 
     def set_block_current_pane_signal(self, value: bool = True) -> None:
@@ -270,18 +272,18 @@ class Figure(object):
         self.gs = gridspec.GridSpec(n_rows, n_cols, figure=self.fig)
 
     def remove_artists(self) -> None:
-        """Remove all artists."""
-        self.artists.reset_artists('all')
+        """Remove all gallery."""
+        self.gallery.reset_artists('all')
 
     def reset_artists(self) -> None:
-        """Recreate all artists from models."""
-        self.artists.reset_artists('all')
+        """Recreate all gallery from models."""
+        self.gallery.reset_artists('all')
         for pane_ in self.panes:
-            new_artists = pane_.create_artists_from_current_models()
+            new_drawings = pane_.create_artists_from_current_models()
             successes = 0
-            successes += self.artists.add_artists(new_artists)
-            if successes != len(new_artists):
-                log.debug('Error encountered while creating artists')
+            successes += self.gallery.add_drawings(new_drawings)
+            if successes != len(new_drawings):
+                log.debug('Error encountered while creating gallery')
 
         # add borders back in
         self._add_pane_artists()
@@ -289,8 +291,11 @@ class Figure(object):
         # add fits back in; managed by view
         self.signals.toggle_fit_visibility.emit()
 
+        # add reference models if available
+        self.signals.update_reference_lines.emit()
+
     def _add_pane_artists(self) -> None:
-        """Track existing border artists."""
+        """Track existing border gallery."""
         borders = dict()
         for pane_number, pane_ in enumerate(self.panes):
             if self.highlight_pane:
@@ -308,20 +313,20 @@ class Figure(object):
                 'kind': 'border',
                 'artist': pane_.get_border(),
                 'visible': visible}
-        self.artists.add_patches(borders)
+        self.gallery.add_patches(borders)
 
     def _add_crosshair(self) -> None:
-        """Track existing crosshair artists."""
-        crosshairs = dict()
+        """Track existing crosshair gallery."""
+        crosshairs = list()
         for pane_number, pane_ in enumerate(self.panes):
             pane_lines = pane_.plot_crosshair()
-            for direction, artist in pane_lines.items():
-                crosshairs[f'pane_{pane_number}_{direction}'] = {
-                    'kind': 'crosshair',
-                    'artist': artist,
-                    'visible': False,
-                    'direction': direction}
-        self.artists.add_crosshairs(crosshairs)
+            for pane_line in pane_lines:
+                model_name = f'crosshair_pane_{pane_number}'
+                pane_line.set_high_model(model_name)
+                pane_line.set_visible(False)
+                crosshairs.append(pane_line)
+
+        self.gallery.add_crosshairs(crosshairs)
 
     def model_matches_pane(self, pane_: PID, model_: MT) -> bool:
         """
@@ -683,9 +688,12 @@ class Figure(object):
         else:
             self.add_panes(n_dims=model_.default_ndims, n_panes=1)
             additions = self.panes[self.current_pane].add_model(model_)
-        successes = self.artists.add_artists(artists=additions)
+        successes = self.gallery.add_drawings(additions)
         if successes:
-            log.info(f'Added {successes} models to panes')
+            log.info('Added model to panes')
+
+            # if any updates, add reference models if available
+            self.signals.update_reference_lines.emit()
 
     def remove_model_from_pane(
             self, filename: Optional[str] = None,
@@ -729,9 +737,31 @@ class Figure(object):
         self.clear_all()
         self.signals.atrophy_bg_full.emit()
 
+    def update_reference_lines(self, models: RT):
+        """
+        Updating reference lines requires removing the lines entirely and
+        replotting them.
+
+        Parameters
+        ----------
+        models
+        """
+        self.gallery.reset_artists(selection='reference')
+        if models.get_visibility('ref_line'):
+            for pane_ in self.panes:
+                additions = pane_.update_reference_data(models, plot=True)
+                success = self.gallery.add_drawings(additions)
+                if success:
+                    log.debug('Updated reference data')
+        self.signals.atrophy_bg_partial.emit()
+
     ####
     # Plotting
     ####
+    def unload_reference_model(self, models):
+        for pane_ in self.panes:
+            pane_.unload_ref_model()
+
     def refresh(self, bg_full: bool, bg_partial: bool) -> None:
         """
         Refresh the figure canvas.
@@ -757,7 +787,7 @@ class Figure(object):
             self.blitter.update_animated()
 
     def clear_all(self) -> None:
-        """Clear all artists and redraw panes."""
+        """Clear all gallery and redraw panes."""
         self.set_block_current_pane_signal(True)
         self.fig.clear()
         self._assign_axes()
@@ -787,6 +817,12 @@ class Figure(object):
             if _pane is not None:
                 _pane.set_limits(limits)
 
+                # update reference data for new limits
+                ref_updates = _pane.update_reference_data()
+                if ref_updates is not None:
+                    self.gallery.update_reference_data(pane_=_pane,
+                                                       updates=ref_updates)
+
     def change_axis_unit(self, units: Dict[str, str],
                          target: Optional[Any] = None) -> None:
         """
@@ -805,16 +841,15 @@ class Figure(object):
             to apply only to the current pane, or a list of
         """
         panes, axes = self.parse_pane_flag(target)
-
+        changed = False
         for _pane in panes:
             if _pane is not None:
-                line_updates, error_updates = _pane.set_units(units, axes)
-                self.artists.update_line_data(pane=_pane,
-                                              updates=line_updates,
-                                              axes=axes)
-                if error_updates:
-                    self.artists.update_error_ranges(pane=_pane,
-                                                     updates=error_updates)
+                _pane.set_units(units, axes)
+                changed = True
+
+        # trigger full artist regeneration
+        if changed:
+            self.clear_all()
 
     def change_axis_field(self, fields: Dict[str, str],
                           target: Optional[Any] = None) -> None:
@@ -904,7 +939,7 @@ class Figure(object):
                     _pane.set_overplot(state)
             self.reset_artists()
         else:  # Turning off
-            self.artists.reset_artists(selection='alt', panes=panes)
+            self.gallery.reset_artists(selection='alt', panes=panes)
             for _pane in panes:
                 if _pane is not None:
                     _pane.reset_alt_axes(remove=True)
@@ -977,7 +1012,7 @@ class Figure(object):
             for pane_ in self.panes:
                 pane_.set_color_cycle_by_name(cycle_name)
                 updates = pane_.update_colors()
-                self.artists.update_artist_options(pane_=pane_,
+                self.gallery.update_artist_options(pane_=pane_,
                                                    options=updates)
         self.signals.atrophy.emit()
 
@@ -994,7 +1029,7 @@ class Figure(object):
         if self.populated():
             for pane_ in self.panes:
                 line_updates = pane_.set_plot_type(plot_type)
-                self.artists.update_line_type(pane_=pane_,
+                self.gallery.update_line_type(pane_=pane_,
                                               updates=line_updates)
         self.signals.atrophy.emit()
 
@@ -1012,7 +1047,7 @@ class Figure(object):
         if self.populated():
             for pane_ in self.panes:
                 marker_updates = pane_.set_markers(state)
-                self.artists.update_artist_options(pane_=pane_,
+                self.gallery.update_artist_options(pane_=pane_,
                                                    options=marker_updates)
         self.signals.atrophy.emit()
 
@@ -1047,8 +1082,9 @@ class Figure(object):
             for pane_ in self.panes:
                 pane_.set_error(state)
                 updates = pane_.update_visibility()
-                self.artists.update_artist_options(pane_=pane_,
-                                                   options=updates)
+                for update in updates:
+                    self.gallery.update_artist_options(pane_=pane_,
+                                                       options=updates)
         self.signals.atrophy.emit()
 
     def set_dark_mode(self, state: bool = True) -> None:
@@ -1088,7 +1124,7 @@ class Figure(object):
         pane_ = self.panes[pane_id]
         pane_.set_model_enabled(model_id, state)
         updates = pane_.update_visibility()
-        self.artists.update_artist_options(pane_=pane_, options=updates)
+        self.gallery.update_artist_options(pane_=pane_, options=updates)
         self.signals.atrophy.emit()
 
     def set_all_enabled(self, pane_id: int, state: bool) -> None:
@@ -1106,7 +1142,7 @@ class Figure(object):
         pane_ = self.panes[pane_id]
         pane_.set_all_models_enabled(state)
         updates = pane_.update_visibility()
-        self.artists.update_artist_options(pane_=pane_, options=updates)
+        self.gallery.update_artist_options(pane_=pane_, options=updates)
         self.signals.atrophy.emit()
 
     ####
@@ -1201,7 +1237,7 @@ class Figure(object):
         """
         pane_index = self.determine_selected_pane(event.inaxes)
         data_point = self.panes[pane_index].data_at_cursor(event)
-        self.artists.update_marker(data_point)
+        self.gallery.update_marker(data_point)
         return data_point
 
     def crosshair(self, event: mbb.MouseEvent) -> None:
@@ -1217,18 +1253,18 @@ class Figure(object):
         if pane_index is not None and pane_index == self._current_pane:
             data_point = self.panes[pane_index].xy_at_cursor(event)
             direction = self._parse_cursor_direction(mode='crosshair')
-            self.artists.update_crosshair(pane_index, data_point=data_point,
+            self.gallery.update_crosshair(pane_index, data_point=data_point,
                                           direction=direction)
             self.signals.atrophy.emit()
 
     def clear_crosshair(self) -> None:
         """Clear any displayed crosshairs."""
-        self.artists.reset_artists(selection='crosshair')
+        self.gallery.reset_artists(selection='crosshair')
 
     def reset_data_points(self) -> None:
         """Reset any displayed cursor markers."""
         if self.populated():
-            self.artists.hide_cursor_markers()
+            self.gallery.hide_cursor_markers()
 
     def reset_zoom(self, all_panes: Optional[bool] = False) -> None:
         """
@@ -1246,8 +1282,14 @@ class Figure(object):
             panes = self.panes
         else:
             panes = [self.panes[self.current_pane]]
+        # Don't want to include reference data in relim
         for _pane in panes:
+            self.gallery.reset_artists(selection='reference', panes=[_pane])
             _pane.reset_zoom()
+            ref_artists = _pane.update_reference_data()
+            if ref_artists is not None:
+                self.gallery.update_reference_data(pane_=_pane,
+                                                   updates=ref_artists)
         self.signals.atrophy_bg_partial.emit()
 
     def set_cursor_mode(self, mode: str) -> None:
@@ -1298,12 +1340,9 @@ class Figure(object):
             if len(self._cursor_locations) == 2:
                 self.end_cursor_records(pane_index)
             else:
-                guide_artists = self.panes[pane_index].plot_guides(
+                guide_drawings = self.panes[pane_index].plot_guides(
                     location, kind=self._parse_cursor_direction())
-                art_dict = dict()
-                for direction, line in guide_artists.items():
-                    art_dict[f'{direction}_guide'] = {0: {'guide': line}}
-                self.artists.add_artists(art_dict)
+                self.gallery.add_drawings(guide_drawings)
                 self.signals.atrophy.emit()
 
     def end_cursor_records(self, pane_index: int) -> None:
@@ -1387,10 +1426,16 @@ class Figure(object):
             zoom_points=self._cursor_locations, direction=direction)
 
         # clear all h and v guides
-        self.artists.reset_artists(selection='h_guide',
+        self.gallery.reset_artists(selection='h_guide',
                                    panes=self.panes[pane_index])
-        self.artists.reset_artists(selection='v_guide',
+        self.gallery.reset_artists(selection='v_guide',
                                    panes=self.panes[pane_index])
+
+        # update reference data for new limits
+        ref_updates = self.panes[pane_index].update_reference_data()
+        if ref_updates is not None:
+            self.gallery.update_reference_data(pane_=self.panes[pane_index],
+                                               updates=ref_updates)
 
         # partial background: reset limits, data has not changed
         self.signals.atrophy_bg_partial.emit()
@@ -1413,10 +1458,10 @@ class Figure(object):
         else:
             limits = [self._cursor_locations[1], self._cursor_locations[0]]
 
-        fit_artists, fit_params = self.panes[pane_index].perform_fit(
+        fit_drawings, fit_params = self.panes[pane_index].perform_fit(
             self._cursor_mode, limits)
 
-        self.artists.add_artists(fit_artists)
+        self.gallery.add_drawings(fit_drawings)
         self._fit_params.extend(fit_params)
 
     def get_selection_results(self) -> List[ModelFit]:
@@ -1455,23 +1500,24 @@ class Figure(object):
             flags = [flags]
         for flag in flags:
             if flag == 'fit':
-                self.artists.reset_artists(flag, panes=panes)
+                self.gallery.reset_artists(flag, panes=panes)
             else:
-                self.artists.reset_artists(f'{flag}_guide', panes=panes)
+                self.gallery.reset_artists(f'{flag}_guide', panes=panes)
 
     def toggle_fits_visibility(self, fits: List[ModelFit]) -> None:
         # Tell artist to update fit artist
         # If failure, loop over panes. Ask each one to make new
-        #   artist for fit. If model, order, fields don't match,
-        #   pane does nothing. Else remake fit artists and return them.
-        #   Then add new artists to Artists
+        #   drawing for fit. If model, order, fields don't match,
+        #   pane does nothing. Else remake fit drawing and return them.
+        #   Then add new drawing to Gallery
         for fit in fits:
-            options = [{'model_id': fit.get_model_id(),
-                        'order': fit.get_order(), 'data_id': fit.get_id(),
-                        'new_visibility': fit.get_visibility()}]
+            options = {'high_model': fit.get_model_id(), 'kind': 'fit',
+                       'mid_model': fit.get_order(), 'data_id': fit.get_id(),
+                       'updates': {'visible': fit.get_visibility()}}
+            options = [drawing.Drawing(**options)]
             for pane_ in self.panes:
                 if fit.get_axis() in pane_.axes():
-                    result = self.artists.update_artist_options(
+                    result = self.gallery.update_artist_options(
                         pane_, kinds='fit', options=options)
                     if not result:
                         self._regenerate_fit_artists(pane_, fit, options)
@@ -1484,7 +1530,7 @@ class Figure(object):
         matching_panes = self._panes_matching_model_fits(fits)
         for pane_idx, fits in matching_panes.items():
             pane_ = self.panes[pane_idx]
-            self.artists.reset_artists(selection='fit',
+            self.gallery.reset_artists(selection='fit',
                                        panes=[pane_])
             for fit in fits:
                 self._regenerate_fit_artists(pane_, fit)
@@ -1493,13 +1539,13 @@ class Figure(object):
         # fit_params = {fit['model_id']: {fit['order']: fit}}
         # fit_artists = pane_.generate_gauss_fit_artists(fit_params)
         try:
-            fit_artists = pane_.generate_fit_artists(fit)
+            fit_drawings = pane_.generate_fit_artists(fit)
         except (KeyError, IndexError):
             # can happen if model id no longer exists
             return
-        self.artists.add_artists(fit_artists)
+        self.gallery.add_drawings(fit_drawings)
         if options:
-            self.artists.update_artist_options(pane_, kinds='fit',
+            self.gallery.update_artist_options(pane_, kinds='fit',
                                                options=options)
 
     def _panes_matching_model_fits(self, fits: List[ModelFit]

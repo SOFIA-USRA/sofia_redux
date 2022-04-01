@@ -31,6 +31,14 @@ class HawcPlusFrames(SofiaFrames):
     FITS_FLAG_BETWEEN_SCANS = 3
 
     def __init__(self):
+        """
+        Initialize HAWC+ frames.
+
+        HAWC+ frames contain the timestream data for HAWC+ integrations.
+        The include additional information on the MCE serial, the HWP angle,
+        line-of-sight (LOSS), aircraft roll, the observing status flag, and
+        the detector jump count.
+        """
         super().__init__()
         self.mce_serial = None
         self.hwp_angle = None
@@ -40,6 +48,16 @@ class HawcPlusFrames(SofiaFrames):
 
         # Special 2-D
         self.jump_counter = None
+
+    def copy(self):
+        """
+        Return a copy of the HAWC+ frames.
+
+        Returns
+        -------
+        HawcPlusFrames
+        """
+        return super().copy()
 
     @property
     def default_field_types(self):
@@ -69,7 +87,7 @@ class HawcPlusFrames(SofiaFrames):
             'hwp_angle': 0.0 * units.Unit('deg'),
             'los': 0.0 * units.Unit('deg'),
             'roll': 0.0 * units.Unit('deg'),
-            'status': 0,
+            'status': 0
         })
         return fields
 
@@ -91,7 +109,13 @@ class HawcPlusFrames(SofiaFrames):
 
     @property
     def readout_attributes(self):
-        """Attributes that will be operated on by the `shift` method."""
+        """
+        Attributes that will be operated on by the `shift` method.
+
+        Returns
+        -------
+        set (str)
+        """
         fields = super().readout_attributes
         fields.add('jump_counter')
         fields.add('chopper_position')
@@ -107,7 +131,7 @@ class HawcPlusFrames(SofiaFrames):
 
         Returns
         -------
-        HawcPlusInfo
+        sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo
         """
         return super().info
 
@@ -175,6 +199,8 @@ class HawcPlusFrames(SofiaFrames):
                     continue
 
         for key, name in columns.items():
+            if name is None:
+                continue
             if name not in hdu.columns.names:
                 columns[key] = None
                 log.warning(f"Missing {name} KEY in HDU")
@@ -183,14 +209,22 @@ class HawcPlusFrames(SofiaFrames):
         for astrometry in [self.info.astrometry,
                            self.integration.info.astrometry]:
             if astrometry.equatorial is None:
-                ra = hdu.data[columns['ra']][0] * units.Unit('hourangle')
-                dec = hdu.data[columns['dec']][0] * units.Unit('deg')
-                astrometry.equatorial = EquatorialCoordinates(
-                    np.stack((ra, dec)), epoch=J2000)
+                try:
+                    ra = hdu.data[columns['ra']][0] * units.Unit('hourangle')
+                    dec = hdu.data[columns['dec']][0] * units.Unit('deg')
+                    astrometry.equatorial = EquatorialCoordinates(
+                        np.stack((ra, dec)), epoch=J2000)
+                except (KeyError, IndexError, ValueError):  # pragma: no cover
+                    pass
 
         if columns['ora'] is not None or columns['odec'] is not None:
-            if (np.isnan(hdu.data[columns['ora']][0])
-                    or np.isnan(hdu.data[columns['odec']][0])):
+            try:
+                obsra = hdu.data[columns['ora']][0]
+                obsdec = hdu.data[columns['odec']][0]
+            except (KeyError, IndexError, ValueError):
+                obsra = obsdec = np.nan
+
+            if np.isnan(obsra) or np.isnan(obsdec):
                 columns['ora'] = None
                 columns['odec'] = None
                 if self.scan.is_nonsidereal:
@@ -482,6 +516,10 @@ class HawcPlusFrames(SofiaFrames):
         """
         Perform the squid dark correction for blind channels.
 
+        The dark correction is applied for all frames by by subtracting the
+        associated dark squid channel data from each non-blind channel over
+        all valid frames.
+
         Returns
         -------
         None
@@ -489,24 +527,19 @@ class HawcPlusFrames(SofiaFrames):
         channels = self.scan.channels.data
         squid_lookup = self.info.detector_array.dark_squid_lookup
 
-        blind_indices = channels.is_flagged('BLIND')
-        blind_sub = channels.sub[blind_indices]
-        blind_col = channels.col[blind_indices]
+        correct_indices = channels.is_unflagged('BLIND', indices=True)
+        correct_sub = channels.sub[correct_indices]
+        correct_col = channels.col[correct_indices]
 
-        squid_fixed_indices = squid_lookup[blind_sub, blind_col]
-
-        # Cull is used to that the two indices are of the same shape.
-        # Invalid indices are set to -1.
-        frame_squid_indices = self.find_fixed_indices(
+        squid_fixed_indices = squid_lookup[correct_sub, correct_col]
+        squid_indices = self.channels.find_fixed_indices(
             squid_fixed_indices, cull=False)
-        frame_channel_indices = self.find_channel_fixed_indices(
-            channels.fixed_index[blind_indices], cull=False)
 
         hnf.dark_correct(
             data=self.data,
             valid_frame=self.valid,
-            channel_indices=frame_channel_indices,
-            squid_indices=frame_squid_indices)
+            channel_indices=correct_indices,
+            squid_indices=squid_indices)
 
     def set_from_downsampled(self, frames, start_indices, valid, window):
         """
@@ -549,7 +582,6 @@ class HawcPlusFrames(SofiaFrames):
         if unit is not None:
             low_res_hwp = low_res_hwp * unit
 
-        # TODO: This is a blatant bug in CRUSH which we replicate here.
-        # TODO: The correct line should be
-        # self.hwp_angle = low_res_hwp
-        self.hwp_angle = self.hwp_angle + low_res_hwp  # TODO: Change
+        # Note: due to a bug the original added on the smoothed value to the
+        # existing values (not replicated here)
+        self.hwp_angle = low_res_hwp

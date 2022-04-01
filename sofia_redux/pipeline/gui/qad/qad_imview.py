@@ -360,7 +360,6 @@ class QADImView(object):
         for frame in frames:
             log.info('')
             if allframes:
-                log.info('Frame ' + frame)
                 self.run('frame ' + frame)
                 # check for loaded data
                 if not self._loaded_data():
@@ -369,7 +368,7 @@ class QADImView(object):
             try:
                 results = self.retrieve_data(ctr1, ctr2, photometry=False)
             except (ValueError, TypeError) as err:
-                log.debug(f'Error in retrieving data: {err}')
+                log.debug(f'Error in retrieving Frame {frame} data: {err}')
                 continue
             fulldata = results['fulldata']
             data = results['data']
@@ -377,8 +376,13 @@ class QADImView(object):
             hwcs = results['wcs']
             xctr = results['xctr']
             yctr = results['yctr']
+            filename = results['filename']
 
-            log.info(f'Histogram at: {ctr1},{ctr2}')
+            # get file and ext name if possible
+            log.info(f'Frame {frame}: {filename}')
+
+            log.info(f'Histogram at x={ctr1}, y={ctr2} '
+                     f'(in {cs} coordinates)')
 
             # get data from region mask or window
             mask = self._region_mask(cs, all_regions, xctr, yctr, hwcs)
@@ -608,6 +612,7 @@ class QADImView(object):
                 self.ptable = None
                 if self.plotviewer is not None:
                     self.plotviewer.clear()
+                    self.plotviewer.hide()
 
                 # check for tiling -- if tiled, delete regions
                 # from all active frames
@@ -809,6 +814,8 @@ class QADImView(object):
         i = 0
         if len(img_files) > 0 and self.disp_parameters['ds9_viewer'] \
                 and self.HAS_DS9:
+            log.info('')
+
             self.set_defaults()
             exten = ''
             if 'frame' in self.disp_parameters['extension']:
@@ -838,11 +845,15 @@ class QADImView(object):
                     imgdata[j] = s2n
 
                 try:
+                    frame_to_load = int(self.run('frame', via='get')) + 1
+                except ValueError:
+                    frame_to_load = 1
+                if exten != '':
+                    extenstr = f'[{exten}]'
+                else:
+                    extenstr = ''
+                try:
                     if not is_data[ffile]:
-                        if exten != '':
-                            extenstr = '[{}]'.format(exten)
-                        else:
-                            extenstr = ''
                         if cmd == 'multiframe':
                             ds9_cmd = "{} {}{}".format(cmd, ffile, extenstr)
                         else:
@@ -876,6 +887,9 @@ class QADImView(object):
                         except ValueError:
                             log.debug("Loading from tempfile")
                             status = self._load_from_tempfile(cmd, ffile, data)
+
+                    log.info(f'Loaded frame {frame_to_load}: '
+                             f'{os.path.basename(ffile)}{extenstr}')
 
                 except ValueError as err:
                     msg = str(err)
@@ -1270,6 +1284,8 @@ class QADImView(object):
             at selected image location.
         """
         if not self.HAS_PIPECAL:
+            log.warning('Photometry is not available. The '
+                        'sofia_redux.calibration package is required.')
             return
 
         # reset photometry table if necessary
@@ -1287,15 +1303,33 @@ class QADImView(object):
         else:
             allframes = False
             frames = [self.run('frame', via='get')]
+        if self.run('wcs align', via='get') == 'yes':
+            cs = 'wcs'
+        else:
+            cs = 'image'
+
+        # log input values
+        log.info(f'Photometry at x={ctr1}, y={ctr2} (in {cs} coordinates)')
+        log.info('Parameters:')
+        log.info(f"    Model: {param['model']}")
+        log.info(f"    Window: {param['window']} {param['window_units']}")
+        log.info(f"    Starting FWHM: {param['fwhm']} {param['fwhm_units']}")
+        log.info(f"    Aperture: {param['psf_radius']} "
+                 f"{param['aperture_units']}")
+        log.info(f"    Background: radius {param['bg_inner']} "
+                 f"{param['aperture_units']}, width {param['bg_width']} "
+                 f"{param['aperture_units']}")
+        log.info('')
 
         for frame in frames:
             if allframes:
-                log.info('Frame ' + frame)
+                log.debug('Selecting frame ' + frame)
                 self.run('frame ' + frame)
 
             try:
                 results = self.retrieve_data(ctr1, ctr2)
-            except (ValueError, TypeError):
+            except (ValueError, TypeError) as err:
+                log.debug(f'Error in retrieving Frame {frame} data: {err}')
                 continue
             ps = results['pix_scale']
             data = results['data']
@@ -1306,6 +1340,9 @@ class QADImView(object):
             ystart = results['ystart']
             xctr = results['xctr']
             yctr = results['yctr']
+            filename = results['filename']
+
+            log.info(f'Frame {frame}: {filename}')
 
             # check for reasonable data
             if np.sum(np.isfinite(data)) < 3:
@@ -1525,7 +1562,7 @@ class QADImView(object):
         self.ptable.sort(['Frame', 'Peak'])
         print_str = '\n'.join(
             self.ptable.pformat(max_lines=-1, max_width=-1))
-        log.info('\n{}\n'.format(print_str))
+        log.info(f'\nResults:\n{print_str}\n')
 
     def pix2pix(self, ctr1, ctr2):
         """
@@ -1586,7 +1623,6 @@ class QADImView(object):
         for frame in frames:
             log.info('')
             if allframes:
-                log.info('Frame ' + frame)
                 self.run('frame ' + frame)
                 # check for loaded data
                 if not self._loaded_data():
@@ -1595,7 +1631,7 @@ class QADImView(object):
             try:
                 results = self.retrieve_data(ctr1, ctr2, photometry=False)
             except (ValueError, TypeError) as err:
-                log.debug(f'Error in retrieving data: {err}')
+                log.debug(f'Error in retrieving Frame {frame} data: {err}')
                 continue
             fulldata = results['fulldata']
             data = results['data']
@@ -1603,8 +1639,13 @@ class QADImView(object):
             hwcs = results['wcs']
             xctr = results['xctr']
             yctr = results['yctr']
+            filename = results['filename']
 
-            log.info(f'Pixel comparison at: {ctr1},{ctr2}')
+            # get file and ext name if possible
+            log.info(f'Frame {frame}: {filename}')
+
+            log.info(f'Pixel comparison at x={ctr1}, y={ctr2} '
+                     f'(in {cs} coordinates)')
 
             # get data from region mask or window
             mask = self._region_mask(cs, all_regions, xctr, yctr, hwcs)
@@ -1808,7 +1849,7 @@ class QADImView(object):
         try:
             with set_log_level('ERROR'):
                 hwcs = wcs.WCS(hdr)
-            psd2 = wcs.utils.proj_plane_pixel_scales(hwcs.celestial)
+                psd2 = wcs.utils.proj_plane_pixel_scales(hwcs.celestial)
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 ps = np.mean(psd2) * 3600
@@ -1822,13 +1863,20 @@ class QADImView(object):
             hwcs = None
             ps = 1.0
 
+        # get file/ext name if possible
+        filename = hdr.get('FILENAME', '')
+        extname = hdr.get('EXTNAME', None)
+        if extname is not None:
+            filename = f'{filename} [{extname}]'
+
         # convert RA/Dec to pix if necessary
         if cs == 'wcs' and hwcs is not None:
             if hwcs.naxis == 2:
                 ctr = [[ctr1, ctr2]]
             else:
                 ctr = [[ctr1, ctr2, 1]]
-            pixctr = hwcs.wcs_world2pix(ctr, 1)
+            with set_log_level('ERROR'):
+                pixctr = hwcs.wcs_world2pix(ctr, 1)
 
             # occasionally, values get returned as pixels instead
             # of RA/Dec - eg. when there is an empty frame around
@@ -1909,7 +1957,8 @@ class QADImView(object):
                    'yctr': yctr,
                    'data': data,
                    'fulldata': fulldata,
-                   'header': hdr}
+                   'header': hdr,
+                   'filename': filename}
 
         return results
 

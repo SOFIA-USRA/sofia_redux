@@ -12,6 +12,13 @@ class ReductionVersion(ABC):
     revision = ''
 
     def __init__(self):
+        """
+        Initialize the reduction version information.
+
+        The reduction version is used to store a few directory paths
+        including the reduction work path, retrieve the reduction version
+        information and add this information to headers.
+        """
         self.home = '.'
         self.work_path = '.'
 
@@ -39,7 +46,7 @@ class ReductionVersion(ABC):
 
         Returns
         -------
-        str
+        version : str
         """
         if cls.revision is None:
             return cls.version

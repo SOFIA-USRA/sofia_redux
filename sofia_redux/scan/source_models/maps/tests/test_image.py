@@ -159,12 +159,14 @@ def test_crop(ascending):
     assert 'Received None' in str(err.value)
 
     img.crop(ranges)
-    assert np.allclose(img.data, [[65, 66], [75, 76]])
-    assert img.history == ['set new image 2x2 2D float64']
+    assert np.allclose(img.data, [[65, 66, 67],
+                                  [75, 76, 77],
+                                  [85, 86, 87]])
+    assert img.history == ['set new image 3x3 2D float64']
 
     no_change = np.array([[0, 2], [0, 2]])
     img.crop(no_change)
-    assert img.history == ['set new image 2x2 2D float64']  # No change
+    assert img.history == ['set new image 3x3 2D float64']  # No change
 
 
 def test_auto_crop(ascending):
@@ -233,15 +235,15 @@ def test_get_asymmetry(ones):
     img.data = data
     angle = 0 * units.Unit('degree')
     asymmetry, rms = img.get_asymmetry(grid, center_index, angle, radial_range)
-    assert np.isclose(asymmetry,  0.361803, atol=1e-6)
+    assert np.isclose(asymmetry, 0.361803, atol=1e-6)
     assert np.isclose(rms, 0.625)
     center_index = Coordinate2D([6.0, 5.0])
     asymmetry, rms = img.get_asymmetry(grid, center_index, angle, radial_range)
-    assert np.isclose(asymmetry,  -0.111803, atol=1e-6)
+    assert np.isclose(asymmetry, -0.111803, atol=1e-6)
     assert np.isclose(rms, 0.625)
     angle = 45 * units.Unit('degree')
     asymmetry, rms = img.get_asymmetry(grid, center_index, angle, radial_range)
-    assert np.isclose(asymmetry,  -0.331974, atol=1e-6)
+    assert np.isclose(asymmetry, -0.331974, atol=1e-6)
     assert np.isclose(rms, 0.618718, atol=1e-6)
     img.clear()  # zero data
     asymmetry, rms = img.get_asymmetry(grid, center_index, angle, radial_range)

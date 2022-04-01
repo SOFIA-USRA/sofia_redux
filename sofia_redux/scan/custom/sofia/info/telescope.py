@@ -15,25 +15,36 @@ from sofia_redux.scan.utilities.utils import (
 __all__ = ['SofiaTelescopeInfo']
 
 
+degree = units.Unit('degree')
+um = units.Unit('um')
+hourangle = units.Unit('hourangle')
+
+
 class SofiaTelescopeInfo(TelescopeInfo):
 
     telescope_diameter = 2.5 * units.Unit('m')
 
     def __init__(self):
+        """
+        Initialize the SOFIA telescope information.
+
+        Contains information on the SOFIA specific telescope parameters such as
+        zenith angle, boresight coordinates, and tracking status.
+        """
         super().__init__()
         self.telescope = "SOFIA 2.5m"
         self.tel_config = None
-        self.vpa = np.nan * units.Unit('deg')
+        self.vpa = np.nan * degree
         self.last_rewind = None
-        self.focus_t = BracketedValues(np.nan * units.Unit('um'),
-                                       np.nan * units.Unit('um'))
-        self.rel_elevation = np.nan * units.Unit('deg')
-        self.cross_elevation = np.nan * units.Unit('deg')
-        self.line_of_sight_angle = np.nan * units.Unit('deg')
+        self.focus_t = BracketedValues(np.nan * um,
+                                       np.nan * um)
+        self.rel_elevation = np.nan * degree
+        self.cross_elevation = np.nan * degree
+        self.line_of_sight_angle = np.nan * degree
         self.tascu_status = None
         self.fbc_status = None
-        self.zenith_angle = BracketedValues(np.nan * units.Unit('um'),
-                                            np.nan * units.Unit('um'))
+        self.zenith_angle = BracketedValues(np.nan * degree,
+                                            np.nan * degree)
         self.tracking_mode = None
         self.has_tracking_error = False
         self.is_tracking = False
@@ -45,25 +56,53 @@ class SofiaTelescopeInfo(TelescopeInfo):
         self.requested_equatorial = self.boresight_equatorial.copy()
 
     def apply_configuration(self):
+        """
+        Update telescope information with FITS header information.
+
+        Updates the information by taking the following keywords from the
+        FITS header::
+
+          TELESCOP - The observatory name (str)
+          TELVPA - The boresight position angle (degrees)
+          LASTREW - The UTC time of last telescope rewind (str)
+          FOCUS_ST - The focus T value at start (um)
+          FOCUS_EN - The focus T value at end (um)
+          TELEL - The telescope elevation in cavity (degrees)
+          TELXEL - The telescope cross elevation in cavity (degrees)
+          TELLOS - The telescope line-of-sight angle in cavity (degrees)
+          TSC-STAT - The TASCU system status at end (str)
+          FBC-STAT - The flexible body compensation system status at end (str)
+          ZA_START - The zenith angle at start (degrees)
+          ZA_END - The zenith angle at end (degrees)
+          TRACMODE - The SOFIA tracking mode (str)
+          TRACERR - Whether there was a tracking error in the scan (bool)
+          TELCONF - The telescope configuration (str)
+          EQUINOX - The coordinate epoch (year)
+          TELEQUI - The boresight epoch (year)
+          TELRA - The boresight RA (hourangle)
+          TELDEC - The boresight DEC (degrees)
+          OBSRA - The requested RA (hourangle)
+          OBSDEC - The requested DEC (degrees)
+
+        Returns
+        -------
+        None
+        """
         options = self.options
         if options is None:
             return
-
-        deg = units.Unit('deg')
-        um = units.Unit('um')
-
         self.telescope = options.get_string("TELESCOP", default=self.telescope)
-        self.vpa = options.get_float("TELVPA") * deg
+        self.vpa = options.get_float("TELVPA") * degree
         self.last_rewind = options.get_string("LASTREW")
         self.focus_t.start = options.get_float("FOCUS_ST") * um
         self.focus_t.end = options.get_float("FOCUS_EN") * um
-        self.rel_elevation = options.get_float("TELEL") * deg
-        self.cross_elevation = options.get_float("TELXEL") * deg
-        self.line_of_sight_angle = options.get_float("TELLOS") * deg
+        self.rel_elevation = options.get_float("TELEL") * degree
+        self.cross_elevation = options.get_float("TELXEL") * degree
+        self.line_of_sight_angle = options.get_float("TELLOS") * degree
         self.tascu_status = options.get_string("TSC-STAT")
         self.fbc_status = options.get_string("FBC-STAT")
-        self.zenith_angle.start = options.get_float("ZA_START") * deg
-        self.zenith_angle.end = options.get_float("ZA_END") * deg
+        self.zenith_angle.start = options.get_float("ZA_START") * degree
+        self.zenith_angle.end = options.get_float("ZA_END") * degree
         self.tracking_mode = options.get_string("TRACMODE")
         self.has_tracking_error = options.get_bool("TRACERR")
         self.is_tracking = str(self.tracking_mode).strip().upper() != 'OFF'
@@ -119,8 +158,7 @@ class SofiaTelescopeInfo(TelescopeInfo):
         -------
         None
         """
-        header['TELESCOP'] = self.get_telescope_name()
-        header.comments['TELESCOP'] = 'Telescope name.'
+        header['TELESCOP'] = self.get_telescope_name(), 'Telescope name.'
 
     def edit_header(self, header):
         """
@@ -136,27 +174,33 @@ class SofiaTelescopeInfo(TelescopeInfo):
         None
         """
         if self.boresight_equatorial is not None:
-            telra = self.boresight_equatorial.ra.to(
-                units.Unit('hourangle')).value
-            teldec = self.boresight_equatorial.dec.to(units.Unit('deg')).value
+            telra = self.boresight_equatorial.ra.to(hourangle).value
+            teldec = self.boresight_equatorial.dec.to(degree).value
+            tel_epoch = self.boresight_equatorial.epoch
         else:
             telra = teldec = np.nan
+            tel_epoch = None
 
         if self.requested_equatorial is not None:
-            obsra = self.requested_equatorial.ra.to(units.Unit('hourangle'))
-            obsdec = self.requested_equatorial.dec.to(units.Unit('deg'))
+            obsra = self.requested_equatorial.ra.to(hourangle)
+            obsdec = self.requested_equatorial.dec.to(degree)
         else:
-            obsra = np.nan * units.Unit('hourangle')
-            obsdec = np.nan * units.Unit('degree')
+            obsra = np.nan * hourangle
+            obsdec = np.nan * degree
 
         info = [
             ('COMMENT', "<------ SOFIA Telescope Data ------>"),
             ('TELESCOP', self.telescope, 'Observatory name.'),
             ('TELCONF', self.tel_config, 'Telescope configuration.'),
-            ('TELRA', telra, '(hour) Boresight RA.'),
-            ('TELDEC', teldec, '(deg) Boresight DEC.'),
-            ('TELEQUI', str(self.boresight_equatorial.epoch),
-             'Boresight epoch.'),
+            ('TELRA', to_header_float(telra, 'hourangle'),
+             '(hour) Boresight RA.'),
+            ('TELDEC', to_header_float(teldec, 'degree'),
+             '(deg) Boresight DEC.')]
+
+        if tel_epoch is not None:
+            info.append(('TELEQUI', str(tel_epoch), 'Boresight epoch.'))
+
+        info.extend([
             ('TELVPA', to_header_float(self.vpa, 'deg'),
              '(deg) Boresight position angle.'),
             ('LASTREW', self.last_rewind,
@@ -183,7 +227,7 @@ class SofiaTelescopeInfo(TelescopeInfo):
              '(deg) Zenith angle at start.'),
             ('ZA_END', to_header_float(self.zenith_angle.end, 'deg'),
              '(deg) Zenith angle at end.')
-        ]
+        ])
 
         if self.tracking_mode is not None:
             info.extend([

@@ -14,6 +14,13 @@ __all__ = ['HorizontalFrames']
 class HorizontalFrames(Frames):
 
     def __init__(self):
+        """
+        Initialize horizontal frames.
+
+        The horizontal frames extend standard equatorial based frames to
+        include horizontal coordinates, offset from the observed source,
+        and the zenith opacity (tau).
+        """
         super().__init__()
         self.horizontal = None
         self.horizontal_offset = None
@@ -62,6 +69,8 @@ class HorizontalFrames(Frames):
         -------
         GeodeticCoordinates
         """
+        if self.astrometry is None:
+            return None
         return self.astrometry.site
 
     def validate(self):
@@ -111,7 +120,8 @@ class HorizontalFrames(Frames):
             equatorial = self.equatorial.empty_copy()
             if equatorial.epoch.singular:
                 equatorial.epoch = self.equatorial.epoch.copy()
-            else:
+            else:  # pragma: no cover
+                # not commonly used
                 equatorial.epoch = self.equatorial.epoch[indices].copy()
 
         shaped = len(position.shape) > 1
@@ -160,24 +170,26 @@ class HorizontalFrames(Frames):
         """
         if indices is None:
             indices = slice(None)
+
+        position = self.get_native_xy(offsets, indices=indices)
         if horizontal is None:
             horizontal = Coordinate2D.get_instance('horizontal')
 
-        if not horizontal.is_singular:
-            x = horizontal.x[indices]
-            y = horizontal.y[indices]
-        else:
-            x = horizontal.x
-            y = horizontal.y
-
-        position = self.get_native_xy(offsets, indices=indices)
         shaped = len(position.shape) > 1
-        cos_lat = self.astrometry.horizontal.cos_lat
-        if shaped:
-            x, y = x[..., None], y[..., None]
+        px, py = position.x, position.y
+        cos_lat = self.astrometry.equatorial.cos_lat
+        if self.is_singular:
+            hx = self.horizontal.x
+            hy = self.horizontal.y
+        else:
+            hx = self.horizontal.x[indices]
+            hy = self.horizontal.y[indices]
 
-        horizontal.set_native_longitude(x + (position.x / cos_lat))
-        horizontal.set_native_latitude(y + position.y)
+        if shaped:
+            hx, hy = hx[..., None], hy[..., None]
+
+        horizontal.set_native_longitude(hx + (px / cos_lat))
+        horizontal.set_native_latitude(hy + py)
         return horizontal
 
     def get_horizontal_offset(self, position, indices=None, offset=None):
@@ -413,16 +425,21 @@ class HorizontalFrames(Frames):
         angle : astropy.units.Quantity (numpy.ndarray)
             An array of angles of size (N,) or (indices.size,).
         """
-        radian = units.Unit('radian')
+        rad = units.Unit('radian')
         if indices is None:
             indices = slice(None)
 
-        if not self.is_singular:
-            result = np.arctan2(
-                self.sin_pa[indices], self.cos_pa[indices]) * radian
+        if self.is_singular:
+            angle = np.arctan2(self.sin_pa, self.cos_pa)
         else:
-            result = np.arctan2(self.sin_pa, self.cos_pa) * radian
-        return result
+            angle = np.arctan2(self.sin_pa[indices], self.cos_pa[indices])
+
+        if isinstance(angle, units.Quantity):
+            angle = angle.to(rad)
+        else:
+            angle *= rad
+
+        return angle
 
     def calculate_horizontal(self):
         """

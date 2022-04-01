@@ -16,6 +16,36 @@ __all__ = ['GalacticCoordinates']
 class GalacticCoordinates(CelestialCoordinates):
 
     def __init__(self, coordinates=None, unit='degree', copy=True):
+        """
+        Initialize galactic coordinates.
+
+        Galactic coordinates use spherical coordinates in a celestial
+        coordinate system with the Sun at the center with the primary
+        direction aligned to the approximate center of the Milky Way with
+        the fundamental plane parallel to an approximation of the galactic
+        plane slightly offset to the north.  Coordinates are positive toward
+        the north and east in the fundamental plane.
+
+        The galactic longitude is the angular distance of an object eastward
+        along the galactic equator from the galactic center.  The galactic
+        latitude is the angle of an object northward of the galactic equator as
+        viewed from Earth.
+
+        Parameters
+        ----------
+        coordinates : list or tuple or array-like or units.Quantity, optional
+            The coordinates used to populate the object during initialization.
+            The first (0) value or index should represent longitudinal
+            coordinates, and the second should represent latitude.
+        unit : units.Unit or str, optional
+            The angular unit for the spherical coordinates.  The default is
+            'degree'.
+        copy : bool, optional
+            Whether to explicitly perform a copy operation on the input
+            coordinates when storing them into these coordinates.  Note that it
+            is extremely unlikely for the original coordinates to be passed in
+            as a reference due to the significant checks performed on them.
+        """
         super().__init__(coordinates=coordinates, unit=unit, copy=copy)
 
     def setup_coordinate_system(self):

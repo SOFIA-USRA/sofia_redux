@@ -14,14 +14,17 @@ from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
     EquatorialCoordinates
 from sofia_redux.scan.utilities import utils
 
-__all__ = ['SofiaGyroDriftsInfo']
+__all__ = ['SofiaGyroDriftsInfo', 'GyroDrift']
 
 
 class SofiaGyroDriftsInfo(InfoBase):
 
     def __init__(self):
         """
-        Initialize the GyroDrift object.
+        Initialize the SOFIA gyro drift information.
+
+        Contains information on the SOFIA gyro drifts and provides methods
+        to correct integrations/scans.
         """
         super().__init__()
         self.drifts = None
@@ -97,7 +100,7 @@ class SofiaGyroDriftsInfo(InfoBase):
             if drift.valid:
                 self.drifts.append(drift)
                 log.debug(f"drift {drift.index}: {drift.length.to('arcsec')}")
-            else:
+            else:  # pragma: no cover
                 break
             drift_index += 1
 
@@ -159,6 +162,26 @@ class SofiaGyroDriftsInfo(InfoBase):
             offsets[i, 0] = drift.delta.x
             offsets[i, 1] = drift.delta.y
         return offsets
+
+    def get_table_entry(self, name):
+        """
+        Return a parameter value for the given name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the parameter to retrieve.
+
+        Returns
+        -------
+        value
+        """
+        if name == 'max':
+            return self.get_max().to('arcsec')
+        elif name == 'rms':
+            return self.get_rms().to('arcsec')
+        else:
+            return None
 
     def validate_time_range(self, scan):
         """
@@ -222,32 +245,15 @@ class SofiaGyroDriftsInfo(InfoBase):
         integration.frames.horizontal_offset.add(offset)
         integration.frames.horizontal.add_offset(offset)
 
-    def get_table_entry(self, name):
-        """
-        Return a parameter value for the given name.
-
-        Parameters
-        ----------
-        name : str
-            The name of the parameter to retrieve.
-
-        Returns
-        -------
-        value
-        """
-        if name == 'max':
-            return self.get_max().to('arcsec')
-        elif name == 'rms':
-            return self.get_rms().to('arcsec')
-        else:
-            return None
-
 
 class GyroDrift(ABC):
 
     def __init__(self, header, index):
         """
         Initializes a single drift.
+
+        Contains information on a single drift consisting of a spatial
+        delta between one time and another.
 
         Parameters
         ----------

@@ -19,6 +19,20 @@ __all__ = ['SingleColorChannelData']
 class SingleColorChannelData(ColorArrangementData):
 
     def __init__(self, channels=None):
+        """
+        Initialize single color channel data.
+
+        The single color channel data defines each channel as a single color
+        pixel on a camera detector arranged by row and column, with a focal
+        plane position.  Each pixel may defined as having no relation to other
+        pixels on the same detector (independent=True), or that they do share
+        some commonality (independent=False) such as overlapping sensitivities
+        to the source response.
+
+        Parameters
+        ----------
+        channels
+        """
         super().__init__(channels=channels)
         self.row = None
         self.col = None
@@ -27,6 +41,31 @@ class SingleColorChannelData(ColorArrangementData):
 
     @property
     def default_field_types(self):
+        """
+        Return the default values for the channel attributes.
+
+        These are used during the initial creation of the data arrays to
+        populate each of the attribute arrays with a default value.  The field
+        types are returned as a dictionary {attribute (str): value}.  If a
+        simple initialized value is supplied, that attribute of the data
+        will default to a numpy array filled with that value.  Other options
+        are::
+
+          - (value, shape): will create arrays of shape (n, shape,) filled with
+            value.
+          - type or class: will create empty arrays of the given type
+
+        Special handling are provided for `units.Quantity`, `units.Unit` and
+        the :class:`sofia_redux.scan.coordinate_systems.coordinate.Coordinate`
+        classes.  For the coordinate type classes, a field value also may be
+        provided as (class, value, shape) to create filled coordinates of shape
+        (n, shape,) with the value.  Here, n is the size of the data.
+
+        Returns
+        -------
+        defaults : dict
+            A dictionary of the form {name (str): value}.
+        """
         result = super().default_field_types
         result.update({'position': (Coordinate2D, 'arcsec'),
                        'independent': True,
@@ -215,7 +254,7 @@ class SingleColorChannelData(ColorArrangementData):
         return self.get_geometric_overlap_indices(radius)
 
     @abstractmethod
-    def geometric_rows(self):
+    def geometric_rows(self):  # pragma: no cover
         """
         Return the number of geometric rows in the detector array.
 
@@ -226,7 +265,7 @@ class SingleColorChannelData(ColorArrangementData):
         pass
 
     @abstractmethod
-    def geometric_cols(self):
+    def geometric_cols(self):  # pragma: no cover
         """
         Return the number of geometric columns in the detector array.
 
@@ -262,6 +301,24 @@ class SingleColorChannelData(ColorArrangementData):
         return self.find_row_col_overlap_indices(radius, rows, cols)
 
     def find_row_col_overlap_indices(self, radius, rows, cols):
+        """
+        Find which pixels overlap with others within a given radius.
+
+        Parameters
+        ----------
+        radius : units.Quantity
+            The radius defining the maximum overlapping radius.  Should be
+            provided in the same units as the SI pixel size of the parent
+            channels.
+        rows : numpy.ndarray (int or float)
+            The row indices of the channels for which to determine overlaps.
+        cols : numpy.ndarray (int or float)
+            The column indices of the channels for which to determine overlaps.
+
+        Returns
+        -------
+        overlaps : csr_matrix
+        """
         pixel_sizes = self.channels.get_si_pixel_size()
         x = cols * pixel_sizes.x.value
         y = rows * pixel_sizes.y.value

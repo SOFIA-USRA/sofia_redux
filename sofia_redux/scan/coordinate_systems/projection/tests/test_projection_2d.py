@@ -25,7 +25,7 @@ def test_reference():
 def test_equal():
     p = DefaultProjection2D()
     assert p == p
-    assert p is not None
+    assert p != 1
     p2 = p.copy()
     assert p == p2
     p2.reference = Coordinate2D([1, 2])

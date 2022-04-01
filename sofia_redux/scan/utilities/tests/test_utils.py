@@ -1,13 +1,15 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from astropy import units
-from astropy.time import Time
+from astropy.time import Time, TimeDelta
 from astropy.coordinates import FK4, FK5, SkyCoord
 from astropy.io import fits
 from astropy.modeling.functional_models import Gaussian2D
 from astropy.stats import gaussian_sigma_to_fwhm
 from copy import deepcopy
 import numpy as np
+import os
+from pathlib import Path
 import pytest
 
 from sofia_redux.scan.utilities.range import Range
@@ -881,3 +883,28 @@ def test_get_comment_unit():
     assert utils.get_comment_unit(None) is None
     assert utils.get_comment_unit('a bad format (degree') is None
     assert utils.get_comment_unit('this is not (a unit)') is None
+
+
+def test_safe_sidereal_time():
+    from astropy.utils.iers import iers
+    from astropy.utils.data import get_pkg_data_filename
+    ame = 30.0
+    t = Time.now() + TimeDelta(10, format='jd') * np.arange(2)
+    iers_a_file_1 = get_pkg_data_filename(
+        os.path.join('data', 'finals2000A-2016-02-30-test'),
+        package='astropy.utils.iers.tests')
+    iers_a_url_1 = Path(iers_a_file_1).as_uri()
+
+    # offline, data aged out error
+    with iers.conf.set_temp('iers_auto_url', iers_a_url_1):
+        with iers.conf.set_temp('iers_auto_url_mirror', iers_a_url_1):
+            with iers.conf.set_temp('auto_max_age', ame):
+                lst_with_error = utils.safe_sidereal_time(
+                    t, 'mean', longitude=45)
+
+    t = Time.now() + TimeDelta(10, format='jd') * np.arange(2)
+    lst_accurate = utils.safe_sidereal_time(t, 'mean', longitude=45)
+
+    assert not lst_accurate[0] == lst_with_error[0]
+    assert np.allclose(lst_accurate, lst_with_error,
+                       atol=10 * units.Unit('arcsec'))

@@ -12,6 +12,14 @@ __all__ = ['SofiaIntegration']
 class SofiaIntegration(Integration):
 
     def __init__(self, scan=None):
+        """
+        Initialize a SOFIA integration.
+
+        Parameters
+        ----------
+        scan : sofia_redux.scan.custom.sofia.scan.scan.SofiaScan, optional
+            The scan to which this integration belongs.
+        """
         super().__init__(scan=scan)
 
     def set_tau(self, spec=None, value=None):
@@ -69,7 +77,11 @@ class SofiaIntegration(Integration):
         log.debug(f"Applying ATRAN model atmospheric correction: {c:.3f}")
 
         tau = -np.log(model.reference_transmission * c)
-        tau *= np.sin(elevation).value
+        tau *= np.sin(elevation)
+
+        if isinstance(tau, units.Quantity):
+            tau = tau.value
+
         self.set_tau_value(tau)
 
     def set_pwv_model_tau(self):
@@ -80,8 +92,8 @@ class SofiaIntegration(Integration):
         -------
         None
         """
-        pwv = self.get_model_pwv().to('micrometer').value
-        log.debug(f"Using PWV model to correct fluxes: PWV = {pwv:.1f} um")
+        pwv = self.get_model_pwv().to('micrometer')
+        log.debug(f"Using PWV model to correct fluxes: PWV = {pwv:.1f}")
         self.configuration.parse_key_value('tau.pwv', str(pwv.value))
         self.set_tau(spec='pwv', value=pwv.to('micrometer').value)
 

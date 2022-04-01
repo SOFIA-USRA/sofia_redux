@@ -103,10 +103,10 @@ different filter values or even different sizes cannot be provided.
     :include-source:
 
     import matplotlib.pyplot as plt
-    from skimage.data import page
+    import imageio
     from sofia_redux.toolkit.convolve.filter import sobel
 
-    image = page().astype(float)
+    image = imageio.imread('imageio:page.png')
     fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(10, 6))
     ax[0, 0].imshow(image, cmap='gray')
     ax[0, 0].set_title("Image")

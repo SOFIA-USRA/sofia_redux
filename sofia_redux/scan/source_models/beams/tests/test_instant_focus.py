@@ -117,7 +117,7 @@ def test_derive_from():
     imm2 = 1 / mm ** 2
     assert np.isclose(focus.x, -0.5 * mm)
     assert np.isclose(focus.x_weight, 64 * imm2)
-    assert np.isclose(focus.y, -1/3 * mm)
+    assert np.isclose(focus.y, -1 / 3 * mm)
     assert np.isclose(focus.y_weight, 0.995575 * imm2, atol=1e-6)
     assert np.isclose(focus.z, -0.075 * mm)
     assert np.isclose(focus.z_weight, 0.249990 * imm2, atol=1e-6)
@@ -126,7 +126,7 @@ def test_derive_from():
     focus.derive_from(c, asymmetry=asymmetry, elongation=0.4,
                       elongation_weight=400)
     assert focus.x is None and focus.x_weight is None
-    assert np.isclose(focus.y, -1/3 * mm)
+    assert np.isclose(focus.y, -1 / 3 * mm)
     assert np.isclose(focus.y_weight, 0.995575 * imm2, atol=1e-6)
     assert np.isclose(focus.z, -0.075 * mm)
     assert np.isclose(focus.z_weight, 0.249990 * imm2, atol=1e-6)
@@ -147,3 +147,10 @@ def test_derive_from():
     asymmetry.x = None
     focus.derive_from(c, asymmetry=asymmetry)
     assert focus.x is None and focus.y is None and focus.z is None
+
+    del c['focus.xcoeff']
+    asymmetry.y = None
+    focus.derive_from(c, asymmetry=asymmetry, elongation=0.4,
+                      elongation_weight=100.0)
+    assert focus.x is None and focus.y is None
+    assert np.isclose(focus.z, -0.075 * mm)

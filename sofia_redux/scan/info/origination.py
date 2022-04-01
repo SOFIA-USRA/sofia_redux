@@ -8,6 +8,14 @@ __all__ = ['OriginationInfo']
 class OriginationInfo(InfoBase):
 
     def __init__(self):
+        """
+        Initialize the origination information.
+
+        Origination information consists of data such as the organization to
+        which the data belongs, the observer responsible for the data,
+        who or what created the data, any operators, the original filename and
+        description.
+        """
         super().__init__()
         self.organization = None
         self.observer = None

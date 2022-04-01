@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 
 from sofia_redux.scan.utilities.class_provider \
     import get_simulated_source_class
+from sofia_redux.scan.coordinate_systems.horizontal_coordinates import \
+    HorizontalCoordinates
 
 __all__ = ['SimulatedSource']
 
@@ -11,36 +13,31 @@ __all__ = ['SimulatedSource']
 class SimulatedSource(ABC):
 
     def __init__(self):
+        """
+        Initialize a simulated source.
+
+        This is an abstract class base for simulating source data given input
+        positions.  Currently equatorial offsets and horizontal coordinates
+        may be converted to timestream data.
+        """
         self.name = 'base'
 
-    @abstractmethod
-    def apply_to_offsets(self, offsets):
-        """
-        Apply the model to a set of offset coordinates.
-
-        Parameters
-        ----------
-        offsets : Coordinate2D
-
-        Returns
-        -------
-        generated_model : numpy.ndarray
-        """
-        pass
-
-    def __call__(self, offsets):
+    def __call__(self, coordinates):
         """
         Generate a source model for the applied offsets.
 
         Parameters
         ----------
-        offsets : Coordinate2D
+        coordinates : Coordinate2D
 
         Returns
         -------
         generated_model : numpy.ndarray
         """
-        return self.apply_to_offsets(offsets)
+        if isinstance(coordinates, HorizontalCoordinates):
+            return self.apply_to_horizontal(coordinates)
+        else:
+            return self.apply_to_offsets(coordinates)
 
     @staticmethod
     def get_source_model(name, **kwargs):
@@ -60,3 +57,33 @@ class SimulatedSource(ABC):
         """
         source_class = get_simulated_source_class(name)
         return source_class(**kwargs)
+
+    @abstractmethod
+    def apply_to_offsets(self, offsets):  # pragma: no cover
+        """
+        Apply the model to a set of offset coordinates.
+
+        Parameters
+        ----------
+        offsets : Coordinate2D
+
+        Returns
+        -------
+        generated_model : numpy.ndarray
+        """
+        pass
+
+    @abstractmethod
+    def apply_to_horizontal(self, offsets):  # pragma: no cover
+        """
+        Apply the model to a set of offset coordinates.
+
+        Parameters
+        ----------
+        offsets : HorizontalCoordinates
+
+        Returns
+        -------
+        generated_model : numpy.ndarray
+        """
+        pass

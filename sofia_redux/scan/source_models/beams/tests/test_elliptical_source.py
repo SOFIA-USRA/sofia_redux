@@ -85,7 +85,7 @@ def test_init(gaussian_source):
     assert g.angle_weight is None
 
     g = EllipticalSource(gaussian_model=gaussian_source)
-    assert np.isclose(g.elongation, 1/3)
+    assert np.isclose(g.elongation, 1 / 3)
     assert np.isclose(g.fwhm, 7.07106781 * arcsec, atol=1e-6)
     assert g.fwhm == g.x_fwhm
     assert g.y_fwhm == g.y_fwhm
@@ -152,13 +152,15 @@ def test_elongation_rms(elliptical_source):
     assert e.elongation_rms == 0
     e.elongation_weight = 0.25
     assert e.elongation_rms == 2
+    e.elongation_weight = None
+    assert e.elongation_rms == 0
 
 
 def test_set_elongation(elliptical_source):
     e = elliptical_source.copy()
-    assert np.isclose(e.elongation, 1/3)
+    assert np.isclose(e.elongation, 1 / 3)
     e.set_elongation()
-    assert np.isclose(e.elongation, 1/3)
+    assert np.isclose(e.elongation, 1 / 3)
     assert e.elongation_weight == np.inf
 
     e.set_xy_fwhm(0 * arcsec, 0 * arcsec)
@@ -259,7 +261,7 @@ def test_pointing_info(filtered_map2d, elliptical_source):
 def test_find_source_extent(filtered_map2d, grid_elliptical_source):
     image = filtered_map2d.copy()
     e = grid_elliptical_source.copy()
-    assert np.isclose(e.elongation, 1/3)
+    assert np.isclose(e.elongation, 1 / 3)
     e.find_source_extent(image)
     assert np.isclose(e.elongation, 0.666680, atol=1e-6)
     assert np.isclose(e.elongation_weight, 111.5182710, atol=1e-6)

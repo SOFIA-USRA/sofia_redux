@@ -25,7 +25,8 @@ Display Classes
 .. toctree::
   :maxdepth: 2
 
-  artists.rst
+  gallery.rst
+  drawings.rst
   plotting.rst
   signals.rst
 
@@ -48,7 +49,9 @@ Support Methods
 
 Display Module
 ~~~~~~~~~~~~~~
-.. automodapi:: sofia_redux.visualization.display.artists
+.. automodapi:: sofia_redux.visualization.display.gallery
+   :headings: ^"
+.. automodapi:: sofia_redux.visualization.display.drawing
    :headings: ^"
 .. automodapi:: sofia_redux.visualization.display.blitting
    :headings: ^"

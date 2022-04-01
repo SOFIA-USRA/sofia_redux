@@ -1,7 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from astropy import log, units
-from astropy.stats import gaussian_fwhm_to_sigma
 import numpy as np
 
 from sofia_redux.scan.source_models.astro_data_2d import AstroData2D
@@ -24,13 +23,69 @@ __all__ = ['AstroIntensityMap']
 class AstroIntensityMap(AstroData2D):
 
     def __init__(self, info, reduction=None):
+        """
+        Initialize an astronomical intensity map.
+
+        The astronomical intensity map represents the source as an
+        :class:`Observation2D` map containing data, noise, and exposure values.
+        It also contains a base image containing the results of the previous
+        reduction iteration in order to calculate gain and coupling increments.
+
+        Parameters
+        ----------
+        info : sofia_redux.scan.info.info.Info
+            The Info object which should belong to this source model.
+        reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
+            The reduction for which this source model should be applied.
+        """
         self.map = Observation2D()
         self.base = None  # referenced, not copied
         super().__init__(info, reduction=reduction)
         self.create_map()
 
+    def copy(self, with_contents=True):
+        """
+        Return a copy of the source model.
+
+        Parameters
+        ----------
+        with_contents : bool, optional
+            If `True`, return a true copy of the map.  Otherwise, just return
+            a map with basic metadata.
+
+        Returns
+        -------
+        AstroIntensityMap
+        """
+        new = super().copy(with_contents=with_contents)
+        if self.grid is not None and isinstance(new, AstroIntensityMap):
+            new.map.set_grid(self.grid)
+        return new
+
+    @property
+    def referenced_attributes(self):
+        """
+        Return attributes that should be referenced during a copy.
+
+        Returns
+        -------
+        set (str)
+        """
+        attributes = super().referenced_attributes
+        attributes.add('base')
+        return attributes
+
     @property
     def flagspace(self):
+        """
+        Return the flagspace associated with the underlying map observation.
+
+        Returns
+        -------
+        sofia_redux.scan.flags.flags.Flag
+        """
+        if self.map is None:
+            return super().flagspace
         return self.map.flagspace
 
     @property
@@ -62,28 +117,22 @@ class AstroIntensityMap(AstroData2D):
         -------
         None
         """
+        if self.map is None:
+            return
         self.map.shape = new_shape
-
-    @property
-    def referenced_attributes(self):
-        """
-        Return attributes that should be referenced during a copy.
-
-        Returns
-        -------
-        set (str)
-        """
-        attributes = super().referenced_attributes
-        attributes.add('base')
-        return attributes
 
     def set_info(self, info):
         """
-        Set the channels for the source. (setInstrument)
+        Set the Info object for the source model.
+
+        This sets the provided `info` as the primary Info object containing
+        the configuration and reduction information for the source model.
+        The source model will also take ownership of the `info` and set
+        various parameters from the contents.
 
         Parameters
         ----------
-        info : Info
+        info : sofia_redux.info.info.Info
 
         Returns
         -------
@@ -98,21 +147,25 @@ class AstroIntensityMap(AstroData2D):
 
     def get_jansky_unit(self):
         """
-        Return the Jansky unit for the model.
+        Return the Jansky's per unit area.
 
         Returns
         -------
-        astropy.units.Quantity
+        janskys : units.Quantity
         """
-        # astropy.modeling.functional_models.Gaussian2D
         beam = self.map.underlying_beam
         if beam is None:
-            beam_area = 0 * units.Unit('degree2')
+            beam_area = 0 * units.Unit('radian2')
         else:
-            area_factor = 2 * np.pi * (gaussian_fwhm_to_sigma ** 2)
-            beam_area = beam.x_fwhm * beam.y_fwhm * area_factor
-        jy = units.Unit('Jy')
-        return beam_area * self.info.instrument.jansky_per_beam() * jy
+            beam_area = beam.area
+
+        beam_factor = beam_area.to('radian2').value * units.Unit('beam')
+        jy_per_beam = self.info.instrument.jansky_per_beam()
+        jy = (beam_factor * jy_per_beam).to('Jy')
+        # - Old method (wrong units)
+        # jy = units.Unit('Jy')
+        # return beam_area * self.info.instrument.jansky_per_beam() * jy
+        return jy
 
     def add_model_data(self, source_model, weight=1.0):
         """
@@ -145,25 +198,6 @@ class AstroIntensityMap(AstroData2D):
         """
         self.map.merge_accumulate(other.map)
 
-    def copy(self, with_contents=True):
-        """
-        Return a copy of the source model.
-
-        Parameters
-        ----------
-        with_contents : bool, optional
-            If `True`, return a true copy of the map.  Otherwise, just return
-            a map with basic metadata.
-
-        Returns
-        -------
-        AstroIntensityMap
-        """
-        new = super().copy(with_contents=with_contents)
-        if self.grid is not None and isinstance(new, AstroIntensityMap):
-            new.map.set_grid(self.grid)
-        return new
-
     def stand_alone(self):
         """
         Create a stand alone base image.
@@ -187,12 +221,11 @@ class AstroIntensityMap(AstroData2D):
         self.map.set_grid(self.grid)
         self.map.set_validating_flags(~self.mask_flag)
         self.map.add_local_unit(self.get_native_unit())
-        self.map.add_local_unit(self.get_jansky_unit())
-        self.map.add_local_unit(self.get_kelvin_unit())
         self.map.set_display_grid_unit(self.info.instrument.get_size_unit())
         self.map.fits_properties.set_instrument_name(
             self.info.instrument.name)
-        self.map.fits_properties.set_copyright('LOL')
+        self.map.fits_properties.set_copyright(
+            self.map.fits_properties.default_copyright)
         if self.reduction is not None:
             self.map.set_parallel(self.reduction.max_jobs)
             self.map.fits_properties.set_creator_name(
@@ -221,11 +254,14 @@ class AstroIntensityMap(AstroData2D):
         """
         self.create_map()
         super().create_from(scans, assign_scans=assign_scans)
-        properties = self.map.fits_properties
-        properties.set_object_name(self.get_first_scan().source_name)
+        self.map.fits_properties.set_object_name(
+            self.get_first_scan().source_name)
         self.map.set_underlying_beam(self.get_average_resolution())
+        self.map.add_local_unit(self.get_kelvin_unit())
+        self.map.add_local_unit(self.get_jansky_unit())
         log.info("\n".join(self.map.get_info()))
-        self.base = Image2D(x_size=self.map.shape[1], y_size=self.map.shape[0],
+        self.base = Image2D(x_size=self.map.shape[1],
+                            y_size=self.map.shape[0],
                             dtype=float)
 
     def post_process_scan(self, scan):
@@ -277,7 +313,12 @@ class AstroIntensityMap(AstroData2D):
                 distance = self.map.grid.index_to_offset(map_indices).length
                 self.map.discard(distance > radius)
 
-        scan.pointing = self.get_peak_source()  # A GaussianSource or None
+        spline_degree = self.configuration.get_int('pointing.degree',
+                                                   default=3)
+        reduce_degrees = self.configuration.get_bool('pointing.reduce_degrees')
+        # Sets a GaussianSource or None
+        scan.pointing = self.get_peak_source(degree=spline_degree,
+                                             reduce_degrees=reduce_degrees)
 
     def get_peak_index(self):
         """
@@ -313,9 +354,19 @@ class AstroIntensityMap(AstroData2D):
         projector.deproject()
         return projector.coordinates
 
-    def get_peak_source(self):
+    def get_peak_source(self, degree=3, reduce_degrees=False):
         """
         Return the peak source model.
+
+        Parameters
+        ----------
+        degree : int, optional
+            The spline degree used to fit the peak map value.
+        reduce_degrees : bool, optional
+            If `True`, allow the spline fit to reduce the number of degrees
+            in cases where there are not enough points available to perform
+            the spline fit of `degree`.  If `False`, a ValueError will be
+            raised if such a fit fails.
 
         Returns
         -------
@@ -332,18 +383,21 @@ class AstroIntensityMap(AstroData2D):
         if self.configuration.get_bool('pointing.lsq'):
             log.debug("Fitting peak source using LSQ method.")
             try:
-                peak_source.fit_map_least_squares(self.map)
+                peak_source.fit_map_least_squares(
+                    self.map, degree=degree, reduce_degrees=reduce_degrees)
             except Exception as err:
                 log.warning(f"Could not fit using LSQ method: {err}")
                 log.warning("Attempting standard fitting...")
                 try:
-                    peak_source.fit_map(self.map)
+                    peak_source.fit_map(self.map, degree=degree,
+                                        reduce_degrees=reduce_degrees)
                 except Exception as err:
                     log.warning(f"Could not fit peak: {err}")
                     return None
         else:
             try:
-                peak_source.fit_map(self.map)
+                peak_source.fit_map(self.map, degree=degree,
+                                    reduce_degrees=reduce_degrees)
             except Exception as err:
                 log.warning(f"Could not fit peak: {err}")
                 return None
@@ -383,7 +437,8 @@ class AstroIntensityMap(AstroData2D):
             blanking_range = np.array([-np.inf, np.inf])
             check_blanking = False
         else:
-            blanking_range = np.array([-blanking_level, blanking_level])
+            blanking_range = np.array([-blanking_level, blanking_level],
+                                      dtype=float)
             sign = self.configuration.get_sign(self.source_option('sign'))
             check_blanking = True
             if sign < 0:
@@ -434,6 +489,20 @@ class AstroIntensityMap(AstroData2D):
         """
         Add points to the source model.
 
+        Accumulates the combined frame and channel data to the source map
+        for each frame/channel sample.  If a given sample maps to a single map
+        pixel, that pixel is incremented by::
+
+            i = frame_data * weights * gains
+            w = weights * gains^2
+            weights = frame_weight / channel_variance
+            gains = frame_gain * channel_gain
+
+        where i is the weighted data increment, and w is the weight increment.
+        The exposure values are also added to by simply incrementing the time
+        at any pixel by the sampling interval multiplied by the number of
+        samples falling within that pixel.
+
         Parameters
         ----------
         frames : Frames
@@ -466,21 +535,29 @@ class AstroIntensityMap(AstroData2D):
                                indices=sample_indices)
         return n
 
-    def mask_samples(self, flag):
+    def mask_samples(self, flag='SAMPLE_SKIP'):
         """
-        Mask samples in all integrations in all scans with a given pattern.
+        Propagate masked source samples to integration sample flags.
+
+        Flags the integration samples using the given flag if they correspond
+        to a masked source sample.
 
         Parameters
         ----------
-        flag : str or int or Enum
+        flag : str or int or Enum, optional
            The name, integer identifier, or actual flag by which to mask
-           samples.
+           samples.  By default, any integration samples that correspond to
+           masked source samples will be flagged as 'SAMPLE_SKIP'.
 
         Returns
         -------
         None
         """
+        if self.scans is None:
+            return
         for scan in self.scans:
+            if scan.integrations is None:
+                continue
             for integration in scan.integrations:
                 self.mask_integration_samples(integration, flag)
 
@@ -504,22 +581,20 @@ class AstroIntensityMap(AstroData2D):
             return
 
         pixels = integration.channels.get_mapping_pixels()
-        sample_flag = integration.frames.flagspace.convert_flag(flag).value
+        flag_value = integration.frames.flagspace.convert_flag(flag).value
 
-        if integration.frames.source_index is None:
+        if integration.frames.map_index is None or np.allclose(
+                integration.frames.map_index.x, -1):
             self.create_lookup(integration)
 
-        map_indices = self.source_index_to_pixel_index(
-            integration.frames.source_index[:, pixels.indices])
-
-        # Yes, this is correct (map indices is in (x, y) format).
-        xi, yi = map_indices[..., 0].flat, map_indices[..., 1].flat
+        xi, yi = integration.frames.map_index.coordinates[..., pixels.indices]
         masked_samples = masked[yi, xi]
         if not masked_samples.any():
             return
 
-        sample_flags = integration.frames.sample_flag.flat
-        sample_flags[masked_samples] |= sample_flag
+        sample_flags = integration.frames.sample_flag[..., pixels.indices]
+        sample_flags[masked_samples] |= flag_value
+        integration.frames.sample_flag[..., pixels.indices] = sample_flags
 
     def add_frames_from_integration(self, integration, pixels, source_gains,
                                     signal_mode=None):
@@ -609,7 +684,7 @@ class AstroIntensityMap(AstroData2D):
     def calculate_coupling(self, integration, pixels, source_gains,
                            sync_gains):
         """
-        Don't know
+        Calculate the channel source coupling values.
 
         Parameters
         ----------
@@ -632,7 +707,8 @@ class AstroIntensityMap(AstroData2D):
         else:
             s2n_range = Range(min_val=5.0)
 
-        if integration.frames.map_index is None:
+        if integration.frames.map_index is None or np.allclose(
+                integration.frames.map_index.x, -1):
             self.create_lookup(integration)
 
         frame_gains = integration.gain * integration.frames.get_source_gain(

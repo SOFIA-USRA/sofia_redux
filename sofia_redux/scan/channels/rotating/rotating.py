@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 __all__ = ['Rotating']
 
 
-class Rotating(ABC):
+class Rotating(ABC):  # pragma: no cover
 
     @abstractmethod
     def get_rotation(self):

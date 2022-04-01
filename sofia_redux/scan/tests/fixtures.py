@@ -2,17 +2,34 @@
 
 from astropy import units
 from astropy.io import fits
+from astropy.table import Table
+from astropy.time import Time
 from configobj import ConfigObj
 import numpy as np
 import pytest
+from scipy.sparse import csr_matrix
 
+from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
+    EquatorialCoordinates
+from sofia_redux.scan.coordinate_systems.horizontal_coordinates import \
+    HorizontalCoordinates
+from sofia_redux.scan.coordinate_systems.geodetic_coordinates import \
+    GeodeticCoordinates
+from sofia_redux.scan.channels.division.division import ChannelDivision
+from sofia_redux.scan.channels.mode.mode import Mode
+from sofia_redux.scan.channels.modality.modality import Modality
 from sofia_redux.scan.configuration.configuration import Configuration
+from sofia_redux.scan.custom.example.channels.channel_group.channel_group \
+    import ExampleChannelGroup
 from sofia_redux.scan.custom.example.info.info import ExampleInfo
 from sofia_redux.scan.custom.example.scan.scan import ExampleScan
 from sofia_redux.scan.custom.hawc_plus.info.info import HawcPlusInfo
 from sofia_redux.scan.custom.hawc_plus.scan.scan import HawcPlusScan
 from sofia_redux.scan.custom.hawc_plus.simulation.simulation \
     import HawcPlusSimulation
+from sofia_redux.scan.custom.hawc_plus.channels.channel_data.channel_data \
+    import HawcPlusChannelData
+from sofia_redux.scan.utilities.utils import safe_sidereal_time
 from sofia_redux.scan.reduction.reduction import Reduction
 
 
@@ -150,6 +167,20 @@ def initialized_conditions(fits_configuration):
     return fits_configuration.conditions
 
 
+# ChannelData fixtures
+
+@pytest.fixture
+def overlaps():
+    values = np.arange(100)
+    valid = np.arange(25)
+    rows = np.tile(np.arange(5), (5, 1)).ravel()
+    cols = np.tile(np.arange(5), (5, 1)).T.ravel()
+    overlap_values = csr_matrix((values[valid],
+                                 (rows, cols)),
+                                shape=(10, 10))
+    return overlap_values
+
+
 # Example instrument simulation
 
 @pytest.fixture
@@ -217,6 +248,42 @@ def focal_pointing_scan(scan_file, tmpdir):
 @pytest.fixture
 def populated_integration(populated_scan):
     return populated_scan.integrations[0]
+
+
+@pytest.fixture
+def populated_data(populated_scan):
+    return populated_scan.channels.data
+
+
+@pytest.fixture
+def example_modality(populated_data):
+    g1 = ExampleChannelGroup(populated_data, name='test_g1')
+    g2 = ExampleChannelGroup(populated_data, name='test_g2')
+    division = ChannelDivision('test_division', groups=[g1, g2])
+    modality = Modality(name='test', mode_class=Mode,
+                        channel_division=division, gain_provider='gain')
+    return modality
+
+
+@pytest.fixture
+def skydip_file(tmpdir):
+    reduction = Reduction('example')
+    fname = str(tmpdir.join('skydip.fits'))
+    reduction.info.write_simulated_hdul(fname, scan_pattern='skydip',
+                                        source_type='sky',
+                                        start_elevation=80,  # degrees
+                                        end_elevation=10,  # degrees
+                                        scan_time=45)  # seconds
+    return fname
+
+
+@pytest.fixture
+def skydip_scan(skydip_file):
+    info = ExampleInfo()
+    info.read_configuration()
+    channels = info.get_channels_instance()
+    scan = channels.read_scan(skydip_file)
+    return scan
 
 
 # HAWC+ simulation
@@ -321,3 +388,176 @@ def populated_hawc_integration(populated_hawc_scan):
 @pytest.fixture
 def populated_hawc_chop_integration(populated_hawc_chopscan):
     return populated_hawc_chopscan.integrations[0]
+
+
+@pytest.fixture
+def hawc_plus_channel_data():
+    info = HawcPlusInfo()
+    info.read_configuration()
+    header = fits.Header(HawcPlusSimulation.default_values)
+    info.configuration.read_fits(header)
+    info.apply_configuration()
+    channels = info.get_channels_instance()
+    data = HawcPlusChannelData(channels=channels)
+    data.configuration.parse_key_value('pixelsize', '5.0')
+    data.info.detector_array.load_detector_configuration()
+    data.info.detector_array.initialize_channel_data(data)
+    data.info.detector_array.set_boresight()
+    data.channels.subarray_gain_renorm = np.full(4, 1.0)
+    data.calculate_sibs_position()
+    center = data.info.detector_array.get_sibs_position(
+        sub=0,
+        row=39 - data.info.detector_array.boresight_index.y,
+        col=data.info.detector_array.boresight_index.x)
+    data.position.subtract(center)
+    return data
+
+
+@pytest.fixture
+def jump_file_zeros(tmpdir):
+    filename = str(tmpdir.mkdir('fake_jump_data').join('jump.dat'))
+    data = np.zeros((32, 123), dtype=int)
+    hdul = fits.HDUList()
+    hdul.append(fits.PrimaryHDU(data=data))
+    hdul.writeto(filename)
+    return filename
+
+
+@pytest.fixture
+def hawc_plus_channels(jump_file_zeros):
+    info = HawcPlusInfo()
+    info.read_configuration()
+    h = HawcPlusSimulation.default_values.copy()
+    h['SPECTEL1'] = 'HAW_A'
+    h['SPECTEL2'] = 'HAW_HWP_Open'
+    h['WAVECENT'] = 53.0
+    h['CHOPPING'] = True
+    h['CHPNOISE'] = 3.0  # Chopper noise (arcsec)
+    h['SRCAMP'] = 20.0  # NEFD estimate
+    h['SRCS2N'] = 30.0  # source signal to noise
+    h['OBSDEC'] = 7.406657  # declination (degree)
+    h['OBSRA'] = 1.272684  # ra (hours)
+    h['SRCSIZE'] = 20  # source FWHM (arcsec)
+    h['ALTI_STA'] = 41993.0
+    h['ALTI_END'] = 41998.0
+    h['LON_STA'] = -108.182373
+    h['LAT_STA'] = 47.043457
+    h['EXPTIME'] = 20  # scan length (seconds)
+    h['DATE-OBS'] = '2016-12-14T06:41:30.450'
+    header = fits.Header(h)
+    info.configuration.parse_key_value('subarray', 'R0,T0,R1')
+    info.configuration.parse_key_value('jumpdata', jump_file_zeros)
+    info.configuration.lock('subarray')
+    info.configuration.lock('jumpdata')
+    info.configuration.read_fits(header)
+    info.apply_configuration()
+    channels = info.get_channels_instance()
+    channels.load_channel_data()
+    channels.initialize()
+    channels.normalize_array_gains()
+    return channels
+
+
+@pytest.fixture
+def no_data_scan(hawc_plus_channels):
+    scan = hawc_plus_channels.get_scan_instance()
+    scan.hdul = fits.HDUList()
+    scan.integrations = [scan.get_integration_instance()]
+    scan.hdul = None
+    integration = scan.integrations[0]
+    integration.frames.initialize(integration, 10)
+    return scan
+
+
+@pytest.fixture
+def full_hdu(no_data_scan):
+    degree = units.Unit('degree')
+    hourangle = units.Unit('hourangle')
+    frames = no_data_scan[0].frames
+    n_frames = frames.size
+    row, col = frames.channels.data.fits_row, frames.channels.data.fits_col
+    n_row, n_col = row.max() + 1, col.max() + 1
+    dac = np.ones((n_frames, n_row, n_col))
+    jump = np.zeros((n_frames, n_row, n_col), dtype=int)
+    sn = np.arange(n_frames)
+    dt = frames.info.instrument.sampling_interval
+    t0 = Time('2022-03-28T12:00:00.000')
+    t = t0 + np.arange(n_frames) * dt
+    utc = t.unix
+    zeros = np.zeros(n_frames)
+    ra = np.full(n_frames, 12.0)
+    dec = np.full(n_frames, 30.0)
+    lon = np.full(n_frames, 15.0)
+    lat = np.full(n_frames, 20.0)
+    lst = safe_sidereal_time(t, 'mean', longitude=lon * units.Unit('degree'))
+    equatorial = EquatorialCoordinates([ra * hourangle, dec * degree])
+    site = GeodeticCoordinates([lon * degree, lat * degree])
+    horizontal = equatorial.to_horizontal(site, lst)
+    table = Table(
+        {'Timestamp': utc,
+         'FrameCounter': sn,
+         'FluxJumps': jump,
+         'SQ1Feedback': dac,
+         'Flag': zeros.astype(int),
+         'AZ': horizontal.az.to('degree').value,
+         'EL': horizontal.el.to('degree').value,
+         'RA': ra,
+         'DEC': dec,
+         'NonSiderealRA': ra,
+         'NonSiderealDec': dec,
+         'LST': lst.value,
+         'SIBS_VPA': zeros + 1,
+         'TABS_VPA': zeros + 2,
+         'Chop_VPA': zeros + 3,
+         'LON': lon,
+         'LAT': lat,
+         'sofiaChopR': zeros + 4,
+         'sofiaChopS': zeros + 5,
+         'PWV': zeros + 6,
+         'LOS': zeros + 7,
+         'ROLL': zeros + 8,
+         'hwpCounts': zeros.astype(int) + 9}
+    )
+    hdu = fits.BinTableHDU(table)
+    hdu.header['EXTNAME'] = 'Timestream'
+    return hdu
+
+
+@pytest.fixture
+def valid_frames(no_data_frames, full_hdu):
+    frames = no_data_frames.copy()
+    frames.scan.is_nonsidereal = True
+    frames.configuration.parse_key_value('lab', 'False')
+    frames.configuration.parse_key_value('chopper.invert', 'False')
+    frames.apply_hdu(full_hdu)
+    return frames
+
+
+@pytest.fixture
+def small_integration(no_data_scan, full_hdu):
+    scan = no_data_scan
+    scan.is_nonsidereal = True
+    integration = scan[0]
+    c = integration.configuration
+    c.parse_key_value('lab', 'False')
+    c.parse_key_value('chopper.invert', 'False')
+    for key in ['shift', 'frames', 'fillgaps', 'notch', 'vclip', 'aclip',
+                'positions.smooth', 'subscan.minlength']:
+        c.purge(key)
+    integration.frames.data = None
+    integration.read([full_hdu])
+    integration.channels.census()
+
+    c.set_option('tau', 'pwv')
+    c.set_option('tau.pwv', '62.49575959996947')
+    c.set_option('tau.pwv.a', '1.0')
+    c.set_option('tau.pwv.b', '0.0')
+    c.set_option('tau.hawc_plus.a', '0.0020')
+    c.set_option('tau.hawc_plus.b', '0.181')
+    scan.info.astrometry.horizontal = HorizontalCoordinates([30, 60])
+    scan.info.instrument.resolution = 5 * units.Unit('arcsec')
+    speed = 10 * units.Unit('arcsec/s')
+    integration.average_scan_speed = speed, 1 / speed ** 2
+    integration.info.instrument.resolution = 5 * units.Unit('arcsec')
+    integration.info.chopping.chopping = False
+    return integration

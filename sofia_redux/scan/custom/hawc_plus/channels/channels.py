@@ -23,9 +23,33 @@ __all__ = ['HawcPlusChannels']
 class HawcPlusChannels(SofiaCamera):
 
     def __init__(self, parent=None, info=None, size=0, name='hawc_plus'):
+        """
+        Initialize HAWC+ channels.
+
+        Parameters
+        ----------
+        parent : object, optional
+            The owner of the channels such as a Reduction, Scan or Integration.
+        info : HawcPlusInfo, optional
+            The info object relating to these channels.
+        size : int, optional
+            The intended size of the channels (number of total data channels).
+        name : str, optional
+            The name for the channels.
+        """
         super().__init__(name=name, parent=parent, info=info, size=size)
         self.subarray_groups = None
         self.subarray_gain_renorm = None
+
+    def copy(self):
+        """
+        Return a copy of the HAWC+ channels.
+
+        Returns
+        -------
+        HawcPlusChannels
+        """
+        return super().copy()
 
     @property
     def detector(self):
@@ -75,6 +99,32 @@ class HawcPlusChannels(SofiaCamera):
         """
         return self.info.detector_array.dark_squid_lookup
 
+    def init_groups(self):
+        """
+        Initializes channel groups for HAWC+.
+
+        Each group contains a subset of the channel data, referenced by index.
+
+        The HAWC_PLUS groups contain additional groups based on sub-array.
+
+        Returns
+        -------
+        None
+        """
+        super().init_groups()
+        self.subarray_groups = [None] * self.info.detector_array.subarrays
+        sub_index = 0
+        for pol_array in range(self.info.detector_array.pol_arrays):
+            for pol_sub_array in range(self.info.detector_array.pol_subarrays):
+                indices = np.nonzero(self.data.sub == sub_index)[0]
+                pol_id = self.info.detector_array.POL_ID[pol_array]
+                group = self.create_channel_group(
+                    indices=indices,
+                    name=f'{pol_id}{pol_sub_array}')
+                self.add_group(group)
+                self.subarray_groups[sub_index] = group
+                sub_index += 1
+
     def init_divisions(self):
         """
         Initializes channel divisions.
@@ -101,7 +151,7 @@ class HawcPlusChannels(SofiaCamera):
             self.add_division(self.get_division(
                 name=division_name, field=field, discard_flag=dead_blind))
 
-        if self.configuration.has_option('darkcorrect'):
+        if self.configuration.get_bool('darkcorrect'):
             bad_mux_flag = self.flagspace.flags.DEAD
         else:
             bad_mux_flag = dead_blind
@@ -116,32 +166,6 @@ class HawcPlusChannels(SofiaCamera):
         self.add_division(mux_division)
         self.add_division(self.get_division(
             name='rows', field='row', discard_flag=bad_mux_flag))
-
-    def init_groups(self):
-        """
-        Initializes channel groups.
-
-        Each group contains a subset of the channel data, referenced by index.
-
-        The HAWC_PLUS groups contain additional groups based on sub-array.
-
-        Returns
-        -------
-        None
-        """
-        super().init_groups()
-        self.subarray_groups = [None] * self.info.detector_array.subarrays
-        sub_index = 0
-        for pol_array in range(self.info.detector_array.pol_arrays):
-            for pol_sub_array in range(self.info.detector_array.pol_subarrays):
-                indices = np.nonzero(self.data.sub == sub_index)[0]
-                pol_id = self.info.detector_array.POL_ID[pol_array]
-                group = self.create_channel_group(
-                    indices=indices,
-                    name=f'{pol_id}{pol_sub_array}')
-                self.add_group(group)
-                self.subarray_groups[sub_index] = group
-                sub_index += 1
 
     def init_modalities(self):
         """
@@ -177,7 +201,7 @@ class HawcPlusChannels(SofiaCamera):
 
         for name, identity, division_name, gain_field, gain_flag in builds:
             division = self.divisions.get(division_name)
-            if division is None:
+            if division is None:  # pragma: no cover
                 log.warning(f"Channel division {division_name} not found.")
                 continue
             modality = CorrelatedModality(name=name,
@@ -331,16 +355,17 @@ class HawcPlusChannels(SofiaCamera):
         for i in range(self.detector.subarrays):
             pol_mask |= (i & 2) + 1
 
-        self.detector.dark_squid_correction = self.configuration.has_option(
+        self.detector.dark_squid_correction = self.configuration.get_bool(
             'darkcorrect')
 
-        if pol_mask != 3:
+        if pol_mask != 3:  # pragma: no cover
+            # Hard to test since it depends on the detector class
             self.configuration.blacklist('correlated.polarrays')
 
         self.detector.initialize_channel_data(self.data)
 
         if not self.configuration.has_option('filter'):
-            wavelength = self.info.instrument.wavelenth.to('um').value
+            wavelength = self.info.instrument.wavelength.to('um').value
             if (wavelength % 1) == 0:
                 wavelength = int(wavelength)
             self.configuration.set_option('filter', f'{wavelength}um')

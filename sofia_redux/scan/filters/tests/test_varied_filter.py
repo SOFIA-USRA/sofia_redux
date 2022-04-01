@@ -6,7 +6,7 @@ import pytest
 from sofia_redux.scan.filters.varied_filter import VariedFilter
 
 
-class WorkingFilter(VariedFilter):
+class WorkingFilter(VariedFilter):  # pragma: no cover
 
     def dft_filter(self, channels=None):
         # Raises an error

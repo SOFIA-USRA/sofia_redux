@@ -29,7 +29,7 @@ class Coordinate(ABC):
         ----------
         coordinates : list or tuple or array-like or units.Quantity, optional
             The coordinates used to populate the object during initialization.
-        unit : str or units.Unit, optional
+        unit : str or units.Unit or units.Quantity, optional
             The units of the internal coordinates.
         copy : bool, optional
             If `True`, populate these coordinates with a copy of `coordinates`

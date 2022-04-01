@@ -282,6 +282,8 @@ class FitsData(FlaggedArray):
         """
         unit = self.unit_to_quantity(unit)
         unit_key = unit.unit.to_string()
+        if not isinstance(self.local_units, dict):
+            self.local_units = {}
         self.local_units[unit_key] = unit
 
         if hasattr(unit.unit, 'names'):
@@ -307,6 +309,8 @@ class FitsData(FlaggedArray):
         -------
         None
         """
+        if not isinstance(self.alternate_unit_names, dict):
+            self.alternate_unit_names = {}
         if isinstance(alternate_names, str):
             alternate_names = [alternate_names]
         for alternate_name in alternate_names:
@@ -558,17 +562,24 @@ class FitsData(FlaggedArray):
         """
         super().add(value, indices=self.fits_to_numpy(indices), factor=factor)
         is_array = isinstance(value, FlaggedArray)
-        if factor is None:
-            if is_array:
-                message = f'added {value.__class__.__name__}'
-            else:
-                message = f'add {value}'
+
+        if is_array:
+            singular = False
+            value_str = value.__class__.__name__
+        elif isinstance(value, np.ndarray) and value.shape != ():
+            value_str = f'{value.shape} array'
+            singular = False
         else:
-            if is_array:
-                message = f'added scaled ' \
-                          f'{value.__class__.__name__} ({factor}x)'
-            else:
-                message = f'add {value * factor}'
+            singular = True
+            value_str = str(value)
+
+        if factor is None:
+            message = f'added {value_str}'
+        elif singular:
+            message = f'added {value * factor}'
+        else:
+            message = f'added scaled {value_str} ({factor}x)'
+
         self.add_history(message)
 
     def scale(self, factor, indices=None):
@@ -828,8 +839,8 @@ class FitsData(FlaggedArray):
         header['BZERO'] = 0.0, 'Zeroing level of the image data'
         header['BSCALE'] = 1.0, 'Scaling of the image data'
 
-        if (not isinstance(self.unit, units.Quantity) or
-                self.unit.unit == units.dimensionless_unscaled):
+        if (not isinstance(self.unit, units.Quantity)
+                or self.unit.unit == units.dimensionless_unscaled):
             header['BUNIT'] = (units.Unit("count").to_string(),
                                'Data unit specification.')
         else:
@@ -1018,7 +1029,7 @@ class FitsData(FlaggedArray):
         """
         return self.numpy_to_fits(super().get_index_range())
 
-    def value_at(self, index, degree=3):
+    def value_at(self, index, degree=3, reduce_degrees=False):
         """
         Return the data value at a given index.
 
@@ -1029,13 +1040,19 @@ class FitsData(FlaggedArray):
             order (FITS).
         degree : int, optional
             The degree of spline to fit.
+        reduce_degrees : bool, optional
+            If `True`, allow the spline fit to reduce the number of degrees
+            in cases where there are not enough points available to perform
+            the spline fit of `degree`.  If `False`, a ValueError will be
+            raised if such a fit fails.
 
         Returns
         -------
         float
         """
         return super().value_at(
-            np.atleast_1d(self.fits_to_numpy(index)), degree=degree)
+            np.atleast_1d(self.fits_to_numpy(index)),
+            degree=degree, reduce_degrees=reduce_degrees)
 
     def index_of_max(self, sign=1, data=None):
         """
@@ -1088,8 +1105,8 @@ class FitsData(FlaggedArray):
             limit for the first dimension and ranges[0, 1] would give the
             maximum crop limit for the first dimension.  In this case, the
             'first' dimension is in FITS format.  i.e., (x, y) for a 2-D array.
-            Also note that the upper crop limit is not inclusive so a range
-            of (0, 3) includes indices [0, 1, 2] but not 3.
+            Also note that the upper crop limit is inclusive so a range
+            of (0, 3) includes indices [0, 1, 2, 3].
 
         Returns
         -------

@@ -1,6 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from sofia_redux.scan.custom.example.info.simulation import SimulationInfo
+from sofia_redux.scan.simulation.info import SimulationInfo
 
 __all__ = ['ExampleInfo']
 
@@ -32,23 +32,6 @@ class ExampleInfo(SimulationInfo):
         if self.instrument is None or self.instrument.name is None:
             return super().get_name()
         return self.instrument.name
-
-    def validate_scans(self, scans):
-        """
-        Validate a list of scans specific to the instrument
-
-        Parameters
-        ----------
-        scans : list (SofiaScan)
-            A list of scans.
-
-        Returns
-        -------
-        None
-        """
-        if scans is None or len(scans) == 0 or scans[0] is None:
-            super().validate_scans(scans)
-            return
 
     @staticmethod
     def get_file_id():

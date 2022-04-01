@@ -21,7 +21,9 @@ from sofia_redux.scan.custom.sofia.info.info import SofiaInfo
 from sofia_redux.scan.custom.sofia.info.gyro_drifts import SofiaGyroDriftsInfo
 from sofia_redux.scan.custom.sofia.info.extended_scanning import (
     SofiaExtendedScanningInfo)
-from sofia_redux.scan.utilities.utils import insert_info_in_header
+from sofia_redux.scan.utilities.utils import (
+    insert_info_in_header, to_header_float)
+
 from sofia_redux.toolkit.utilities import multiprocessing
 
 __all__ = ['HawcPlusInfo']
@@ -33,6 +35,9 @@ class HawcPlusInfo(SofiaInfo):
         """
         Initialize a HawcPlusInfo object.
 
+        The HAWC+ information contains metadata on various parts of an
+        observation that are specific to observations with the instrument.
+
         Parameters
         ----------
         configuration_path : str, optional
@@ -42,14 +47,14 @@ class HawcPlusInfo(SofiaInfo):
         """
         super().__init__(configuration_path=configuration_path)
         self.name = 'hawc_plus'
-        self.astrometry = HawcPlusAstrometryInfo()  #
-        self.gyro_drifts = SofiaGyroDriftsInfo()  #
-        self.chopping = HawcPlusChoppingInfo()  #
+        self.astrometry = HawcPlusAstrometryInfo()
+        self.gyro_drifts = SofiaGyroDriftsInfo()
+        self.chopping = HawcPlusChoppingInfo()
         self.detector_array = HawcPlusDetectorArrayInfo()
-        self.instrument = HawcPlusInstrumentInfo()  #
-        self.spectroscopy = None  #
-        self.telescope = HawcPlusTelescopeInfo()  #
-        self.observation = HawcPlusObservationInfo()  #
+        self.instrument = HawcPlusInstrumentInfo()
+        self.spectroscopy = None
+        self.telescope = HawcPlusTelescopeInfo()
+        self.observation = HawcPlusObservationInfo()
         self.scanning = SofiaExtendedScanningInfo()
         self.hwp_grouping_angle = 2 * units.Unit('degree')
 
@@ -80,8 +85,9 @@ class HawcPlusInfo(SofiaInfo):
         super().edit_header(header)
         self.detector_array.edit_header(header)
 
+        freq = (1.0 / self.sampling_interval).to('Hz').value
         info = [('COMMENT', "<------ HAWC+ Header Keys ------>"),
-                ('SMPLFREQ', (1.0 / self.sampling_interval).to('Hz').value,
+                ('SMPLFREQ', to_header_float(freq),
                  "(Hz) Detector readout rate.")]
 
         requested_subarrays = self.detector_array.subarrays_requested
@@ -91,7 +97,7 @@ class HawcPlusInfo(SofiaInfo):
 
         if self.detector_array.hwp_angle not in [None, -1]:
             info.append(
-                ('DETHWPAG', self.detector_array.hwp_angle,
+                ('DETHWPAG', to_header_float(self.detector_array.hwp_angle),
                  "The determine half wave plate angle from the file group"))
         insert_info_in_header(header, info, delete_special=True)
 
@@ -243,16 +249,16 @@ class HawcPlusInfo(SofiaInfo):
         file_groups : dict
             The files grouped by HWP angle {angle : [files]}
         """
+        if isinstance(filenames, str):
+            filenames = [filenames]
         n_files = len(filenames)
         read_jobs = int(np.clip(n_files, 1, jobs))
 
         msg = f"Grouping {n_files} HAWC_PLUS files by HWP angles"
-        if jobs > 1:
+        if jobs > 1:  # pragma: no cover
             msg += f" using {read_jobs} parallel threads."
         log.debug(msg)
         file_groups = {}
-        if isinstance(filenames, str):
-            filenames = [filenames]
 
         da = self.hwp_grouping_angle
         hwp_step = self.instrument.hwp_step
@@ -266,9 +272,11 @@ class HawcPlusInfo(SofiaInfo):
 
         for filename, hwp_angle in zip(filenames, hwp_angles):
             if np.isnan(hwp_angle):
-                if None in file_groups:
-                    file_groups[hwp_angle].append(filename)
-                    continue
+                if None not in file_groups:
+                    file_groups[None] = [filename]
+                else:
+                    file_groups[None].append(filename)
+                continue
 
             for angle, angle_files in file_groups.items():
                 if (angle - da) <= hwp_angle <= (angle + da):

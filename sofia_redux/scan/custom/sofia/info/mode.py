@@ -9,6 +9,13 @@ __all__ = ['SofiaModeInfo']
 class SofiaModeInfo(InfoBase):
 
     def __init__(self):
+        """
+        Initialize the SOFIA mode information.
+
+        Contains information on the SOFIA mode parameters.  These include
+        whether the observation involves chopping, nodding, dithering, mapping,
+        and scanning.
+        """
         super().__init__()
         self.is_chopping = False
         self.is_nodding = False
@@ -30,6 +37,22 @@ class SofiaModeInfo(InfoBase):
         return 'mode'
 
     def apply_configuration(self):
+        """
+        Update mapping information with FITS header information.
+
+        Updates the mode information by taking the following keywords from
+        the FITS header::
+
+          CHOPPING - Whether chopper was in use (bool)
+          NODDING - Whether nodding was used (bool)
+          DITHER - Whether dithering was in use (bool)
+          MAPPING - Whether mapping was performed (bool)
+          SCANNING - Whether scanning was performed (bool)
+
+        Returns
+        -------
+        None
+        """
         options = self.options
         if options is None:
             return

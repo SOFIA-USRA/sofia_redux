@@ -8,7 +8,7 @@ from sofia_redux.scan.filters.filter import Filter
 from sofia_redux.scan.filters.kill_filter import KillFilter
 
 
-class NoFilter(Filter):
+class NoFilter(Filter):  # pragma: no cover
 
     def __init__(self, integration=None, data=None):
         super().__init__(integration=integration, data=data)

@@ -94,7 +94,8 @@ class MotionResponse(Response):
         return self.get_signal_from_direction(integration, direction)
 
     @abstractmethod
-    def get_signal_from_direction(self, integration, direction):
+    def get_signal_from_direction(self, integration,
+                                  direction):  # pragma: no cover
         """
         Return a signal object from an integration and direction.
 

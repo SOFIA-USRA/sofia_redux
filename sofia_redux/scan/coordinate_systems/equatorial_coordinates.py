@@ -25,6 +25,35 @@ class EquatorialCoordinates(PrecessingCoordinates):
 
     def __init__(self, coordinates=None, unit='degree',
                  copy=True, epoch=J2000):
+        """
+        Initialize equatorial coordinates.
+
+        Equatorial coordinates are precessing celestial coordinates
+        represented as spherical coordinates with the origin at the center
+        of the Earth.  The longitude (RA or right ascension) measure the
+        angular distance of an object eastward along the celestial equator
+        from the vernal equinox to the hour angle passing through the object.
+        The latitude (DEC or declination) measures the angular distance of
+        an object perpendicular to the celestial equator with north taken as
+        positive.
+
+        Parameters
+        ----------
+        coordinates : list or tuple or array-like or units.Quantity, optional
+            The coordinates used to populate the object during initialization.
+            The first (0) value or index should represent longitudinal
+            coordinates, and the second should represent latitude.
+        unit : units.Unit or str, optional
+            The angular unit for the spherical coordinates.  The default is
+            'degree'.
+        copy : bool, optional
+            Whether to explicitly perform a copy operation on the input
+            coordinates when storing them into these coordinates.  Note that it
+            is extremely unlikely for the original coordinates to be passed in
+            as a reference due to the significant checks performed on them.
+        epoch : Epoch or str or int or float or Time or fits.Header, optional
+            Information from which to set the epoch for these coordinates.
+        """
         super().__init__(coordinates=coordinates, unit=unit, copy=copy,
                          epoch=epoch)
 

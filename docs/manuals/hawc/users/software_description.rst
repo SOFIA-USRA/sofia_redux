@@ -65,7 +65,7 @@ External Requirements
 To run the pipeline for any mode from the Redux interface, Python 3.8 or
 higher is required, as well as the following packages: astropy, astroquery,
 bottleneck, configobj, cycler, dill, joblib, matplotlib, numba, numpy, pandas,
-photutils, scikit-image, scikit-learn, and scipy.
+photutils, scikit-learn, and scipy.
 
 Some display functions for the graphical user interface (GUI) additionally
 require the PyQt5, pyds9, and regions packages. All required

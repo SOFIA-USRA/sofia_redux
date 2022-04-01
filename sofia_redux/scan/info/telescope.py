@@ -9,9 +9,16 @@ __all__ = ['TelescopeInfo']
 class TelescopeInfo(InfoBase):
 
     def __init__(self):
+        """
+        Initialize the telescope information.
+
+        Contains information on the telescope, telescope coordinate system
+        epoch, and whether it is tracking the source coordinates.
+        """
         super().__init__()
         self.is_tracking = False
         self.epoch = J2000
+        self.telescope = None
 
     @property
     def log_id(self):

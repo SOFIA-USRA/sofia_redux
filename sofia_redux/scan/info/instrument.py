@@ -12,6 +12,13 @@ __all__ = ['InstrumentInfo']
 class InstrumentInfo(InfoBase):
 
     def __init__(self):
+        """
+        Initialize the instrument information.
+
+        The instrument information contains parameters relating to the
+        observing instrument such as the observing frequency, resolution,
+        sampling interval, gain, and number of channels.
+        """
         super().__init__()
         self.configuration = None
         self.name = None
@@ -39,14 +46,24 @@ class InstrumentInfo(InfoBase):
         """
         return 'inst'
 
-    def set_configuration(self, configuration):
-        super().set_configuration(configuration)
-
     def set_mount(self, mount):
+        """
+        Set the telescope mount for the instrument.
+
+        Parameters
+        ----------
+        mount : Mount or int or str
+            The actual Mount flag type, it's integer representation (be
+            careful it's correct), or the string name for the mount.
+
+        Returns
+        -------
+        None
+        """
         if isinstance(mount, int):
             self.mount = Mount(mount)
         elif isinstance(mount, str):
-            self.mount = getattr(Mount, mount)
+            self.mount = getattr(Mount, mount, None)
             if self.mount is None:
                 raise ValueError(f"{mount} is not a valid Mount.")
         elif isinstance(mount, Mount):
@@ -73,31 +90,34 @@ class InstrumentInfo(InfoBase):
         -------
         units.Quantity
         """
-        source_size = self.configuration.get_float('sourcesize', default=0.0)
+        if self.configuration is None:
+            source_size = 0.0
+        else:
+            source_size = self.configuration.get_float(
+                'sourcesize', default=0.0)
         source_size *= self.get_size_unit()
         beam_size = self.resolution
         return np.hypot(source_size, beam_size)
 
     def get_stability(self):
-        return self.configuration.get_float('stability',
-                                            default=10.0) * units.s
+        """
+        Return the instrument stability timescale.
 
-    # TODO: This belongs to channels
-    def get_one_over_fstat(self):
-        channels = self.scan.data.get_observing_channels()
-        values = channels.one_over_fstat
-        valid = channels.is_unflagged() & np.isfinite(values)
-        if not valid.any():
-            return np.nan
+        The stability time scale is the expected time over which the instrument
+        is expected to produce somewhat consistent results.  This is used to
+        determine the number of frames from which to perform baseline
+        subtraction and other operations.
 
-        w = channels.weight[valid]
-        values = values[valid]
-        sum_wv = np.nansum(w * values)
-        sum_w = np.nansum(w)
-        if sum_w != 0:
-            return sum_wv / sum_w
+        Returns
+        -------
+        time : units.Quantity
+            The stability time for the instrument.
+        """
+        if self.configuration is None:
+            return 10.0 * units.s
         else:
-            return np.nan
+            return self.configuration.get_float('stability',
+                                                default=10.0) * units.s
 
     def get_point_size(self):
         """
@@ -117,7 +137,10 @@ class InstrumentInfo(InfoBase):
         -------
         astropy.units.Unit
         """
-        dataunit = self.configuration.get('dataunit', default='count')
+        if self.configuration is None:
+            dataunit = 'count'
+        else:
+            dataunit = self.configuration.get('dataunit', default='count')
         return units.Unit(dataunit)
 
     def jansky_per_beam(self):

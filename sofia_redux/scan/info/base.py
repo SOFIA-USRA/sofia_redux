@@ -18,6 +18,17 @@ class InfoBase(ABC):
     UNKNOWN_FLOAT_VALUE = -9999.0
 
     def __init__(self):
+        """
+        Initialize a basic informational object.
+
+        This provides the template from which all specific information
+        objects are founded.  All contain a configuration from which they
+        extract FITS header options and process accordingly.
+
+        Following a reduction, they should also be able to parse their
+        information back to a FITS header for inclusion in the final output
+        product and may or may not perform additional operation on scans.
+        """
         self.configuration = None
         self.scan_applied = False
         self.scan = None
@@ -164,7 +175,7 @@ class InfoBase(ABC):
         self.scan_applied = True
         self.scan = scan
 
-    def validate(self):
+    def validate(self):  # pragma: no cover
         """
         Validate the data obtained from FITS header and configuration
 
@@ -174,7 +185,7 @@ class InfoBase(ABC):
         """
         pass
 
-    def validate_scan(self, scan):
+    def validate_scan(self, scan):  # pragma: no cover
         """
         Validate scan information with *THIS* information.
 
@@ -188,7 +199,7 @@ class InfoBase(ABC):
         """
         pass
 
-    def parse_image_header(self, header):
+    def parse_image_header(self, header):  # pragma: no cover
         """
         Apply settings from a FITS image header.
 
@@ -202,7 +213,7 @@ class InfoBase(ABC):
         """
         pass
 
-    def edit_image_header(self, header, scans=None):
+    def edit_image_header(self, header, scans=None):  # pragma: no cover
         """
         Edit an image header with available information.
 
@@ -219,7 +230,7 @@ class InfoBase(ABC):
         """
         pass
 
-    def edit_scan_header(self, header, scans=None):
+    def edit_scan_header(self, header, scans=None):  # pragma: no cover
         """
         Edit a scan header with available information.
 
@@ -267,6 +278,8 @@ class InfoBase(ABC):
         -------
         valid : bool
         """
+        if value is None:
+            return False
         if isinstance(value, bool):
             return True
         elif isinstance(value, int):
@@ -274,10 +287,10 @@ class InfoBase(ABC):
         elif isinstance(value, str):
             return value != cls.UNKNOWN_STRING_VALUE
         elif isinstance(value, float):
-            return (value != cls.UNKNOWN_FLOAT_VALUE) and not np.isnan(value)
+            return (value != cls.UNKNOWN_FLOAT_VALUE) and np.isfinite(value)
         elif isinstance(value, units.Quantity):
             x = value.value
-            return (x != cls.UNKNOWN_FLOAT_VALUE) and not np.isnan(x)
+            return (x != cls.UNKNOWN_FLOAT_VALUE) and np.isfinite(x)
         else:
             return False
 

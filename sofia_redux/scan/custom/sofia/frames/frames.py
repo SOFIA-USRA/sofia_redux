@@ -18,6 +18,14 @@ __all__ = ['SofiaFrames']
 class SofiaFrames(HorizontalFrames):
 
     def __init__(self):
+        """
+        Initialize frames for SOFIA instruments.
+
+        The SOFIA frames expand on the :class:`HorizontalFrames` class to
+        include the global location of SOFIA, the precipitable water vapour,
+        the equatorial coordinates of the observed object, UTC times, and
+        vertical position angles for the instrument, telescope, and chopper.
+        """
         super().__init__()
         self.utc = None
         self.object_equatorial = None
@@ -69,7 +77,7 @@ class SofiaFrames(HorizontalFrames):
         ----------
         position : Coordinate2D
             The (x, y) focal plane offsets.
-        projector : AstroProjector
+        projector : Projector2D
             The projector to store and determine the projected offsets.
         indices : int or slice or numpy.ndarray (int or bool)
             The frame indices to project.
@@ -80,7 +88,7 @@ class SofiaFrames(HorizontalFrames):
             The projected (x, y) offsets.
         """
         if isinstance(projector.coordinates, TelescopeCoordinates):
-            projector.set_refererence_coordinates()
+            projector.set_reference_coordinates()
             offset = self.get_native_offset(position, indices=indices)
             projector.coordinates.add_native_offset(offset)
             return projector.project()

@@ -439,10 +439,6 @@ be optionally saved by selecting the 'save' parameter.
    -  *Pinhole locations*: The default pinhole mask table is automatically
       loaded. Set to a valid text file path to override it.
 
-   -  *Transform type*: Select the warping algorithm used to apply the
-      distortion correction. The polynomial algorithm is more traditional;
-      the piecewise-affine algorithm may be more accurate for central regions.
-
    -  *Extrapolate solution*: If not set, edges of the image beyond known
       pinhole inputs will be set to NaN.
 

@@ -8,6 +8,12 @@ __all__ = ['ObservationInfo']
 class ObservationInfo(InfoBase):
 
     def __init__(self):
+        """
+        Initialize the observation information.
+
+        Observational information includes details on the name of the source
+        and the observing project.
+        """
         super().__init__()
         self.source_name = None
         self.project = None
@@ -39,4 +45,5 @@ class ObservationInfo(InfoBase):
         None
         """
         self.source_name = source_name
-        self.configuration.set_object(self.source_name, validate=True)
+        if self.configuration is not None:
+            self.configuration.set_object(self.source_name, validate=True)

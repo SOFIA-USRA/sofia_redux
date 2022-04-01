@@ -144,8 +144,9 @@ class Chopper(ABC):
         -------
         str
         """
-        return (f'+/- {self.amplitude} at {self.angle}, {self.frequency}, '
-                f'{100 * self.efficiency:.1f}')
+        return (f'chop +/- {self.amplitude:.3f} at {self.angle:.3f},'
+                f' {self.frequency:.6f}, '
+                f'{100 * self.efficiency:.1f}% efficiency')
 
     def analyze_xy(self, x, y, time, threshold):
         """
@@ -171,8 +172,8 @@ class Chopper(ABC):
             y.to(threshold.unit).value,
             threshold.value)
 
-        distance *= threshold.unit
-        angle *= units.rad
+        distance = distance * threshold.unit
+        angle = angle * units.Unit('radian')
 
         if transitions > 2:
             dt = time[end] - time[start]
@@ -181,7 +182,10 @@ class Chopper(ABC):
             self.is_chopping = False
             return
 
-        amplitude = np.nanmedian(distance)
+        if distance.size > 0:
+            amplitude = np.nanmedian(distance)
+        else:
+            amplitude = 0.0 * threshold.unit
         if amplitude < threshold:
             log.debug("Small chopper fluctuations "
                       "(assuming chopper not used).")

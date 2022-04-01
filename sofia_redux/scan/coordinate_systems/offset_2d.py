@@ -10,6 +10,11 @@ class Offset2D(Coordinate2D):
 
     def __init__(self, reference, coordinates=None, unit=None, copy=True):
         """
+        Initialize a 2-dimensional offset.
+
+        The 2D offset is an extension of the :class:`Coordinate2D` that
+        represents (x, y) coordinates in relation to a given 2-dimensional
+        reference coordinate.
 
         Parameters
         ----------
@@ -17,8 +22,13 @@ class Offset2D(Coordinate2D):
             The reference (x, y) coordinate(s).
         coordinates : Coordinate2D or units.Quantity or numpy.ndarray, optional
             Offset coordinates from the reference position.
-        unit
-        copy
+        unit : units.Unit or str, optional
+            The angular unit for the spherical coordinates.
+        copy : bool, optional
+            Whether to explicitly perform a copy operation on the input
+            coordinates when storing them into these coordinates.  Note that it
+            is extremely unlikely for the original coordinates to be passed in
+            as a reference due to the significant checks performed on them.
         """
         if unit is None:
             if isinstance(reference, (Coordinate2D, units.Quantity)):

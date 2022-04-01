@@ -3,11 +3,13 @@
 from astropy import log, units
 import numpy as np
 import os
+import warnings
 
 from sofia_redux.scan.source_models.source_model import SourceModel
 from sofia_redux.scan.source_models.sky_dip_model import SkyDipModel
 from sofia_redux.scan.source_models import source_numba_functions as snf
 from sofia_redux.scan.utilities.range import Range
+from sofia_redux.scan.utilities.utils import round_values
 
 __all__ = ['SkyDip']
 
@@ -18,10 +20,16 @@ class SkyDip(SourceModel):
         """
         Initialize a skydip model.
 
+        The SkyDip source model is used to measure and store a model of the
+        instrument response and atmospheric parameters with respect to the
+        elevation of an observation.
+
         Parameters
         ----------
-        info : Info
-        reduction : Reduction
+        info : sofia_redux.scan.info.info.Info
+            The Info object which should belong to this source model.
+        reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
+            The reduction for which this source model should be applied.
         """
         super().__init__(info=info, reduction=reduction)
         self.data = None
@@ -33,15 +41,21 @@ class SkyDip(SourceModel):
         self.signal_index = 0
         self.model = SkyDipModel()
 
-    def copy(self):
+    def copy(self, with_contents=True):
         """
         Return a copy of the SkyDip.
+
+        Parameters
+        ----------
+        with_contents : bool, optional
+            If `True`, return a true copy of the source model.  Otherwise, just
+            return a basic version with the necessary meta data.
 
         Returns
         -------
         SkyDip
         """
-        copy = super().copy()
+        copy = super().copy(with_contents=with_contents)
         return copy
 
     @property
@@ -77,18 +91,25 @@ class SkyDip(SourceModel):
         -------
         value
         """
+        parameters = self.model.parameters
+        errors = self.model.errors
+        if parameters is None:
+            parameters = {}
+        if errors is None:
+            errors = {}
+
         if name == 'tau':
-            return self.model.parameters['tau']
+            return parameters.get('tau')
         elif name == 'dtau':
-            return self.model.errors['tau']
+            return errors.get('tau')
         elif name == 'kelvin':
-            return self.model.parameters['kelvin']
+            return parameters.get('kelvin')
         elif name == 'dkelvin':
-            return self.model.errors['kelvin']
+            return errors.get('kelvin')
         elif name == 'tsky':
-            return self.model.parameters['tsky']
+            return parameters.get('tsky')
         elif name == 'dtsky':
-            return self.model.errors['tsky']
+            return errors.get('tsky')
         else:
             return super().get_table_entry(name)
 
@@ -161,7 +182,7 @@ class SkyDip(SourceModel):
             resolution = self.configuration.get_float('skydip.grid')
             self.resolution = resolution * units.Unit('arcsec')
         else:
-            self.resolution = 0.25 * units.Unit('degree')
+            self.resolution = 900 * units.Unit('arcsec')  # 1/4 degree
 
         if self.has_option('skydip.signal'):
             self.signal_name = self.configuration.get_string('skydip.signal')
@@ -189,12 +210,15 @@ class SkyDip(SourceModel):
         if singular and (np.isnan(elevation) or self.resolution == 0):
             return -1
 
-        float_bins = np.round((elevation / self.resolution).decompose().value)
+        float_bins = (elevation / self.resolution).decompose().value
         if singular:
-            return int(float_bins)
+            if not np.isfinite(float_bins):
+                return -1
+            else:
+                return int(round_values(float_bins))
 
         float_bins[~np.isfinite(float_bins)] = -1
-        return float_bins.astype(int)
+        return round_values(float_bins)
 
     def get_elevation(self, bins):
         """
@@ -219,7 +243,8 @@ class SkyDip(SourceModel):
         skydip : SkyDip
             The skydip increment.
         weight : float, optional
-            The weight of the model increment.
+            The weight of the model increment.  Not applicable for the skydip
+            model.
 
         Returns
         -------
@@ -395,8 +420,10 @@ class SkyDip(SourceModel):
         if self.data is None or self.weight is None:
             return signal_range
         values = self.data[self.weight > 0]
-        signal_range.min = np.nanmin(values)
-        signal_range.max = np.nanmax(values)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', RuntimeWarning)
+            signal_range.min = np.nanmin(values)
+            signal_range.max = np.nanmax(values)
         return signal_range
 
     def get_elevation_range(self):
@@ -410,8 +437,10 @@ class SkyDip(SourceModel):
         el_range = Range()
         valid = np.nonzero(self.weight > 0)[0]
         elevations = self.get_elevation(valid)
-        el_range.min = np.nanmin(elevations)
-        el_range.max = np.nanmax(elevations)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', RuntimeWarning)
+            el_range.min = np.nanmin(elevations)
+            el_range.max = np.nanmax(elevations)
         return el_range
 
     def get_air_mass_range(self):
@@ -423,24 +452,47 @@ class SkyDip(SourceModel):
         Range
         """
         el_range = self.get_elevation_range()
-        am_range = Range(min_val=1.0 / np.sin(el_range.max),
-                         max_val=1.0 / np.sin(el_range.min))
+        lower = 1.0 / np.sin(el_range.max)
+        upper = 1.0 / np.sin(el_range.min)
+        if isinstance(lower, units.Quantity):
+            lower = lower.decompose().value
+            upper = upper.decompose().value
+
+        am_range = Range(min_val=lower, max_val=upper)
         return am_range
 
-    def write(self, path):
+    def fit(self, model):
+        """
+        Fit the sky dip data to a model.
+
+        Parameters
+        ----------
+        model : SkyDipModel
+
+        Returns
+        -------
+        None
+        """
+        model.set_configuration(self.configuration)
+        model.fit(self)
+
+    def write(self, path=None):
         """
         Write the sky dip model to file.
 
         Parameters
         ----------
-        path : str
-            The file path to write to.
+        path : str, optional
+            The directory in which to write the results.  The default is the
+            reduction work path.
 
         Returns
         -------
         None
         """
         self.model = SkyDipModel()
+        if path is None:
+            path = self.configuration.work_path
 
         initial_values = self.model.initial_guess
         initial_values['kelvin'] = self.info.kelvin.to(
@@ -454,12 +506,12 @@ class SkyDip(SourceModel):
                    f'{self.model}',
                    '=================================================']
             log.info('\n'.join(msg))
-        else:
+        else:  # pragma: no cover
             log.warning("Skydip fit did not converge...")
 
         name = self.configuration.get_string(
             'name', default=self.get_default_core_name())
-        core_name = os.path.join(self.configuration.work_path, name)
+        core_name = os.path.join(path, name)
         filename = f'{core_name}.dat'
         header = [x.strip() for x in str(self.model).split('\n')]
         header = [f'# {x}' for x in header if x != '']
@@ -499,21 +551,6 @@ class SkyDip(SourceModel):
         None
         """
         pass
-
-    def fit(self, model):
-        """
-        Fit the sky dip data to a model.
-
-        Parameters
-        ----------
-        model : SkyDipModel
-
-        Returns
-        -------
-        None
-        """
-        model.set_configuration(self.configuration)
-        model.fit(self)
 
     def no_parallel(self):
         """

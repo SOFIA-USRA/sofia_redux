@@ -17,6 +17,7 @@ from sofia_redux.scan.coordinate_systems.galactic_coordinates import \
     GalacticCoordinates
 from sofia_redux.scan.coordinate_systems.super_galactic_coordinates import \
     SuperGalacticCoordinates
+from sofia_redux.scan.utilities.utils import round_values
 
 __all__ = ['Grid2D']
 
@@ -1095,8 +1096,7 @@ class Grid2D(Grid):
             The grid indices.
         """
         offset_indices = self.offset_to_index(offsets, in_place=False)
-        i_xy = np.stack([np.round(offset_indices.x).astype(int),
-                         np.round(offset_indices.y).astype(int)])
+        i_xy = round_values(np.stack([offset_indices.x, offset_indices.y]))
         if indices is None:
             indices = Coordinate2D()
         indices.set(i_xy)

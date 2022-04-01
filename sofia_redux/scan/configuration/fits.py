@@ -14,10 +14,18 @@ class FitsOptions(Options):
 
     def __init__(self, allow_error=False, verbose=True):
         """
-        Initialize a FitsOptions object.
+        Initialize the FITS options.
 
-        The FitsOptions object contains configuration options specifically
-        relating to a FITS header.
+        The FITS options is a place in the configuration where values from a
+        FITS header may be stored and acted on when necessary.
+
+        Parameters
+        ----------
+        allow_error : bool, optional
+            If `True`, allow poorly formatted options to be skipped rather than
+            raising an error.
+        verbose : bool, optional
+            If `True`, issues a warning when a poorly option is encountered.
         """
         super().__init__(allow_error=allow_error, verbose=verbose)
         self.enabled = False

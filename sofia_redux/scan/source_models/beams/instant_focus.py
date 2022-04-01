@@ -95,7 +95,7 @@ class InstantFocus(ABC):
             return "No focus results"
         info = []
         for param in ['x', 'y', 'z']:
-            v, w = getattr(self, param), getattr(self,  f'{param}_weight')
+            v, w = getattr(self, param), getattr(self, f'{param}_weight')
             if v is None:
                 continue
             unit = None
@@ -187,7 +187,7 @@ class InstantFocus(ABC):
             coeff = configuration.get_float(f'focus.{direction}coeff',
                                             default=np.nan)
             if np.isnan(coeff) or coeff == 0:
-                continue
+                continue  # pragma: no cover
 
             if direction == 'z':
                 v = elongation
@@ -199,7 +199,7 @@ class InstantFocus(ABC):
                 w = getattr(asymmetry, f'{direction}_weight')
 
             if v is None or w is None:
-                continue
+                continue  # pragma: no cover
 
             significance = np.abs(v) * np.sqrt(w)
             if significance <= s2n:

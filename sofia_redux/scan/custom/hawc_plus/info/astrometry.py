@@ -13,13 +13,31 @@ __all__ = ['HawcPlusAstrometryInfo']
 class HawcPlusAstrometryInfo(SofiaAstrometryInfo):
 
     def __init__(self):
+        """
+        Initialize astrometry information for HAWC+ observations.
+
+        An extension of the SOFIA astrometry information with additional
+        handling for nonsidereal coordinates.
+        """
         super().__init__()
 
     def apply_configuration(self):
+        """
+        Update astrometry information with the FITS header configuration data.
+
+        Additionally populates the object coordinates from the OBJRA and
+        OBJDEC keywords in the configuration the EQUINOX epoch from the FITS
+        header.  Non-sidereal observations may be flagged using the NONSIDE
+        keyword or by setting rtoc=True in the configuration.
+
+        Returns
+        -------
+        None
+        """
         if self.configuration is None:
             return
         options = self.options
-        if options is None:
+        if options is None:  # pragma: no cover
             return
 
         if 'OBJRA' in self.configuration and 'OBJDEC' in self.configuration:
@@ -51,7 +69,7 @@ class HawcPlusAstrometryInfo(SofiaAstrometryInfo):
         if not super().is_requested_valid(header=header):
             return False
         if header is None:
-            if self.options is None:
+            if self.options is None:  # pragma: no cover
                 return False
             ra = self.options.get_float('OBSRA')
             dec = self.options.get_float('OBSDEC')

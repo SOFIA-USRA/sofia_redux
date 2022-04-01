@@ -14,6 +14,12 @@ __all__ = ['SofiaEnvironmentInfo']
 class SofiaEnvironmentInfo(InfoBase):
 
     def __init__(self):
+        """
+        Initialize the SOFIA environment information.
+
+        Contains information on the SOFIA environment parameters such as the
+        ambient and telescope temperatures.
+        """
         super().__init__()
         self.pwv = BracketedValues()
         self.ambient_t = np.nan * units.Unit('K')
@@ -36,6 +42,24 @@ class SofiaEnvironmentInfo(InfoBase):
         return 'env'
 
     def apply_configuration(self):
+        """
+        Update environment information with FITS header information.
+
+        Updates the environment information by taking the following keywords
+        from the FITS header::
+
+          WVZ_STA - Precipitable water vapour at start of observation (um)
+          WVZ_END - Precipitable water vapour at end of observation (um)
+          TEMP_OUT - The ambient air temperature (C)
+          TEMPPRI1 - The primary mirror temperature 1 (C)
+          TEMPPRI2 - The primary mirror temperature 2 (C)
+          TEMPPRI3 - The primary mirror temperature 3 (C)
+          TEMPSEC1 - The secondary mirror temperature (C)
+
+        Returns
+        -------
+        None
+        """
         options = self.options
         if options is None:
             return
@@ -93,17 +117,18 @@ class SofiaEnvironmentInfo(InfoBase):
         -------
         value
         """
+        equiv = units.temperature()
         if name == 'tamb':
-            return self.ambient_t.to('Kelvin')
+            return self.ambient_t.to('Kelvin', equivalencies=equiv)
         elif name == 'pwv':
             return self.pwv.midpoint.to('um')
         elif name == 't1':
-            return self.primary_t1.to('Kelvin')
+            return self.primary_t1.to('Kelvin', equivalencies=equiv)
         elif name == 't2':
-            return self.primary_t2.to('Kelvin')
+            return self.primary_t2.to('Kelvin', equivalencies=equiv)
         elif name == 't3':
-            return self.primary_t3.to('Kelvin')
+            return self.primary_t3.to('Kelvin', equivalencies=equiv)
         elif name == 'sect':
-            return self.secondary_t.to('Kelvin')
+            return self.secondary_t.to('Kelvin', equivalencies=equiv)
         else:
             return super().get_table_entry(name)

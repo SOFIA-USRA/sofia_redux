@@ -92,7 +92,7 @@ with irregular coordinates.
 
     import numpy as np
     import matplotlib.pyplot as plt
-    from skimage.data import camera
+    import imageio
     from sofia_redux.toolkit.resampling.resample_kernel import ResampleKernel
 
     def mexican_hat(x, y, period=1):
@@ -125,7 +125,7 @@ with irregular coordinates.
         delta.shape)
 
     # Now show an example of edge detection using the irregular kernel
-    image = camera().astype(float)
+    image = imageio.imread('imageio:camera.png').astype(float)
     image -= image.min()
     image /= image.max()
 

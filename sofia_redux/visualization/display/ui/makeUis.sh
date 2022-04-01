@@ -7,4 +7,6 @@
 pyuic5 simple_spec_viewer.ui -o simple_spec_viewer.py
 pyuic5 fit_result_window.ui -o fit_result_window.py
 pyuic5 cursor_location.ui -o cursor_location.py
+pyuic5 reference_data.ui -o reference_data.py
+pyuic5 textview.ui -o textview.py
 

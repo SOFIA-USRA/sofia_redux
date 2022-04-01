@@ -1,14 +1,16 @@
 #  Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 import logging
-import pytest
+
+from astropy import units as u
 from matplotlib import figure as mpf
 from matplotlib import gridspec
 from matplotlib import backend_bases as mpb
+import pytest
 import pytestqt.exceptions as pe
 
-from sofia_redux.visualization.display import figure, artists, blitting, pane
-from sofia_redux.visualization.models import high_model
+from sofia_redux.visualization.display import figure, gallery, blitting, pane
+from sofia_redux.visualization.models import high_model, reference_model
 from sofia_redux.visualization import signals
 from sofia_redux.visualization.utils import eye_error
 
@@ -25,7 +27,7 @@ class TestFigure(object):
                          'show_grid': False, 'show_error': True,
                          'dark_mode': False, '_cursor_mode': None,
                          '_cursor_pane': None}
-        correct_types = {'fig': mpf.Figure, 'artists': artists.Artists,
+        correct_types = {'fig': mpf.Figure, 'gallery': gallery.Gallery,
                          'blitter': blitting.BlitManager, 'panes': list,
                          '_cursor_locations': list, '_fit_params': list}
         correct_values = {'_current_pane': 0, 'layout': 'grid',
@@ -47,7 +49,7 @@ class TestFigure(object):
     @pytest.mark.parametrize('state', [True, False, None])
     def test_set_pane_highlight_flag(self, blank_figure, mocker, state, qtbot):
 
-        art_mock = mocker.patch.object(artists.Artists,
+        art_mock = mocker.patch.object(gallery.Gallery,
                                        'set_pane_highlight_flag')
         blank_figure.set_pane_highlight_flag(state)
 
@@ -131,7 +133,7 @@ class TestFigure(object):
         assert 'Invalid number of dimensions' in str(e)
 
     def test_remove_artists(self, blank_figure, mocker):
-        mock = mocker.patch.object(artists.Artists,
+        mock = mocker.patch.object(gallery.Gallery,
                                    'reset_artists')
 
         blank_figure.remove_artists()
@@ -143,7 +145,7 @@ class TestFigure(object):
         mocker.patch.object(pane.OneDimPane,
                             'create_artists_from_current_models',
                             return_value=[1, 2])
-        mocker.patch.object(artists.Artists, 'add_artists',
+        mocker.patch.object(gallery.Gallery, 'add_drawings',
                             return_value=0)
         mocker.patch.object(figure.Figure, '_add_pane_artists')
 
@@ -151,10 +153,10 @@ class TestFigure(object):
 
         blank_figure.reset_artists()
 
-        assert 'Error encountered while creating artists' in caplog.text
+        assert 'Error encountered while creating gallery' in caplog.text
 
     def test_add_pane_artists(self, blank_figure, mocker):
-        add_mock = mocker.patch.object(artists.Artists, 'add_patches')
+        add_mock = mocker.patch.object(gallery.Gallery, 'add_patches')
         blank_figure.panes = [pane.OneDimPane()]
         blank_figure._current_pane = None
         expected = {'pane_0': {'kind': 'border',
@@ -232,7 +234,7 @@ class TestFigure(object):
         blank_figure.add_model_to_pane(model)
         assert blank_figure.pane_count() == 2
 
-        assert 'Added 1 models to panes' in caplog.text
+        assert 'Added model to panes' in caplog.text
 
     def test_remove_model_from_pane(self, blank_figure, mocker):
 
@@ -286,7 +288,7 @@ class TestFigure(object):
     def test_set_enabled(self, blank_figure, mocker, qtbot):
         model_mock = mocker.patch.object(pane.OneDimPane,
                                          'set_model_enabled')
-        art_mock = mocker.patch.object(artists.Artists,
+        art_mock = mocker.patch.object(gallery.Gallery,
                                        'update_artist_options')
         vis_mock = mocker.patch.object(pane.OneDimPane,
                                        'update_visibility')
@@ -305,7 +307,7 @@ class TestFigure(object):
     def test_set_all_enabled(self, blank_figure, mocker, qtbot):
         model_mock = mocker.patch.object(pane.OneDimPane,
                                          'set_all_models_enabled')
-        art_mock = mocker.patch.object(artists.Artists,
+        art_mock = mocker.patch.object(gallery.Gallery,
                                        'update_artist_options')
         vis_mock = mocker.patch.object(pane.OneDimPane,
                                        'update_visibility')
@@ -324,7 +326,7 @@ class TestFigure(object):
         direction = 'v'
         mocker.patch.object(figure.Figure, 'determine_selected_pane',
                             return_value=0)
-        art_mock = mocker.patch.object(artists.Artists, 'update_crosshair')
+        art_mock = mocker.patch.object(gallery.Gallery, 'update_crosshair')
         cross_mock = mocker.patch.object(figure.Figure,
                                          '_parse_cursor_direction',
                                          return_value=direction)
@@ -343,7 +345,7 @@ class TestFigure(object):
         assert cross_mock.called_with({'mode': 'crosshair'})
 
     def test_reset_data_points_empty(self, blank_figure, mocker):
-        mock = mocker.patch.object(artists.Artists, 'hide_cursor_markers')
+        mock = mocker.patch.object(gallery.Gallery, 'hide_cursor_markers')
 
         blank_figure.reset_data_points()
 
@@ -377,7 +379,7 @@ class TestFigure(object):
         assert direction == result
 
     def test_clear_lines_all(self, blank_figure, mocker):
-        reset_mock = mocker.patch.object(artists.Artists,
+        reset_mock = mocker.patch.object(gallery.Gallery,
                                          'reset_artists')
         panes = [pane.OneDimPane() for i in range(3)]
         blank_figure.panes = panes
@@ -521,56 +523,120 @@ class TestFigure(object):
         # no fits, nothing happens
         fits = []
         blank_figure.toggle_fits_visibility(fits)
-        assert len(blank_figure.artists.arts['fit']) == 0
+        assert len(blank_figure.gallery.arts['fit']) == 0
 
         # with fit, no panes, nothing happens
         fits = [gauss_model_fit]
         blank_figure.toggle_fits_visibility(fits)
-        assert len(blank_figure.artists.arts['fit']) == 0
+        assert len(blank_figure.gallery.arts['fit']) == 0
 
-        # with fit and pane and matching fields, fit artists
+        # with fit and pane and matching fields, fit gallery
         # are attempted to be regenerated, but fail because
         # there's no model in the pane
         blank_figure.add_panes(1)
         gauss_model_fit.fields = {'x': 'wavepos', 'y': 'spectral_flux'}
         gauss_model_fit.order = 0
         blank_figure.toggle_fits_visibility(fits)
-        assert len(blank_figure.artists.arts['fit']) == 0
+        assert len(blank_figure.gallery.arts['fit']) == 0
 
         # add a model to the pane
         model = high_model.Grism(grism_hdul)
         blank_figure.add_model_to_pane(model)
         gauss_model_fit.model_id = model.id
         blank_figure.toggle_fits_visibility(fits)
-        assert len(blank_figure.artists.arts['fit']) == 2
-        art1 = blank_figure.artists.arts['fit'][0]['artist']
+        assert len(blank_figure.gallery.arts['fit']) == 2
+        art1 = blank_figure.gallery.arts['fit'][0].get_artist()
 
         # remake when axis matches: artist is updated in place
         gauss_model_fit.axis = blank_figure.panes[0].axes()[0]
         blank_figure.toggle_fits_visibility(fits)
-        assert len(blank_figure.artists.arts['fit']) == 2
-        art2 = blank_figure.artists.arts['fit'][0]['artist']
+        assert len(blank_figure.gallery.arts['fit']) == 2
+        art2 = blank_figure.gallery.arts['fit'][0].get_artist()
         assert art2 == art1
 
         # remake when original artist has been lost: replaces with new artist
-        blank_figure.artists.arts['fit'] = []
+        blank_figure.gallery.arts['fit'] = []
         blank_figure.toggle_fits_visibility(fits)
-        assert len(blank_figure.artists.arts['fit']) == 2
-        art3 = blank_figure.artists.arts['fit'][0]['artist']
+        assert len(blank_figure.gallery.arts['fit']) == 2
+        art3 = blank_figure.gallery.arts['fit'][0].get_artist()
         assert art3 != art1
 
         # stale_fit_artists should do the same: reset and replace
         blank_figure.stale_fit_artists(fits)
-        assert len(blank_figure.artists.arts['fit']) == 2
-        art4 = blank_figure.artists.arts['fit'][0]['artist']
+        assert len(blank_figure.gallery.arts['fit']) == 2
+        art4 = blank_figure.gallery.arts['fit'][0].get_artist()
         assert art4 != art1
 
         # with another fit artist added to the same pane:
-        # should add the artists and not reset in between
+        # should add the gallery and not reset in between
         moffat_model_fit.fields = {'x': 'wavepos', 'y': 'spectral_flux'}
         moffat_model_fit.order = 0
         moffat_model_fit.model_id = model.id
         moffat_model_fit.axis = blank_figure.panes[0].axes()[0]
         fits.append(moffat_model_fit)
         blank_figure.stale_fit_artists(fits)
-        assert len(blank_figure.artists.arts['fit']) == 4
+        assert len(blank_figure.gallery.arts['fit']) == 4
+
+    def test_update_reference_lines(self, caplog, qtbot, blank_figure,
+                                    grism_hdul):
+        caplog.set_level(logging.DEBUG)
+
+        # only reset for empty reference/panes
+        ref = reference_model.ReferenceData()
+        with qtbot.wait_signal(blank_figure.signals.atrophy_bg_partial):
+            blank_figure.update_reference_lines(ref)
+        assert 'Resetting reference gallery' in caplog.text
+        assert 'Updated reference' not in caplog.text
+
+        # add data and lines
+        model = high_model.Grism(grism_hdul)
+        blank_figure.add_model_to_pane(model)
+        ref.line_list = {'1': [5.1], '2': [6.3], '3': [7.4]}
+        ref.line_unit = u.um
+        ref.set_visibility('all', True)
+
+        # reference lines added
+        with qtbot.wait_signal(blank_figure.signals.atrophy_bg_partial):
+            blank_figure.update_reference_lines(ref)
+        assert 'Resetting reference gallery' in caplog.text
+        assert 'Updated reference' in caplog.text
+
+    def test_unload_reference_model(self, mocker, blank_figure, grism_hdul):
+        ref = reference_model.ReferenceData()
+
+        # no op if no panes
+        blank_figure.unload_reference_model(ref)
+
+        # add a pane: calls unload_ref_model
+        model = high_model.Grism(grism_hdul)
+        blank_figure.add_model_to_pane(model)
+
+        m1 = mocker.patch.object(blank_figure.panes[0], 'unload_ref_model')
+        blank_figure.unload_reference_model(ref)
+        m1.assert_called_once()
+
+    def test_change_axis_limits(self, mocker, blank_figure, grism_hdul):
+        # add data and lines
+        model = high_model.Grism(grism_hdul)
+        blank_figure.add_model_to_pane(model)
+        ref = reference_model.ReferenceData()
+        ref.line_list = {'1': [5.1], '2': [6.3], '3': [7.4]}
+        ref.line_unit = u.um
+        ref.set_visibility('all', True)
+        blank_figure.update_reference_lines(ref)
+
+        m1 = mocker.patch.object(blank_figure.gallery,
+                                 'update_reference_data')
+
+        # change limits
+        blank_figure.change_axis_limits({'x': [4, 6]})
+        assert m1.call_count == 1
+
+        # reset zoom: update called again
+        blank_figure.reset_zoom()
+        assert m1.call_count == 2
+
+        # zoom by mouse: also calls update
+        blank_figure._cursor_locations = [[4, 4], [6, 4]]
+        blank_figure._end_zoom(0, 'x')
+        assert m1.call_count == 3

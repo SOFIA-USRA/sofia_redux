@@ -19,6 +19,7 @@ SOFIA Pipeline Contributors
 ===========================
 
 * Ryan Arneson
+* Karishma Bansal
 * Ed Chambers
 * Melanie Clarke
 * Sebastian Colditz

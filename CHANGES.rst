@@ -1,3 +1,12 @@
+1.2.3
+=====
+
+- Updated FORCAST pipeline to v2.4.0, removing scikit-image as a dependency.
+- Added a line list overplot feature to the spectral viewer tool.
+- Improved log messages for the QAD image viewer tools.
+- Completed test coverage and associated minor fixes for the scan module.
+
+
 1.2.2 (2022-03-15)
 ==================
 

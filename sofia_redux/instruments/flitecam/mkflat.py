@@ -111,8 +111,14 @@ def mkflat(infiles, method='median', weighted=True, robust=True,
                 threshold = detect_threshold(gain_corr, nsigma=obj_sigma)
 
                 # detect any 5 connected pixels above the threshold
-                segmented = detect_sources(gain_corr, threshold,
-                                           npixels=5, filter_kernel=kernel)
+                try:
+                    # photutils < 1.4.0
+                    segmented = detect_sources(gain_corr, threshold,
+                                               npixels=5, filter_kernel=kernel)
+                except TypeError:
+                    # photutils >= 1.4.0
+                    segmented = detect_sources(gain_corr, threshold,
+                                               npixels=5, kernel=kernel)
             if segmented is not None:
                 obj_mask = (segmented.data != 0)
             else:

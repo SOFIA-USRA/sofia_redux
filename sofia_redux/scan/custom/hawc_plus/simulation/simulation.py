@@ -33,6 +33,9 @@ from sofia_redux.scan.coordinate_systems.projector.astro_projector import \
     AstroProjector
 
 
+__all__ = ['HawcPlusSimulation']
+
+
 class HawcPlusSimulation(ABC):
 
     # FITS header keys specific to this simulation or used to override defaults

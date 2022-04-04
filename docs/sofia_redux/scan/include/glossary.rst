@@ -1,3 +1,8 @@
+.. _scan_glossary:
+
+Configuration Glossary
+^^^^^^^^^^^^^^^^^^^^^^
+
 .. list-table:: Configuration Keywords
    :class: longtable
    :widths: 20 20 40

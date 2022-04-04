@@ -23,6 +23,9 @@ hourangle = units.Unit('hourangle')
 degree = units.Unit('degree')
 
 
+__all__ = ['AircraftSimulation']
+
+
 class AircraftSimulation(ABC):
 
     def __init__(self):

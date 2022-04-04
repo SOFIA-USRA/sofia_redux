@@ -945,6 +945,7 @@ class Reduction(ReductionVersion):
         None
         """
         self.configuration.set_outpath()
+        self.work_path = self.configuration.work_path
 
     def update_parallel_config(self, reset=False):
         """

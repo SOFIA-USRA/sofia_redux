@@ -6,10 +6,32 @@ The :mod:`sofia_redux.scan` package contains supporting algorithms
 and helper functions for reconstructing image maps from scanned
 observations.
 
-Configuration Option Glossary
-=============================
+Description
+===========
 
-.. include:: configuration/glossary.rst
+.. toctree::
+   :maxdepth: 2
+
+   scan_description
+
+
+Architecture
+============
+
+.. toctree::
+   :maxdepth: 2
+
+   scan_architecture
+
+
+Usage
+=====
+
+.. toctree::
+   :maxdepth: 2
+
+   scan_usage
+   scan_configuration
 
 
 Reference/API
@@ -299,6 +321,9 @@ sofia_redux.scan.custom
 .. automodapi:: sofia_redux.scan.custom.hawc_plus.scan.scan
    :headings: ~^
 
+.. automodapi:: sofia_redux.scan.custom.hawc_plus.simulation.simulation
+   :headings: ~^
+
 .. automodapi:: sofia_redux.scan.custom.sofia.channels.camera
    :headings: ~^
 .. automodapi:: sofia_redux.scan.custom.sofia.channels.channel_data.channel_data
@@ -358,6 +383,9 @@ sofia_redux.scan.custom
 .. automodapi:: sofia_redux.scan.custom.sofia.integration.models.atran
    :headings: ~^
 .. automodapi:: sofia_redux.scan.custom.sofia.scan.scan
+   :headings: ~^
+
+.. automodapi:: sofia_redux.scan.custom.sofia.simulation.aircraft
    :headings: ~^
 
 sofia_redux.scan.filters
@@ -469,6 +497,27 @@ sofia_redux.scan.signal
 .. automodapi:: sofia_redux.scan.signal.signal_numba_functions
    :headings: ~^
 .. automodapi:: sofia_redux.scan.signal.correlated_signal
+   :headings: ~^
+
+sofia_redux.scan.simulation
+---------------------------
+.. automodapi:: sofia_redux.scan.simulation.info
+   :headings: ~^
+
+.. automodapi:: sofia_redux.scan.simulation.scan_patterns.constant_speed
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.simulation.scan_patterns.daisy
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.simulation.scan_patterns.lissajous
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.simulation.scan_patterns.skydip
+   :headings: ~^
+
+.. automodapi:: sofia_redux.scan.simulation.source_models.simulated_source
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.simulation.source_models.single_gaussian
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.simulation.source_models.sky
    :headings: ~^
 
 sofia_redux.scan.source_models

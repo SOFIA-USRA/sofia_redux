@@ -99,6 +99,9 @@ def test_offline(mocker, capsys):
     assert 'value may not be accurate' in capt.err
 
     # result is returned
-    assert np.allclose(result['vhelio'].value, expected['vhelio'].value)
-    assert np.allclose(result['vsun'].value, expected['vsun'].value)
-    assert np.allclose(result['vlsr'].value, expected['vlsr'].value)
+    assert np.allclose(result['vhelio'].value, expected['vhelio'].value,
+                       rtol=.01)
+    assert np.allclose(result['vsun'].value, expected['vsun'].value,
+                       rtol=.01)
+    assert np.allclose(result['vlsr'].value, expected['vlsr'].value,
+                       rtol=.01)

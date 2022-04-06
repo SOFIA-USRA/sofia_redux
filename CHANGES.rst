@@ -1,5 +1,5 @@
-1.2.3
-=====
+1.2.3 (2022-04-06)
+==================
 
 - Updated FORCAST pipeline to v2.4.0, removing scikit-image as a dependency.
 - Added a line list overplot feature to the spectral viewer tool.

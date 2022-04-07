@@ -11,7 +11,7 @@ from sofia_redux.scan.custom.hawc_plus.simulation.simulation import \
     HawcPlusSimulation
 from sofia_redux.scan.custom.hawc_plus.channels.channels import \
     HawcPlusChannels
-
+from sofia_redux.toolkit.utilities.multiprocessing import in_windows_os
 
 arcsec = units.Unit('arcsec')
 
@@ -237,6 +237,7 @@ def test_get_si_pixel_size(hawc_plus_channels):
         [2.57, 2.57], unit='arcsec')
 
 
+@pytest.mark.skipif(in_windows_os(), reason='Path differences')
 def test_write_flat_field(initialized_channels, tmpdir):
     channels = initialized_channels.copy()
     path = tmpdir.mkdir('test_write_flat_field')
@@ -252,9 +253,8 @@ def test_write_flat_field(initialized_channels, tmpdir):
     for hdu in hdul:
         assert hdu.data.shape == (41, 64)
 
-    # failing in windows ci only
-    #assert not np.allclose(hdul['T ARRAY GAIN'].data, 1)
-    #assert not np.allclose(hdul['T BAD PIXEL MASK'].data, 2)
+    assert not np.allclose(hdul['T ARRAY GAIN'].data, 1)
+    assert not np.allclose(hdul['T BAD PIXEL MASK'].data, 2)
 
     hdul.close()
 

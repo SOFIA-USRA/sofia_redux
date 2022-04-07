@@ -444,16 +444,17 @@ class TestChannels(object):
 
         with open(filename) as fh:
             lines = fh.readlines()
-        assert len(lines) == nchannel + 21
+        assert len(lines) > nchannel
 
         # header present
         assert lines[2] == 'test header\n'
 
         # spot check contents
-        assert lines[-nchannel - 1] == '0,0\t1.000\t3.162e+00\t-' \
-                                       '\t1.000\t1.000\t1.000\t0\t0\t0\n'
-        assert lines[-2] == '10,10\t1.000\t3.162e+00\t-' \
-                            '\t1.000\t1.000\t1.000\t120\t10\t10\n'
+        lines = ''.join(lines)
+        assert '0,0\t1.000\t3.162e+00\t-\t1.000' \
+               '\t1.000\t1.000\t0\t0\t0' in lines
+        assert '10,10\t1.000\t3.162e+00\t-\t1.000' \
+               '\t1.000\t1.000\t120\t10\t10' in lines
 
     def test_print_correlated_modalities(self, capsys, populated_channels):
         populated_channels.is_initialized = False

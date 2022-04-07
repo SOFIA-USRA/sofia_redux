@@ -891,7 +891,7 @@ def test_convert_range_value_to_index(initialized_spike_map, capsys):
     ranges = np.asarray([[4, 7], [5, 9]]) * arcsec
     index_ranges = m.convert_range_value_to_index(ranges)
     assert np.allclose(index_ranges, [[4, 7], [5, 9]])
-    assert index_ranges.dtype == int
+    assert index_ranges.dtype in [int, np.int64]
 
 
 def test_crop(initialized_spike_map):

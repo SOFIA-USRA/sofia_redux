@@ -320,10 +320,10 @@ class TestChannelData(object):
         data.weight = np.arange(3)
         data.flag = np.arange(3)
         s = data.to_string()
-        assert s == "ch\tgain\tweight\tflag\n" \
-                    "0\t0.000\t0.000e+00\t-\n" \
-                    "1\t1.000\t1.000e+00\tX\n" \
-                    "2\t2.000\t2.000e+00\tB\n"
+        assert "ch\tgain\tweight\tflag" in s
+        assert "0\t0.000\t0.000e+00\t-" in s
+        assert "1\t1.000\t1.000e+00\tX" in s
+        assert "2\t2.000\t2.000e+00\tB" in s
 
         df = data.to_string(frame=True)
         assert isinstance(df, pandas.DataFrame)

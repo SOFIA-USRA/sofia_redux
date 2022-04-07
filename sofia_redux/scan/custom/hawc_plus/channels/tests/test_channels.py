@@ -252,8 +252,8 @@ def test_write_flat_field(initialized_channels, tmpdir):
     for hdu in hdul:
         assert hdu.data.shape == (41, 64)
 
-    assert not np.allclose(hdul[1].data, 1)
-    assert not np.allclose(hdul[3].data, 2)
+    assert not np.allclose(hdul['T ARRAY GAIN'].data, 1)
+    assert not np.allclose(hdul['T BAD PIXEL MASK'].data, 2)
 
     hdul.close()
 
@@ -269,8 +269,8 @@ def test_write_flat_field(initialized_channels, tmpdir):
     channels.data.pol.fill(0)
     channels.write_flat_field(regular, include_nonlinear=False)
     hdul = fits.open(regular)
-    assert np.allclose(hdul[1].data, 1)
-    assert np.allclose(hdul[3].data, 2)
+    assert np.allclose(hdul['T ARRAY GAIN'].data, 1)
+    assert np.allclose(hdul['T BAD PIXEL MASK'].data, 2)
 
 
 def test_add_hdu(initialized_channels):

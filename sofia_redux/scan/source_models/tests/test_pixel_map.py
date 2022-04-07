@@ -408,8 +408,8 @@ def test_write_pixel_data(short_source, tmpdir):
 
     with open(filename, 'r') as f:
         lines = f.readlines()
-
-    indices = [int(x.split()[0]) for x in lines if not x.startswith('#')]
+    indices = [int(x.split()[0]) for x in lines
+               if (not x.startswith('#') and x.strip() != '')]
     assert indices == [0, 1, 2, 3, 4]
 
 

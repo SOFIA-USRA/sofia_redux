@@ -50,8 +50,8 @@ class CameraInfo(Info):
         if source_type == 'pixelmap':
             return PixelMap(info=self, reduction=reduction)
         else:
-            return super().get_source_model_instance(scans,
-                                                     reduction=reduction)
+            return super().get_source_model_instance(
+                scans, reduction=reduction)
 
     def get_rotation_angle(self):
         """

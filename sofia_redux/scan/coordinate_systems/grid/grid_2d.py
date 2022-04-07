@@ -488,7 +488,10 @@ class Grid2D(Grid):
         -------
         None
         """
-        self.i = np.linalg.pinv(self.m)
+        if np.isnan(self.m).any():
+            self.i = np.zeros_like(self.m)
+        else:
+            self.i = np.linalg.pinv(self.m)
 
     def get_transform(self):
         """

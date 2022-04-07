@@ -233,6 +233,9 @@ def test_calculate_inverse_transform():
     g.m = np.array([[2, 0], [1, 4]])
     g.calculate_inverse_transform()
     assert np.allclose(g.i, [[0.5, 0], [-0.125, 0.25]])
+    g.m = np.full((4, 4), np.nan)
+    g.calculate_inverse_transform()
+    assert np.allclose(g.i, 0)
 
 
 def test_get_transform():

@@ -10,7 +10,6 @@ Current SOFIA DPS team
 * Dan Perera, developer
 * Rachel Vander Vliet, developer
 * Karishma Bansal, developer
-* Arpan Das, developer
 * Bruce Clarke, systems engineer
 * John Fenwick, systems administrator
 
@@ -94,4 +93,3 @@ packages are also listed below.
    - Carrie Volpert
 * CRUSH
    - Attila Kovacs
-

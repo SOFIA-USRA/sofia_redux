@@ -1,3 +1,4 @@
+
 .. list-table:: Configuration Keywords
    :class: longtable
    :widths: 20 20 40
@@ -86,6 +87,35 @@
      - An alias for all radiation-sensitive channels of the instrument, or set
        options for it.  See `correlated.<modality>`_ for further details.
 
+   * - .. _atran.altcoeffs:
+
+       | **atran.altcoeffs**
+       | Instrument: SOFIA
+     - atran.altcoeffs=<c0>,<c1>,<c2>,...<cN>
+     - The polynomial coefficients used to determine the altitude factor when
+       determining the atmospheric transmission correction.  Used to fit for
+       an altitude relative to 41 kft in units of kft.
+
+   * - .. _atran.amcoeffs:
+
+       | **atran.amcoeffs**
+       | Instrument: SOFIA
+     - atran.amcoeffs=<c0>,<c1>,<c2>,...<cN>
+     - The polynomial coefficients used to determine the air mass factor when
+       determining the atmospheric transmission correction.  Used to fit for
+       the air mass relative to sqrt(2) (an elevation of 45 degrees).
+
+   * - .. _atran.reference:
+
+       | **atran.reference**
+       | Instrument: SOFIA
+     - atran.reference=<X>
+     - The factor (f) used to provide the actual transmission value when
+       multiplied by the transmission correction value (c).  The
+       transmission (t) is given as t = f * c where c = am_factor * alt_factor
+       (see `atran.altcoeffs`_ and `atran.amcoeffs`_).  The transmission is
+       related to the opacity (tau) by t = exp(-tau * airmass).
+
    * - .. _beam:
 
        **beam**
@@ -144,9 +174,9 @@
        **chopped**
      - chopped={True, False}
      - Used for specifying a chopped data reduction.  Can be set manually or
-       automatically (via detect.chopped) based on the data itself.  The key
+       automatically based on the data itself.  The key
        may trigger conditional statements and extra decorrelation steps.
-       See `detect.chopped`_, `correlated.<modality>.trigger`_.
+       See `correlated.<modality>.trigger`_.
 
    * - .. _chopper.invert:
 
@@ -395,6 +425,14 @@
        step, is subtracted from the timestream in addition to it's inverse
        transform (correct method of removal).
 
+   * - .. _darkcorrect:
+
+       | **darkcorrect**
+       | Instrument: HAWC+
+     - darkcorrect={True,False}
+     - Whether to perform the squid dark correction for blind channels.
+       Otherwise, all blind channels will be flagged as dead.
+
    * - .. _datapath:
 
        **datapath**
@@ -548,15 +586,6 @@
        The flagging of spiky channels and frames is controlled by the
        `despike.flagcount`_, `despike.flagfraction`_, and `despike.framespikes`_
        keys.
-
-   * - .. _detect.chopped:
-
-       **detect.chopped**
-     - detect.chopped={True, False}
-     - Try to determine if the chopper was used from the data itself, and set
-       the chopped_ flag accordingly.  This can be used to trigger the
-       activation of specific reduction steps for chopped data.  See
-       `correlated.<modality>.trigger`_.
 
    * - .. _division.<name>:
 
@@ -971,6 +1000,39 @@
      - Produce maps in focal-plane coordinates.  This is practical only for
        beam-mapping.  Thus, focal-plane coordinates are default when
        `source.type`_ is set to 'pixelmap'.  See pixelmap_ and `source.type`_.
+
+   * - .. _focus.<direction>coeff:
+
+       **focus.<direction>coeff**
+     - focus.<direction>coeff=<X>
+     - Used to convert the asymmetry and elongation parameters of an elliptical
+       model of the source to focus values (in mm) using focus=-1/coeff * param
+       where coeff is the value supplied here, and param is the asymmetry x or
+       y factor for directions x and y, and param is the elongation factor for
+       the z direction.  <direction> may take values of x, y, or z.
+
+   * - .. _focus.<direction>scatter:
+
+       **focus.<direction>scatter**
+     - focus.<direction>scatter=<X>
+     - Adds extra noise to the reported focus measurements in the x, y, and/or
+       z <direction>.  RMS values should be provided in units of mm.
+
+   * - .. _focus.significance:
+
+       **focus.significance**
+     - focus.significance=<X>
+     - Require focus calculation factors (asymmetry and elongation) to have a
+       signal-to-noise ratio of greater than <X> in order for the focus results
+       to be reported in the x, y, and z directions.
+
+   * - .. _focus.elong0:
+
+       **focus.elong0**
+     - focus.elong0=<X>
+     - Subtracts an offset correction from the elongation of an elliptical
+       model of the source when and if focus calculations are performed.  <X>
+       should be supplied as a percentage value.
 
    * - .. _forget:
 
@@ -1619,14 +1681,6 @@
        If neither of these, it will default to 'maximum-likelihood'.  If not
        set, the global estimator_ will be used.
 
-   * - .. _phasedspike:
-
-       **phasedspike**
-     - phasedspike={True, False}
-     - When set, the phase data (such as position-switched phases) will be
-       despiked together with the regular high-frequency despiking.  The
-       despiking level is the same as for the `despike.level`_ option.  See
-       despike_, `despike.level`_, and phaseweights_.
 
    * - .. _phasegains:
 
@@ -1636,16 +1690,6 @@
        modes.  The default is to use the fast samples for calculating gains.
        Alternatively, you can set this property separately for each correlated
        modality using `correlated.<modality>.phasegains`_.
-
-   * - .. _phaseweights:
-
-       **phaseweights**
-     - phaseweights={True, False}
-     - When set, SOFSCAN will calculate proper noise weights for the phase scan
-       data as well as the high-frequency timestream, under the expectation that
-       the phase noise can be dominated by 1/f-type behaviour on the relevant
-       timescales.  the calculation of phase weights improves the reliability of
-       the photometry.  See weighting_, phases_, and chopped_.
 
    * - .. _pixeldata:
 
@@ -1821,6 +1865,16 @@
 
        See point_.
 
+   * - .. _pointing.degree:
+
+       **pointing.degree**
+     - | [pointing]
+       | degree=<X>
+     - Sets the degree (integer <X>) of spline used to fit the peak source
+       amplitude value. This may be important for pixel maps where the map
+       coverage is not sufficient to provide the required number of points
+       for a third degree spline fit (default).
+
    * - .. _pointing.exposureclip:
 
        **pointing.exposureclip**
@@ -1864,6 +1918,14 @@
      - Restrict the pointing fit to a circular area, with radius X (arcseconds),
        around the nominal map center.  it may be useful for deriving pointing in
        a crowded field.  See `pointing.suggest`_.
+
+   * - .. _pointing.reduce_degrees:
+
+       **pointing.reduce_degrees**
+     - | [pointing]
+       | reduce_degrees={True, False}
+     - Allows the degree of spline fit to be lowered if there are insufficient
+       points to allow for the requested fit (see `pointing.degree`_).
 
    * - .. _pointing.significance:
 
@@ -2098,7 +2160,8 @@
    * - .. _scale:
 
        **scale**
-     - scale={<X>, <filename>}
+     - | [scale]
+       | value={<X>, <filename>}
      - Set the calibration scaling of the data.  The following values are
        available:
 
@@ -2109,6 +2172,15 @@
 
        Note: not all instruments support the <filename> value.  See tau_, gain_,
        invert_, and jackknife_.
+
+   * - .. _scale.grid:
+
+       **scale.grid**
+     - | [scale]
+       | grid=<X>
+     - The grid resolution in arcseconds for which the scale_ value was
+       derived.  If set, this correctly conserves flux values if grid_ is
+       set to a different value.
 
    * - .. _scanmaps:
 
@@ -2707,7 +2779,9 @@
 
        When lookup tables are used, the tau values will be interpolated for each
        scan, so long as the scan falls inside the interpolator's range.
-       Otherwise, a tau of 0.0 will be used.
+       Otherwise, a tau of 0.0 will be used.  For SOFIA instruments, <spec>
+       may also take the values {atran, pwvmodel}.  Please see
+       `atran.reference`_, `tau.pwvmodel`_, and `tau.<?>`_ for further details.
 
    * - .. _tau.pwvmodel:
 
@@ -2962,34 +3036,7 @@
 
        will write out the coupling gains of each detector to the telescope
        azimuth motion ('telescope-x') and scalar acceleration ('accel-mag').
-       See `correlated.<modality>`_ and `write.coupling.spec`_.
-
-   * - .. _write.coupling.spec:
-
-       | **write.coupling.spec**
-       | *(Not currently implemented)*
-     - | [write]
-       | [[coupling]]
-       | [[[spec]]]
-       | value=<mod1>, <mod2>,...
-     - Measure and write coupling spectra.  Coupling spectra are similar to
-       correlation spectra, but with a gain-type normalization so that the
-       values can be interpreted directly as gains by which the correlated
-       signal can be removed from the timestream data.  The <mod> arguments are
-       a list of modality names such as 'telescope-x' or 'accel-mag'.  See
-       `correlated.<modality>`_ and `write.coupling`_.
-
-   * - .. _write.coupling.spec.windowsize:
-
-       | **write.coupling.spec. windowsize**
-       | *(Not currently implemented)*
-     - | [write]
-       | [[coupling]]
-       | [[[spec]]]
-       | windowsize=<N>
-     - Specify the window size (as N downsampled samples) on which to measure
-       the coupling spectra.  The default is to measure on the longest
-       meaningful timescale as defined by drifts_.  See `write.coupling.spec`_.
+       See `correlated.<modality>`_.
 
    * - .. _write.covar:
 

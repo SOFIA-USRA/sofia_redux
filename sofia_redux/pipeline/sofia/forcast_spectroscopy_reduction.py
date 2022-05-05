@@ -644,8 +644,9 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
             log.debug(f'Using slit correction file {slitfile}.')
             slit_fn = slit_hdul[0].data
 
-        # divide by 2 for NMC and SLITSCAN
-        if 'nmc' in cnmode or 'scan' in cnmode:
+        # divide by 2 for NMC and old-style SLITSCAN
+        # (but not SLITSCAN_NXCAC)
+        if 'nmc' in cnmode or cnmode == 'slitscan':
             log.info('Dividing by 2 for NMC chop-nod mode.')
             cn_factor = 2.0
         else:
@@ -2833,10 +2834,8 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
                 else:
                     aplot = [wave, atran]
 
-            if not error_plot:
-                spec_err = None
-
             # plot spectral flux
+            spec_err = None if not error_plot else spec_err
             make_spectral_plot(ax, wave, spec_flux, spectral_error=spec_err,
                                scale=spec_scale, labels=labels,
                                colormap=colormap,

@@ -83,7 +83,7 @@ def readmode(header):
             mode = skymode
         else:
             mode = instmode
-    elif skymode in ['C2NC2', 'C2NC4']:
+    elif skymode in ['C2NC2', 'C2NC4'] or 'SLITSCAN' in skymode:
         mode = skymode
     else:
         mode = instmode

@@ -256,8 +256,10 @@ class TestFORCASTSpectroscopyReduction(object):
                               ('OBJECT', 'NMC', 'POINT_SOURCE'),
                               ('OBJECT', 'NXCAC', 'POINT_SOURCE'),
                               ('OBJECT', 'NXCAC', 'EXTENDED_SOURCE'),
-                              ('OBJECT', 'SLITSCAN', 'EXTENDED_SOURCE')])
-    def test_all_steps(self, tmpdir, obstype, skymode, srctype):
+                              ('OBJECT', 'SLITSCAN', 'EXTENDED_SOURCE'),
+                              ('OBJECT', 'SLITSCAN_NMC', 'EXTENDED_SOURCE'),
+                              ('OBJECT', 'SLITSCAN_NXCAC', 'EXTENDED_SOURCE')])
+    def test_all_steps(self, capsys, tmpdir, obstype, skymode, srctype):
         # exercises nominal behavior for a typical reduction --
         # standard and not
         red = FORCASTSpectroscopyReduction()
@@ -280,6 +282,13 @@ class TestFORCASTSpectroscopyReduction(object):
                 continue
             msg = '-- Pipeline step: {}'.format(red.processing_steps[step])
             assert msg in history
+
+        # check for NMC normalization
+        capt = capsys.readouterr().out
+        if 'NMC' in skymode or skymode == 'SLITSCAN':
+            assert 'Dividing by 2 for NMC' in capt
+        else:
+            assert 'Dividing by 2 for NMC' not in capt
 
     def test_parameter_copy(self, tmpdir):
         # test that parameter copy gets the additional

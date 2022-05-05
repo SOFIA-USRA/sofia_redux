@@ -249,6 +249,6 @@ def sobel(input_array, kderiv=(-1, 0, 1), kperp=(1, 2, 1), pnorm=1, doabs=True,
                 result += output ** pnorm
 
         if pnorm != 1:
-            result **= (1.0 / pnorm)
+            result = result ** (1.0 / pnorm)
 
     return result

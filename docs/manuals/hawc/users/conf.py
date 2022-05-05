@@ -96,7 +96,8 @@ release = ': %s %s' % (package, version)
 latex_documents = [('users',
                     'hawc_users.tex',
                     "HAWC+ DRP User's Manual",
-                    "M. Clarke, M. Berthoud, A. Kovács, F. Santos, G. Novak",
+                    "M. Clarke, D. Perera, M. Berthoud, A. Kovács, "
+                    "F. Santos, G. Novak",
                     'howto')]
 
 # Fix environment error, make one-sided document,

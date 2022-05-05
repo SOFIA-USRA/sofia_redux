@@ -47,8 +47,8 @@ class TestResample(FIFITestCase):
             elif i == 2 or i == 4:
                 # error sum should be higher for interp data
                 assert np.nansum(interp[i].data) > np.nansum(rsmp[i].data)
-            elif i == 5 or i == 6 or i == 7:
-                # same for x, y, wvlen
+            elif i in [5, 6, 7, 8, 9, 10, 11]:
+                # same for x, y, w, transmission, response, exposure map
                 assert np.allclose(rsmp[i].data, interp[i].data)
             else:
                 # mean should be in the ballpark for flux
@@ -312,7 +312,7 @@ class TestResample(FIFITestCase):
         # exposure map returns no good idx
         mocker.patch(
             'sofia_redux.instruments.fifi_ls.resample.generate_exposure_map',
-            return_value=np.array([False]))
+            return_value=[(np.array([False]), (0, 1), (0, 1))])
         rbf_mean_combine(combined, grid_info)
         assert np.all(np.isnan(combined['GRID_FLUX']))
         capt = capsys.readouterr()
@@ -644,3 +644,59 @@ class TestResample(FIFITestCase):
         assert np.all(with_wts['IMAGE_WEIGHTS'].data == np.arange(10))
         assert np.all(with_wts['UNCORRECTED_IMAGE_WEIGHTS'].data
                       == np.arange(10) + 10)
+
+    def test_large_data(self, capsys, mocker):
+        files = get_wsh_files()
+
+        # mock resample to return faster
+        mocker.patch(
+            'sofia_redux.instruments.fifi_ls.resample.Resample.'
+            '__call__', return_value=(10, 10, 10))
+
+        # mock data size estimates
+        class MockMem:
+            total = 1000
+        mocker.patch(
+            'sofia_redux.instruments.fifi_ls.resample.psutil.virtual_memory',
+            return_value=MockMem)
+        mocker.patch(
+            'sofia_redux.instruments.fifi_ls.resample.Resample.'
+            'estimate_max_bytes', return_value=10)
+
+        # test with small data, check_memory=True and False should be same
+        resample(files, write=False, check_memory=True)
+        capt = capsys.readouterr()
+        assert 'Maximum expected memory needed: 10.00 B' in capt.out
+        assert 'Splitting data tree into blocks.' not in capt.out
+        resample(files, write=False, check_memory=False)
+        capt = capsys.readouterr()
+        assert 'Maximum expected memory needed: 10.00 B' in capt.out
+        assert 'Splitting data tree into blocks.' not in capt.out
+
+        # test with large data, check_memory=True
+        mocker.patch(
+            'sofia_redux.instruments.fifi_ls.resample.Resample.'
+            'estimate_max_bytes', return_value=10000)
+        resample(files, write=False, check_memory=True)
+        capt = capsys.readouterr()
+        assert 'Maximum expected memory needed: 9.77 kB' in capt.out
+        assert 'Splitting data tree into blocks.' not in capt.out
+
+        # test with large data, check_memory=False:
+        # large_data is explicitly set
+        mocker.patch(
+            'sofia_redux.instruments.fifi_ls.resample.Resample.'
+            'estimate_max_bytes', return_value=10000)
+        resample(files, write=False, check_memory=False)
+        capt = capsys.readouterr()
+        assert 'Maximum expected memory needed: 9.77 kB' in capt.out
+        assert 'Splitting data tree into blocks.' in capt.out
+
+        # test with borderline data: 1/10 of memory
+        mocker.patch(
+            'sofia_redux.instruments.fifi_ls.resample.Resample.'
+            'estimate_max_bytes', return_value=100)
+        resample(files, write=False, check_memory=False)
+        capt = capsys.readouterr()
+        assert 'Maximum expected memory needed: 100.00 B' in capt.out
+        assert 'Splitting data tree into blocks.' in capt.out

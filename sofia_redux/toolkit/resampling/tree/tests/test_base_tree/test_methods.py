@@ -46,10 +46,47 @@ def test_block_members():
     assert "neighborhood tree not initialized" in str(err.value).lower()
 
 
+def test_estimate_ball_tree_bytes():
+    coordinates = np.empty((3, 10000))
+    float_bytes = np.empty(0, dtype=float).itemsize
+    n_bytes = BaseTree.estimate_ball_tree_bytes(
+        coordinates, leaf_size=40)
+    assert np.isclose(n_bytes / float_bytes, 40800)
+
+    n_bytes = BaseTree.estimate_ball_tree_bytes(
+        coordinates[0], leaf_size=40)
+    assert np.isclose(n_bytes / float_bytes, 20400)
+
+
+def test_estimate_hood_tree_bytes():
+    rand = np.random.RandomState(3)
+    coordinates = rand.random((3, 10000)) * 50
+    n_bytes = BaseTree.estimate_hood_tree_bytes(coordinates)
+    assert np.isclose(n_bytes, 13080104, rtol=1e-3)
+    n_bytes = BaseTree.estimate_hood_tree_bytes(coordinates[0])
+    assert np.isclose(n_bytes, 85304, rtol=1e-3)
+    n_bytes = BaseTree.estimate_hood_tree_bytes(coordinates, window=2)
+    assert np.isclose(n_bytes, 1705104, rtol=1e-3)
+
+
+def test_estimate_max_bytes():
+    x = np.linspace(0, 255, 256)
+    coordinates = np.array(np.meshgrid(x, x))
+    n_bytes = BaseTree.estimate_max_bytes(
+        coordinates, window=8, leaf_size=40)
+    assert np.isclose(n_bytes, 4693160, rtol=1e-3)
+
+    n_bytes = BaseTree.estimate_max_bytes(
+        coordinates[0].ravel(), window=8, leaf_size=40)
+    assert np.isclose(n_bytes, 2886376, rtol=1e-3)
+
+
 def test_get_class_for():
     rand = np.random.random
     resampler = ResamplePolynomial(rand(100), rand(100), rand(100))
     c = BaseTree.get_class_for(resampler)
+    assert c == PolynomialTree
+    c = BaseTree.get_class_for(ResamplePolynomial)
     assert c == PolynomialTree
     c = BaseTree.get_class_for('polynomial')
     assert c == PolynomialTree
@@ -133,11 +170,33 @@ def test_build_tree():
     assert "unknown tree building method" in str(err.value).lower()
 
 
+def test_build_balltree_for_block():
+    coordinates = np.stack([x.ravel() for x in np.mgrid[:5, :6]])
+    tree = BaseTree(coordinates, build_type='none')
+    tree.leaf_size = None
+    tree.build_ball_tree_for_block(2)
+    assert isinstance(tree._balltree, BallTree)
+    assert tree._balltree.data.size == 12
+    assert tree.ball_tree_block == 2
+
+    tree.leaf_size = 30
+    tree._balltree = None
+    tree.build_ball_tree_for_block(0)
+    assert isinstance(tree._balltree, BallTree)
+    assert tree._balltree.data.size == 8
+    assert tree.ball_tree_block == 0
+
+
 def test_build_balltree():
     coordinates = np.stack([x.ravel() for x in np.mgrid[:5, :6]])
     tree = BaseTree((0, 0))
     tree.coordinates = coordinates
     assert not tree.balltree_initialized
+    tree.large_data = True
+    tree._build_ball_tree()
+    assert not tree.balltree_initialized
+
+    tree.large_data = False
     tree._build_ball_tree()
     assert tree.balltree_initialized
     assert isinstance(tree._balltree, BallTree)
@@ -201,6 +260,22 @@ def test_query_radius():
     assert np.allclose(r0, distances[0])
     r1 = np.hypot(*(coordinates[:, ind[1]] - points[:, 1, None]))
     assert np.allclose(r1, distances[1])
+
+    tree.large_data = True
+    x = np.array([0.0, 2.0])
+    with pytest.raises(ValueError) as err:
+        tree.query_radius(x, radius=2)
+    assert "No block number" in str(err.value)
+
+    inds = tree.query_radius(x, radius=2, block=2)
+    assert len(inds) == 1
+    assert np.allclose(inds[0], [1, 2, 3, 7, 8, 9])
+
+    inds, distances = tree.query_radius(x, radius=2, block=2,
+                                        return_distance=True)
+    assert len(inds) == 1 and len(distances) == 1
+    assert np.allclose(inds[0], [1, 2, 3, 7, 8, 9])
+    assert np.allclose(distances[0], [1, 0, 1, np.sqrt(2), 1, np.sqrt(2)])
 
 
 def test_neighborhood():

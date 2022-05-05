@@ -2,6 +2,7 @@
 
 import numba as nb
 import numpy as np
+import psutil
 
 from sofia_redux.toolkit.resampling.resample_utils import (
     scale_coordinates,
@@ -26,6 +27,9 @@ class ResamplePolynomial(ResampleBase):
                  window_estimate_oversample=2.0,
                  leaf_size=40,
                  order=1, fix_order=True,
+                 large_data=None,
+                 check_memory=True,
+                 memory_buffer=0.25,
                  **distance_kwargs):
         """
         Class to resample data using local polynomial fits.
@@ -100,6 +104,17 @@ class ResamplePolynomial(ResampleBase):
             Number of points at which to switch to brute-force during the
             ball tree query algorithm.  See `sklearn.neighbours.BallTree`
             for further details.
+        large_data : bool, optional
+            If `True`, indicates that this resampling algorithm will run on
+            a large set of data, and the ball tree should be created on
+            subsets of the data.
+        check_memory : bool, optional
+            If `True`, check the memory requirements for resampling the
+            supplied data.
+        memory_buffer : float, optional
+            A fraction (positive or negative) with which to modify the memory
+            estimates for the process memory requirements.  Memory estimates
+            are scaled by the factor 1 + memory_buffer.
         distance_kwargs : dict, optional
             Optional keyword arguments passed into
             :func:`sklearn.neighbors.DistanceMetric`.  The default is to use
@@ -119,7 +134,9 @@ class ResamplePolynomial(ResampleBase):
                          window_estimate_bins=window_estimate_bins,
                          window_estimate_percentile=window_estimate_percentile,
                          window_estimate_oversample=window_estimate_oversample,
-                         leaf_size=leaf_size, **distance_kwargs)
+                         leaf_size=leaf_size, large_data=large_data,
+                         check_memory=check_memory,
+                         memory_buffer=memory_buffer, **distance_kwargs)
 
     @property
     def order(self):
@@ -152,6 +169,9 @@ class ResamplePolynomial(ResampleBase):
                         window_estimate_percentile=50,
                         window_estimate_oversample=2.0,
                         leaf_size=40,
+                        large_data=None,
+                        check_memory=True,
+                        memory_buffer=0.25,
                         **distance_kwargs):
         """
         Build the sample tree from input coordinates.
@@ -178,6 +198,17 @@ class ResamplePolynomial(ResampleBase):
             Number of points at which to switch to brute-force during the
             ball tree query algorithm.  See `sklearn.neighbours.BallTree`
             for further details.
+        large_data : bool, optional
+            If `True`, indicates that this resampling algorithm will run on
+            a large set of data, and the ball tree should be created on
+            subsets of the data.
+        check_memory : bool, optional
+            If `True`, check the memory requirements for resampling the
+            supplied data.
+        memory_buffer : float, optional
+            A fraction (positive or negative) with which to modify the memory
+            estimates for the process memory requirements.  Memory estimates
+            are scaled by the factor 1 + memory_buffer.
         distance_kwargs : dict, optional
             Optional keyword arguments passed into
             :func:`sklearn.neighbors.DistanceMetric`.  The default is to use
@@ -192,13 +223,19 @@ class ResamplePolynomial(ResampleBase):
         """
         self._order = self.check_order(self._order, self._n_features,
                                        self._n_samples)
+
+        memory_kwargs = {'order': self._order}
+
         super().set_sample_tree(
             coordinates,
             radius=radius,
             window_estimate_bins=window_estimate_bins,
             window_estimate_percentile=window_estimate_percentile,
             window_estimate_oversample=window_estimate_oversample,
-            leaf_size=leaf_size,
+            leaf_size=leaf_size, large_data=large_data,
+            check_memory=check_memory,
+            memory_buffer=memory_buffer,
+            memory_kwargs=memory_kwargs,
             **distance_kwargs)
         self.sample_tree.set_order(self._order, fix_order=self._fix_order)
         self.sample_tree.precalculate_phi_terms()
@@ -688,6 +725,14 @@ class ResamplePolynomial(ResampleBase):
 
         # Loading cannot be covered in tests as it occurs on other CPUs.
         load_args = False
+
+        block_memory = _global_resampling_values.get('block_memory_usage')
+        if not cls.sufficient_memory_for(block_memory):  # pragma: no cover
+            raise MemoryError(
+                f"Insufficient memory to process block {block}. "
+                f"Estimated: {block_memory} bytes. "
+                f"Available: {psutil.virtual_memory().available} bytes.")
+
         if filename is not None:  # pragma: no cover
             if 'args' not in _global_resampling_values:
                 load_args = True
@@ -708,16 +753,33 @@ class ResamplePolynomial(ResampleBase):
          get_distance_weights, get_rchi2, get_cross_derivatives,
          get_offset_variance, settings) = _global_resampling_values['args']
 
+        if load_args:  # pragma: no cover
+            block_memory = settings.get('block_memory_usage')
+            if not cls.sufficient_memory_for(block_memory):
+                raise MemoryError(
+                    f"Insufficient memory to process {filename}. "
+                    f"Estimated: {block_memory} bytes. "
+                    f"Available: {psutil.virtual_memory().available} bytes.")
+
         fit_indices, fit_coordinates, fit_phi_terms = \
             fit_tree.block_members(block, get_locations=True, get_terms=True)
 
         sample_indices = nb.typed.List(sample_tree.query_radius(
-            fit_coordinates, 1.0, return_distance=False))
+            fit_coordinates, 1.0, block=block, return_distance=False))
+
+        if not sample_tree.large_data:
+            sample_phi_terms = sample_tree.phi_terms
+        else:
+            phi_indices = sample_tree.create_phi_terms_for(block)
+            n_coeffs = sample_tree.exponents.shape[0]
+            n = sample_tree.n_members
+            sample_phi_terms = np.empty((n_coeffs, n), dtype=float)
+            sample_phi_terms[:, phi_indices] = sample_tree.phi_terms
 
         return (fit_indices,
                 *solve_fits(
                     sample_indices, sample_tree.coordinates,
-                    sample_tree.phi_terms,
+                    sample_phi_terms,
                     sample_values, sample_error, sample_mask,
                     fit_coordinates, fit_phi_terms, settings['order'],
                     settings['alpha'], settings['adaptive_alpha'],
@@ -945,6 +1007,7 @@ def resamp(coordinates, data, *locations,
            window_estimate_percentile=50,
            window_estimate_oversample=2.0,
            leaf_size=40,
+           large_data=False,
            smoothing=0.0, relative_smooth=False,
            adaptive_threshold=None, adaptive_algorithm='scaled',
            fit_threshold=0.0, cval=np.nan, edge_threshold=0.0,
@@ -979,6 +1042,7 @@ def resamp(coordinates, data, *locations,
     window_estimate_percentile
     window_estimate_oversample
     leaf_size
+    large_data
     smoothing
     relative_smooth
     adaptive_threshold
@@ -1028,7 +1092,7 @@ def resamp(coordinates, data, *locations,
         window_estimate_bins=window_estimate_bins,
         window_estimate_percentile=window_estimate_percentile,
         window_estimate_oversample=window_estimate_oversample,
-        leaf_size=leaf_size,
+        leaf_size=leaf_size, large_data=large_data,
         **distance_kwargs)
 
     return resampler(*locations,

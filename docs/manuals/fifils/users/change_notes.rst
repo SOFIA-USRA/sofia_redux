@@ -11,9 +11,15 @@ v2.0.0 and later were implemented in Python. For previously processed
 data, check the PIPEVERS keyword in the FITS header to determine the
 pipeline version used.
 
-
-FIFI-LS Redux v2.6.0
+FIFI-LS Redux v2.6.1
 ~~~~~~~~~~~~~~~~~~~~
+*User manual: Rev. K*
+
+- Fix performance issues for very large maps.
+
+
+FIFI-LS Redux v2.6.0 (2021-12-09)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. J*
 
 - Reformat reference wavelength calibration data for easier maintenance.

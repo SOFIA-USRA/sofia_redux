@@ -53,30 +53,32 @@ def apply_atran_correction(wave, data, var, atran, cutoff):  # pragma: no cover
     var_corr = np.empty(shape, dtype=nb.float64)
     atran_store = np.empty(shape, dtype=nb.float64)
 
+    # find range of atran to interpolate
+    minw, maxw = np.nanmin(wave), np.nanmax(wave)
+    buffer = 0.1 * (maxw - minw)
+    low_atran = minw - buffer
+    high_atran = maxw + buffer
+    found = False
+    a0 = 0
+    a1 = na
+    for ai in range(na):
+        w = aw[ai]
+        if found and w > high_atran:
+            a1 = ai
+            break
+        if not found and w >= low_atran:
+            a0 = ai
+            found = True
+
     for n in range(ndata):
         for i in range(25):
             x = wave[:, i]
             y = data[n, :, i]
             v = var[n, :, i]
-            buffer = 0.1 * (np.nanmax(x) - np.nanmin(x))
-            lower_lim = x[0] - buffer
-            upper_lim = x[-1] + buffer
-            a0 = 0
-            a1 = na
-            found = False
-            for ai in range(na):
-                w = aw[ai]
-                if found and w > upper_lim:
-                    a1 = ai
-                    break
-                if not found and w >= lower_lim:
-                    a0 = ai
-                    found = True
 
             itrans = np.interp(x, aw[a0:a1], at[a0:a1])
             for k in range(nwave):
                 transmission = itrans[k]
-
                 atran_store[n, k, i] = transmission
                 if transmission >= cutoff:
                     tel_corr[n, k, i] = y[k] / transmission

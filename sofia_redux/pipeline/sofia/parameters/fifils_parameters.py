@@ -338,6 +338,22 @@ DEFAULT = {
                         'distributed across multiple cores.',
          'dtype': 'bool',
          'wtype': 'check_box'},
+        {'key': 'max_cores',
+         'name': 'Maximum cores to use',
+         'value': '',
+         'description': 'Set to the maximum number of cores to use in \n'
+                        'parallel processing. If not set, 1/2 of available \n'
+                        'cores will be used.',
+         'dtype': 'int',
+         'wtype': 'text_box'},
+        {'key': 'check_memory',
+         'name': 'Check memory use during resampling',
+         'value': True,
+         'description': 'Set to manage memory use and abort if more \n'
+                        'memory is needed than is available. \n'
+                        'Turn off to attempt processing anyway.',
+         'dtype': 'bool',
+         'wtype': 'check_box'},
         {'key': 'skip_coadd',
          'name': 'Skip coadd',
          'value': False,
@@ -385,6 +401,12 @@ DEFAULT = {
          'description': 'If set, distance weights calculated by the '
                         'resampling algorithm will be appended to the '
                         'output FITS file.',
+         'dtype': 'bool',
+         'wtype': 'check_box'},
+        {'key': 'skip_uncorrected',
+         'name': 'Skip computing the uncorrected flux cube',
+         'value': False,
+         'description': 'If set, the uncorrected flux data will be ignored.',
          'dtype': 'bool',
          'wtype': 'check_box'},
         {'key': 'spatial_params',

@@ -25,7 +25,7 @@ overall Verification and Validation (V&V) approach can be found in the
 Data Processing System V&V Plan (SV01-2232). Both documents can be
 obtained from the SOFIA document library in Windchill.
 
-This manual applies to FIFI-LS Redux version 2.5.0.
+This manual applies to FIFI-LS Redux version 2.6.1.
 
 .. include:: data_description.rst
 

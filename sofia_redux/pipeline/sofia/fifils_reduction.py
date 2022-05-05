@@ -825,6 +825,8 @@ class FIFILSReduction(Reduction):
         param = self.get_parameter_set()
         save = param.get_value('save')
         parallel = param.get_value('parallel')
+        max_cores = param.get_value('max_cores')
+        check_memory = param.get_value('check_memory')
         skip_coadd = param.get_value('skip_coadd')
         interp = param.get_value('interpolate')
         error_weighting = param.get_value('error_weighting')
@@ -837,6 +839,7 @@ class FIFILSReduction(Reduction):
         xy_window = param.get_value('xy_window')
         adaptive_algorithm = param.get_value('adaptive_algorithm')
         append_weights = param.get_value('append_weights')
+        skip_uncorrected = param.get_value('skip_uncorrected')
         w_window = param.get_value('w_window')
         xy_smoothing = param.get_value('xy_smoothing')
         w_smoothing = param.get_value('w_smoothing')
@@ -873,9 +876,18 @@ class FIFILSReduction(Reduction):
             files = [self.input]
 
         if parallel:
-            jobs = self.max_cores
+            max_avail = psutil.cpu_count() - 1
+            try:
+                jobs = int(max_cores)
+                jobs = max_avail if jobs > max_avail else jobs
+                jobs = 1 if jobs < 1 else jobs
+            except(ValueError, TypeError):
+                jobs = max_avail
         else:
             jobs = None
+        if jobs is not None:
+            log.info(f'Using {jobs} max cores for parallel processing.')
+            log.info('')
 
         # set adaptive smoothing for spatial dimensions if desired
         if adaptive_algorithm in ['scaled', 'shaped']:
@@ -908,7 +920,8 @@ class FIFILSReduction(Reduction):
                               fit_threshold=fitthresh,
                               edge_threshold=(xythresh, xythresh, wthresh),
                               append_weights=append_weights,
-                              jobs=jobs)
+                              skip_uncorrected=skip_uncorrected,
+                              jobs=jobs, check_memory=check_memory)
             if not result:
                 msg = 'Problem in fifi_ls.resample.'
                 log.error(msg)
@@ -1195,11 +1208,9 @@ class FIFILSReduction(Reduction):
             ax1.scatter(x, y, c=contour_color, marker='x', s=20,
                         alpha=0.8)
 
-            if not error_plot:
-                spec_err = None
-
             # add a spectral plot
             ax = fig.add_subplot(2, 1, 2)
+            spec_err = None if not error_plot else spec_err
             make_spectral_plot(ax, wave, spec_flux, spectral_error=spec_err,
                                scale=spec_scale, colormap=colormap,
                                xunit=xunit, yunit=yunit, title=spectitle,

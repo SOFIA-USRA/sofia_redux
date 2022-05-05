@@ -2,11 +2,13 @@
 
 import importlib
 import itertools
+import inspect
 import numpy as np
 
 from scipy.sparse import csr_matrix
 from sklearn.neighbors import BallTree
 import sofia_redux.toolkit.resampling.tree as tree_module
+from sofia_redux.toolkit.utilities.func import byte_size_of_object
 
 
 __all__ = ['BaseTree']
@@ -15,7 +17,7 @@ __all__ = ['BaseTree']
 class BaseTree(object):
 
     def __init__(self, argument, shape=None, build_type='all', leaf_size=40,
-                 **distance_kwargs):
+                 large_data=False, **distance_kwargs):
         r"""
         Create a tree structure for use with the resampling algorithm.
 
@@ -95,6 +97,10 @@ class BaseTree(object):
             If `build_type` was set to 'all' or 'balltree', defines the leaf
             size of the BallTree.  Please see
             :func:`sklearn.neighbors.BallTree` for further details.
+        large_data : bool, optional
+            If `True`, indicates that this resampling algorithm will run on
+            a large set of data, and the tree should be created on subsets
+            of the data only when necessary.
         distance_kwargs : dict, optional
             Optional keyword arguments passed into
             :func:`sklearn.neighbors.DistanceMetric`.  The default is to use
@@ -114,11 +120,16 @@ class BaseTree(object):
         self.populated = None
         self.hood_population = None
         self.coordinates = None
+        self.large_data = large_data
+        self.ball_tree_block = None
+        self.ball_tree_members = None
+        self.leaf_size = leaf_size
+        self.distance_kwargs = distance_kwargs
 
         arg = np.asarray(argument)
         if np.asarray(arg).ndim > 1:
             self.build_tree(arg, shape=shape, method=build_type,
-                            leaf_size=leaf_size, **distance_kwargs)
+                            leaf_size=self.leaf_size, **self.distance_kwargs)
         else:
             self._set_shape(tuple(arg))
 
@@ -214,6 +225,193 @@ class BaseTree(object):
         else:
             return self.coordinates.shape[1]
 
+    @classmethod
+    def estimate_ball_tree_bytes(cls, coordinates, leaf_size=40):
+        """
+        Estimate the maximum number of bytes used to construct the ball-tree.
+
+        According to sklearn documentation, the memory needed to store the
+        tree scales as::
+
+             2 ** (1 + floor(log2((n-1) / leaf_size))) - 1
+
+        However, empirically the data also scale as (ndim+1) * leaf_size.
+
+        The estimated number of elements is given as::
+
+            (ndim+1) * leaf_size * (2 ** (1+floor(log2((n-1) / leaf_size)))-1)
+
+        This is then scaled by the number of bytes in a float (typically 8).
+
+        Parameters
+        ----------
+        coordinates : numpy.ndarray
+            The coordinates of shape (n_dimensions, n)
+        leaf_size : int
+            The number of leaves used to construct the ball-tree
+
+        Returns
+        -------
+        max_size : int
+            The maximum number of bytes used to construct the tree.
+        """
+        if leaf_size is None:
+            leaf_size = 40
+        float_bytes = np.empty(0, dtype=float).itemsize
+        if coordinates.ndim == 1:
+            coordinates = coordinates[None]
+        n_dimensions = coordinates.shape[0]
+        n = coordinates.size // n_dimensions
+
+        scale = 2 ** (1 + np.floor(np.log2((n - 1) / leaf_size))) - 1
+        correcting_factor = leaf_size * (n_dimensions + 1)
+        n_elements = scale * correcting_factor
+        return int(n_elements * float_bytes)
+
+    @classmethod
+    def estimate_split_tree_bytes(cls, coordinates,
+                                  window=1, leaf_size=40):
+        """
+        Return the size of a ball tree for a single neighborhood.
+
+        Parameters
+        ----------
+        coordinates : numpy.ndarray
+            The coordinates of shape (n_dimensions, n)
+        window : int or float or numpy.ndarray, optional
+            The window binning size.  If a numpy array is supplied, it should
+            be of shape (n_dimensions,).
+        leaf_size : int
+            The number of leaves used to construct the ball-tree
+
+        Returns
+        -------
+        max_size : int
+            The maximum number of bytes used to construct the tree.
+        """
+        if leaf_size is None:
+            leaf_size = 40
+        n_bins = cls.estimate_n_bins(coordinates, window=window)
+        if coordinates.ndim == 1:
+            coordinates = coordinates[None]
+        n_dimensions = coordinates.shape[0]
+        n_samples = coordinates[0].size
+        samples_per_bin = n_samples / n_bins
+        bins_per_hood = 3 ** n_dimensions
+        n = bins_per_hood * samples_per_bin  # samples in each hood tree
+        n = int(np.clip(n, 0, n_samples))
+        scale = 2 ** (1 + np.floor(np.log2((n - 1) / leaf_size))) - 1
+        correcting_factor = leaf_size * (n_dimensions + 1)
+        float_bytes = np.empty(0, dtype=float).itemsize
+        n_elements = scale * correcting_factor
+        return int(n_elements * float_bytes)
+
+    @classmethod
+    def estimate_n_bins(cls, coordinates, window=1):
+        """
+        Estimate the number of bins in the hood tree.
+
+        Parameters
+        ----------
+        coordinates : numpy.ndarray
+            The coordinates of shape (n_dimensions, n).
+        window : int or float or numpy.ndarray, optional
+            The window binning size.  If a numpy array is supplied, it should
+            be of shape (n_dimensions,).
+
+        Returns
+        -------
+        bytes : int
+        """
+        if coordinates.ndim == 1:
+            coordinates = coordinates[None]
+
+        n_dimensions = coordinates.shape[0]
+        span = np.empty(n_dimensions, dtype=float)
+        for i in range(n_dimensions):
+            span[i] = np.nanmax(coordinates[i]) - np.nanmin(coordinates[i])
+
+        span /= window
+        bins = np.ceil(span).astype(int)
+        n_bins = np.clip(int(np.prod(bins)), 1, None)
+        return n_bins
+
+    @classmethod
+    def estimate_hood_tree_bytes(cls, coordinates, window=1):
+        """
+        Estimate the maximum byte size for the neighborhood tree.
+
+        Parameters
+        ----------
+        coordinates : numpy.ndarray
+            The coordinates of shape (n_dimensions, n).
+        window : int or float or numpy.ndarray, optional
+            The window binning size.  If a numpy array is supplied, it should
+            be of shape (n_dimensions,).
+
+        Returns
+        -------
+        bytes : int
+        """
+        if coordinates.ndim == 1:
+            coordinates = coordinates[None]
+
+        n_dimensions = coordinates.shape[0]
+        n_bins = cls.estimate_n_bins(coordinates, window=window)
+        n_samples = coordinates.size // n_dimensions
+
+        test_array = np.zeros(0, dtype=int)
+        item_byte_size = test_array.itemsize
+        empty_byte_size = byte_size_of_object(test_array)
+        average_samples = n_samples / n_bins
+        array_byte_size = empty_byte_size + (item_byte_size * average_samples)
+        # Add all sub arrays and the container array
+        hood_tree_byte_size = (array_byte_size * n_bins) + empty_byte_size
+        return int(np.ceil(hood_tree_byte_size))
+
+    @classmethod
+    def estimate_max_bytes(cls, coordinates, window=1, leaf_size=40,
+                           full_tree=True, **kwargs):
+        """
+        Estimate the maximum number of bytes required by the tree.
+
+        Parameters
+        ----------
+        coordinates : numpy.ndarray
+            The coordinates for the tree of shape (n_dimensions, n)
+        window : int or float, optional
+            The size of the tree windows
+        leaf_size : int, optional
+            The number of leaves used to construct the ball-tree
+        full_tree : bool, optional
+            Calculate the maximum number of bytes if the full ball-tree is
+            pre-calculated.  Otherwise, calculates the size of a single
+            neighborhood sized ball-tree.
+        kwargs : dict, optional
+            Additional keyword arguments to pass that may be used by subclasses
+            of the BaseTree.
+
+        Returns
+        -------
+        max_size : int
+            The maximum number of bytes used to construct the tree.
+        """
+        float_bytes = np.empty(0, dtype=float).itemsize
+
+        # 1 for coordinates, 1 for coordinate offsets.
+        coordinate_bytes = 2 * coordinates.size * float_bytes
+        if full_tree:
+            ball_tree_bytes = cls.estimate_ball_tree_bytes(
+                coordinates, leaf_size=leaf_size)
+        else:
+            ball_tree_bytes = cls.estimate_split_tree_bytes(
+                coordinates, window=window, leaf_size=leaf_size)
+
+        hood_tree_bytes = cls.estimate_hood_tree_bytes(
+            coordinates, window=window)
+
+        return int(ball_tree_bytes + hood_tree_bytes + coordinate_bytes)
+
     @staticmethod
     def get_class_for(thing):
         """
@@ -231,12 +429,17 @@ class BaseTree(object):
         if isinstance(thing, str):
             name = thing
         else:
-            if 'Grid' in thing.__class__.__name__:
-                name = thing.__class__.__name__.split('Grid')[0]
-            elif 'Resample' in thing.__class__.__name__:
-                name = thing.__class__.__name__.split('Resample')[-1]
+            if inspect.isclass(thing):
+                class_name = thing.__name__
+            else:
+                class_name = thing.__class__.__name__
+            if 'Grid' in class_name:
+                name = class_name.split('Grid')[0]
+            elif 'Resample' in class_name:
+                name = class_name.split('Resample')[-1]
             else:
                 name = None
+
         return BaseTree.get_class_for_name(name)
 
     @staticmethod
@@ -422,7 +625,33 @@ class BaseTree(object):
             self._build_hood_tree()
             self._build_ball_tree(leaf_size=leaf_size, **distance_kwargs)
         else:
-            raise ValueError("Unknown tree building method: %s" % method)
+            raise ValueError(f"Unknown tree building method: {method}")
+
+    def build_ball_tree_for_block(self, block):
+        """
+        Build a ball tree for a neighborhood around a single block.
+
+        Parameters
+        ----------
+        block : int
+            The center block of the neighborhood.
+
+        Returns
+        -------
+        None
+        """
+        if not self.hood_initialized:
+            self._build_hood_tree()
+        self.ball_tree_block = int(block)
+        self.ball_tree_members, coordinates = self.hood_members(
+            self.ball_tree_block, get_locations=True)
+        if self.leaf_size is None:
+            self._balltree = BallTree(
+                coordinates.T, **self.distance_kwargs)
+        else:
+            self._balltree = BallTree(
+                coordinates.T, leaf_size=self.leaf_size,
+                **self.distance_kwargs)
 
     def _build_ball_tree(self, leaf_size=40, **distance_kwargs):
         r"""
@@ -449,6 +678,10 @@ class BaseTree(object):
         None
         """
         self._ball_initialized = False
+        self.ball_tree_block = None
+        if self.large_data:
+            # Do not attempt to build a full ball tree for large data
+            return
         if leaf_size is None:
             self._balltree = BallTree(self.coordinates.T,
                                       **distance_kwargs)
@@ -498,7 +731,7 @@ class BaseTree(object):
                     self.block_population[hoods])
         self._hood_initialized = True
 
-    def query_radius(self, coordinates, radius=1.0, **kwargs):
+    def query_radius(self, coordinates, radius=1.0, block=None, **kwargs):
         r"""
         Return all tree members within a certain distance of given points.
 
@@ -517,6 +750,9 @@ class BaseTree(object):
             certain radius.
         radius : float, optional
             The search radius around each coordinate.
+        block : int, optional
+            Used to create a temporary ball tree for the given block when
+            operating on large data.
         kwargs : dict, optional
             Keywords for :func:`sklearn.neighbors.BallTree.query_radius`.
 
@@ -529,13 +765,36 @@ class BaseTree(object):
             :func:`sklearn.neighbors.BallTree.query_radius` for further
             information.
         """
-        if not self._ball_initialized:
-            raise RuntimeError("Ball tree not initialized")
         if coordinates.ndim == 1:
             c = coordinates[None]
         else:
             c = coordinates.T
-        return self._balltree.query_radius(c, radius, **kwargs)
+
+        if self.large_data:
+            if block is None:
+                raise ValueError("No block number for large data query has "
+                                 "been supplied.")
+            self.build_ball_tree_for_block(block)
+            indices = self._balltree.query_radius(c, radius, **kwargs)
+            if kwargs.get('return_distance'):
+                return_distance = True
+                indices, distances = indices
+            else:
+                return_distance = False
+                distances = None
+
+            for i, point_indices in enumerate(indices):
+                indices[i] = self.ball_tree_members[point_indices]
+
+            if return_distance:
+                return indices, distances
+            else:
+                return indices
+
+        elif not self.balltree_initialized:
+            raise RuntimeError("Ball tree not initialized")
+        else:
+            return self._balltree.query_radius(c, radius, **kwargs)
 
     def block_members(self, block, get_locations=False):
         if not self._hood_initialized:

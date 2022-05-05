@@ -38,6 +38,7 @@ class ResampleKernel(ResampleBase):
                  reduce_degrees=False,
                  imperfect=False,
                  leaf_size=40,
+                 large_data=False,
                  **distance_kwargs):
         """
         Class to resample data using kernel convolution.
@@ -173,6 +174,10 @@ class ResampleKernel(ResampleBase):
             Number of points at which to switch to brute-force during the
             ball tree query algorithm.  See `sklearn.neighbours.BallTree`
             for further details.
+        large_data : bool, optional
+            If `True`, indicates that this resampling algorithm will run on
+            a large set of data, and the ball tree should be created on
+            subsets of the data.
         distance_kwargs : dict, optional
             Optional keyword arguments passed into
             :func:`sklearn.neighbors.DistanceMetric`.  The default is to use
@@ -206,7 +211,8 @@ class ResampleKernel(ResampleBase):
         self._distance_kwargs = distance_kwargs
         super().__init__(coordinates, data, error=error, mask=mask,
                          robust=robust, negthresh=negthresh,
-                         leaf_size=leaf_size, **distance_kwargs)
+                         leaf_size=leaf_size, large_data=large_data,
+                         **distance_kwargs)
 
     @property
     def kernel(self):
@@ -296,6 +302,7 @@ class ResampleKernel(ResampleBase):
 
     def set_sample_tree(self, coordinates,
                         leaf_size=40,
+                        large_data=False,
                         **distance_kwargs):
         """
         Build the sample tree from input coordinates.
@@ -308,6 +315,10 @@ class ResampleKernel(ResampleBase):
             Number of points at which to switch to brute-force during the
             ball tree query algorithm.  See `sklearn.neighbours.BallTree`
             for further details.
+        large_data : bool, optional
+            If `True`, indicates that this resampling algorithm will run on
+            a large set of data, and the ball tree should be created on
+            subsets of the data.
         distance_kwargs : dict, optional
             Optional keyword arguments passed into
             :func:`sklearn.neighbors.DistanceMetric`.  The default is to use
@@ -323,7 +334,8 @@ class ResampleKernel(ResampleBase):
         super().set_sample_tree(
             coordinates,
             radius=self.estimate_feature_windows(),
-            leaf_size=leaf_size, **self._distance_kwargs)
+            leaf_size=leaf_size, large_data=large_data,
+            **self._distance_kwargs)
         self.set_kernel(**self.kernel_args)
 
     def estimate_feature_windows(self, *args, **kwargs):
@@ -925,7 +937,6 @@ class ResampleKernel(ResampleBase):
         `False`, the corresponding output array will have the correct number of
         axes, but be of zero size.
         """
-
         fit = np.full((n_sets, n_fits), float(cval))
 
         if get_error:

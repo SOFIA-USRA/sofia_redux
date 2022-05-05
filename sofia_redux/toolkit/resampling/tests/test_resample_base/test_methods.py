@@ -32,6 +32,14 @@ def test_global_resampling_values(test_resampler):
     assert g.get('foo') == 'bar'
 
 
+def test_estimate_max_bytes():
+    coordinates = np.stack([x.ravel() for x in np.mgrid[:10, :10]])
+    window = 3
+    n_bytes = ResampleBase.estimate_max_bytes(
+        coordinates, window, n_sets=2, leaf_size=40)
+    assert n_bytes == 14560
+
+
 def test_get_grid_class(test_resampler):
     r = test_resampler
     assert r.get_grid_class() == BaseGrid

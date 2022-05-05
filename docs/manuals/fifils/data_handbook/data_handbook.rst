@@ -15,7 +15,7 @@ described in the SOFIA Observer’s Handbook, available from the
 `Proposing and Observing <https://www.sofia.usra.edu/science/proposing-and-observing>`__
 page on the SOFIA website.
 
-This handbook applies to FIFI-LS Redux version 2.5.0.
+This handbook applies to FIFI-LS Redux version 2.6.1.
 
 
 .. include:: ../users/data_description.rst

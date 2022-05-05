@@ -12,7 +12,7 @@ __all__ = ['PolynomialTree']
 class PolynomialTree(BaseTree):
 
     def __init__(self, argument, shape=None, build_type='all',
-                 order=None, fix_order=True, leaf_size=40,
+                 order=None, fix_order=True, leaf_size=40, large_data=False,
                  **distance_kwargs):
         r"""
         Create a tree structure for use with the resampling algorithm.
@@ -111,6 +111,10 @@ class PolynomialTree(BaseTree):
             If `build_type` was set to 'all' or 'balltree', defines the leaf
             size of the BallTree.  Please see
             :func:`sklearn.neighbors.BallTree` for further details.
+        large_data : bool, optional
+            If `True`, indicates that this resampling algorithm will run on
+            a large set of data, and the ball tree should be created on
+            subsets of the data.
         distance_kwargs : dict, optional
             Optional keyword arguments passed into
             :func:`sklearn.neighbors.DistanceMetric`.  The default is to use
@@ -118,7 +122,8 @@ class PolynomialTree(BaseTree):
             definition.
         """
         super().__init__(argument, shape=shape, build_type=build_type,
-                         leaf_size=leaf_size, **distance_kwargs)
+                         leaf_size=leaf_size, large_data=large_data,
+                         **distance_kwargs)
 
         self._order = None
         self._order_symmetry = None
@@ -235,6 +240,57 @@ class PolynomialTree(BaseTree):
         bool
         """
         return self._phi_terms_precalculated
+
+    @classmethod
+    def estimate_max_bytes(cls, coordinates, window=1, leaf_size=40,
+                           full_tree=True, order=2):
+        """
+        Estimate the maximum number of bytes required by the tree.
+
+        This includes pre-calculation of the phi terms for polynomial
+        representation.
+
+        Parameters
+        ----------
+        coordinates : numpy.ndarray
+            The coordinates for the tree of shape (n_dimensions, n)
+        window : int or float, optional
+            The size of the tree windows
+        leaf_size : int, optional
+            The number of leaves used to construct the ball-tree
+        full_tree : bool, optional
+            Calculate the maximum number of bytes if the full ball-tree is
+            pre-calculated.  Otherwise, calculates the size of a single
+            neighborhood sized ball-tree.
+        order : int or numpy.ndarray (int), optional
+            The order of polynomial to fit as an integer for all dimensions or
+            an array of shape (n_dimensions,).
+
+        Returns
+        -------
+        max_size : int
+            An upper limit for the maximum number of bytes used to construct
+            the tree.
+        """
+        tree_bytes = super().estimate_max_bytes(
+            coordinates, window=window, leaf_size=leaf_size,
+            full_tree=full_tree)
+        float_bytes = np.empty(0, dtype=float).itemsize
+        n_dimensions = coordinates.shape[0]
+        n = coordinates.size // n_dimensions
+
+        if not full_tree:
+            n_bins = cls.estimate_n_bins(coordinates, window=window)
+            samples_per_bin = n / n_bins
+            bins_per_hood = 3 ** n_dimensions
+            samples_per_hood = int(np.ceil(samples_per_bin * bins_per_hood))
+            if samples_per_hood < n:
+                n = samples_per_hood
+
+        exponents = polynomial_exponents(order, ndim=n_dimensions)
+        n_coefficients = exponents.shape[0]
+        phi_bytes = n_coefficients * n * float_bytes
+        return phi_bytes + tree_bytes
 
     def _set_shape(self, shape):
         r"""
@@ -376,7 +432,6 @@ class PolynomialTree(BaseTree):
         if not self.order_varies:  # easy
             self.term_indices = None
             exponents = polynomial_exponents(self._order, ndim=self.features)
-            self.phi_terms = polynomial_terms(self.coordinates, exponents)
             self._derivative_term_map = polynomial_derivative_map(exponents)
             self.derivative_term_indices = None
 
@@ -385,25 +440,20 @@ class PolynomialTree(BaseTree):
             # Also, since we concatenate the results into a single large array,
             # create indices that reference correct terms for a given order.
             order_phi_indices = [0]
-            order_phi = []
             order_derivative_indices = [0]
             order_derivative_maps = []
             exponents = None
 
             for o in range(self.order + 1):
                 exponents = polynomial_exponents(o, ndim=self.features)
-                phi = polynomial_terms(self.coordinates, exponents)
-                order_phi.append(phi)
-                order_phi_indices.append(phi.shape[0] + order_phi_indices[o])
+                order_phi_indices.append(
+                    exponents.shape[0] + order_phi_indices[o])
                 derivative_map = polynomial_derivative_map(exponents)
                 order_derivative_maps.append(derivative_map)
                 order_derivative_indices.append(derivative_map.shape[2]
                                                 + order_derivative_indices[o])
 
-            self.phi_terms = np.empty((order_phi_indices[-1], self.n_members),
-                                      dtype=np.float64)
-            self.term_indices = np.asarray(order_phi_indices,
-                                           dtype=int)
+            self.term_indices = np.asarray(order_phi_indices, dtype=int)
             self._derivative_term_map = np.empty(
                 (self.features, 3, order_derivative_indices[-1]), dtype=int)
 
@@ -411,14 +461,73 @@ class PolynomialTree(BaseTree):
                 order_derivative_indices, dtype=int)
 
             for o in range(self.order + 1):
-                i0, i1 = order_phi_indices[o: o + 2]
-                self.phi_terms[i0: i1] = order_phi[o]
                 i0, i1 = order_derivative_indices[o: o + 2]
                 self._derivative_term_map[..., i0: i1] = \
                     order_derivative_maps[o]
 
-        self._phi_terms_precalculated = True
         self._exponents = exponents
+        self.create_phi_terms_for(None)
+
+    def create_phi_terms_for(self, block=None):
+        """
+        Create the phi terms on demand.
+
+        If `block` is None, creates the phi terms over all samples.  Otherwise,
+        creates phi terms for all samples in the neighborhood of `block`.
+
+        Parameters
+        ----------
+        block : int, optional
+            The block for which to create the phi terms.  If `None` is
+            supplied, will calculate for all coordinates.
+
+        Returns
+        -------
+        hood_members : numpy.ndarray (int) or slice or None
+            The samples within the neighborhood of block, all indices or
+            `None` if not calculated.
+        """
+        self._phi_terms_precalculated = False
+        if self.large_data and block is None:
+            # Do not precalculate the phi terms for large data.
+            self.phi_terms = None
+            self._phi_terms_precalculated = False
+            return None
+
+        if block is None:
+            coordinates = self.coordinates
+            indices = slice(0, self.n_members)
+        else:
+            indices, coordinates = self.hood_members(block, get_locations=True)
+
+        if not self.order_varies:  # easy
+            exponents = polynomial_exponents(self._order, ndim=self.features)
+            self.phi_terms = polynomial_terms(coordinates, exponents)
+            self._phi_terms_precalculated = True
+            return indices
+
+        # For each possible order generate phi terms and derivative maps.
+        # Also, since we concatenate the results into a single large array,
+        # create indices that reference correct terms for a given order.
+        order_phi_indices = [0]
+        order_phi = []
+        n = coordinates.shape[1]
+
+        for o in range(self.order + 1):
+            exponents = polynomial_exponents(o, ndim=self.features)
+            phi = polynomial_terms(coordinates, exponents)
+            order_phi.append(phi)
+            order_phi_indices.append(exponents.shape[0] + order_phi_indices[o])
+
+        self.phi_terms = np.empty(
+            (order_phi_indices[-1], n), dtype=np.float64)
+
+        for o in range(self.order + 1):
+            i0, i1 = order_phi_indices[o: o + 2]
+            self.phi_terms[i0: i1] = order_phi[o]
+
+        self._phi_terms_precalculated = True
+        return indices
 
     def block_members(self, block, get_locations=False, get_terms=False):
         """
@@ -449,13 +558,18 @@ class PolynomialTree(BaseTree):
         if not get_terms:
             return result
 
-        if get_terms:
-            if not self._phi_terms_precalculated:
-                raise RuntimeError("Phi terms have not been calculated.")
-        if get_locations:
-            result += self.phi_terms[:, result[0]],
+        indices = result[0] if get_locations else result
+        if self.large_data:
+            terms = None
+        elif not self._phi_terms_precalculated:
+            raise RuntimeError("Phi terms have not been calculated.")
         else:
-            result = result, self.phi_terms[:, result]
+            terms = self.phi_terms[:, indices]
+
+        if get_locations:
+            result += terms,
+        else:
+            result = result, terms
         return result
 
     def hood_members(self, center_block, get_locations=False, get_terms=False):
@@ -488,11 +602,16 @@ class PolynomialTree(BaseTree):
         if not get_terms:
             return result
 
-        if get_terms:
-            if not self._phi_terms_precalculated:
-                raise RuntimeError("Phi terms have not been calculated.")
-        if get_locations:
-            result += self.phi_terms[:, result[0]],
+        indices = result[0] if get_locations else result
+        if self.large_data:
+            terms = None
+        elif not self._phi_terms_precalculated:
+            raise RuntimeError("Phi terms have not been calculated.")
         else:
-            result = result, self.phi_terms[:, result]
+            terms = self.phi_terms[:, indices]
+
+        if get_locations:
+            result += terms,
+        else:
+            result = result, terms
         return result

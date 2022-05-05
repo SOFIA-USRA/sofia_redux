@@ -13,8 +13,8 @@ class KernelTree(BaseTree):
     def __init__(self, argument, shape=None, build_type='all',
                  leaf_size=40, kernel=None, kernel_spacing=1.0,
                  kernel_offsets=None, smoothing=0.0,
-                 imperfect=False, degrees=3, spline_kwargs=None,
-                 **distance_kwargs):
+                 imperfect=False, degrees=3, large_data=False,
+                 spline_kwargs=None, **distance_kwargs):
         r"""
         Create a tree structure for use with the kernel resampling algorithm.
 
@@ -127,6 +127,10 @@ class KernelTree(BaseTree):
             The degree of spline to fit in each dimension.  Either a scalar can
             be supplied pertaining to all dimensions, or an array of shape
             (n_dimensions,) can be used.
+        large_data : bool, optional
+            If `True`, indicates that this resampling algorithm will run on
+            a large set of data, and the ball tree should be created on
+            subsets of the data.
         spline_kwargs : dict, optional
             Optional keyword arguments for spline initialization.  Please see
             :class:`Spline` for further details.
@@ -137,7 +141,8 @@ class KernelTree(BaseTree):
             definition.
         """
         super().__init__(argument, shape=shape, build_type=build_type,
-                         leaf_size=leaf_size, **distance_kwargs)
+                         leaf_size=leaf_size, large_data=large_data,
+                         **distance_kwargs)
         self.kernel = None
         self.kernel_spacing = None
         self.kernel_coordinates = None

@@ -26,6 +26,7 @@ prior to interpolation.
 
   from sofia_redux.toolkit.image.smooth import fiterpolate
   import matplotlib.pyplot as plt
+  import imageio
 
   image = imageio.imread('imageio:camera.png').astype(float)
   image -= image.min()

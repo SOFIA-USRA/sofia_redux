@@ -325,9 +325,9 @@ class StepBgSubtract(StepMOParent, BaseMap):
             stokes = ['I']
 
         # set up for parallel processing via joblib
-        max_cores = psutil.cpu_count() - 1
-        if max_cores < 2:  # pragma: no cover
-            max_cores = 1
+        max_cores = psutil.cpu_count() // 2
+        # serial if only one core available
+        max_cores = 1 if max_cores < 2 else max_cores
 
         sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
 

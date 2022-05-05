@@ -4,6 +4,7 @@ import bottleneck as bn
 import numba
 import numpy as np
 import os
+import psutil
 from scipy.special import gamma
 import shutil
 from tempfile import mkdtemp
@@ -31,6 +32,9 @@ class ResampleBase(object):
                  window_estimate_percentile=50,
                  window_estimate_oversample=2.0,
                  leaf_size=40,
+                 large_data=None,
+                 check_memory=True,
+                 memory_buffer=None,
                  **distance_kwargs):
         """
         Class to resample data using local polynomial fits.
@@ -89,6 +93,17 @@ class ResampleBase(object):
             Number of points at which to switch to brute-force during the
             ball tree query algorithm.  See `sklearn.neighbours.BallTree`
             for further details.
+        large_data : bool, optional
+            If `True`, indicates that this resampling algorithm will run on
+            a large set of data, and the ball tree should be created on
+            subsets of the data.
+        check_memory : bool, optional
+            If `True`, check the memory requirements for resampling the
+            supplied data.
+        memory_buffer : float, optional
+            A fraction (positive or negative) with which to modify the memory
+            estimates for the process memory requirements.  Memory estimates
+            are scaled by the factor 1 + memory_buffer.
         distance_kwargs : dict, optional
             Optional keyword arguments passed into
             :func:`sklearn.neighbors.DistanceMetric`.  The default is to use
@@ -115,6 +130,7 @@ class ResampleBase(object):
         self.sample_tree = None
         self.fit_grid = None
         self.iteration = 0
+        self.memory_info = None
 
         self._process_input_data(data, coordinates,
                                  error=error, mask=mask, negthresh=negthresh,
@@ -125,7 +141,9 @@ class ResampleBase(object):
             window_estimate_bins=window_estimate_bins,
             window_estimate_percentile=window_estimate_percentile,
             window_estimate_oversample=window_estimate_oversample,
-            leaf_size=leaf_size, **distance_kwargs)
+            leaf_size=leaf_size, large_data=large_data,
+            check_memory=check_memory, memory_buffer=memory_buffer,
+            **distance_kwargs)
 
     @property
     def features(self):
@@ -184,6 +202,24 @@ class ResampleBase(object):
         return self.get_grid_class()
 
     @classmethod
+    def sufficient_memory_for(cls, memory):
+        """
+        Return whether there is sufficient available memory for the task.
+
+        Parameters
+        ----------
+        memory : int or None
+            The memory required for the task in bytes
+
+        Returns
+        -------
+        perform_task : bool
+        """
+        if memory is None:
+            return True
+        return memory < psutil.virtual_memory().available
+
+    @classmethod
     def global_resampling_values(cls):
         """
         Return the global resampling values.
@@ -197,6 +233,58 @@ class ResampleBase(object):
         dict
         """
         return _global_resampling_values
+
+    @classmethod
+    def estimate_max_bytes(cls, coordinates, window=1, n_sets=1,
+                           leaf_size=40, full_tree=True, **kwargs):
+        """
+        Estimate the maximum number of bytes required by a reduction.
+
+        Assumes that many factors are precalculated for processing time
+        reduction and that the ball-tree is constructed in the least efficient
+        configuration.
+
+        Parameters
+        ----------
+        coordinates : numpy.ndarray
+            The coordinates for the tree of shape (n_dimensions, n)
+        window : int or float, optional
+            The size of the tree windows
+        n_sets : int, optional
+            The number of data sets to reduce sharing coordinates.
+        leaf_size : int, optional
+            The number of leaves used to construct the ball-tree.
+        full_tree : bool, optional
+            Calculate the maximum number of bytes if the full ball-tree is
+            pre-calculated.  Otherwise, calculates the size of a single
+            neighborhood sized ball-tree.
+        kwargs : dict, optional
+            Optional keyword arguments to pass into the calculation for
+            subclasses of the Reduction.  Will include `order` (`int`) for
+            polynomial resampling.
+
+        Returns
+        -------
+        max_size : int
+            An upper limit for the maximum number of bytes used to construct
+            the reduction including pre-calculation and all possible inputs.
+        """
+        tree = BaseTree.get_class_for(cls)
+        tree_bytes = tree.estimate_max_bytes(
+            coordinates, window=window, leaf_size=leaf_size,
+            full_tree=full_tree, **kwargs)
+        float_bytes = np.empty(0, dtype=float).itemsize
+        n_dimensions = coordinates.shape[0]
+        n = coordinates.size // n_dimensions
+
+        # A second hood tree is built for the fitting coordinates
+        hood_tree_bytes = tree.estimate_hood_tree_bytes(
+            coordinates, window=window)
+
+        # 3 is from data, mask, and error
+        data_sets = 3 * n * n_sets
+        data_bytes = data_sets * float_bytes
+        return data_bytes + tree_bytes + hood_tree_bytes
 
     def get_grid_class(self):
         """
@@ -330,6 +418,10 @@ class ResampleBase(object):
                         window_estimate_percentile=50,
                         window_estimate_oversample=2.0,
                         leaf_size=40,
+                        large_data=None,
+                        check_memory=True,
+                        memory_buffer=None,
+                        memory_kwargs=None,
                         **distance_kwargs):
         """
         Build the sample tree from input coordinates.
@@ -356,6 +448,18 @@ class ResampleBase(object):
             Number of points at which to switch to brute-force during the
             ball tree query algorithm.  See `sklearn.neighbours.BallTree`
             for further details.
+        large_data : bool or None, optional
+            If `True`, indicates that this resampling algorithm will run on
+            a large set of data, and the ball tree should be created on
+            subsets of the data.
+        check_memory : bool, optional
+            If `True`, check the memory requirements for resampling the
+            supplied data.
+        memory_buffer : float, optional
+            A fraction (positive or negative) with which to modify the memory
+            estimates for the process memory requirements.  Memory estimates
+            are scaled by the factor 1 + memory_buffer.
+        memory_kwargs : dict, optional
         distance_kwargs : dict, optional
             Optional keyword arguments passed into
             :func:`sklearn.neighbors.DistanceMetric`.  The default is to use
@@ -376,10 +480,51 @@ class ResampleBase(object):
             oversample=window_estimate_oversample
         ).astype(np.float64)
 
+        if memory_kwargs is None:
+            memory_kwargs = {}
+
+        if check_memory:
+            full_process_size = self.estimate_max_bytes(
+                scaled_coordinates, window=1, leaf_size=leaf_size,
+                n_sets=self.n_sets, full_tree=True, **memory_kwargs)
+            split_process_size = self.estimate_max_bytes(
+                scaled_coordinates, window=1, leaf_size=leaf_size,
+                n_sets=self.n_sets, full_tree=False, **memory_kwargs)
+            available_memory = psutil.virtual_memory().total
+
+            if memory_buffer is not None:
+                buffer = float(memory_buffer)
+                factor = np.clip(1 + buffer, 0, None)
+                split_process_size = int(factor * split_process_size)
+                full_process_size = int(factor * full_process_size)
+
+            max_cores = relative_cores(-1)
+            process_memory = available_memory - full_process_size
+            max_full_jobs = process_memory / full_process_size
+            max_split_jobs = process_memory / split_process_size
+            max_full_jobs = int(np.clip(max_full_jobs, 1, max_cores))
+            max_split_jobs = int(np.clip(max_split_jobs, 1, max_cores))
+
+            memory_info = {'available_memory': available_memory,
+                           'full_process_size': full_process_size,
+                           'split_process_size': split_process_size,
+                           'max_full_jobs': max_full_jobs,
+                           'max_split_jobs': max_split_jobs}
+            if large_data is None:
+                max_processes = max_cores + 1  # +1 for main process
+                max_size = max_processes * full_process_size
+                large_data = max_size >= available_memory
+            memory_info['large_data'] = large_data
+        else:
+            memory_info = None
+            if large_data is None:
+                large_data = False
+
         tree_class = BaseTree.get_class_for(self)
         self.sample_tree = tree_class(
             scaled_coordinates, build_type='all', leaf_size=leaf_size,
-            **distance_kwargs)
+            large_data=large_data, **distance_kwargs)
+        self.memory_info = memory_info
 
     def _scale_to_window(self, coordinates, radius=None,
                          feature_bins=10, percentile=50,
@@ -690,6 +835,13 @@ class ResampleBase(object):
         elif not use_processes and not use_threading:
             use_processes = True
 
+        if self.memory_info is None:
+            block_memory_usage = None
+        elif self.memory_info['large_data']:
+            block_memory_usage = self.memory_info['split_process_size']
+        else:
+            block_memory_usage = self.memory_info['full_process_size']
+
         self._fit_settings = {
             'n_features': n_features,
             'error_weighting': error_weighting,
@@ -700,9 +852,9 @@ class ResampleBase(object):
             'edge_algorithm_idx': edge_algorithm_idx,
             'jobs': jobs,
             'use_processes': use_processes,
-            'use_threading': use_threading
+            'use_threading': use_threading,
+            'block_memory_usage': block_memory_usage
         }
-
         return self._fit_settings
 
     def _check_call_arguments(self, *args):
@@ -855,6 +1007,15 @@ class ResampleBase(object):
             **kwargs)
 
         self.pre_fit(settings, *args)
+
+        if self.memory_info is not None and jobs is not None:
+            # Check the maximum number of jobs here
+            jobs = relative_cores(jobs)
+            if self.memory_info['large_data']:
+                max_jobs = self.memory_info['max_split_jobs']
+            else:
+                max_jobs = self.memory_info['max_full_jobs']
+            jobs = int(np.clip(jobs, None, max_jobs))
 
         (fit, error, counts, weights, distance_weights, sigma,
          derivative_cross_products, distribution_offset_variance
@@ -1053,6 +1214,8 @@ class ResampleBase(object):
         _global_resampling_values['args'] = args
         _global_resampling_values['iteration'] = iteration
         _global_resampling_values['filename'] = filename
+        _global_resampling_values['block_memory_usage'] = settings.get(
+            'block_memory_usage')
         task_args = filename, iteration
 
         old_threading = numba.config.THREADING_LAYER
@@ -1072,6 +1235,7 @@ class ResampleBase(object):
             del _global_resampling_values['args']
             del _global_resampling_values['iteration']
             del _global_resampling_values['filename']
+            del _global_resampling_values['block_memory_usage']
 
         if cache_dir is not None:
             shutil.rmtree(cache_dir)

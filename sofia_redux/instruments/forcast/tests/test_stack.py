@@ -385,12 +385,12 @@ class TestStack(object):
                              ['C2', 'C2NC2', 'NAS', 'NOS', 'C2NC4',
                               'NXCAC', 'NMC', 'NPC', 'NPCCAS', 'NPCNAS',
                               'C2ND', 'SLITSCAN', 'MAP', 'C3D',
-                              'CM', 'STARE'])
+                              'CM', 'STARE', 'SLITSCAN_NMC', 'SLITSCAN_NXCAC'])
     def test_stack_modes(self, skymode, capsys, mocker):
         c2_modes = ['C2', 'C2NC2']
         map_modes = ['NAS', 'NOS', 'C2NC4', 'NXCAC', 'C2N', 'NMC',
                      'NPC', 'NPCCAS', 'NPCNAS', 'C2ND', 'SLITSCAN',
-                     'MAP']
+                     'SLITSCAN_NMC', 'SLITSCAN_NXCAC', 'MAP']
 
         # fake data
         data, header = fake_data()

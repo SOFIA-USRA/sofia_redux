@@ -1332,7 +1332,7 @@ class TestQADImView(object):
                              [(84, 62, 'circle'),
                               (98, 104, 'rectangle'),
                               (64, 94, 'ellipse'),
-                              #(51, 142, 'rectangle'),  # box annulus not yet
+                              # (51, 142, 'rectangle'),  # box annulus not yet
                               (80, 145, 'annulus'),
                               (154, 58, 'polygon')])
     def test_region_mask(self, mocker, capsys, ds9_regions_image,

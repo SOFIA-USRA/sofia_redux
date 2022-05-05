@@ -23,7 +23,7 @@ introduction to the data reduction
 procedure and the scientific justification of the algorithms is
 available in the FIFI-LS Redux User's Manual.
 
-This manual applies to FIFI-LS Redux version 2.5.0.
+This manual applies to FIFI-LS Redux version 2.6.1.
 
 
 Redux Revision History
@@ -297,4 +297,3 @@ FIFI-LS Redux pipeline, as defined in the Pipetools-Pipeline ICD.
 
 .. include:: include/fifi_ls_recipe.json
    :literal:
-

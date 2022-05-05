@@ -586,6 +586,7 @@ class TestFIFILSReduction(object):
         red = pickle.loads(red_copy)
         for param in red.parameters.current:
             param.set_value('parallel', True)
+            param.set_value('max_cores', 5)
         red.reduce()
 
     def test_parameter_copy(self, tmpdir):

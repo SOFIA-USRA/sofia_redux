@@ -5,6 +5,7 @@ import os
 from astropy import log
 from astropy.io import fits
 import numpy as np
+import psutil
 from scipy.interpolate import Rbf
 
 from sofia_redux.instruments.fifi_ls.get_resolution \
@@ -13,7 +14,8 @@ from sofia_redux.instruments.fifi_ls.get_response \
     import get_response, clear_response_cache
 from sofia_redux.instruments.fifi_ls.make_header \
     import make_header
-from sofia_redux.toolkit.utilities import gethdul, hdinsert, write_hdul, stack
+from sofia_redux.toolkit.utilities \
+    import gethdul, hdinsert, write_hdul, stack
 from sofia_redux.toolkit.resampling.resample import Resample
 from sofia_redux.spectroscopy.smoothres import smoothres
 
@@ -51,12 +53,12 @@ def combine_files(filenames):
     ufluxs, uerrs, ulams = [], [], []
     atran = None
 
-    log.info("Reading %i files" % nfiles)
+    log.info(f'Reading {nfiles} files')
     otf_mode = False
     for i, filename in enumerate(filenames):
         hdul = gethdul(filename, verbose=True)
         if hdul is None:
-            msg = "Could not read file: %s" % filename
+            msg = 'Could not read file: {filename}'
             log.error(msg)
             raise ValueError(msg)
         header = hdul[0].header
@@ -111,8 +113,8 @@ def combine_files(filenames):
         hdul.close()
 
     if len(filenames) > 1 or otf_mode:
-        log.info("Combining and rotating relative to the first file (%s)" %
-                 os.path.basename(fnames[0]))
+        log.info(f'Combining and rotating relative to the first file '
+                 f'({os.path.basename(fnames[0])}).')
     else:
         interpolate = True
 
@@ -132,8 +134,10 @@ def combine_files(filenames):
                  header_list[update].get('DLAM_MAP', 0) - lamoff[update])
 
     idx = abs(a) > 1e-6
-    lamoff[idx] = lamoff[idx] * np.cos(a[idx]) - betoff[idx] * np.sin(a[idx])
-    betoff[idx] = lamoff[idx] * np.sin(a[idx]) + betoff[idx] * np.cos(a[idx])
+    dx = lamoff[idx] * np.cos(a[idx]) - betoff[idx] * np.sin(a[idx])
+    dy = lamoff[idx] * np.sin(a[idx]) + betoff[idx] * np.cos(a[idx])
+    lamoff[idx] = dx
+    betoff[idx] = dy
 
     for i, (x, y, dx, dy) in enumerate(zip(xs, ys, lamoff, betoff)):
         if i == 0:
@@ -234,9 +238,9 @@ def get_grid_info(combined, xrange=None, yrange=None, wrange=None,
     else:
         xy_oversample, w_oversample = oversample
 
-    log.info("Overall wave min/max (um): %f %f" % (wmin, wmax))
-    log.info("Overall X min/max (arcsec): %f %f" % (xmin, xmax))
-    log.info("Overall Y min/max (arcsec): %f %f" % (ymin, ymax))
+    log.info(f'Overall wave min/max (um): {wmin:.5f} {wmax:.5f}')
+    log.info(f'Overall X min/max (arcsec): {xmin:.2f} {xmax:.2f}')
+    log.info(f'Overall Y min/max (arcsec): {ymin:.2f} {ymax:.2f}')
 
     # Begin with spectral scalings
     wmid = (wmin + wmax) / 2
@@ -248,9 +252,9 @@ def get_grid_info(combined, xrange=None, yrange=None, wrange=None,
     else:
         delta_wave = wave_fwhm / w_oversample
     nw = int(np.round((wmax - wmin) / delta_wave) + 1)
-    log.info("Average spectral FWHM: %f um" % wave_fwhm)
-    log.info("Output spectral pixel scale: %f um" % delta_wave)
-    log.info("Spectral oversample: %f pixels" % w_oversample)
+    log.info(f'Average spectral FWHM: {wave_fwhm:.5f} um')
+    log.info(f'Output spectral pixel scale: {delta_wave:.5f} um')
+    log.info(f'Spectral oversample: {w_oversample:.2f} pixels')
 
     # Spatial scalings
     xy_fwhm = get_resolution(
@@ -270,10 +274,10 @@ def get_grid_info(combined, xrange=None, yrange=None, wrange=None,
     nx = int(np.round((xrange / delta_xy) + 1))
     ny = int(np.round((yrange / delta_xy) + 1))
 
-    log.info("Pixel size for channel: %f arcsec" % pix_size)
-    log.info("Average spatial FWHM for channel: %f arcsec" % xy_fwhm)
-    log.info("Output spatial pixel scale: %f arcsec/pix" % delta_xy)
-    log.info("Spatial oversample: %f pixels" % xy_oversample)
+    log.info(f'Pixel size for channel: {pix_size:.2f} arcsec')
+    log.info(f'Average spatial FWHM for channel: {xy_fwhm:.2f} arcsec')
+    log.info(f'Output spatial pixel scale: {delta_xy:.2f} arcsec/pix')
+    log.info(f'Spatial oversample: {xy_oversample:.2f} pixels')
 
     # Rotation angle before calibration.  If not rotated at calibration,
     # detector rotation is zero.
@@ -284,16 +288,11 @@ def get_grid_info(combined, xrange=None, yrange=None, wrange=None,
     wout = np.arange(nw, dtype=float) * delta_wave + wmin
     xout = np.arange(nx, dtype=float) * delta_xy + xmin
     yout = np.arange(ny, dtype=float) * delta_xy + ymin
-    xgrid = np.resize(xout, (ny, nx))
-    ygrid = np.resize(yout, (nx, ny)).T
-
-    detxout = (xgrid * np.cos(det_angle)) - (ygrid * np.sin(det_angle))
-    detyout = (xgrid * np.sin(det_angle)) + (ygrid * np.cos(det_angle))
 
     log.info('')
-    log.info("Output grid size (nw, ny, nx): %ix%ix%i" % (nw, ny, nx))
+    log.info(f'Output grid size (nw, ny, nx): {nw} x {ny} x {nx}')
     if nx > 2048 or ny > 2048:
-        log.error("Spatial range too large")
+        log.error('Spatial range too large.')
         return
 
     coordinates = stack(xs, ys, lam)
@@ -312,7 +311,6 @@ def get_grid_info(combined, xrange=None, yrange=None, wrange=None,
         'wrange': wrange, 'xrange': xrange, 'yrange': yrange,
         'delta': (delta_wave, delta_xy, delta_xy),
         'oversample': (w_oversample, xy_oversample, xy_oversample),
-        'detxout': detxout, 'detyout': detyout,
         'wave_fwhm': wave_fwhm, 'xy_fwhm': xy_fwhm,
         'resolution': resolution,
         'pix_size': pix_size, 'det_angle': det_angle,
@@ -343,59 +341,122 @@ def generate_exposure_map(combined, grid_info, get_good=False):
         a list of boolean arrays is returned instead, representing
         the good pixel mask for each input file.
     """
-
-    # get x and y and correct by the det angle
+    # get x and y and correct by the det angle to get
+    # min and max range in detector CS
     a = grid_info['det_angle']
     if not np.allclose(a, 0):
         cosa, sina = np.cos(a), np.sin(a)
-        x = (combined['X'] * cosa) - (combined['Y'] * sina)
-        y = (combined['X'] * sina) + (combined['Y'] * cosa)
+        detx = (combined['X'] * cosa) - (combined['Y'] * sina)
+        dety = (combined['X'] * sina) + (combined['Y'] * cosa)
     else:
-        x, y = combined['X'], combined['Y']
+        cosa, sina = 1.0, 0.0
+        detx, dety = combined['X'], combined['Y']
+    # wavelengths are okay as is
+    detw = combined['WAVELENGTH']
+
+    # get grid info to index into
+    dw, dy, dx = grid_info['delta']
+    wavesize = dw / 2
+    pixsize = grid_info['pix_size'] / 2
+    wmin = grid_info['wmin']
+    ymin = grid_info['ymin']
+    xmin = grid_info['xmin']
+    nw, ny, nx = grid_info['shape'][1:]
 
     # loop over files to get exposure for each one
-    # Note: the number of data points may be different per
-    # file, and nfiles << npix, so a loop is sensible here.
-    dxy = grid_info['pix_size'] / 2
-    dw = grid_info['delta'][0] / 2
-    exposure = np.zeros(grid_info['shape'][1:])
-    good_val = []
-    for i in range(len(x)):
-        xval = x[i]
-        yval = y[i]
-        wval = combined['WAVELENGTH'][i]
-
-        xmin, xmax = xval.min(), xval.max()
-        ymin, ymax = yval.min(), yval.max()
-        wmin, wmax = wval.min(), wval.max()
-
-        # check for x/y values
-        good = grid_info['detxout'] >= xmin - dxy
-        good &= grid_info['detxout'] <= xmax + dxy
-        good &= grid_info['detyout'] >= ymin - dxy
-        good &= grid_info['detyout'] <= ymax + dxy
-
-        # check for wavelength values
-        valid = grid_info['wout'] >= wmin - dw
-        valid &= grid_info['wout'] <= wmax + dw
-
-        exposure += good[None, :, :] * valid[:, None, None]
-        good_val.append(good)
-
     if get_good:
-        return good_val
+        exposure = []
+    else:
+        exposure = np.zeros((nw, ny, nx), dtype=int)
+    for i in range(len(detx)):
+        detx_min = detx[i].min() - pixsize
+        detx_max = detx[i].max() + pixsize
+        dety_min = dety[i].min() - pixsize
+        dety_max = dety[i].max() + pixsize
+        detw_min = detw[i].min() - wavesize
+        detw_max = detw[i].max() + wavesize
+
+        # use wavelengths directly
+        wl = int(np.floor((detw_min - wmin) / dw))
+        wh = int(np.ceil((detw_max - wmin) / dw)) + 1
+        wl = 0 if wl < 0 else wl
+        wh = nw if wh > nw else wh
+
+        # unrotate square corners between min and max to get grid locations
+        # in clockwise order
+        cx, cy = [], []
+        cx.append(detx_min * cosa + dety_min * sina)
+        cy.append(-detx_min * sina + dety_min * cosa)
+        cx.append(detx_min * cosa + dety_max * sina)
+        cy.append(-detx_min * sina + dety_max * cosa)
+        cx.append(detx_max * cosa + dety_max * sina)
+        cy.append(-detx_max * sina + dety_max * cosa)
+        cx.append(detx_max * cosa + dety_min * sina)
+        cy.append(-detx_max * sina + dety_min * cosa)
+
+        # convert to pixel indices
+        idx = (np.array(cx) - xmin) / dx
+        idy = (np.array(cy) - ymin) / dy
+
+        # make a square large enough to contain the FOV
+        xl = int(np.floor(idx.min()))
+        xh = int(np.ceil(idx.max())) + 1
+        xl = 0 if xl < 0 else xl
+        xh = nx if xh > nx else xh
+
+        yl = int(np.floor(idy.min()))
+        yh = int(np.ceil(idy.max())) + 1
+        yl = 0 if yl < 0 else yl
+        yh = ny if yh > ny else yh
+
+        square = np.zeros((yh - yl, xh - xl), dtype=int)
+
+        # set values for FOV between corner vertices
+        fov = np.full(square.shape, True)
+        fov_y, fov_x = np.indices(square.shape)
+        for j in range(len(idx)):
+            p1x = idx[j - 1] - xl
+            p1y = idy[j - 1] - yl
+            p2x = idx[j] - xl
+            p2y = idy[j] - yl
+
+            # check for vertical line
+            if p2x == p1x:
+                # mark data to the correct side of the line
+                max_x = p1x
+                sign = np.sign(p2y - p1y)
+                fov &= (fov_x * sign) >= (max_x * sign)
+            else:
+                # otherwise: mark area under the line between
+                # previous vertex and current
+                # (or above, as appropriate)
+                m = (p2y - p1y) / (p2x - p1x)
+                max_y = m * (fov_x - p1x) + p1y
+                sign = np.sign(p2x - p1x)
+
+                fov &= (fov_y * sign) <= (max_y * sign)
+
+        square[fov] = 1
+
+        if get_good:
+            exposure.append((square.astype(bool), (xl, xh), (yl, yh)))
+        else:
+            exposure[wl:wh, yl:yh, xl:xh] += square[None, :, :]
 
     # For accounting purposes, multiply the exposure map by 2 for NMC
-    nodstyle = combined['PRIMEHEAD'].get('NODSTYLE', 'UNK').upper().strip()
-    if nodstyle in ['SYMMETRIC', 'NMC']:
-        exposure *= 2
+    if not get_good:
+        nodstyle = combined['PRIMEHEAD'].get('NODSTYLE', 'UNK').upper().strip()
+        if nodstyle in ['SYMMETRIC', 'NMC']:
+            exposure *= 2
+
     return exposure
 
 
 def rbf_mean_combine(combined, grid_info, window=None,
                      error_weighting=True, smoothing=None,
                      order=0, robust=None, neg_threshold=None,
-                     fit_threshold=None, edge_threshold=None, **kwargs):
+                     fit_threshold=None, edge_threshold=None,
+                     skip_uncorrected=False, **kwargs):
     """
     Combines multiple datasets using radial basis functions and mean combine.
 
@@ -440,25 +501,29 @@ def rbf_mean_combine(combined, grid_info, window=None,
         a high degree of edge clipping, while values close to 1 ckip edges
         to a lesser extent. The clipping threshold is a fraction of window.
         An array may be used to specify values for each dimension.
+    skip_uncorrected: bool, optional
+        If set, the uncorrected flux cube will not be computed, even
+        if present in the input data.  This option is primarily intended
+        for testing or quicklook, when the full data product is not needed.
     kwargs : dict, optional
         Optional keyword arguments to pass into `scipy.interpolate.Rbf`.
         Please see the options here.  By default, the weighting function
         is a multi-quadratic sqrt(r/epsilon)**2 + 1) rather than the
         previous version inverse distance weighting scheme.
     """
-    log.info("")
-    log.info("Resampling wavelengths with polynomial fits.")
-    log.info("Interpolating spatial coordinates with radial basis functions.")
+    log.info('')
+    log.info('Resampling wavelengths with polynomial fits.')
+    log.info('Interpolating spatial coordinates with radial basis functions.')
 
     shape = grid_info['shape'][1:]
     flux = np.zeros(shape)
     std = np.zeros(shape)
     counts = np.zeros(shape)
 
-    do_uncor = 'UNCORRECTED_FLUX' in combined
+    do_uncor = 'UNCORRECTED_FLUX' in combined and not skip_uncorrected
 
     if do_uncor:
-        log.debug("Resampling uncorrected cube alongside corrected cube")
+        log.debug('Resampling uncorrected cube alongside corrected cube')
         uflux = np.zeros(shape)
         ustd = np.zeros(shape)
         ucounts = np.zeros(shape)
@@ -487,8 +552,8 @@ def rbf_mean_combine(combined, grid_info, window=None,
 
     fit_wdw = window * grid_info['wave_fwhm']
     smoothing_wdw = smoothing * grid_info['wave_fwhm']
-    log.info("Fit window: %f um" % fit_wdw)
-    log.info("Gaussian width of smoothing function: %f um" % smoothing_wdw)
+    log.info(f'Fit window: {fit_wdw:.5f} um')
+    log.info(f'Gaussian width of smoothing function: {smoothing_wdw:.5f} um')
 
     # minimum points in a wavelength slice to attempt to interpolate
     minpoints = 10
@@ -506,11 +571,13 @@ def rbf_mean_combine(combined, grid_info, window=None,
 
     # loop over files
     for filei, grididx in enumerate(good_grid):
+        square, xrange, yrange = grididx
 
-        if not grididx.any():
+        if not square.any():
             log.debug('No good values in file {}'.format(filei))
             continue
-        xout, yout = xgrid[grididx], ygrid[grididx]
+        xout = xgrid[yrange[0]:yrange[1], xrange[0]:xrange[1]][square]
+        yout = ygrid[yrange[0]:yrange[1], xrange[0]:xrange[1]][square]
 
         # resample to grid wavelengths
         ws = combined['WAVELENGTH'][filei]
@@ -584,22 +651,43 @@ def rbf_mean_combine(combined, grid_info, window=None,
         for wavei in range(nw):
             if waveok[wavei]:
                 idx = fidx[wavei]
+
                 rbf = Rbf(x[idx], y[idx], iflux[wavei][idx], **kwargs)
-                flux[wavei][grididx] += rbf(xout, yout)
+                new_flux = np.zeros(square.shape)
+                new_flux[square] = rbf(xout, yout)
+                flux[wavei, yrange[0]:yrange[1],
+                     xrange[0]:xrange[1]] += new_flux
+
                 rbf = Rbf(x[idx], y[idx], istd[wavei][idx], **kwargs)
-                std[wavei][grididx] += rbf(xout, yout) ** 2
-                counts[wavei][grididx] += 1
+                new_std = np.zeros(square.shape)
+                new_std[square] = rbf(xout, yout) ** 2
+                std[wavei, yrange[0]:yrange[1],
+                    xrange[0]:xrange[1]] += new_std
+
+                counts[wavei, yrange[0]:yrange[1],
+                       xrange[0]:xrange[1]] += square
+
             if do_uncor:
                 if uwaveok[wavei]:
                     idx = ufidx[wavei]
+
                     rbf = Rbf(x[idx], y[idx], iuflux[wavei][idx], **kwargs)
-                    uflux[wavei][grididx] += rbf(xout, yout)
+                    new_flux = np.zeros(square.shape)
+                    new_flux[square] = rbf(xout, yout)
+                    uflux[wavei, yrange[0]:yrange[1],
+                          xrange[0]:xrange[1]] += new_flux
+
                     rbf = Rbf(x[idx], y[idx], iustd[wavei][idx], **kwargs)
-                    ustd[wavei][grididx] += rbf(xout, yout) ** 2
-                    ucounts[wavei][grididx] += 1
+                    new_std = np.zeros(square.shape)
+                    new_std[square] = rbf(xout, yout) ** 2
+                    ustd[wavei, yrange[0]:yrange[1],
+                         xrange[0]:xrange[1]] += new_std
+
+                    ucounts[wavei, yrange[0]:yrange[1],
+                            xrange[0]:xrange[1]] += square
 
     # average, set zero counts to nan
-    log.info("Mean-combining all resampled cubes")
+    log.info('Mean-combining all resampled cubes')
     exposure = ucounts.copy() if do_uncor else counts.copy()
 
     # For accounting purposes, multiply the exposure map by 2 for NMC
@@ -615,7 +703,7 @@ def rbf_mean_combine(combined, grid_info, window=None,
 
     # correct flux for pixel size change
     factor = (grid_info['delta'][1] / grid_info['pix_size']) ** 2
-    log.info('Flux correction factor: {}'.format(factor))
+    log.info(f'Flux correction factor: {factor:.5f}')
     correction = factor
 
     combined['GRID_FLUX'] = flux * correction
@@ -656,7 +744,8 @@ def local_surface_fit(combined, grid_info, window=None,
                       error_weighting=True, smoothing=None,
                       order=2, robust=None, neg_threshold=None,
                       fit_threshold=None, edge_threshold=None,
-                      jobs=None):
+                      skip_uncorrected=False, jobs=None,
+                      check_memory=True):
     """
     Resamples combined data on regular grid using local polynomial fitting.
 
@@ -709,16 +798,21 @@ def local_surface_fit(combined, grid_info, window=None,
         Threshold for edge marking for (x, y, w) dimensions. Values
         should be between 0 and 1; higher values mean more edge pixels
         marked. Default is (0.7, 0.7, 0.5).
-    order : int, optional
-        Maximum order of local polynomial fits.
+    skip_uncorrected: bool, optional
+        If set, the uncorrected flux cube will not be computed, even
+        if present in the input data.  This option is primarily intended
+        for testing or quicklook, when the full data product is not needed.
     jobs : int, optional
         Specifies the maximum number of concurrently running jobs.
         Values of 0 or 1 will result in serial processing.  A negative
         value sets jobs to `n_cpus + 1 + jobs` such that -1 would use
         all cpus, and -2 would use all but one cpu.
+    check_memory : bool, optional
+        If set, expected memory use will be checked and used to limit
+        the number of jobs if necessary.
     """
-    log.info("")
-    log.info("Resampling using local polynomial fits")
+    log.info('')
+    log.info('Resampling using local polynomial fits')
 
     # Fit window for FWHM
     if window is None:
@@ -738,25 +832,50 @@ def local_surface_fit(combined, grid_info, window=None,
          smoothing[1] * grid_info['xy_fwhm'],
          smoothing[2] * grid_info['wave_fwhm'])
 
-    log.info("Fit window (x, y, w): "
-             "%f arcsec, %f arcsec, %f um" % fit_wdw)
+    log.info(f'Fit window (x, y, w): {fit_wdw[0]:.2f} arcsec, '
+             f'{fit_wdw[1]:.2f} arcsec, {fit_wdw[2]:.5f} um')
 
-    log.info("Gaussian width of smoothing function (x, y, w): "
-             "%f arcsec, %f arcsec, %f um" % smoothing_wdw)
+    log.info(f'Gaussian width of smoothing function (x, y, w): '
+             f'{smoothing_wdw[0]:.2f} arcsec, {smoothing_wdw[1]:.2f} arcsec, '
+             f'{smoothing_wdw[2]:.5f} um')
 
     if adaptive_threshold is not None:
-        log.info("Adaptive algorithm: %s" % adaptive_algorithm)
-        log.info("Adaptive smoothing threshold (x, y, w): "
-                 "%.2f, %.2f, %.2f" %
-                 (adaptive_threshold[0],
-                  adaptive_threshold[1],
-                  adaptive_threshold[2]))
+        log.info(f'Adaptive algorithm: {adaptive_algorithm}')
+        log.info(f'Adaptive smoothing threshold (x, y, w): '
+                 f'{adaptive_threshold[0]:.2f}, {adaptive_threshold[1]:.2f}, '
+                 f'{adaptive_threshold[2]:.2f}')
     else:
         adaptive_threshold = 0
         adaptive_algorithm = None
 
     flxvals = np.hstack([f.ravel() for f in combined['FLUX']])
     errvals = np.hstack([e.ravel() for e in combined['ERROR']])
+
+    # check whether data fits in memory
+    log.info('')
+    max_bytes = Resample.estimate_max_bytes(grid_info['coordinates'],
+                                            fit_wdw, order=order)
+    max_avail = psutil.virtual_memory().total
+
+    max_size = max_bytes
+    for unit in ['B', 'kB', 'MB', 'GB', 'TB', 'PB']:
+        if max_size < 1024 or unit == 'PB':
+            break
+        max_size /= 1024.0
+    log.debug(f'Maximum expected memory needed: {max_size:.2f} {unit}')
+
+    if check_memory:
+        # let the resampler handle it - it has more sophisticated checks
+        large_data = None
+    else:
+        # with check_memory false, set large data if the reduction is
+        # likely to take up a significant percentage of memory, to give
+        # it a chance to succeed
+        if max_bytes >= max_avail / 10:
+            log.debug('Splitting data tree into blocks.')
+            large_data = True
+        else:
+            large_data = False
 
     if np.all(np.isnan(flxvals)):
         log.warning('Primary flux cube contains only NaN values.')
@@ -767,7 +886,8 @@ def local_surface_fit(combined, grid_info, window=None,
         resampler = Resample(
             grid_info['coordinates'].copy(), flxvals, error=errvals,
             window=fit_wdw, order=order, robust=robust,
-            negthresh=neg_threshold)
+            negthresh=neg_threshold, large_data=large_data,
+            check_memory=check_memory)
 
         flux, std, weights = resampler(
             *grid_info['grid'], smoothing=smoothing_wdw,
@@ -778,11 +898,12 @@ def local_surface_fit(combined, grid_info, window=None,
             get_distance_weights=True,
             error_weighting=error_weighting, jobs=jobs)
 
-    do_uncor = 'UNCORRECTED_FLUX' in combined
+    do_uncor = 'UNCORRECTED_FLUX' in combined and not skip_uncorrected
 
     if do_uncor:
-        log.info("")
-        log.info("Now resampling uncorrected cube")
+        log.info('')
+        log.info('Now resampling uncorrected cube.')
+
         if grid_info['uncorrected_coordinates'] is None:
             coord = grid_info['coordinates'].copy()
         else:
@@ -799,7 +920,8 @@ def local_surface_fit(combined, grid_info, window=None,
             resampler = Resample(
                 coord, flxvals, error=errvals,
                 window=fit_wdw, order=order, robust=robust,
-                negthresh=neg_threshold)
+                negthresh=neg_threshold, large_data=large_data,
+                check_memory=check_memory)
             uflux, ustd, uweights = resampler(
                 *grid_info['grid'], smoothing=smoothing_wdw,
                 adaptive_algorithm=adaptive_algorithm,
@@ -812,6 +934,8 @@ def local_surface_fit(combined, grid_info, window=None,
         uflux, ustd, uweights = None, None, None
 
     # make exposure map
+    log.info('')
+    log.info('Making the exposure map.')
     exposure = generate_exposure_map(combined, grid_info)
     combined['GRID_COUNTS'] = exposure
 
@@ -867,8 +991,8 @@ def make_hdul(combined, grid_info, append_weights=False):
     outname, _ = os.path.splitext(outname)
     for repl in ['SCM', 'TEL', 'CAL', 'WSH']:
         outname = outname.replace(repl, 'WXY')
-    outname = '_'.join(outname.split('_')[:-1])
-    outname += '_%s.fits' % primehead.get("FILENUM", "UNK")
+    outname = f"{'_'.join(outname.split('_')[:-1])}_" \
+              f"{primehead.get('FILENUM', 'UNK')}.fits"
     hdinsert(primehead, 'FILENAME', outname)
     hdinsert(primehead, 'NAXIS', 0)
     hdinsert(primehead, 'PRODTYPE', 'resampled')
@@ -893,7 +1017,7 @@ def make_hdul(combined, grid_info, append_weights=False):
     # searchable values
     hdinsert(primehead, 'TELRA', obslam / 15)
     hdinsert(primehead, 'TELDEC', obsbet)
-    procstat = str(primehead.get("PROCSTAT")).upper()
+    procstat = str(primehead.get('PROCSTAT')).upper()
     imagehdu = fits.ImageHDU(combined['GRID_FLUX'])
 
     exthdr = imagehdu.header.copy()
@@ -1043,8 +1167,9 @@ def resample(filenames, xrange=None, yrange=None, wrange=None,
              adaptive_threshold=None, adaptive_algorithm=None,
              error_weighting=True, smoothing=None, order=2,
              robust=None, neg_threshold=None, fit_threshold=None,
-             edge_threshold=None, append_weights=False, write=False,
-             outdir=None, jobs=None):
+             edge_threshold=None, append_weights=False,
+             skip_uncorrected=False, write=False, outdir=None,
+             jobs=None, check_memory=True):
     """
     Resample unevenly spaced FIFI-LS pixels to regular grid.
 
@@ -1135,6 +1260,13 @@ def resample(filenames, xrange=None, yrange=None, wrange=None,
         a high degree of edge clipping, while values close to 1 ckip edges
         to a lesser extent. The clipping threshold is a fraction of window.
         An array may be used to specify values for each dimension.
+    append_weights: bool, optional
+        If set, distance weights will be appended as an additional
+        extension.
+    skip_uncorrected: bool, optional
+        If set, the uncorrected flux cube will not be computed, even
+        if present in the input data.  This option is primarily intended
+        for testing or quicklook, when the full data product is not needed.
     write : bool, optional
         If True, write to disk and return the path to the output
         file.  The output filename is created from the input filename,
@@ -1147,6 +1279,9 @@ def resample(filenames, xrange=None, yrange=None, wrange=None,
         Values of 0 or 1 will result in serial processing.  A negative
         value sets jobs to `n_cpus + 1 + jobs` such that -1 would use
         all cpus, and -2 would use all but one cpu.
+    check_memory : bool, optional
+        If set, expected memory use will be checked and used to limit
+        the number of jobs if necessary.
 
     Returns
     -------
@@ -1164,12 +1299,12 @@ def resample(filenames, xrange=None, yrange=None, wrange=None,
     if isinstance(filenames, str):
         filenames = [filenames]
     if not hasattr(filenames, '__len__'):
-        log.error("Invalid input files type (%s)" % repr(filenames))
+        log.error(f'Invalid input files type ({repr(filenames)})')
         return
 
     if isinstance(outdir, str):
         if not os.path.isdir(outdir):
-            log.error("Output directory %s does not exist" % outdir)
+            log.error(f'Output directory {outdir} does not exist')
             return
     else:
         if isinstance(filenames[0], str):
@@ -1191,7 +1326,8 @@ def resample(filenames, xrange=None, yrange=None, wrange=None,
                              error_weighting=error_weighting,
                              smoothing=smoothing, order=order,
                              robust=robust, neg_threshold=neg_threshold,
-                             fit_threshold=fit_threshold)
+                             fit_threshold=fit_threshold,
+                             skip_uncorrected=skip_uncorrected)
         except Exception as err:
             log.error(err, exc_info=True)
             return None
@@ -1205,7 +1341,8 @@ def resample(filenames, xrange=None, yrange=None, wrange=None,
                               robust=robust, neg_threshold=neg_threshold,
                               fit_threshold=fit_threshold,
                               edge_threshold=edge_threshold,
-                              jobs=jobs)
+                              skip_uncorrected=skip_uncorrected,
+                              jobs=jobs, check_memory=check_memory)
         except Exception as err:
             log.error(err, exc_info=True)
             return None

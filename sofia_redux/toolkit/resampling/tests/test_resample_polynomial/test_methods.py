@@ -137,9 +137,17 @@ def test_process_block(data_2d):
     fit_indices, fit, error, counts, wsum, dwsum, rchi2, deriv, var = result
     assert isinstance(fit_indices, np.ndarray) and fit_indices.size > 0
     assert isinstance(fit, np.ndarray) and fit.size > 0
+    expected_fit = np.full(16, np.nan)
+    expected_fit[-1] = 0.99926409
+    assert np.allclose(fit, expected_fit, atol=1e-6, equal_nan=True)
 
     for value in [error, counts, wsum, dwsum, rchi2, deriv, var]:
         assert isinstance(value, np.ndarray) and value.size == 0
+
+    r.sample_tree.large_data = True
+    result = r.process_block((filename, iteration), first_block)
+    assert len(result) == 9
+    assert np.allclose(result[1], expected_fit, atol=1e-6, equal_nan=True)
 
 
 def test_call(data_2d):

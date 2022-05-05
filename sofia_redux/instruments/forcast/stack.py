@@ -664,7 +664,7 @@ def stack(data, header, variance=None, mask=None, extra=None, stat='mode'):
     c2_modes = ['C2', 'C2NC2']
     map_modes = ['NAS', 'NOS', 'C2NC4', 'NXCAC', 'C2N', 'NMC',
                  'NPC', 'NPCCAS', 'NPCNAS', 'C2ND', 'SLITSCAN',
-                 'MAP']
+                 'SLITSCAN_NMC', 'SLITSCAN_NXCAC', 'MAP']
 
     if mode in c2_modes:
         result = stack_c2nc2(posdata, header, variance=var,

@@ -142,10 +142,8 @@ class EXESQuicklookReduction(FORCASTSpectroscopyReduction):
                 else:
                     aplot = [wave, atran]
 
-            if not error_plot:
-                spec_err = None
-
             # plot spectral flux
+            spec_err = None if not error_plot else spec_err
             make_spectral_plot(ax, wave, spec_flux, spectral_error=spec_err,
                                scale=scale, labels=labels, colormap=colormap,
                                xunit=xunit, yunit=yunit,

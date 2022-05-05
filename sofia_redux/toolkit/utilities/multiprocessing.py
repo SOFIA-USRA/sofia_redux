@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from functools import partial
+import gc
 import logging
 import multiprocessing as mp
 import os
@@ -210,7 +211,7 @@ def multitask(func, iterable, args, kwargs, jobs=None, skip=None,
         when parallel processing is spawned from a child process of the main
         thread.
     force_processes : bool, optional
-        If `True`, force joblib to run parrallel jobs using CPUs rather than
+        If `True`, force joblib to run parallel jobs using CPUs rather than
         threads.  This can sometimes lead to unexpected outcomes when the
         multiprocessing is launched from a non-main thread.  Pickling arguments
         prior and return values during processing is recommended in this case.
@@ -238,7 +239,7 @@ def _wrap_function(func, args, kwargs):
     """
     Wrap given arguments and keyword arguments to a function.
 
-    Removes The requirement of supplying args and kwargs to the given function.
+    Removes the requirement of supplying args and kwargs to the given function.
     :func:`multitask` should be run on a function supplied in a very strict
     format, and actually only takes one single runtime argument.  Functions
     should be designed so that they are of the form:
@@ -641,6 +642,9 @@ def _parallel(jobs, func, args, kwargs, iterable, skip=None,
                 os.killpg(subprocess, signal.SIGTERM)
             except ProcessLookupError:
                 pass
+
+    del executor
+    gc.collect()
 
     return processed_result
 

@@ -52,11 +52,23 @@ class TestReadmode(object):
         # if no skymode, with zero amplitudes, is nmc
         assert 'NMC' == readmode(header)
         # if skymode, is skymode
-        header['SKYMODE'] = 'SLITSCAN'
-        assert 'SLITSCAN' == readmode(header)
+        header['SKYMODE'] = 'TEST'
+        assert readmode(header) == 'TEST'
 
     def test_nmc(self):
         assert readmode(nmc_testdata()['header']) == 'NMC'
 
     def test_npc(self):
         assert readmode(npc_testdata()['header']) == 'NPC'
+
+    def test_slitscan(self):
+        header = fits.header.Header()
+        header['INSTMODE'] = 'TEST'
+
+        # if slitscan in skymode, INSTMODE is ignored
+        header['INSTMODE'] = 'SLITSCAN'
+        assert readmode(header) == 'SLITSCAN'
+        header['INSTMODE'] = 'SLITSCAN_NMC'
+        assert readmode(header) == 'SLITSCAN_NMC'
+        header['INSTMODE'] = 'SLITSCAN_NXCAC'
+        assert readmode(header) == 'SLITSCAN_NXCAC'

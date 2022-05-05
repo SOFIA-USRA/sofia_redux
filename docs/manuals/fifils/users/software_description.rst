@@ -398,6 +398,21 @@ Some key parameters to note are listed below.
 
    - General parameters
 
+      -  *Use parallel processing*: If not set, data will be processed
+         serially.  This will likely result in longer processing times,
+         but smaller memory footprint during processing.
+
+      -  *Maximum cores to use*: Specify the maximum cores to use, in the
+         case of parallel processing.  If not specified, the maximum is
+         the number of available cores, minus 1.
+
+      -  *Check memory use during resampling*: If set, memory availability
+         will be checked before processing, and the number of processes will
+         be modified if necessary.  If not set, processing is attempted with
+         the maximum number of cores specified.  Use with caution: in some
+         conditions, unsetting this option may result in software or computer
+         crashes.
+
       -  *Skip coadd*: If selected, a separate flux cube will be made from
          each input file, using the interpolation algorithm.
          This option is useful for identifying bad input files.
@@ -405,7 +420,7 @@ Some key parameters to note are listed below.
       -  *Interpolate instead of fit*: If set, an alternate resampling
          algorithm will be used, rather than the local polynomial surface
          fits. This option may be preferable for data with small dither
-         offsets.
+         offsets; it is not recommended for large maps.
 
       -  *Weight by errors*: If set, local fits will be weighted by the
          flux errors, as calculated by the pipeline.
@@ -426,14 +441,21 @@ Some key parameters to note are listed below.
          calculated by the resampling algorithm will be appended to the output
          FITS file. This option is primarily used for testing.
 
+      -  *Skip computing the uncorrected flux cube*: If set, the uncorrected
+         flux data will be ignored.  This option is primarily for faster
+         testing and/or quicklook, when the full data product is not required.
+
    - Spatial resampling parameters
 
       -  *Spatial oversample*: This parameter controls the resolution of the output
-         spatial grid. The value is given in terms of pixels per reference
-         FWHM for the detector channel used. For the BLUE camera, the
-         reference FWHM is 5.0 arcseconds; for RED, it is 10.0 arcseconds. A
-         value of 5 resamples BLUE data at 1 arcsecond per pixel and RED
-         data at 2 arcseconds per pixel.
+         spatial grid, with reference to the assumed FWHM at the observed wavelength.
+         The value is given in terms of pixels per reference FWHM for the
+         detector channel used.
+
+      -  *Output spatial pixel size (arcsec)*: This parameter directly controls
+         the resolution of the output spatial grid. If set, this
+         parameter overrides the spatial oversample parameter. For BLUE data,
+         the default value is 1.5 arcsec; for RED data, it is 3.0 arcsec.
 
       -  *Spatial surface fit order*: This parameter controls the
          order of the surface fit to the spatial data at each grid point. Higher
@@ -465,6 +487,11 @@ Some key parameters to note are listed below.
       -  *Spectral oversample*: This parameter controls the resolution of the output
          spectral grid. The value is given in terms of pixels per reference
          spectral FWHM at the central wavelength of the observation.
+
+      -  *Output spectral pixel size (um)*: This parameter directly controls
+         the resolution of the output spectral grid.  If set, this
+         parameter overrides the spatial oversample parameter.  It does not
+         have a default value.
 
       -  *Spectral surface fit order*: This parameter controls the
          order of the surface fit to the spectral data at each grid point.
@@ -598,6 +625,3 @@ reduction to be successful.
 
 .. include:: include/headerdef.dat
    :literal:
-
-
-

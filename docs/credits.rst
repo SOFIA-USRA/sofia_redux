@@ -22,6 +22,7 @@ SOFIA Pipeline Contributors
 * Ed Chambers
 * Melanie Clarke
 * Sebastian Colditz
+* Arpan Das
 * Dario Fadda
 * Christian Fischer
 * Nicole Karnath

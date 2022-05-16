@@ -74,11 +74,11 @@ def test_estimate_max_bytes():
     coordinates = np.array(np.meshgrid(x, x))
     n_bytes = BaseTree.estimate_max_bytes(
         coordinates, window=8, leaf_size=40)
-    assert np.isclose(n_bytes, 4693160, rtol=1e-3)
+    assert np.isclose(n_bytes, 4693160, rtol=0.1)
 
     n_bytes = BaseTree.estimate_max_bytes(
         coordinates[0].ravel(), window=8, leaf_size=40)
-    assert np.isclose(n_bytes, 2886376, rtol=1e-3)
+    assert np.isclose(n_bytes, 2886376, rtol=0.1)
 
 
 def test_get_class_for():

@@ -37,7 +37,7 @@ def test_estimate_max_bytes():
     window = 3
     n_bytes = ResampleBase.estimate_max_bytes(
         coordinates, window, n_sets=2, leaf_size=40)
-    assert n_bytes == 14560
+    assert np.isclose(n_bytes, 14560, rtol=0.1)
 
 
 def test_get_grid_class(test_resampler):

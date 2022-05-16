@@ -11,11 +11,11 @@ def test_estimate_max_bytes():
     window = 10
     n_bytes = PolynomialTree.estimate_max_bytes(
         coordinates, window, leaf_size=40, order=2)
-    assert np.isclose(n_bytes, 369326064, rtol=1e-3)
+    assert np.isclose(n_bytes, 369326064, rtol=0.1)
 
     n_bytes = PolynomialTree.estimate_max_bytes(
         coordinates, window, leaf_size=40, order=3)
-    assert np.isclose(n_bytes, 537098224, rtol=1e-3)
+    assert np.isclose(n_bytes, 537098224, rtol=0.1)
 
 
 def test_set_shape():

@@ -4,6 +4,7 @@
 - Updated FORCAST pipeline to v2.5.0, including support for NXCAC slit scans.
 - Updated FIFI-LS pipeline to v2.6.1, including performance improvements
   and additional memory management for large data sets.
+- Calibration data updates for FORCAST and FIFI-LS.
 
 1.2.3 (2022-04-06)
 ==================

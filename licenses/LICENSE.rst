@@ -1,4 +1,4 @@
-Copyright 2021 Universities Space Research Association
+Copyright 2022 Universities Space Research Association
 under Government Prime Contract Number NNA17BF53C
 
 Redistribution and use in source and binary forms, with or without

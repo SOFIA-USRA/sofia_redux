@@ -1,5 +1,5 @@
-1.2.4
-=====
+1.2.4 (2022-05-25)
+==================
 
 - Updated FORCAST pipeline to v2.5.0, including support for NXCAC slit scans.
 - Updated FIFI-LS pipeline to v2.6.1, including performance improvements

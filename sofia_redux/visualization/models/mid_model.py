@@ -1,6 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from typing import Dict, Optional, TypeVar, Union, Any
+from copy import deepcopy
 import astropy.io.fits as pf
 import numpy as np
 
@@ -40,6 +41,20 @@ class MidModel(object):
         self.name = ''
         self.data = dict()
         self.enabled = True
+
+    def __copy__(self):  # pragma: no cover
+        cls = self.__class__
+        new = cls.__new__(cls)
+        new.__dict__.update(self.__dict__)
+        return new
+
+    def __deepcopy__(self, memodict):
+        cls = self.__class__
+        new = cls.__new__(cls)
+        memodict[id(self)] = new
+        for k, v in self.__dict__.items():
+            setattr(new, k, deepcopy(v, memodict))
+        return new
 
     def populated(self) -> bool:
         """
@@ -270,9 +285,10 @@ class Order(MidModel):
                  f'{hdu.name}')
         fields = ['wavepos', 'spectral_flux',
                   'spectral_error', 'transmission', 'response']
-        kinds = ['wavelength', 'flux', 'flux', 'scale', 'scale']
+        kinds = ['wavelength', 'flux', 'flux', 'scale', 'time']
         units = [hdu.header.get('XUNITS'), hdu.header.get('YUNITS'),
-                 hdu.header.get('YUNITS'), None, None]
+                 hdu.header.get('YUNITS'), None, 'sec']
+
         for (i, field), kind, unit in zip(enumerate(fields), kinds, units):
             try:
                 if hdu.data.ndim == 2:

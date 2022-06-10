@@ -15,6 +15,7 @@ from matplotlib import artist as mart
 from sofia_redux.visualization.display import pane, drawing
 from sofia_redux.visualization.models import high_model, reference_model
 from sofia_redux.visualization.utils import eye_error
+from sofia_redux.visualization import signals
 
 PyQt5 = pytest.importorskip('PyQt5')
 
@@ -22,8 +23,9 @@ PyQt5 = pytest.importorskip('PyQt5')
 class TestPane(object):
 
     def test_eq(self):
-        pane1 = pane.OneDimPane()
-        pane2 = pane.OneDimPane()
+        sigs = signals.Signals()
+        pane1 = pane.OneDimPane(sigs)
+        pane2 = pane.OneDimPane(sigs)
         assert pane1 != 'test'
         assert pane1 == pane1
         assert pane1 == pane2
@@ -38,6 +40,20 @@ class TestPane(object):
 
         blank_pane.set_border_visibility(False)
         assert not blank_pane.border.get_visible()
+
+    def test_update_model(self, multiorder_hdul_merged,
+                          blank_onedim, grism_hdul):
+        grism_filename = grism_hdul.filename()
+        grism_model = high_model.Grism(grism_hdul)
+        blank_onedim.models[grism_filename] = grism_model
+
+        multi_model = dict()
+        multi_model[grism_filename] = high_model.MultiOrder(
+            multiorder_hdul_merged)
+
+        blank_onedim.update_model(multi_model)
+        assert id(blank_onedim.models[grism_filename]) != \
+               id(high_model.MultiOrder(multiorder_hdul_merged))
 
     def test_remove_model(self, blank_onedim, mocker,
                           grism_hdul, multiorder_hdul_merged):
@@ -86,6 +102,17 @@ class TestPane(object):
         output = blank_onedim.current_units()
         assert all([len(v) == 0 for v in output.values()])
 
+    def test_current_units_full(self, blank_onedim, mocker, grism_hdul):
+
+        grism_filename = grism_hdul.filename()
+        grism_model = high_model.Grism(grism_hdul)
+        blank_onedim.models[grism_filename] = grism_model
+        blank_onedim.units = {'x': u.um, 'y': u.nm}
+
+        output = blank_onedim.current_units()
+        assert output['x'] == blank_onedim.units['x']
+        assert output['y'] == blank_onedim.units['y']
+
     def test_set_orders(self, blank_onedim, caplog, mocker,
                         multiorder_hdul_spec,
                         multiorder_hdul_merged):
@@ -132,6 +159,9 @@ class TestPane(object):
 
         assert mock.call_count == 4
 
+    def test_create_artists_from_current_models(self, blank_onedim, mocker):
+        pass
+
     def test_plot_model(self, blank_onedim, mocker, grism_hdul, caplog):
         caplog.set_level(logging.DEBUG)
         mocker.patch.object(high_model.Grism, 'retrieve',
@@ -148,6 +178,37 @@ class TestPane(object):
 
         assert 'Ending limits' in caplog.text
         assert len(lines) == 0
+
+    def test_plot_model_same_fields(self, blank_onedim, mocker, grism_hdul):
+
+        marker = '^'
+        ax = mpf.Figure().subplots(1, 1)
+        blank_onedim.ax = ax
+
+        model = high_model.Grism(grism_hdul)
+        model.enabled = False
+        blank_onedim.models[model.filename] = model
+        blank_onedim.orders[model.filename] = [0]
+        blank_onedim.markers[model.filename] = marker
+        blank_onedim.colors[model.filename] = 'blue'
+
+        # Same fields
+        blank_onedim.fields['y'] = blank_onedim.fields['x']
+        blank_onedim.units = {'x': u.um, 'y': u.nm}
+
+        blank_onedim.plot_type = 'scatter'
+        lines = blank_onedim._plot_model(model)
+        line, cursor = tuple(lines)
+        # Being tested for fields
+        assert line.get_artist()._label.split(',')[-1].strip() == \
+               blank_onedim.fields['x']
+        assert isinstance(line.get_artist(), ml.Line2D)
+        assert line.get_artist().get_marker() == marker
+        assert line.get_artist().get_linestyle() == 'None'
+        assert isinstance(cursor.get_artist(), mc.PathCollection)
+        # assert isinstance(error.get_artist(), mc.PolyCollection)
+        assert all([not ln.get_artist().get_visible()
+                    for ln in lines])
 
     def test_plot_model_bad_shape(self, blank_onedim, mocker, grism_hdul,
                                   caplog):
@@ -301,6 +362,45 @@ class TestPane(object):
         assert blank_onedim.scale['x'] == scales['x']
         assert blank_onedim.scale['y'] == starting_scales['y']
 
+    def test_get_xy_data(self, blank_onedim, mocker, caplog, grism_hdul):
+
+        model = high_model.Grism(grism_hdul)
+        #
+        # blank_onedim.add_model(model)
+        blank_onedim.fields['x'] = 'wavepos'
+        blank_onedim.fields['y'] = 'wavepos'
+        blank_onedim.units = {'x': u.um, 'y': u.nm}
+        x, y = blank_onedim.get_xy_data(model, order=0)
+
+        assert id(x) != id(model)
+        assert id(y) != id(model)
+        assert id(x) != id(y)
+
+        spectrum_x = x.retrieve(order=0,
+                                level='low', field='wavepos')
+        spectrum_y = y.retrieve(order=0,
+                                level='low', field='wavepos')
+        assert spectrum_x.unit_key == 'um'
+        assert spectrum_y.unit_key == 'nm'
+
+    @pytest.mark.parametrize('target, current',
+                             [({'x': u.nm, 'y': 'Jy'}, {'x': 'pixel',
+                                                        'y': u.Jy}),
+                              ({'x': 'pixel', 'y': u.mol}, {'x': 'pixel',
+                                                            'y': u.Jy})])
+    def test_set_units_pixels(self, qtbot, mocker, blank_onedim, grism_hdul,
+                              target, current):
+        mocker.patch.object(pane.OneDimPane, '_convert_low_model_units',
+                            side_effect=ValueError)
+        model = high_model.Grism(grism_hdul)
+
+        blank_onedim.models[model.filename] = model
+        blank_onedim.orders[model.filename] = [0]
+        blank_onedim.units = current
+        units = target
+        with qtbot.wait_signal(blank_onedim.signals.obtain_raw_model):
+            blank_onedim.set_units(units, 'primary')
+
     def test_set_units_fail(self, blank_onedim, mocker, caplog, grism_hdul):
         caplog.set_level(logging.DEBUG)
         mocker.patch.object(pane.OneDimPane, '_convert_low_model_units',
@@ -358,11 +458,37 @@ class TestPane(object):
         assert data[model.filename][0]['visible'] is False
         assert data[model.filename][1]['visible'] is False
 
+    @pytest.mark.parametrize('xdata,isnan', [(2000, False)])
+    def test_data_at_cursor_same_fields(self, blank_onedim, mocker,
+                                        grism_hdul, blank_figure, xdata,
+                                        isnan):
+        mocker.patch.object(np, 'nanargmin', return_value=4)
+        mocker.patch.object(np, 'isnan', return_value=np.array([isnan]))
+        model = high_model.Grism(grism_hdul)
+
+        blank_onedim.models[model.filename] = model
+        blank_onedim.orders[model.filename] = [0]
+        blank_onedim.colors[model.filename] = 'blue'
+
+        # add an alt axis to test too
+        blank_onedim.show_overplot = False
+        blank_onedim.fields['y'] = blank_onedim.fields['x']
+        blank_onedim.units = {'x': u.nm, 'y': u.nm}
+
+        event = mpb.MouseEvent(x=2, y=3, canvas=blank_figure.widget.canvas,
+                               name='motion_notify_event')
+        event.xdata = xdata
+
+        data = blank_onedim.data_at_cursor(event)
+
+        assert data[model.filename][0]['visible'] is False
+        assert data[model.filename][0]['y_field'] == data[model.filename][
+            0]['x_field']
+
     def test_perform_fit_bad(self, blank_onedim):
         arts, params = blank_onedim.perform_fit('trapezoid', [0, 10])
         assert arts is None
         assert params is None
-
         arts, params = blank_onedim.perform_fit('fit_none_none', [0, 10])
         assert arts is None
         assert params is None
@@ -662,6 +788,27 @@ class TestPane(object):
         assert len(lines) == 20
         assert artist_count(lines) == (10, 10)
 
+    def test_window_line_list(self, blank_onedim, grism_hdul, mocker):
+
+        ref = reference_model.ReferenceData()
+        blank_onedim.reference = ref
+        mocker.patch.object(ref, 'convert_line_list_unit',
+                            return_value=dict())
+        # mocker.patch.object(pane.OneDimPane, 'get_axis_limits()',
+        #                      side_effect=ValueError)
+        fn = grism_hdul.filename()
+        grism_model = high_model.Grism(grism_hdul)
+        blank_onedim.models[fn] = grism_model
+        blank_onedim.orders[fn] = [0]
+        blank_onedim.units['x'] = 'pixel'
+        # blank_onedim.markers[fn] = 'x'
+        # blank_onedim.colors[fn] = 'blue'
+        # ax = mpf.Figure().subplots(1, 1)
+        # blank_onedim.ax = ax
+
+        name_limits = blank_onedim._window_line_list()
+        assert name_limits == dict()
+
     def test_current_reference_options(self, blank_onedim, line_list_csv):
         ax = mpf.Figure().subplots(1, 1)
         blank_onedim.ax = ax
@@ -669,7 +816,6 @@ class TestPane(object):
         # none without reference model
         options = blank_onedim._current_reference_options()
         assert len(options) == 0
-
         # load a reference model
         ref = reference_model.ReferenceData()
         ref.add_line_list(line_list_csv)

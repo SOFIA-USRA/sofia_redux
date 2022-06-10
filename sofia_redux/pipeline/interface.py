@@ -562,7 +562,7 @@ class Interface(object):
             os.makedirs(dirname, exist_ok=True)
             self.reduction.output_directory = dirname
 
-    def set_recipe(self, recipe=None):
+    def set_recipe(self, recipe=None, step_to=None):
         """
         Set a non-default processing recipe for the reduction.
 
@@ -578,14 +578,26 @@ class Interface(object):
             ``configuration.recipe`` attribute will
             be used.  If this value is also None, no action
             will be taken.
+        step_to : str, optional
+            A processing step name after which the recipe is terminated.
+            If not provided, the ``configuration.step_to`` attribute will
+            be used.  If this value is also None, no action
+            will be taken.
         """
         if self.reduction is None:
             return
         if recipe is None:
             recipe = self.configuration.recipe
         if recipe is not None:
-            log.warning('Setting a new recipe: {}'.format(recipe))
+            log.warning(f'Setting a new recipe: {recipe}')
             self.reduction.recipe = recipe
+        if step_to is None:
+            step_to = self.configuration.step_to
+        if step_to is not None:
+            if step_to in self.reduction.recipe:
+                log.warning(f'Setting a new stopping point: {step_to}')
+                idx = self.reduction.recipe.index(step_to) + 1
+                self.reduction.recipe = self.reduction.recipe[:idx]
 
     def start(self, data):
         """

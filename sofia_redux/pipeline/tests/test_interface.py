@@ -287,6 +287,19 @@ class TestInterface(object):
         interface.reduce()
         assert interface.reduction.step_index == 2
 
+    def test_set_recipe_step_to(self):
+        # set a non-default recipe (log_input twice)
+        # but also set a stopping point after the first
+        recipe = ['log_input', 'log_input']
+        interface = Interface(Configuration({'recipe': recipe,
+                                             'step_to': 'log_input'}))
+        interface.start('test_data')
+
+        assert interface.reduction.recipe == ['log_input']
+
+        interface.reduce()
+        assert interface.reduction.step_index == 1
+
     def test_set_log_file(self, tmpdir):
         # start a reduction with temporary output directory
         tmpdir_name = str(tmpdir)

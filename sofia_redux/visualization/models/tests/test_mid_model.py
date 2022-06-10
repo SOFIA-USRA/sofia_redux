@@ -136,6 +136,17 @@ class TestOrder(object):
         assert len(model.data) == len(split_order_hdul)
         assert 'Load split order from' in caplog.text
 
+    def test_load_split_2(self, combined_order_hdul, caplog):
+        caplog.set_level(logging.INFO)
+
+        model = mid_model.Order(hdul=combined_order_hdul,
+                                filename=combined_order_hdul.filename(),
+                                number=2)
+        model.data.clear()
+        model.load_split(combined_order_hdul, combined_order_hdul.filename())
+
+        assert len(model.data) == len(combined_order_hdul)
+
     def test_load_combined(self, combined_order_hdul, caplog,
                            split_order_hdul):
         caplog.set_level(logging.INFO)

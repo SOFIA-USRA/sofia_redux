@@ -16,7 +16,6 @@ from sofia_redux.visualization.display import (figure, pane, fitting_results,
 from sofia_redux.visualization.models import high_model, reference_model
 from sofia_redux.visualization.utils.eye_error import EyeError
 
-
 try:
     from PyQt5 import QtCore, QtGui, QtWidgets
     from PyQt5.QtWidgets import QTreeWidgetItem
@@ -431,9 +430,11 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         """Update the cursor location displays."""
         if self.cursor_checkbox.isChecked():
             if event.inaxes and self.figure.populated():
+
                 data_point = self.figure.data_at_cursor(event)
                 idx = self.figure.determine_selected_pane(event.inaxes)
                 cursor_position = self.figure.panes[idx].xy_at_cursor(event)
+
                 if self._cursor_popout:
                     self._update_cursor_loc_window(data_point, cursor_position)
                 else:
@@ -1297,6 +1298,11 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
     ####
     # Axis Controls
     ####
+
+    def model_backup(self, models):
+        targets = self.selected_target_axis()
+        self.figure.model_backup(models, target=targets)
+
     def update_controls(self) -> None:
         """Update control widgets from loaded data."""
         pane_ = self.figure.get_current_pane()

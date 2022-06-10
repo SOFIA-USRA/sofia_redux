@@ -7,6 +7,7 @@ except ImportError:
 
     # duck type parents to allow class definition
     class QtCore:
+
         class QObject:
             pass
 
@@ -42,3 +43,4 @@ class Signals(QtCore.QObject):
     toggle_fit_visibility = QtCore.pyqtSignal()
     update_reference_lines = QtCore.pyqtSignal()
     unload_reference_model = QtCore.pyqtSignal()
+    obtain_raw_model = QtCore.pyqtSignal()

@@ -8,7 +8,6 @@ import matplotlib.backend_bases as bb
 from sofia_redux.visualization import eye
 from sofia_redux.visualization.display import (view, pane, fitting_results,
                                                cursor_location)
-
 PyQt5 = pytest.importorskip('PyQt5')
 
 
@@ -172,7 +171,7 @@ class TestEye(object):
         for axis, prop_selector in selectors.items():
             selector = prop_selector[0]
             assert selector.currentText() == prop_selector[1]
-            last_index = selector.count() - 1
+            last_index = selector.count() - 2
             last_field = selector.itemText(last_index)
             selector.setCurrentIndex(last_index)
             loaded_eye.signals.axis_field_changed.emit()
@@ -205,12 +204,11 @@ class TestEye(object):
         for axis, prop_selector in selectors.items():
             selector = prop_selector[0]
             assert selector.currentText() == prop_selector[1]
-            last_index = selector.count() - 1
+            last_index = selector.count() - 2
             last_field = selector.itemText(last_index)
             selector.setCurrentIndex(last_index)
             app.signals.axis_unit_changed.emit()
             qtbot.wait(1000)
-
             assert all([p.get_unit(axis) == last_field
                         for p in app.view.figure.panes])
 
@@ -220,12 +218,12 @@ class TestEye(object):
         for axis, prop_selector in selectors.items():
             selector = prop_selector[0]
             assert selector.currentText() == prop_selector[1]
-            last_index = selector.count() - 1
+            last_index = selector.count() - 2
             last_field = selector.itemText(last_index)
             selector.setCurrentIndex(last_index)
             loaded_eye.signals.axis_unit_changed.emit()
             qtbot.wait(1000)
-
+            print(last_field)
             assert all([p.get_unit(axis) == last_field
                         for p in loaded_eye.view.figure.panes])
 
@@ -235,7 +233,7 @@ class TestEye(object):
         for axis, prop_selector in selectors.items():
             selector = prop_selector[0]
             assert selector.currentText() == prop_selector[1]
-            last_index = selector.count() - 1
+            last_index = selector.count() - 2
             selector.setCurrentIndex(last_index)
             loaded_eye.signals.axis_unit_changed.emit()
             qtbot.wait(1000)

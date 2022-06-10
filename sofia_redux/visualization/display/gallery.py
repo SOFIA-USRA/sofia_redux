@@ -297,10 +297,12 @@ class Gallery(object):
             kinds = [kinds]
 
         results = list()
+
         for kind in kinds:
             if kind in ['line', 'line_alt', 'all']:
                 out = self._update_line_artist_options(pane_, options)
                 results.append(out)
+
             if kind in ['error', 'error_range', 'all']:
                 out = self._update_error_artist_options(pane_, options)
                 results.append(out)
@@ -347,7 +349,7 @@ class Gallery(object):
                     continue
                 if line.matches(option) and line.match_axes(option.axes):
                     results.append(line.update_options(option, kind='line'))
-
+                    break
         return any(results)
 
     def _update_error_artist_options(self, pane_: PT,
@@ -380,6 +382,7 @@ class Gallery(object):
                 if line.matches(option):
                     results.append(line.update_options(option,
                                                        kind='error_range'))
+                    break
         return any(results)
 
     def _update_border_artist_options(self, pane_: PT,
@@ -411,6 +414,7 @@ class Gallery(object):
                 if option.match_high_model('border'):
                     results.append(patch.update_options(option,
                                                         kind='patch'))
+                    break
         return any(results)
 
     def _update_cursor_artist_options(self, pane_: PT,
@@ -441,6 +445,7 @@ class Gallery(object):
                     continue
                 if point.matches(option):
                     results.append(point.update_options(option, kind='cursor'))
+                    break
         return any(results)
 
     def _update_fit_artist_options(self, pane_: PT,
@@ -471,7 +476,7 @@ class Gallery(object):
                     continue
                 if line.matches(option):
                     results.append(line.update_options(option, kind='fit'))
-
+                    break
         return any(results)
 
     def _update_reference_artist_options(self, pane_: PT,
@@ -485,7 +490,7 @@ class Gallery(object):
                     continue
                 if option.matches(draw):
                     results.append(draw.update_options(option, kind='ref'))
-
+                    break
         return any(results)
 
     def _replace_artist(self, kind: str, model: str, order: int,

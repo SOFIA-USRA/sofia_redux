@@ -16,8 +16,16 @@ For previously processed data, check the PIPEVERS keyword in the
 FITS header to determine the pipeline version used.
 
 
-FORCAST Redux v2.4.0
+FORCAST Redux v2.5.0
 ~~~~~~~~~~~~~~~~~~~~
+*User manual: Rev. K*
+
+Spectroscopy
+^^^^^^^^^^^^
+- Accommodate slit scan data with asymmetric nods (SKYMODE=SLITSCAN_NXCAC).
+
+FORCAST Redux v2.4.0 (2022-04-06)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. K*
 
 Imaging

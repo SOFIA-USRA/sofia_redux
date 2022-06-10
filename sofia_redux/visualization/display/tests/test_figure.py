@@ -141,6 +141,7 @@ class TestFigure(object):
         assert mock.called_with({'selection': 'all'})
 
     def test_reset_artists_fail(self, blank_figure, mocker, caplog):
+        sigs = signals.Signals()
         caplog.set_level(logging.DEBUG)
         mocker.patch.object(pane.OneDimPane,
                             'create_artists_from_current_models',
@@ -149,15 +150,16 @@ class TestFigure(object):
                             return_value=0)
         mocker.patch.object(figure.Figure, '_add_pane_artists')
 
-        blank_figure.panes = [pane.OneDimPane()]
+        blank_figure.panes = [pane.OneDimPane(sigs)]
 
         blank_figure.reset_artists()
 
         assert 'Error encountered while creating gallery' in caplog.text
 
     def test_add_pane_artists(self, blank_figure, mocker):
+        sigs = signals.Signals()
         add_mock = mocker.patch.object(gallery.Gallery, 'add_patches')
-        blank_figure.panes = [pane.OneDimPane()]
+        blank_figure.panes = [pane.OneDimPane(sigs)]
         blank_figure._current_pane = None
         expected = {'pane_0': {'kind': 'border',
                                'artist': None,
@@ -194,7 +196,8 @@ class TestFigure(object):
         n_panes = 3
         fig = mpf.Figure()
         axes = fig.subplots(1, n_panes)
-        blank_figure.panes = [pane.OneDimPane(ax) for ax in axes]
+        sigs = signals.Signals()
+        blank_figure.panes = [pane.OneDimPane(sigs, ax) for ax in axes]
 
         for i, ax in enumerate(axes):
             found = blank_figure.determine_selected_pane(ax)
@@ -205,8 +208,10 @@ class TestFigure(object):
         assert found is None
 
     def test_determine_pane_from_model(self, blank_figure, mocker):
+        sigs = signals.Signals()
+
         count = 3
-        blank_figure.panes = [pane.OneDimPane() for _ in range(count)]
+        blank_figure.panes = [pane.OneDimPane(sigs) for _ in range(count)]
 
         mocker.patch.object(pane.OneDimPane, 'contains_model',
                             return_value=True)
@@ -239,13 +244,13 @@ class TestFigure(object):
     def test_remove_model_from_pane(self, blank_figure, mocker):
 
         remove = mocker.patch.object(pane.OneDimPane, 'remove_model')
-
+        sigs = signals.Signals()
         with pytest.raises(RuntimeError) as msg:
             blank_figure.remove_model_from_pane()
         assert 'Must specify which model' in str(msg)
 
         count = 4
-        panes = [pane.OneDimPane() for i in range(count)]
+        panes = [pane.OneDimPane(sigs) for i in range(count)]
         blank_figure.panes = panes
 
         blank_figure.remove_model_from_pane(filename='test',
@@ -263,7 +268,8 @@ class TestFigure(object):
                               ({'pane': 'current', 'axis': 'alt'}, 1, 'alt')])
     def test_parse_pane_flag(self, blank_figure, flags, pane_count, ax_val):
         # set a list of 4 panes
-        blank_figure.panes = [pane.OneDimPane() for _ in range(4)]
+        sigs = signals.Signals()
+        blank_figure.panes = [pane.OneDimPane(sigs) for _ in range(4)]
 
         panes, axis = blank_figure.parse_pane_flag(flags)
         assert len(panes) == pane_count
@@ -295,8 +301,9 @@ class TestFigure(object):
         pid = 0
         mid = 1
         state = True
+        sigs = signals.Signals()
 
-        blank_figure.panes = [pane.OneDimPane(), pane.OneDimPane()]
+        blank_figure.panes = [pane.OneDimPane(sigs), pane.OneDimPane(sigs)]
         with qtbot.wait_signal(blank_figure.signals.atrophy):
             blank_figure.set_enabled(pid, mid, state)
 
@@ -313,8 +320,9 @@ class TestFigure(object):
                                        'update_visibility')
         pid = 0
         state = True
+        sigs = signals.Signals()
 
-        blank_figure.panes = [pane.OneDimPane(), pane.OneDimPane()]
+        blank_figure.panes = [pane.OneDimPane(sigs), pane.OneDimPane(sigs)]
         with qtbot.wait_signal(blank_figure.signals.atrophy):
             blank_figure.set_all_enabled(pid, state)
 
@@ -330,8 +338,9 @@ class TestFigure(object):
         cross_mock = mocker.patch.object(figure.Figure,
                                          '_parse_cursor_direction',
                                          return_value=direction)
+        sigs = signals.Signals()
 
-        blank_figure.panes = [pane.OneDimPane()]
+        blank_figure.panes = [pane.OneDimPane(sigs)]
         event = mpb.MouseEvent(x=2, y=3, canvas=blank_figure.widget.canvas,
                                name='motion_notify_event')
         event.xdata = 2
@@ -355,9 +364,10 @@ class TestFigure(object):
         with pytest.raises(pe.TimeoutError):
             with qtbot.wait_signal(blank_figure.signals.atrophy_bg_partial):
                 blank_figure.reset_zoom()
+        sigs = signals.Signals()
 
         n_panes = 4
-        blank_figure.panes = [pane.OneDimPane() for i in range(n_panes)]
+        blank_figure.panes = [pane.OneDimPane(sigs) for i in range(n_panes)]
         zoom_mock = mocker.patch.object(pane.OneDimPane, 'reset_zoom')
         with qtbot.wait_signal(blank_figure.signals.atrophy_bg_partial):
             blank_figure.reset_zoom(all_panes=True)
@@ -381,7 +391,8 @@ class TestFigure(object):
     def test_clear_lines_all(self, blank_figure, mocker):
         reset_mock = mocker.patch.object(gallery.Gallery,
                                          'reset_artists')
-        panes = [pane.OneDimPane() for i in range(3)]
+        sigs = signals.Signals()
+        panes = [pane.OneDimPane(sigs) for i in range(3)]
         blank_figure.panes = panes
 
         blank_figure.clear_lines(flags='v', all_panes=True)
@@ -413,17 +424,18 @@ class TestFigure(object):
         blank_figure.change_axis_field(fields)
         assert set_mock.call_count == 0
         assert fields == f1
+        sigs = signals.Signals()
 
         # a valid pane, primary axes
         mocker.patch.object(blank_figure, 'parse_pane_flag',
-                            return_value=([pane.OneDimPane()], 'primary'))
+                            return_value=([pane.OneDimPane(sigs)], 'primary'))
         blank_figure.change_axis_field(fields)
         assert set_mock.call_count == 1
         assert fields == f1
 
         # secondary axis
         mocker.patch.object(blank_figure, 'parse_pane_flag',
-                            return_value=([pane.OneDimPane()], 'alt'))
+                            return_value=([pane.OneDimPane(sigs)], 'alt'))
         blank_figure.change_axis_field(fields)
         assert set_mock.call_count == 2
         assert fields == f2
@@ -431,7 +443,7 @@ class TestFigure(object):
         # both axes
         fields = f1.copy()
         mocker.patch.object(blank_figure, 'parse_pane_flag',
-                            return_value=([pane.OneDimPane()], 'both'))
+                            return_value=([pane.OneDimPane(sigs)], 'both'))
         blank_figure.change_axis_field(fields)
         assert set_mock.call_count == 3
         assert fields == f3
@@ -443,23 +455,25 @@ class TestFigure(object):
         # pane is None, nothing happens
         mocker.patch.object(blank_figure, 'parse_pane_flag',
                             return_value=(None, None))
+        sigs = signals.Signals()
         blank_figure.set_orders(orders)
         assert set_patch.call_count == 0
 
         # pane is single valued, set is called
         mocker.patch.object(blank_figure, 'parse_pane_flag',
-                            return_value=(pane.OneDimPane(), None))
+                            return_value=(pane.OneDimPane(sigs), None))
         blank_figure.set_orders(orders)
         assert set_patch.call_count == 1
 
         # pane is list, only the first is called
         mocker.patch.object(blank_figure, 'parse_pane_flag',
-                            return_value=([pane.OneDimPane(),
-                                          pane.OneDimPane()], None))
+                            return_value=([pane.OneDimPane(sigs),
+                                          pane.OneDimPane(sigs)], None))
         blank_figure.set_orders(orders)
         assert set_patch.call_count == 2
 
     def test_set_scales(self, blank_figure, mocker):
+        sigs = signals.Signals()
         scales = {'x': 'linear', 'y': 'log'}
         s1 = scales.copy()
         s2 = {'x': 'linear', 'y_alt': 'log'}
@@ -475,16 +489,16 @@ class TestFigure(object):
 
         # pane is list, set is called for primary on all
         mocker.patch.object(blank_figure, 'parse_pane_flag',
-                            return_value=([pane.OneDimPane(),
-                                          pane.OneDimPane()], 'primary'))
+                            return_value=([pane.OneDimPane(sigs),
+                                          pane.OneDimPane(sigs)], 'primary'))
         blank_figure.set_scales(scales)
         assert set_patch.call_count == 2
         assert scales == s1
 
         # call for alt
         mocker.patch.object(blank_figure, 'parse_pane_flag',
-                            return_value=([pane.OneDimPane(),
-                                          pane.OneDimPane()], 'alt'))
+                            return_value=([pane.OneDimPane(sigs),
+                                          pane.OneDimPane(sigs)], 'alt'))
         blank_figure.set_scales(scales)
         assert set_patch.call_count == 4
         assert scales == s2
@@ -492,14 +506,15 @@ class TestFigure(object):
         # call for both
         scales = s1.copy()
         mocker.patch.object(blank_figure, 'parse_pane_flag',
-                            return_value=([pane.OneDimPane(),
-                                           pane.OneDimPane()], 'all'))
+                            return_value=([pane.OneDimPane(sigs),
+                                           pane.OneDimPane(sigs)], 'all'))
         blank_figure.set_scales(scales)
         assert set_patch.call_count == 6
         assert scales == s3
 
     def test_end_fit(self, blank_figure, mocker):
-        blank_figure.panes = [pane.OneDimPane()]
+        sigs = signals.Signals()
+        blank_figure.panes = [pane.OneDimPane(sigs)]
         fit_mock = mocker.patch.object(pane.OneDimPane, 'perform_fit',
                                        return_value=({}, []))
 

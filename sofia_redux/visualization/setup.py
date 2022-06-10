@@ -179,6 +179,8 @@ class Setup(object):
             self.view.update_reference_lines)
         self.view.signals.unload_reference_model.connect(
             self.view.unload_reference_model)
+        self.view.signals.obtain_raw_model.connect(
+            self.parent.get_model_backup)
 
     def setup_messages(self):
         """Add filters to pass log messages to GUI handlers."""

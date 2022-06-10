@@ -77,18 +77,24 @@ class CursorLocation(QtWidgets.QDialog, cl.Ui_Dialog):
         cursor_coords : tuple or list
             Current cursor (x, y) coordinates.
         """
+
         new_points = self._flatten_combine(data_coords,
                                            cursor_coords)
         if len(new_points) == 0:
             return
+
         self._define_table(row_count=len(new_points),
                            col_count=len(new_points[0]) - 1)
+
         for row_index, new_point in enumerate(new_points):
+
             for col_index, value in enumerate(new_point[1:]):
+
                 if isinstance(value, float):
                     item = QTableWidgetItem(f'{value:.3g}')
                 elif isinstance(value, int):
                     item = QTableWidgetItem(f'{value:d}')
+
                 elif isinstance(value, str):
                     if value.startswith('#'):
                         # special handling for color values
@@ -131,6 +137,7 @@ class CursorLocation(QtWidgets.QDialog, cl.Ui_Dialog):
             x_cursor, y_cursor, x_value, y_value, column.
         """
         points = list()
+
         for model_id, model_data_coords in data_coords.items():
             point = None
             for values in model_data_coords:
@@ -147,7 +154,6 @@ class CursorLocation(QtWidgets.QDialog, cl.Ui_Dialog):
                 # no points found, append a blank entry for the model
                 point = [model_id] + ['-'] * 9
                 points.append(point)
-
         return points
 
     def _define_table(self, row_count: int, col_count: int) -> None:

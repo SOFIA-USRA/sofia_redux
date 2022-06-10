@@ -11,6 +11,7 @@ from matplotlib import lines as ml
 from matplotlib import collections as mc
 
 from sofia_redux.visualization.display import gallery, pane, drawing
+from sofia_redux.visualization import signals
 
 PyQt5 = pytest.importorskip('PyQt5')
 
@@ -612,7 +613,8 @@ class TestGallery(object):
 
         obj = gallery.Gallery()
         obj.arts = arts
-        pane_ = pane.OneDimPane(arts['line'][0].get_artist().axes)
+        sigs = signals.Signals()
+        pane_ = pane.OneDimPane(sigs, arts['line'][0].get_artist().axes)
         pane_.show_overplot = True
         pane_.ax_alt = line_alt.axes
 
@@ -798,6 +800,7 @@ class TestGallery(object):
         # make a bunch of labels on top of each other
         model_id = 'm_id'
         order = 1
+
         for i in range(6):
             if overlaps:
                 art = one_dim_pane.ax.text(1, 1, f'test {i}', visible=visible)

@@ -62,11 +62,11 @@ def test_estimate_hood_tree_bytes():
     rand = np.random.RandomState(3)
     coordinates = rand.random((3, 10000)) * 50
     n_bytes = BaseTree.estimate_hood_tree_bytes(coordinates)
-    assert np.isclose(n_bytes, 13080104, rtol=0.1, atol=50000)
+    assert np.isclose(n_bytes, 13080104, rtol=5e-3)
     n_bytes = BaseTree.estimate_hood_tree_bytes(coordinates[0])
-    assert np.isclose(n_bytes, 85304, rtol=0.1, atol=50000)
+    assert np.isclose(n_bytes, 85304, rtol=5e-3)
     n_bytes = BaseTree.estimate_hood_tree_bytes(coordinates, window=2)
-    assert np.isclose(n_bytes, 1705104, rtol=0.1, atol=50000)
+    assert np.isclose(n_bytes, 1705104, rtol=5e-3)
 
 
 def test_estimate_max_bytes():

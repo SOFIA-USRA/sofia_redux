@@ -16,6 +16,7 @@ from sofia_redux.visualization.display import pane, blitting, gallery, drawing
 from sofia_redux.visualization.utils.eye_error import EyeError
 from sofia_redux.visualization.utils.model_fit import ModelFit
 
+
 __all__ = ['Figure']
 
 MT = TypeVar('MT', bound=high_model.HighModel)
@@ -215,11 +216,11 @@ class Figure(object):
                                    f'{n_panes}')
         for i, dimension in zip(range(n_panes), n_dims):
             if dimension == 0:
-                new_pane = pane.OneDimPane()
+                new_pane = pane.OneDimPane(self.signals)
             elif dimension == 1:
-                new_pane = pane.OneDimPane()
+                new_pane = pane.OneDimPane(self.signals)
             elif dimension == 2:
-                new_pane = pane.TwoDimPane()
+                new_pane = pane.TwoDimPane(self.signals)
             else:
                 raise RuntimeError(f'Invalid number of dimensions for '
                                    f'pane: {dimension}')
@@ -566,6 +567,17 @@ class Figure(object):
     ####
     # Handling models
     ####
+
+    def model_backup(self, models: MT, target):
+        '''
+        Obtaining the backup model
+        and assign them to panes
+        '''
+        panes, axes = self.parse_pane_flag(target)
+        for _pane in panes:
+            if _pane is not None:
+                _pane.update_model(models)
+
     def assign_models(self, mode: str, models: Dict[str, MT],
                       indices: Optional[List[int]] = None) -> None:
         """
@@ -684,15 +696,17 @@ class Figure(object):
                 self.add_panes(model_.default_ndims, n_panes=1)
             pane_ = self.panes[self.current_pane]
         if self.model_matches_pane(pane_, model_):
+
             additions = pane_.add_model(model_)
+
         else:
             self.add_panes(n_dims=model_.default_ndims, n_panes=1)
             additions = self.panes[self.current_pane].add_model(model_)
+
         successes = self.gallery.add_drawings(additions)
+
         if successes:
             log.info('Added model to panes')
-
-            # if any updates, add reference models if available
             self.signals.update_reference_lines.emit()
 
     def remove_model_from_pane(
@@ -846,7 +860,6 @@ class Figure(object):
             if _pane is not None:
                 _pane.set_units(units, axes)
                 changed = True
-
         # trigger full artist regeneration
         if changed:
             self.clear_all()
@@ -1081,10 +1094,11 @@ class Figure(object):
         if self.populated():
             for pane_ in self.panes:
                 pane_.set_error(state)
-                updates = pane_.update_visibility()
-                for update in updates:
-                    self.gallery.update_artist_options(pane_=pane_,
-                                                       options=updates)
+
+                updates = pane_.update_visibility(error=True)
+                self.gallery.update_artist_options(pane_=pane_,
+                                                   options=updates)
+
         self.signals.atrophy.emit()
 
     def set_dark_mode(self, state: bool = True) -> None:
@@ -1238,6 +1252,7 @@ class Figure(object):
         pane_index = self.determine_selected_pane(event.inaxes)
         data_point = self.panes[pane_index].data_at_cursor(event)
         self.gallery.update_marker(data_point)
+
         return data_point
 
     def crosshair(self, event: mbb.MouseEvent) -> None:

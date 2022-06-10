@@ -2,6 +2,7 @@
 
 import pytest
 import logging
+import copy
 import numpy as np
 import astropy.io.fits as pf
 
@@ -46,6 +47,46 @@ class TestHighModel(object):
                     bad['f'](bad['args'])
                 else:
                     bad['f']()
+
+    def test_copy(self, grism_hdul):
+        model = high_model.Grism(grism_hdul)
+
+        new_model = copy.copy(model)
+
+        assert model.id == new_model.id
+        assert model.filename == new_model.filename
+        assert id(model) != id(new_model)
+
+        old_mid_model = model.retrieve(order=0, level='low', field='wavepos')
+        new_mid_model = new_model.retrieve(order=0, level='low',
+                                           field='wavepos')
+        assert id(old_mid_model) == id(new_mid_model)
+
+        old_low_model = model.retrieve(order=0, level='raw', field='wavepos')
+        new_low_model = new_model.retrieve(order=0, level='raw',
+                                           field='wavepos')
+        assert id(old_low_model) == id(new_low_model)
+        assert np.mean(old_low_model) == np.mean(new_low_model)
+
+    def test_deepcopy(self, grism_hdul):
+        model = high_model.Grism(grism_hdul)
+
+        new_model = copy.deepcopy(model)
+
+        assert model.id == new_model.id
+        assert model.filename == new_model.filename
+        assert id(model) != id(new_model)
+
+        old_mid_model = model.retrieve(order=0, level='low', field='wavepos')
+        new_mid_model = new_model.retrieve(order=0, level='low',
+                                           field='wavepos')
+        assert id(old_mid_model) != id(new_mid_model)
+
+        old_low_model = model.retrieve(order=0, level='raw', field='wavepos')
+        new_low_model = new_model.retrieve(order=0, level='raw',
+                                           field='wavepos')
+        assert id(old_low_model) != id(new_low_model)
+        assert np.mean(old_low_model) == np.mean(new_low_model)
 
 
 class TestGrism(object):
@@ -303,6 +344,7 @@ class TestMultiOrder(object):
 
         value = model.valid_field(field)
         assert value is result
+        assert 'Valid field check for' in caplog.text
 
 
 class TestATRAN(object):

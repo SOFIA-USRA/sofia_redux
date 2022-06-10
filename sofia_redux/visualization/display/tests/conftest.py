@@ -28,7 +28,8 @@ def ax(fig):
 
 @pytest.fixture(scope='function')
 def one_dim_pane(ax):
-    obj = pane.OneDimPane(ax)
+    sigs = signals.Signals()
+    obj = pane.OneDimPane(sigs, ax)
     return obj
 
 
@@ -143,13 +144,15 @@ def blank_figure(fig_widget):
 
 @pytest.fixture(scope='function')
 def blank_pane():
-    p = pane.Pane()
+    sigs = signals.Signals()
+    p = pane.Pane(sigs)
     return p
 
 
 @pytest.fixture(scope='function')
 def blank_onedim():
-    p = pane.OneDimPane()
+    sigs = signals.Signals()
+    p = pane.OneDimPane(sigs)
     return p
 
 

@@ -137,13 +137,16 @@ def convert_wave(wavelength: np.array, start_unit: str,
     """
     start = u.Unit(start_unit)
     end = u.Unit(end_unit)
+
     if start == end:
         log.debug(f'Start and end units are same: {start_unit}')
         return wavelength
 
     log.debug(f'Converting wavelength from {start_unit} to {end_unit}')
+
     try:
-        out_wave = (wavelength * start).to(end).value
+        out_wave = (wavelength * start).to(end,
+                                           equivalencies=u.spectral()).value
     except u.core.UnitConversionError:
         log.debug(f'Units not convertible: {start_unit} -> {end_unit}')
         raise ValueError('Inconvertible units') from None

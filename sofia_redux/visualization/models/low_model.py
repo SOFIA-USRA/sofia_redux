@@ -1,6 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from typing import Dict, Union, Sequence, TypeVar
+from copy import deepcopy
 import astropy.io.fits as pf
 import astropy.units as u
 import numpy as np
@@ -31,16 +32,15 @@ class LowModel(object):
         Optional keywords to set `name`, `data`, and `kind`
         properties.
     """
+
     def __init__(self, hdu: pf.ImageHDU, filename: str, **kwargs) -> None:
-        self.hdu = hdu
+        self.header = hdu.header.copy()  # Should this be here or not?
         self.filename = filename
         self.unit = None
         self.unit_key = ''
-
-        self.name = kwargs.get('name', self.hdu.name.lower())
-        self.data = kwargs.get('data', self.hdu.data)
+        self.name = kwargs.get('name', hdu.name.lower())
+        self.data = kwargs.get('data', hdu.data)
         self.kind = kwargs.get('kind', '')
-
         self.available_units = self._define_units()
         self.kind_names = dict()
 
@@ -49,11 +49,27 @@ class LowModel(object):
         self.id = None
         self.enabled = True
 
+    def __copy__(self):  # pragma: no cover
+        cls = self.__class__
+        new = cls.__new__(cls)
+        new.__dict__.update(self.__dict__)
+        return new
+
+    def __deepcopy__(self, memodict):
+        cls = self.__class__
+        new = cls.__new__(cls)
+        memodict[id(self)] = new
+        for k, v in self.__dict__.items():
+            setattr(new, k, deepcopy(v, memodict))
+        return new
+
     @staticmethod
     def _define_units() -> Dict[str, Dict[str, Union[str, u.Quantity]]]:
         """Define common units and their astropy equivalent."""
         wavelength_units = {'um': u.um, 'nm': u.nm,
                             u'\u212B': u.angstrom,
+                            'cm-1': u.kayser,
+                            'pixel': u.pix
                             }
         flux_units = {'Jy': u.Jy,
                       'W / m2': u.W / u.m ** 2,
@@ -61,20 +77,24 @@ class LowModel(object):
                       'W / (m2 um)': u.W / (u.m ** 2 * u.um),
                       'erg / (s cm2 Angstrom)':
                           u.erg / (u.s * u.cm ** 2 * u.AA),
-                      'erg / (s cm2 Hz)': u.erg / (u.s * u.cm ** 2 * u.Hz),
+                      'erg / (s cm2 Hz)': u.erg / (u.s * u.cm ** 2 * u.Hz)
                       }
         scale_units = {'': ''}
         unitless = {'': u.dimensionless_unscaled}
         position_units = {'arcsec': u.arcsec,
                           'degree': u.deg,
                           'arcmin': u.arcmin,
+                          'pixel': u.pix
                           }
+        time_units = {'sec': u.s,
+                      'pixel': u.pix}
 
         available_units = {'scale': scale_units,
                            'unitless': unitless,
                            'position': position_units,
                            'flux': flux_units,
-                           'wavelength': wavelength_units}
+                           'wavelength': wavelength_units,
+                           'time': time_units}
         return available_units
 
     def get_unit(self) -> str:
@@ -107,7 +127,7 @@ class LowModel(object):
         header_unit = ''
         for key in header_keys:
             try:
-                header_unit = self.hdu.header[key]
+                header_unit = self.header[key]
             except KeyError:
                 continue
             else:
@@ -117,8 +137,19 @@ class LowModel(object):
             unit = ''
 
         self.unit = uc.parse_unit(unit)
+
         self.unit_key = str(self.unit)
         self._verify_unit_parse()
+
+        # if self.unit_key == 'cm-1':
+        #
+        #     wave_number_unit = {'cm-1': u.kayser,
+        #                         'pixel': u.pix}
+        #     self.available_units['wavelength'] = wave_number_unit
+        # elif self.unit_key == 'sec':
+        #     time_units = {'sec': u.s,
+        #                   'pixel': u.pix}
+        #     self.available_units['time'] = time_units
 
     def _verify_unit_parse(self) -> None:
         """
@@ -131,6 +162,7 @@ class LowModel(object):
             contained in the available units.
         """
         if not isinstance(self.unit, u.UnitBase):
+
             message = (f'Failure to parse unit for {self.filename}, '
                        f'{self.name}: {self.kind}, {self.unit} '
                        f'({type(self.unit)}')
@@ -247,8 +279,10 @@ class Spectrum(LowModel):
                            'unitless': ['spatial_profile'],
                            'flux': ['spectral_flux', 'spectral_error'],
                            'wavelength': ['wavepos', 'slitpos'],
-                           'position': ['slitpos']}
+                           'position': ['slitpos'],
+                           'unrecog': ['miscellaneous']}
         self._parse_kind()
+
         self._parse_units(**kwargs)
 
     def convert(self, target_unit: str, wavelength: Data,
@@ -270,8 +304,6 @@ class Spectrum(LowModel):
         ValueError
             If conversion cannot be completed.
         """
-        # TODO - add pixel conversion handling.
-        #  right now, would destroy calibration data
         if self.kind == 'flux':
             self.data = uc.convert_flux(
                 in_flux=self.data, start_unit=self.unit_key,
@@ -280,9 +312,12 @@ class Spectrum(LowModel):
         elif self.kind in ['wavelength', 'position']:
             # this will work for any simple conversions handled
             # by astropy
-            self.data = uc.convert_wave(
-                wavelength=self.data, start_unit=self.unit_key,
-                end_unit=target_unit)
+            if target_unit == 'pixel':
+                self.data = np.arange(len(self.data)).astype(float)
+            else:
+                self.data = uc.convert_wave(
+                    wavelength=self.data, start_unit=self.unit_key,
+                    end_unit=target_unit)
         elif self.kind in ['scale', 'unitless']:
             # no conversions to do for these types
             return

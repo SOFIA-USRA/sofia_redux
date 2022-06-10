@@ -172,7 +172,8 @@ class Eye(object):
             added = False
             for fname in filename:
                 log.debug(f'Adding data from {fname}')
-                added_filename = self._add_model(fname)
+                added_filename = self.\
+                    _add_model(fname)
                 if added_filename is not None:
                     added = True
                     self.view.display_filenames(added_filename)
@@ -214,6 +215,7 @@ class Eye(object):
             if filename not in self.models.keys():
                 try:
                     m = model.Model.add_model(filename=filename)
+
                 except FileNotFoundError:
                     log.warning(f'No such file: {filename}')
                     filename = None
@@ -293,7 +295,6 @@ class Eye(object):
                            f'HDUList objects. Provided {type(data)}')
                 log.error(message)
                 raise TypeError(message)
-
             added_filename = self._add_model(hdul=hdul)
             hdul.close()
             if added_filename is not None:
@@ -500,6 +501,12 @@ class Eye(object):
         if not isinstance(units, dict):
             raise TypeError('Provided units must be dict')
         self.view.set_units(units=units, panes=panes)
+
+    def get_model_backup(self):
+        """
+        return a copy of raw data
+        """
+        self.view.model_backup(self.models)
 
     def get_units(self, panes: Optional[Union[str, List[int]]] = 'all') -> \
             List:

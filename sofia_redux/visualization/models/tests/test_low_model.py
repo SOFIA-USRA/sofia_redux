@@ -17,7 +17,7 @@ class TestLowModel(object):
 
         model = low_model.LowModel(spectrum_hdu, filename)
 
-        assert model.hdu == spectrum_hdu
+        assert model.header == spectrum_hdu.header
         assert model.filename == filename
         npt.assert_array_equal(model.data, spectrum_hdu.data)
         assert model.unit is None
@@ -59,7 +59,9 @@ class TestLowModel(object):
                               ('micron', 'BUNIT', 'wavelength', u.um,
                                'micron'),
                               ('(cm-1)', 'XUNIT', 'wavelength', u.kayser,
-                               '1 / cm')])
+                               '1 / cm'),
+                              (None, 'XUNIT', 'wavelength',
+                               u.dimensionless_unscaled, '')])
     def test_parse_units(self, spectrum_hdu, key, kind, unit, result, out_key):
         spectrum_hdu.header[key] = unit
         model = low_model.LowModel(spectrum_hdu, 'test.fits',
@@ -87,11 +89,19 @@ class TestLowModel(object):
         assert 'Non-standard unit found' in caplog.text
         assert 'micron' in model.available_units['flux']
 
-    def test_parse_kind(self, spectrum_hdu):
+    def test_parse_kind_fail(self, spectrum_hdu):
         model = low_model.LowModel(spectrum_hdu, 'test.fits')
         with pytest.raises(RuntimeError) as msg:
             model._parse_kind()
         assert 'Failed to parse kind' in str(msg)
+
+    def test_parse_kind(self, spectrum_hdu):
+        model = low_model.LowModel(spectrum_hdu, 'test.fits', kind='flux')
+        model.kind_names = {'flux': ['spectral_flux', 'spectral_error'],
+                            'wavelength': ['wavepos', 'slitpos']}
+        model._parse_kind()
+
+        assert model.kind == 'flux'
 
     def test_convert(self, spectrum_hdu):
         model = low_model.LowModel(spectrum_hdu, 'test.fits')
@@ -180,3 +190,12 @@ class TestSpectrum(object):
         # attempted conversion to a different bad unit should fail
         with pytest.raises(ValueError):
             model.convert('other', wave, 'um')
+
+    def test_convert_pixel(self, spectrum_hdu):
+        # set an unrecognized unit in the header
+        spectrum_hdu.header['XUNIT'] = 'um'
+        model = low_model.Spectrum(spectrum_hdu, 'spec.fits')
+        model.kind = 'wavelength'
+        wave = np.arange(len(spectrum_hdu.data))
+        model.convert('pixel', wave, 'um')
+        assert model.unit == 'pixel'

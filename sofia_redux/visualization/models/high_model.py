@@ -12,6 +12,7 @@ Currently implemented high-level models:
 """
 
 from typing import List, Dict, Optional, TypeVar, Union
+from copy import deepcopy
 import astropy.io.fits as pf
 import numpy as np
 
@@ -52,6 +53,25 @@ class HighModel(object):
         self.index = 0
         self.enabled = True
         self.default_ndims = 0
+
+    def __copy__(self):
+        cls = self.__class__
+        new = cls.__new__(cls)
+        new.__dict__.update(self.__dict__)
+        return new
+
+    def __deepcopy__(self, memodict):
+        cls = self.__class__
+        new = cls.__new__(cls)
+        memodict[id(self)] = new
+        for k, v in self.__dict__.items():
+            if k == 'hdul':
+                # pass hdul by reference, since it is
+                # not modified from initial read
+                setattr(new, k, v)
+            else:
+                setattr(new, k, deepcopy(v, memodict))
+        return new
 
     def load_data(self) -> None:
         """Load the data into the model."""

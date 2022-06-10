@@ -212,9 +212,10 @@ class TestView(object):
         # no current pane, nothing is done
         blank_view.setup_property_selectors()
         assert blank_view.x_property_selector.currentText() == ''
+        sigs = signals.Signals()
 
         # set a pane, no models
-        pane_ = pane.OneDimPane()
+        pane_ = pane.OneDimPane(sigs)
         blank_view.setup_property_selectors(pane_)
         assert blank_view.x_property_selector.currentText() == '-'
         assert blank_view.y_property_selector.currentText() == '-'
@@ -239,7 +240,8 @@ class TestView(object):
         assert blank_view.x_unit_selector.currentText() == ''
 
         # set a pane, no models
-        pane_ = pane.OneDimPane()
+        sigs = signals.Signals()
+        pane_ = pane.OneDimPane(sigs)
         blank_view.setup_unit_selectors(pane_)
         assert blank_view.x_unit_selector.currentText() == ''
         assert blank_view.y_unit_selector.currentText() == ''
@@ -260,10 +262,11 @@ class TestView(object):
     def test_setup_axis_limits(self, blank_view, mocker):
         # no current pane, nothing is done
         blank_view.setup_axis_limits()
+        sigs = signals.Signals()
         assert blank_view.x_limit_min.text() == ''
 
         # set a pane, no limits available
-        pane_ = pane.OneDimPane()
+        pane_ = pane.OneDimPane(sigs)
         blank_view.setup_axis_limits(pane_)
         assert blank_view.x_limit_min.text() == '0'
         assert blank_view.x_limit_max.text() == '1'
@@ -478,8 +481,9 @@ class TestView(object):
     def test_setup_axis_limits_bad_limits(self, blank_view, mocker):
         mocker.patch.object(pane.OneDimPane, 'get_axis_limits',
                             return_value={'x': None, 'y': None})
+        sigs = signals.Signals()
         mocker.patch.object(figure.Figure, 'get_current_pane',
-                            return_value=pane.OneDimPane())
+                            return_value=pane.OneDimPane(sigs))
 
         blank_view.setup_axis_limits()
 

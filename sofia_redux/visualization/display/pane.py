@@ -23,6 +23,7 @@ from matplotlib import image as mi
 import scipy.optimize as sco
 
 from sofia_redux.visualization import log
+from sofia_redux.visualization.signals import Signals
 from sofia_redux.visualization.models import high_model, reference_model
 from sofia_redux.visualization.utils.eye_error import EyeError
 from sofia_redux.visualization.utils import model_fit
@@ -92,7 +93,7 @@ class Pane(object):
         view display.
     """
 
-    def __init__(self, ax: Optional[ma.Axes] = None) -> None:
+    def __init__(self, signals: Signals, ax: Optional[ma.Axes] = None) -> None:
         if not HAS_PYQT5:  # pragma: no cover
             raise ImportError('PyQt5 package is required for the Eye.')
 
@@ -129,7 +130,7 @@ class Pane(object):
                                                'dotted', 'dashdot'])
         self.border = None
 
-    def __eq__(self, other):
+    def __eq__(self, other):  # pragma: no cover
         return self.ax == other.ax
 
     def axes(self):
@@ -559,8 +560,8 @@ class OneDimPane(Pane):
         Flag to indicate that data has changed recently.
     """
 
-    def __init__(self, ax: Optional[ma.Axes] = None) -> None:
-        super().__init__(ax)
+    def __init__(self, signals: Signals, ax: Optional[ma.Axes] = None) -> None:
+        super().__init__(signals, ax)
         self.orders = dict()
         self.plot_kind = 'spectrum'
         self.fields = {'x': 'wavepos',
@@ -585,6 +586,7 @@ class OneDimPane(Pane):
                                  'animated': True}
 
         self.data_changed = False
+        self.signals = signals
 
     def __eq__(self, other):
         if isinstance(other, OneDimPane):
@@ -639,9 +641,8 @@ class OneDimPane(Pane):
         # new_lines = dict()
         new_lines = list()
         if model.id not in self.models.keys():
-            self.models[model.id] = copy.copy(model)
+            self.models[model.id] = copy.deepcopy(model)
             self.models[model.id].extension = self.fields['y']
-
             color_index = model.index % len(self.default_colors)
             log.debug(f'Model index: {model.index}; '
                       f'color index: {color_index}')
@@ -658,6 +659,23 @@ class OneDimPane(Pane):
                 new_lines.extend(new_order_lines)
 
         return new_lines
+
+    def update_model(self, models: MT) -> List[DT]:
+        """
+        Copy a model to the pane.
+
+        The model is copied so the data can be manipulated
+        without changing the root model.
+
+        Parameters
+        ----------
+        model : high_model.HighModel
+            Model object to add.
+        """
+
+        for model_id, backup_model in models.items():
+            if model_id in self.models.keys():
+                self.models[model_id] = copy.deepcopy(backup_model)
 
     def remove_model(self, filename: Optional[str] = None,
                      model: Optional[MT] = None) -> None:
@@ -780,15 +798,19 @@ class OneDimPane(Pane):
         current = {'x': '', 'y': '', 'y_alt': ''}
         if not self.models:
             return current
-        for axis in ['x', 'y', 'y_alt']:
-            # take unit from first model only -- they better match
-            models = list(self.models.values())
-            low_model = models[0].retrieve(
-                order=0, field=self.fields[axis], level='low')
-            if low_model is None:
-                continue
-            current[axis] = low_model.unit_key
-        return current
+        else:
+            if any(self.units.values()):
+                return self.units
+            else:
+                for axis in ['x', 'y', 'y_alt']:
+                    # take unit from first model only -- they better match
+                    models = list(self.models.values())
+                    low_model = models[0].retrieve(
+                        order=0, field=self.fields[axis], level='low')
+                    if low_model is None:
+                        continue
+                    current[axis] = low_model.unit_key
+                return current
 
     def set_orders(self, orders: Dict[str, List[int]]) -> None:
         """
@@ -843,8 +865,14 @@ class OneDimPane(Pane):
     def create_artists_from_current_models(self) -> List[DT]:
         """Create new gallery from all current models."""
         new_artists = list()
+
+        # TODO add a clause for y-alt
+        if self.fields['y'] == self.fields['x']:
+            self.signals.obtain_raw_model.emit()
+
         for model_id, model in self.models.items():
             new_artists.extend(self._plot_model(model))
+
         return new_artists
 
     def _plot_model(self, model: MT) -> List[DT]:
@@ -879,29 +907,42 @@ class OneDimPane(Pane):
             order = orders.number
             spectrum = model.retrieve(order=order, level='low',
                                       field=self.fields['y'])
-            # order not available: try the next one
+
             if spectrum is None:
                 continue
-
             # convert to current units, or remove model and
             # stop trying to load it
-            log.debug(f'Current units: {self.units}')
+            # log.debug(f'Current units: {self.units}')
             if any(self.units.values()):
                 try:
-                    self._convert_low_model_units(model, order,
-                                                  'x', self.units['x'])
-                    self._convert_low_model_units(model, order,
-                                                  'y', self.units['y'])
+                    if self.fields['y'] == self.fields['x']:
+                        log.debug(f'TESTING SAME FIELDS: {self.fields}')
+                        x_model, y_model = self.get_xy_data(model, order)
+                        x = x_model.retrieve(order=order, level='raw',
+                                             field=self.fields['x'])
+                        y = y_model.retrieve(order=order, level='raw',
+                                             field=self.fields['y'])
+
+                    else:
+                        self._convert_low_model_units(model, order,
+                                                      'y', self.units['y'])
+                        self._convert_low_model_units(model, order,
+                                                      'x', self.units['x'])
+                        x = model.retrieve(order=order, level='raw',
+                                           field=self.fields['x'])
+                        y = model.retrieve(order=order, level='raw',
+                                           field=self.fields['y'])
+
                 except ValueError:
                     log.warning('Incompatible units. '
                                 'Try a different pane.')
                     self.remove_model(model=model)
                     break
-
-            x = model.retrieve(order=order, level='raw',
-                               field=self.fields['x'])
-            y = model.retrieve(order=order, level='raw',
-                               field=self.fields['y'])
+            else:
+                x = model.retrieve(order=order, level='raw',
+                                   field=self.fields['x'])
+                y = model.retrieve(order=order, level='raw',
+                                   field=self.fields['y'])
 
             if x is None or y is None:
                 log.debug(f'Failed to retrieve raw data for primary '
@@ -915,18 +956,22 @@ class OneDimPane(Pane):
 
             visible = model.enabled or not spectrum.enabled
             label = f'{model.id}, Order {order + 1}, {self.fields["y"]}'
+            # add line artists
             line = self._plot_single_line(x, y, model_id=model.id,
                                           visible=visible, label=label,
                                           alpha=alpha_val[order_i])
             new_line = {'artist': line, 'fields': self.fields, 'kind': 'line',
                         'high_model': model.id, 'mid_model': order,
                         'label': label, 'axes': 'primary'}
+
             new_lines.append(drawing.Drawing(**new_line))
 
+            # add cursor artists
             cursor = self._plot_cursor(x, y, model_id=model.id)
             new_line = {'artist': cursor, 'kind': 'cursor', 'axes': 'primary',
                         'high_model': model.id, 'mid_model': order,
                         'fields': self.fields}
+
             new_lines.append(drawing.Drawing(**new_line))
 
             if 'flux' in self.fields['y'].lower():
@@ -1135,6 +1180,11 @@ class OneDimPane(Pane):
                         names_in_limits[n].append(x)
                     else:
                         names_in_limits[n] = [x]
+        if self.units['x'] == 'pixel':
+            names_in_limits = dict()
+        else:
+            pass
+
         return names_in_limits
 
     def _current_reference_options(self):
@@ -1275,7 +1325,7 @@ class OneDimPane(Pane):
 
         return updates
 
-    def update_visibility(self) -> List[DT]:
+    def update_visibility(self, error: Optional = False) -> List[DT]:
         """Update plot visibility for current loaded data."""
         updates = list()
         for model_id, model in self.models.items():
@@ -1284,16 +1334,23 @@ class OneDimPane(Pane):
                                           field=self.fields['y'])
                 visible = model.enabled & spectrum.enabled
                 error_visible = visible & self.show_error
-                line = drawing.Drawing(high_model=model_id,
-                                       mid_model=order_number,
-                                       kind='line',
-                                       updates={'visible': visible})
-                updates.append(line)
-                line = drawing.Drawing(high_model=model_id,
-                                       mid_model=order_number,
-                                       kind='error',
-                                       updates={'visible': error_visible})
-                updates.append(line)
+                if error:
+                    line = drawing.Drawing(high_model=model_id,
+                                           mid_model=order_number,
+                                           kind='error',
+                                           updates={'visible': error_visible})
+                    updates.append(line)
+                else:
+                    line = drawing.Drawing(high_model=model_id,
+                                           mid_model=order_number,
+                                           kind='line',
+                                           updates={'visible': visible})
+                    updates.append(line)
+                    line = drawing.Drawing(high_model=model_id,
+                                           mid_model=order_number,
+                                           kind='error',
+                                           updates={'visible': error_visible})
+                    updates.append(line)
         return updates
 
     ####
@@ -1579,11 +1636,13 @@ class OneDimPane(Pane):
                                            level='low', field='wavepos')
             wavelength_data = wave_spectrum.data
             wavelength_unit = wave_spectrum.unit_key
+            # if wavelength_unit == 'pixel' and spectrum.kind == 'flux':
+            #
+            #     # wavelength_data =
+            #     # wavelength_unit =
         else:
             wavelength_data = None
             wavelength_unit = None
-
-        # raises ValueError if not possible
         spectrum.convert(target_unit, wavelength_data, wavelength_unit)
 
         if 'flux' in self.fields[axis]:
@@ -1591,6 +1650,18 @@ class OneDimPane(Pane):
                 order=order_number, level='low', field='spectral_error')
             error_spectrum.convert(target_unit, wavelength_data,
                                    wavelength_unit)
+
+    def get_xy_data(self, model, order):
+        """
+        x_model, y_model : copies of model along x and y axis
+        """
+        x_model = copy.deepcopy(model)
+        y_model = copy.deepcopy(model)
+        self._convert_low_model_units(y_model, order,
+                                      'y', self.units['y'])
+        self._convert_low_model_units(x_model, order,
+                                      'x', self.units['x'])
+        return x_model, y_model
 
     def set_units(self, units: Dict[str, str], axes: str,
                   ) -> List[DT]:
@@ -1615,14 +1686,25 @@ class OneDimPane(Pane):
             updated = False
             min_lim = np.inf
             max_lim = -np.inf
+
+            # pixel conversion
+            if current_unit == 'pixel':
+                self.signals.obtain_raw_model.emit()
+
+            if self.units['x'] == 'pixel' and axis == 'y':
+                self.signals.obtain_raw_model.emit()
+
             for model_id, model in self.models.items():
+
                 for order_number in self.orders[model_id]:
                     try:
-                        self._convert_low_model_units(model, order_number,
+                        self._convert_low_model_units(model,
+                                                      order_number,
                                                       axis, target_unit)
                     except ValueError:
                         log.debug(f'Cannot convert units to '
-                                  f'{target_unit} for {model_id}; ignoring')
+                                  f'{target_unit} for {model_id}; '
+                                  f'ignoring')
                         break
                     else:
                         updated = True
@@ -1657,7 +1739,6 @@ class OneDimPane(Pane):
         if self.reference and len(updates) > 0:
             ref_updates = self._update_reference_artists()
             updates.extend(ref_updates)
-
         return updates
 
     def _update_error_artists(self) -> List[DT]:
@@ -1865,14 +1946,21 @@ class OneDimPane(Pane):
         """
         data = dict()
         cursor_x = event.xdata
+
         for model_id, model in self.models.items():
             data[model_id] = list()
             for order_number in self.orders[model_id]:
                 visible = model.enabled
-                x_data = model.retrieve(order=order_number, level='raw',
-                                        field=self.fields['x'])
-                y_data = model.retrieve(order=order_number, level='raw',
-                                        field=self.fields['y'])
+
+                if self.fields['y'] == self.fields['x']:
+                    x_model, y_model = self.get_xy_data(model, order_number)
+                else:
+                    x_model, y_model = model, model
+
+                x_data = x_model.retrieve(order=order_number, level='raw',
+                                          field=self.fields['x'])
+                y_data = y_model.retrieve(order=order_number, level='raw',
+                                          field=self.fields['y'])
                 # skip order if cursor is out of range
                 if (cursor_x < np.nanmin(x_data)
                         or cursor_x > np.nanmax(x_data)):

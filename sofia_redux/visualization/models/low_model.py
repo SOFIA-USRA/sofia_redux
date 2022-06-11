@@ -239,7 +239,7 @@ class Image(LowModel):
         """Calculate mean of data."""
         try:
             mean = np.nanmean(self.data)
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, TypeError):
             mean = np.nan
         return mean
 

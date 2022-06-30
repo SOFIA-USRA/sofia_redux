@@ -1,3 +1,8 @@
+1.2.6
+=====
+
+- Calibration data updates for HAWC flight series OCQ-R.
+
 1.2.5 (2022-06-10)
 ==================
 

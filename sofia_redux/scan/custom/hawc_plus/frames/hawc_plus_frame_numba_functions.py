@@ -159,7 +159,7 @@ def validate(valid, validated, status, chop_length, chopping,
         valid[i] = True
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def dark_correct(data, valid_frame, channel_indices, squid_indices
                  ):  # pragma: no cover
     """

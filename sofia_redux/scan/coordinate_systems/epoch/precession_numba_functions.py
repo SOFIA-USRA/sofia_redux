@@ -8,7 +8,7 @@ nb.config.THREADING_LAYER = 'threadsafe'
 __all__ = ['precess_single', 'precess_times']
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def precess_single(p, ra, dec, cos_lat, sin_lat):  # pragma: no cover
     """
     Precess the coordinates with a precession matrix.
@@ -59,7 +59,7 @@ def precess_single(p, ra, dec, cos_lat, sin_lat):  # pragma: no cover
         flat_dec[i] = np.arctan2(x[2], np.hypot(x[0], x[1]))
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def precess_times(p, ra, dec, cos_lat, sin_lat):  # pragma: no cover
     """
     Precess the coordinates with a precession matrix.

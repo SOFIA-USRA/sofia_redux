@@ -10,7 +10,7 @@ nb.config.THREADING_LAYER = 'threadsafe'
 __all__ = ['find_transitions']
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def find_transitions(x, y, threshold):  # pragma: no cover
     """
     Given (x, y) chopper positions, find the transitions and other parameters.

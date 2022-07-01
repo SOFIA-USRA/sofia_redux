@@ -12,7 +12,7 @@ __all__ = ['spherical_project_array', 'spherical_project',
            'equal_angles', 'asin', 'asin_array', 'acos', 'acos_array']
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def equal_angles(a1, a2, angular_accuracy=1e-12):  # pragma: no cover
     """
     Check if two angles are equal within accuracy.
@@ -33,7 +33,7 @@ def equal_angles(a1, a2, angular_accuracy=1e-12):  # pragma: no cover
     return np.abs(np.fmod(a1 - a2, two_pi)) < angular_accuracy
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def asin(value):  # pragma: no cover
     """
     Return the inverse sine of a value.
@@ -57,7 +57,7 @@ def asin(value):  # pragma: no cover
     return np.arcsin(value)
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def asin_array(values):  # pragma: no cover
     """
     Return the inverse sine for an array of values.
@@ -81,7 +81,7 @@ def asin_array(values):  # pragma: no cover
     return result
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def acos(value):  # pragma: no cover
     """
     Return the inverse cosine of an angle.
@@ -102,7 +102,7 @@ def acos(value):  # pragma: no cover
     return np.arccos(value)
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def acos_array(values):  # pragma: no cover
     """
     Return the inverse cosine for an array of values
@@ -126,7 +126,7 @@ def acos_array(values):  # pragma: no cover
     return result
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def spherical_project(x, y, cos_lat, sin_lat,
                       celestial_pole_x, celestial_pole_y,
                       celestial_cos_lat, celestial_sin_lat, native_pole_x
@@ -216,7 +216,7 @@ def spherical_project(x, y, cos_lat, sin_lat,
     return theta, phi
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def spherical_project_array(x, y, cos_lat, sin_lat,
                             celestial_pole_x, celestial_pole_y,
                             celestial_cos_lat, celestial_sin_lat, native_pole_x
@@ -305,7 +305,7 @@ def spherical_project_array(x, y, cos_lat, sin_lat,
     return theta, phi
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def spherical_deproject(phi, theta,
                         celestial_pole_x, celestial_pole_y,
                         celestial_cos_lat, celestial_sin_lat,
@@ -390,7 +390,7 @@ def spherical_deproject(phi, theta,
     return cx, cy
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def spherical_deproject_array(phi, theta,
                               celestial_pole_x, celestial_pole_y,
                               celestial_cos_lat, celestial_sin_lat,
@@ -475,7 +475,7 @@ def spherical_deproject_array(phi, theta,
     return x, y
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def calculate_celestial_pole(native_reference_x, native_reference_cos_lat,
                              native_reference_sin_lat,
                              reference_x, reference_y,
@@ -587,7 +587,7 @@ def calculate_celestial_pole(native_reference_x, native_reference_cos_lat,
     return celestial_x, celestial_y
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def calculate_celestial_pole_array(native_reference_x,
                                    native_reference_cos_lat,
                                    native_reference_sin_lat,

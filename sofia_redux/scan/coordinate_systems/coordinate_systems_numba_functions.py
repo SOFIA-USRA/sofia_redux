@@ -10,7 +10,7 @@ __all__ = ['check_null', 'check_nan', 'check_finite',
            'spherical_pole_transform']
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def check_null(coordinates):  # pragma: no cover
     """
     Check if coordinates are zeroed.
@@ -36,7 +36,7 @@ def check_null(coordinates):  # pragma: no cover
     return result
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def check_nan(coordinates):  # pragma: no cover
     """
     Check if coordinates are NaN.
@@ -62,7 +62,7 @@ def check_nan(coordinates):  # pragma: no cover
     return result
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def check_finite(coordinates):  # pragma: no cover
     """
     Check if coordinates are finite.
@@ -88,7 +88,7 @@ def check_finite(coordinates):  # pragma: no cover
     return result
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def check_infinite(coordinates):  # pragma: no cover
     """
     Check if coordinates are infinite.
@@ -114,7 +114,7 @@ def check_infinite(coordinates):  # pragma: no cover
     return result
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def check_value(value, coordinates):  # pragma: no cover
     """
     Check if coordinates are equal to a given value in all dimensions.
@@ -142,7 +142,7 @@ def check_value(value, coordinates):  # pragma: no cover
     return result
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def spherical_distance_to(x, rx, cos_lat, sin_lat, r_cos_lat, r_sin_lat
                           ):  # pragma: no cover
     r"""
@@ -252,7 +252,7 @@ def spherical_distance_to(x, rx, cos_lat, sin_lat, r_cos_lat, r_sin_lat
     return result
 
 
-@nb.njit(cache=True, nogil=False, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def spherical_pole_transform(x, px, cos_lat, sin_lat, p_cos_lat,
                              p_sin_lat, phi0, reverse=False
                              ):  # pragma: no cover

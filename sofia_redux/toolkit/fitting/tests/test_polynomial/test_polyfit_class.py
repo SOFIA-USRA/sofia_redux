@@ -58,7 +58,8 @@ def test_robust(data):
     assert poly.termination == "insufficient samples remain"
 
     # add some noise
-    noise = np.random.normal(0, 1e-3, z.shape)
+    rand = np.random.RandomState(42)
+    noise = rand.normal(0, 1e-3, z.shape)
     z += noise
 
     # should only require 1 iteration

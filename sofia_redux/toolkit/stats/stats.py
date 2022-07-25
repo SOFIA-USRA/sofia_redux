@@ -132,7 +132,10 @@ def meancomb(data, variance=None, mask=None, rms=False, axis=None,
 
     if not valid.any() or not np.isfinite(data[valid]).any():
         if outshape is None:
-            return np.nan, 0.0 if returned else np.nan
+            if returned:
+                return np.nan, 0.0
+            else:
+                return np.nan
         else:
             if returned:
                 return np.full(outshape, np.nan), np.zeros(outshape)

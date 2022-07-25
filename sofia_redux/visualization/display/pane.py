@@ -1961,6 +1961,11 @@ class OneDimPane(Pane):
                                           field=self.fields['x'])
                 y_data = y_model.retrieve(order=order_number, level='raw',
                                           field=self.fields['y'])
+
+                # skip entirely if order has no data
+                if x_data is None or y_data is None:
+                    continue
+
                 # skip order if cursor is out of range
                 if (cursor_x < np.nanmin(x_data)
                         or cursor_x > np.nanmax(x_data)):

@@ -93,3 +93,11 @@ def test_returned(data):
     assert isinstance(r, np.ndarray)
     r = meancomb(data, returned=False)
     assert isinstance(r, float)
+
+    r = meancomb(np.full(data.shape, np.nan), returned=True)
+    assert isinstance(r, tuple)
+    assert np.isnan(r[0])
+    assert r[1] == 0
+    r = meancomb(np.full(data.shape, np.nan), returned=False)
+    assert isinstance(r, float)
+    assert np.isnan(r)

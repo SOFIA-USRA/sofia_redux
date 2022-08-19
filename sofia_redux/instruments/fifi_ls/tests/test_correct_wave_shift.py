@@ -17,8 +17,9 @@ class TestCorrectWaveShift(FIFITestCase):
         assert isinstance(result, fits.HDUList)
         assert result[0].header['PRODTYPE'] == 'wavelength_shifted'
         bunit = ['Jy/pixel', 'Jy/pixel', 'um',
-                 'arcsec', 'arcsec', '', 'adu/(Hz s Jy)', 'um']
-        exts = ['FLUX', 'STDDEV', 'LAMBDA', 'XS', 'YS', 'ATRAN',
+                 'arcsec', 'arcsec', 'hourangle', 'degree',
+                 '', 'adu/(Hz s Jy)', 'um']
+        exts = ['FLUX', 'STDDEV', 'LAMBDA', 'XS', 'YS', 'RA', 'DEC', 'ATRAN',
                 'RESPONSE', 'UNCORRECTED_LAMBDA']
         for i, extname in enumerate(exts):
             assert extname in result

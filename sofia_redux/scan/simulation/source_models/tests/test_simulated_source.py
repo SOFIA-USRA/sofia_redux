@@ -30,6 +30,12 @@ def test_call():
     assert source(HorizontalCoordinates()) == 2
 
 
+def test_copy():
+    source = SimSource()
+    source2 = source.copy()
+    assert isinstance(source2, SimSource) and source2 is not SimSource
+
+
 def test_get_source_model():
     source = SimulatedSource.get_source_model('single_gaussian',
                                               fwhm=10 * units.Unit('arcsec'))

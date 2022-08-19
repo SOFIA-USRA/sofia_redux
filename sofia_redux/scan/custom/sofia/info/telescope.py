@@ -115,7 +115,10 @@ class SofiaTelescopeInfo(TelescopeInfo):
         self.requested_equatorial = EquatorialCoordinates(
             np.full(2, np.nan), epoch=self.epoch, unit='degree')
         boresight_epoch = options.get_string('TELEQUI', default=None)
-        if boresight_epoch is None:
+
+        if (boresight_epoch is None or
+                (isinstance(boresight_epoch, str) and
+                 boresight_epoch.lower().startswith('unk'))):
             boresight_epoch = self.epoch
         else:
             boresight_epoch = Epoch(equinox=boresight_epoch)

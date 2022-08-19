@@ -413,8 +413,9 @@ def _derive_positions(hdul, params):
     # check start and end values.
     # If bad, warn but allow it
     if ramp_start < 0 or frame1 < 0:
-        log.warning(f'Bad OTF keywords: calculated '
-                    f'scan start {ramp_start} < 0.')
+        log.warning(f"Bad OTF keywords for file "
+                    f"{header.get('FILENAME', 'UNKNOWN')}: calculated "
+                    f"scan start {ramp_start} < 0.")
         log.warning('Check UNIXSTRT, OTFSTART.')
         log.warning('Setting scan start to start of readouts.')
         ramp_start = 0
@@ -424,9 +425,10 @@ def _derive_positions(hdul, params):
     frame2 = int(np.floor(frame1 + duration / alpha))
     ramp_end = frame2 + params['RAMPLN'] - frame2 % params['RAMPLN'] - 1
     if ramp_end >= nreadout:
-        log.warning(f'Bad OTF keywords: calculated scan end '
-                    f'{ramp_end} > {nreadout} readouts')
-        log.error('Check UNIXSTRT, OTFSTART, TRK_DRTN.')
+        log.warning(f"Bad OTF keywords for file "
+                    f"{header.get('FILENAME', 'UNKNOWN')}: calculated scan "
+                    f"end {ramp_end} > {nreadout} readouts")
+        log.warning('Check UNIXSTRT, OTFSTART, TRK_DRTN.')
         log.warning('Setting scan end to end of readouts.')
         ramp_end = nreadout - 1
 

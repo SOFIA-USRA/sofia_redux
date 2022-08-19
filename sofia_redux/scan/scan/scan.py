@@ -5,7 +5,9 @@ from astropy import log, units
 from astropy.io import fits
 from astropy.table import vstack as table_vstack
 from astropy.time import Time
+import cloudpickle
 from copy import deepcopy
+import os
 import numpy as np
 
 from sofia_redux.scan.utilities import utils, numba_functions
@@ -30,7 +32,7 @@ from sofia_redux.scan.coordinate_systems.focal_plane_coordinates import \
 from sofia_redux.scan.source_models.beams.instant_focus import InstantFocus
 from sofia_redux.scan.utilities.range import Range
 from sofia_redux.scan.utilities.class_provider import get_integration_class
-from sofia_redux.scan.utilities.utils import round_values
+from sofia_redux.scan.utilities.utils import round_values, get_float_list
 
 __all__ = ['Scan']
 
@@ -72,6 +74,7 @@ class Scan(ABC):
         self.is_split = False
         self.pointing = None
         self.source_model = None
+        self.source_model_pickle_file = None
         self.integrations = None
         self.gain = 1.0
         self.map_range = Coordinate2D(np.zeros((2, 2), dtype=float),
@@ -80,6 +83,7 @@ class Scan(ABC):
 
         self.channels = None
         self.reduction = reduction
+        self.temp_source_file = None
         self.set_channels(channels)
 
     @property
@@ -789,14 +793,24 @@ class Scan(ABC):
         """
         size_unit = self.info.instrument.get_size_unit()
         if isinstance(options, dict):
-            correction = Coordinate2D(
-                options.get('value', [0.0, 0.0]), unit=size_unit)
-            offset = Coordinate2D(
-                options.get('offset', [0.0, 0.0]), unit=size_unit)
-            correction.add(offset)
-        elif len(options) == 2:
-            correction = Coordinate2D([float(x) for x in options],
-                                      unit=size_unit)
+            value = get_float_list(options.get('value'))
+            offset = get_float_list(options.get('offset'))
+            if value is not None and len(value) == 2:
+                correction = Coordinate2D(value, unit=size_unit)
+            else:
+                correction = Coordinate2D([0.0, 0.0], unit=size_unit)
+            if offset is not None and len(offset) == 2:
+                add_offset = Coordinate2D(offset, unit=size_unit)
+            else:
+                add_offset = Coordinate2D([0.0, 0.0], unit=size_unit)
+            correction.add(add_offset)
+
+        elif isinstance(options, str) or hasattr(options, '__len__'):
+            list_correction = get_float_list(options)
+            if len(list_correction) == 2:
+                correction = Coordinate2D(list_correction, unit=size_unit)
+            else:
+                correction = Coordinate2D([0.0, 0.0], unit=size_unit)
         else:
             correction = Coordinate2D(np.zeros(2, dtype=float), unit=size_unit)
         return correction
@@ -1229,19 +1243,25 @@ class Scan(ABC):
         self.pointing.edit_header(
             header, size_unit=self.info.instrument.get_size_unit())
 
-    def set_source_model(self, model):
+    def set_source_model(self, source_model):
         """
-        Set the source model for the scan.
+        Set the source model based on whether pickling is enabled or not.
 
         Parameters
         ----------
-        model : SourceModel
+        source_model : SourceModel
 
         Returns
         -------
         None
         """
-        self.source_model = model
+        if (self.configuration.get_bool('source.pickle_scanmaps') and
+                isinstance(self.source_model_pickle_file, str)):
+            with open(self.source_model_pickle_file, 'wb') as f:
+                cloudpickle.dump(source_model, f)
+            self.source_model = None
+        else:
+            self.source_model = source_model
 
     def get_observing_time(self):
         """
@@ -1310,10 +1330,12 @@ class Scan(ABC):
             self.horizontal = self.equatorial.to_horizontal(
                 self.site, self.lst)
 
-        if self.source_model is None:
+        source_model = self.get_source_model()
+
+        if source_model is None:
             source_type = 'model'
         else:
-            source_type = self.source_model.logging_id
+            source_type = source_model.logging_id
 
         if name.startswith('?'):
             name = name[1:].lower()
@@ -1330,10 +1352,10 @@ class Scan(ABC):
 
         source_key = f'{source_type}.'
         if name.startswith(source_key):
-            if self.source_model is None:
+            if source_model is None:
                 return None
             source_entry = ''.join(name.split(source_key)[1:])
-            return self.source_model.get_table_entry(source_entry)
+            return source_model.get_table_entry(source_entry)
 
         point_key = 'pnt.'
         if name.startswith(point_key):
@@ -1345,16 +1367,15 @@ class Scan(ABC):
         if name.startswith(astro_key):
             if self.pointing is None:
                 return None
-            if not isinstance(self.source_model,
+            if not isinstance(source_model,
                               AstroIntensityMap):  # pragma: no cover
                 # not reachable under normal circumstances
                 return None
 
             astro_entry = name[len(astro_key):]
-            pointing = self.pointing.get_representation(
-                self.source_model.map.grid)
+            pointing = self.pointing.get_representation(source_model.map.grid)
             pointing_data = pointing.get_data(
-                self.source_model.map,
+                source_model.map,
                 size_unit=self.info.instrument.get_size_unit())
             return pointing_data.get(astro_entry)
 
@@ -1453,8 +1474,8 @@ class Scan(ABC):
             if name == 'winddir':
                 return info.get_wind_direction().to('degree').value
 
-        if self.source_model is not None:
-            model_entry = self.source_model.get_table_entry(name)
+        if source_model is not None:
+            model_entry = source_model.get_table_entry(name)
             if model_entry is not None:
                 return model_entry
 
@@ -1506,11 +1527,13 @@ class Scan(ABC):
         if self.pointing is not None:
             log.info(f"Instant Focus Results for Scan {self.get_id()}:\n\n"
                      f"{self.get_focus_string()}")
-        elif (self.has_option('pointing')
-              and self.source_model.is_valid()):
-            method = self.configuration.get_string('pointing')
-            if method in ['suggest', 'auto']:
-                log.warning(f"Cannot suggest focus for scan {self.get_id()}.")
+        elif self.has_option('pointing'):
+            source_model = self.get_source_model()
+            if source_model.is_valid():
+                method = self.configuration.get_string('pointing')
+                if method in ['suggest', 'auto']:
+                    log.warning(
+                        f"Cannot suggest focus for scan {self.get_id()}.")
 
     def report_pointing(self):
         """
@@ -1523,11 +1546,13 @@ class Scan(ABC):
         if self.pointing is not None:
             log.info(f"Pointing Results for Scan {self.get_id()}:\n\n"
                      f"{self.get_pointing_string()}")
-        elif self.source_model.is_valid() and self.has_option('pointing'):
-            method = self.configuration.get_string('pointing')
-            if method in ['suggest', 'auto']:
-                log.warning(
-                    f"Cannot suggest pointing for scan {self.get_id()}.")
+        elif self.has_option('pointing'):
+            source_model = self.get_source_model()
+            if source_model is not None:
+                method = self.configuration.get_string('pointing')
+                if method in ['suggest', 'auto']:
+                    log.warning(
+                        f"Cannot suggest pointing for scan {self.get_id()}.")
 
     def split(self):
         """
@@ -1734,8 +1759,9 @@ class Scan(ABC):
         info : str
         """
         info = ['']
-        if isinstance(self.source_model, AstroIntensityMap):
-            info.extend(self.pointing.pointing_info(self.source_model.map))
+        source_model = self.get_source_model()
+        if isinstance(source_model, AstroIntensityMap):
+            info.extend(self.pointing.pointing_info(source_model.map))
 
         increment = self.get_native_pointing_increment(self.pointing)
         info.append(self.get_pointing_string_from_increment(increment))
@@ -1753,7 +1779,7 @@ class Scan(ABC):
         -------
         Asymmetry2D
         """
-        source = self.source_model
+        source = self.get_source_model()
         if not isinstance(source, AstroIntensityMap):
             return None
         radial_range = Range()
@@ -1873,9 +1899,10 @@ class Scan(ABC):
             The point size.
         """
         point_size = self.info.instrument.get_point_size()
-        if self.source_model is None:
+        source_model = self.get_source_model()
+        if source_model is None:
             return point_size
-        return max(point_size, self.source_model.get_point_size())
+        return max(point_size, source_model.get_point_size())
 
     def get_pointing_string_from_increment(self, increment):
         """
@@ -1928,20 +1955,21 @@ class Scan(ABC):
         coordinates : Coordinate2D
         """
         source_coordinates = source.coordinates
-        if (source_coordinates.__class__
-                != self.source_model.reference.__class__):
+        source_model = self.get_source_model()
+        if source_coordinates.__class__ != source_model.reference.__class__:
             raise ValueError("Pointing source is in a different coordinate "
                              "system from source model.")
 
         if isinstance(source_coordinates, EquatorialCoordinates):
-            reference = self.source_model.reference
+            reference = source_model.reference
             if source_coordinates.epoch != self.equatorial.epoch:
                 source_coordinates.precess(self.equatorial.epoch)
         else:
             equatorial_coordinates = self.equatorial.copy()
             reference = self.equatorial.copy()
             source_coordinates.to_equatorial(equatorial_coordinates)
-            self.source_model.reference.to_equatorial(reference)
+            source_model.reference.to_equatorial(reference)
+            self.set_source_model(source_model)
 
         return source_coordinates.get_offset_from(reference)
 
@@ -1975,15 +2003,15 @@ class Scan(ABC):
         -------
         Offset2D
         """
-        if (source.coordinates.__class__
-                != self.source_model.reference.__class__):
+        source_model = self.get_source_model()
 
+        if source.coordinates.__class__ != source_model.reference.__class__:
             raise ValueError("pointing source is in a different coordinate "
                              "system from the source model.")
 
         source_coordinates = source.coordinates
         native_coordinates = self.get_native_coordinates()
-        reference = self.source_model.get_reference()
+        reference = source_model.get_reference()
 
         if source_coordinates.__class__ == native_coordinates.__class__:
             return Offset2D(
@@ -2198,3 +2226,24 @@ class Scan(ABC):
             integration.integration_number = i
             new_integrations.append(integration)
         self.integrations = new_integrations
+
+    def get_source_model(self):
+        """
+        Return the source model which may be loaded from file.
+
+        Returns
+        -------
+        SourceModel or None
+        """
+        if self.source_model is not None:
+            return self.source_model
+        elif isinstance(self.source_model_pickle_file, str) and os.path.isfile(
+                self.source_model_pickle_file):
+            with open(self.source_model_pickle_file, 'rb') as f:
+                source_model = cloudpickle.load(f)
+                source_model.set_info(self.info)
+                source_model.reduction = self.reduction
+                source_model.scans = [self]
+                return source_model
+        else:
+            return None

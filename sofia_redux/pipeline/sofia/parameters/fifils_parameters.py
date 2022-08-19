@@ -409,9 +409,43 @@ DEFAULT = {
          'description': 'If set, the uncorrected flux data will be ignored.',
          'dtype': 'bool',
          'wtype': 'check_box'},
+        {'key': 'otf_params',
+         'name': 'Scan Resampling Parameters',
+         'wtype': 'group'},
+        {'key': 'scan_reduction',
+         'name': 'Use scan reduction before resample',
+         'value': False,
+         'description': 'If set, a scan reduction will be performed to '
+                        'remove additional gains and background before '
+                        'resampling.',
+         'dtype': 'bool',
+         'wtype': 'check_box'},
+        {'key': 'save_scan',
+         'name': 'Save intermediate scan product',
+         'value': False,
+         'description': 'If set, the scan product will be saved to '
+                        'disk as a FITS file.',
+         'dtype': 'bool',
+         'wtype': 'check_box'},
+        {'key': 'scan_options',
+         'name': 'Scan options',
+         'value': '',
+         'description': 'Parameters to pass to the scan reduction. \n'
+                        'Enter as key=value pairs, space-separated.',
+         'dtype': 'str',
+         'wtype': 'text_box'},
         {'key': 'spatial_params',
          'name': 'Spatial Resampling Parameters',
          'wtype': 'group'},
+        {'key': 'detector_coordinates',
+         'name': 'Create map in detector coordinates',
+         'value': False,
+         'description': 'If set, data are combined in arsecond offsets '
+                        'from center, rather than sky coordinates. \n'
+                        'If not set, detector coordinates are used for '
+                        'nonsidereal targets and sky coordinates otherwise.',
+         'dtype': 'bool',
+         'wtype': 'check_box'},
         {'key': 'xy_oversample',
          'name': 'Spatial oversample (pixels per mean FWHM)',
          'value': 5.0,

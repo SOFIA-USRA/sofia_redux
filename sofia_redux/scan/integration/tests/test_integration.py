@@ -1431,6 +1431,12 @@ class TestIntegration(object):
             integ.despike_neighbouring(0.1, 1101)
             assert 'delta (1101) too large' in capsys.readouterr().err
 
+    def test_no_despike(self, populated_integration):
+        integ = populated_integration.copy()
+        integ.configuration.parse_key_value('despike', 'False')
+        integ.despike()
+        assert np.sum(integ.frames.is_flagged()) == 0
+
     def test_flag_spiky_frames(self, capsys, populated_integration):
         integ = populated_integration
         flag = integ.frames.flagspace.flags.FLAG_SPIKY

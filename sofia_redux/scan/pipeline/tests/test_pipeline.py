@@ -1,10 +1,26 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+import cloudpickle
+import os
+import pytest
+
 from sofia_redux.scan.configuration.configuration import Configuration
 from sofia_redux.scan.pipeline.pipeline import Pipeline
 from sofia_redux.scan.reduction.reduction import Reduction
 from sofia_redux.scan.source_models.astro_intensity_map \
     import AstroIntensityMap
+
+
+@pytest.fixture
+def start_pipe(scan_file):
+    reduction = Reduction('example')
+    reduction.read_scans(scan_file)
+    reduction.validate()
+    pipe = Pipeline(reduction)
+    pipe.set_source_model(reduction.source)
+    pipe.ordering = ['source']
+    pipe.scans = reduction.scans
+    return pipe
 
 
 class TestPipeline(object):
@@ -141,3 +157,72 @@ class TestPipeline(object):
         scan.integrations[0].source_generation = 1
         pipe.update_source(scan)
         assert not pipe.scan_source.enable_level
+
+        pipe.configuration.parse_key_value('source.delete_scan', True)
+        pipe.update_source(scan)
+        assert scan.source_model is None
+
+    def test_iterate(self, start_pipe):
+        pipe = start_pipe
+        pipe.configuration.parse_key_value('parallel.scans', True)
+        pipe.configuration.parse_key_value('parallel.source', True)
+        pipe.iterate()
+        pipe.configuration.parse_key_value('parallel.scans', False)
+        pipe.configuration.parse_key_value('parallel.source', False)
+        pipe.iterate()
+
+    def test_update_source_serial_scans(self, start_pipe):
+        pipe = start_pipe
+        pipe.configuration.parse_key_value('source', True)
+        pipe.configuration.parse_key_value('source.delete_scan', True)
+        scan = pipe.scans[0]
+        assert scan.source_model is not None
+        pipe.update_source_serial_scans()
+        assert scan.source_model is None
+
+    def test_do_process(self, start_pipe, tmpdir):
+        pipe = start_pipe
+        scans = pipe.scans
+        scan = scans[0]
+        integration = scan[0]
+        integration.gain = -1.0
+        integration.source_generation = 2
+        integration.configuration.parse_key_value('jackknife', True)
+        assert scan.source_model is not None
+        source0 = scan.source_model.copy()
+        source = source0.copy()
+        assert source.enable_level
+        temp_directory = str(tmpdir.mkdir('test_pipeline_do_process'))
+
+        source_file = os.path.join(temp_directory, 'renewed_source_0.p')
+        with open(source_file, 'wb') as f:
+            cloudpickle.dump(source0, f)
+
+        delete = True
+        scan_jobs = 1
+        args = (scans, temp_directory, scan_jobs, delete)
+        update_file = Pipeline.do_process(args, 0)
+        assert update_file.endswith('source_update_0.p')
+        assert os.path.isfile(update_file)
+
+        with open(update_file, 'rb') as f:
+            updated_source = cloudpickle.load(f)
+        assert not updated_source.enable_level
+        assert '-' in integration.comments and '+' not in integration.comments
+        assert scan.source_model is None
+
+        integration.gain = 1.0
+        Pipeline.do_process(args, 0)
+        assert '+' in integration.comments
+
+        integration.comments = []
+        del integration.configuration['jackknife']
+        integration.gain = -1
+        Pipeline.do_process(args, 0)
+        assert '-' in integration.comments
+
+
+
+
+
+

@@ -543,9 +543,9 @@ class TestAPI(object):
         assert 'No such file' in capsys.readouterr().err
 
         # add an unsupported file
-        bad_file = str(tmpdir.join('simple.fits'))
-        simple_fits_data.writeto(bad_file)
-        fname = empty_eye_app._add_model(filename=bad_file)
+        bad_file = tmpdir.join('simple.fits')
+        bad_file.write('bad\n')
+        fname = empty_eye_app._add_model(filename=str(bad_file))
         assert fname is None
         assert 'Input data is not supported' in capsys.readouterr().err
 
@@ -569,6 +569,7 @@ class TestAPI(object):
 
         # add an unsupported hdul
         simple_fits_data[0].header['FILENAME'] = 'new.fits'
+        simple_fits_data[0].header['INSTRUME'] = 'Hawc'
         fname = empty_eye_app._add_model(hdul=simple_fits_data)
         assert fname is None
         assert 'Input data is not supported' in capsys.readouterr().err

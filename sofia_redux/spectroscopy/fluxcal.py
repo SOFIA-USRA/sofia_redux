@@ -49,8 +49,8 @@ def get_wave_shift(flux, correction, shift_limit, model_order,
     else:
         xout = xin
         subsample = 1
-        sflux = flux
-        scorrect = correction
+        sflux = flux.copy()
+        scorrect = correction.copy()
 
     good = ~np.isnan(sflux) & ~np.isnan(scorrect)
     if not np.any(good):
@@ -305,7 +305,7 @@ def fluxcal(spectra, atran, response=None,
                     if not check_auto or np.abs(shiftval) < shift_limit:
                         # interpolate spectrum from shifted wavelength onto
                         # standard ATRAN wavelength
-                        flux = np.interp(wave + shiftval * dw, wave, flux,
+                        flux = np.interp(wave - shiftval * dw, wave, flux,
                                          left=np.nan, right=np.nan)
                         corr_data = flux / correction
                         good = ~np.isnan(corr_data)
@@ -320,6 +320,17 @@ def fluxcal(spectra, atran, response=None,
                                    robust=robust)
                     fit_chisq.append(poly.stats.chi2)
                     fit_rchisq.append(poly.stats.rchi2)
+
+                    """
+                    # plotting code for debugging
+                    print(f'ATRAN spectrum {i} rchi2: {poly.stats.rchi2}')
+                    from matplotlib import pyplot as plt
+                    plt.plot(wave[good], corr_data[good],
+                             label='corrected flux')
+                    plt.plot(wave, poly(wave), label='poly fit')
+                    plt.legend()
+                    plt.show()
+                    #"""
 
             # find the best atran correction by minimizing residuals
             if optimize and len(fit_chisq) > 0:

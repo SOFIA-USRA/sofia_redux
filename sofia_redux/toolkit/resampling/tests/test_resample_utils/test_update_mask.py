@@ -4,10 +4,12 @@ from sofia_redux.toolkit.resampling.resample_utils import update_mask
 
 import numpy as np
 
+rand = np.random.RandomState(42)
+
 
 def test_update_mask_zero_values():
     mask = np.full(100, True)
-    weights = np.random.random(100)
+    weights = rand.random(100)
     weights *= weights > 0.5
     counts = update_mask(weights, mask)
     assert counts == np.sum(mask)
@@ -18,7 +20,7 @@ def test_update_mask_zero_values():
 
 def test_update_mask_non_finite_values():
     mask = np.full(100, True)
-    weights = np.random.random(100)
+    weights = rand.random(100)
     weights[weights > 0.5] = np.nan
     counts = update_mask(weights, mask)
     assert counts == np.sum(mask)

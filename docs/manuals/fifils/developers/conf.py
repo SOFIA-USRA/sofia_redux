@@ -68,7 +68,7 @@ rst_epilog += """
 
 # NASA document number and revision
 docnumber = 'SOF-US-ICD-SE15-2007'
-docrev = 'J'
+docrev = 'K'
 
 # This does not *have* to match the package name, but typically does
 project = setup_cfg['name']
@@ -87,6 +87,8 @@ release = ': %s %s' % (package, version)
 
 # -- Options for LaTeX output -------------------------------------------------
 
+latex_domain_indices = False
+
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass
 # [howto/manual]).
@@ -102,7 +104,7 @@ latex_elements = {
     'classoptions': ',openany,oneside',
     'babel': r'\usepackage[english]{babel}',
     'maxlistdepth': 20,
-    'printindex': r'\footnotesize\raggedright\printindex',
+    'printindex': r'\footnotesize\def\twocolumn[#1]{#1}\printindex',
     'preamble': r'''
 \pagestyle{plain}
 \setcounter{tocdepth}{2}

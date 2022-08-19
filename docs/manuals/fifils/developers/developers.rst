@@ -19,11 +19,10 @@ Level 2, 3, and 4 reduced products for FIFI-LS data, in either manual or
 automatic mode. Level 2 is defined as data that has been processed to
 correct for instrumental effects; Level 3 is defined as data that has
 been flux-calibrated; Level 4 is any higher data product. A more general
-introduction to the data reduction
-procedure and the scientific justification of the algorithms is
-available in the FIFI-LS Redux User's Manual.
+introduction to the data reduction procedure and the scientific justification
+of the algorithms is available in the FIFI-LS Redux User's Manual.
 
-This manual applies to FIFI-LS Redux version 2.6.1.
+This manual applies to FIFI-LS Redux version 2.7.0.
 
 
 Redux Revision History
@@ -87,8 +86,31 @@ package was renamed to `sofia_redux.instruments.fifi_ls`.  An additional
 package, to support data visualization, was added as
 `sofia_redux.visualization`.
 
+In 2021 and 2022, additional optional features from the `sofia_redux`
+package were incorporated into the FIFI-LS pipeline.  The interface provides
+some interactive photometry routines via `sofia_redux.calibration` and
+some additional support for on-the-fly mode data via `sofia_redux.scan`.
+
 Overview of Software Structure
 ==============================
+
+The sofia_redux package has several sub-modules organized by functionality::
+
+    sofia_redux
+    ├── calibration
+    ├── instruments
+    │   ├── fifi_ls
+    │   ├── flitecam
+    │   ├── forcast
+    │   └── hawc
+    ├── pipeline
+    ├── scan
+    ├── spectroscopy
+    ├── toolkit
+    └── visualization
+
+The modules used in the FIFI-LS pipeline are described below.
+
 
 sofia_redux.instruments.fifi_ls
 -------------------------------
@@ -130,6 +152,31 @@ The `sofia_redux.visualization` package contains plotting and display
 routines, relating to visualizing SOFIA data.  For the FIFI-LS pipeline,
 this package currently provides a module that supports generating
 quick-look preview images.
+
+
+sofia_redux.calibration
+-----------------------
+
+The `sofia_redux.calibration` module contains flux calibration algorithms
+used to perform photometric or flux calibration calculations on
+input images and return their results.  For the FIFI-LS pipeline,
+this package currently provides support for interactive photometry tools
+in the pipeline interface.
+
+sofia_redux.scan
+----------------
+
+The scan package (`sofia_redux.scan`) package implements
+an iterative map reconstruction algorithm, for reducing continuously
+scanned observations.  In the FIFI-LS pipeline, it is used to provide
+optional support for removing residual correlated gain and noise in
+on-the-fly (OTF) mode observations.
+
+For more information on the design and structure of the scan package, see the
+`HAWC+ pipeline developer's manual <https://sofia-usra.github.io/sofia_redux/manuals/hawc/developers/developers.html#scan-map-architecture>`__
+and the software documentation for the
+`sofia_redux.scan module <https://sofia-usra.github.io/sofia_redux/sofia_redux/scan/index.html>`__.
+
 
 sofia_redux.pipeline
 --------------------
@@ -270,6 +317,48 @@ sofia_redux.spectroscopy
    :headings: ~^
 .. automodapi:: sofia_redux.spectroscopy.smoothres
    :headings: ~^
+
+sofia_redux.calibration
+-----------------------
+
+.. automodapi:: sofia_redux.calibration.pipecal_photometry
+   :headings: ~^
+
+sofia_redux.scan
+----------------
+
+.. automodapi:: sofia_redux.scan.reduction.reduction
+   :headings: ~^
+
+.. automodapi:: sofia_redux.scan.custom.fifi_ls.channels.channels
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.custom.fifi_ls.channels.channel_numba_functions
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.custom.fifi_ls.channels.channel_group.channel_group
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.custom.fifi_ls.frames.frames
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.custom.fifi_ls.frames.fifi_ls_frame_numba_functions
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.custom.fifi_ls.info.info
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.custom.fifi_ls.info.astrometry
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.custom.fifi_ls.info.detector_array
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.custom.fifi_ls.info.instrument
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.custom.fifi_ls.info.telescope
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.custom.fifi_ls.integration.integration
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.custom.fifi_ls.integration.fifi_ls_integration_numba_functions
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.custom.fifi_ls.scan.scan
+   :headings: ~^
+
 
 sofia_redux.visualization
 -------------------------

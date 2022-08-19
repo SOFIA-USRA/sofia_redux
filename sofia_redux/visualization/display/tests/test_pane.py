@@ -1,5 +1,5 @@
 #  Licensed under a 3-clause BSD style license - see LICENSE.rst
-
+import matplotlib.collections
 import pytest
 import logging
 import astropy.units as u
@@ -261,6 +261,39 @@ class TestPane(object):
         blank_onedim._plot_model(model)
         assert 'Failed to retrieve raw data for alt' in caplog.text
 
+    def test_plot_alt(self, blank_onedim, mocker, grism_hdul):
+        mocker.patch.object(pane.OneDimPane, 'apply_configuration')
+        marker = '^'
+        ax = mpf.Figure().subplots(1, 1)
+        blank_onedim.ax = ax
+        blank_onedim.ax_alt = ax
+
+        model = high_model.Grism(grism_hdul)
+
+        blank_onedim.models[model.filename] = model
+        blank_onedim.orders[model.filename] = [0]
+        blank_onedim.markers[model.filename] = marker
+        blank_onedim.colors[model.filename] = 'blue'
+        blank_onedim.limits['y_alt'] = [0, 1]
+        blank_onedim.show_overplot = True
+
+        lines = blank_onedim._plot_model(model)
+        line, cursor, error = tuple(lines)
+        assert line.get_artist().get_linestyle() == '-'
+        assert line.get_artist().get_marker() == 'None'
+
+    def test_plot_flux_error(self, blank_onedim, mocker, grism_hdul,
+                             blank_figure):
+        ax = mpf.Figure().subplots(1, 1)
+        blank_onedim.ax = ax
+        aa = np.ones(10)
+        err = None
+        label = 'test_fake_spectrum.txt'
+        colors = ['#59d4db', '#2848ad']
+        for color in colors:
+            output = blank_onedim._plot_flux_error(aa, aa, err, label, color)
+            assert isinstance(output, matplotlib.collections.PolyCollection)
+
     def test_plot_model_scatter(self, blank_onedim, mocker, grism_hdul,
                                 caplog, blank_figure):
         marker = '^'
@@ -393,13 +426,57 @@ class TestPane(object):
         mocker.patch.object(pane.OneDimPane, '_convert_low_model_units',
                             side_effect=ValueError)
         model = high_model.Grism(grism_hdul)
-
         blank_onedim.models[model.filename] = model
         blank_onedim.orders[model.filename] = [0]
         blank_onedim.units = current
         units = target
         with qtbot.wait_signal(blank_onedim.signals.obtain_raw_model):
             blank_onedim.set_units(units, 'primary')
+
+    def test_set_units_err_none(self, qtbot, mocker, blank_onedim, grism_hdul):
+        mocker.patch.object(pane.OneDimPane, '_convert_low_model_units',
+                            side_effect=ValueError)
+        model = high_model.Grism(grism_hdul)
+
+        spectrum = model.retrieve(order=0,
+                                  level='low', field='flux')
+        wave_spectrum = model.retrieve(order=0,
+                                       level='low', field='wavepos')
+        blank_onedim.models[model.filename] = model
+
+        mocker.patch.object(model, 'retrieve',
+                            side_effect=[spectrum, wave_spectrum, None])
+
+        # mock retrieve multiple times
+        blank_onedim.orders[model.filename] = [0]
+        blank_onedim.fields['y'] = 'flux'
+        blank_onedim.fields['x'] = 'wavepos'
+        blank_onedim.units = {'x': u.nm, 'y': u.Jy}
+        units = {'x': u.m, 'y': u.mol}
+        model = blank_onedim.models[model.filename]
+        blank_onedim.set_units(units, 'primary')
+        error_spectrum = model.retrieve(order=0, level='low',
+                                        field='spectral_error')
+
+        assert error_spectrum is None
+
+    def test_update_visibility(self, mocker, blank_onedim,
+                               grism_hdul):
+
+        model = high_model.Grism(grism_hdul)
+
+        spectrum = model.retrieve(order=0,
+                                  level='low', field='flux')
+        # wave_spectrum = model.retrieve(order=0,
+        #                                level='low', field='wavepos')
+        blank_onedim.models[model.filename] = model
+
+        mocker.patch.object(model, 'retrieve',
+                            side_effect=spectrum)
+        blank_onedim.orders[model.filename] = [0]
+
+        updates = blank_onedim.update_visibility(error=None)
+        assert updates[0]._kind == 'line'
 
     def test_set_units_fail(self, blank_onedim, mocker, caplog, grism_hdul):
         caplog.set_level(logging.DEBUG)

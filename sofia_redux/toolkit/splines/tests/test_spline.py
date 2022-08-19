@@ -2,6 +2,8 @@ from sofia_redux.toolkit.splines.spline import Spline
 import numpy as np
 import pytest
 
+rand = np.random.RandomState(42)
+
 
 @pytest.fixture
 def tuple_args_2d():
@@ -89,7 +91,7 @@ def test_parse_inputs(blank_splrep_2d, tuple_args_2d):
     args = c0, c1, data = tuple_args_2d
 
     # Check coordinates are inferred from data shape
-    data_2d = np.random.random((8, 10))
+    data_2d = rand.random((8, 10))
     spline.parse_inputs(data_2d)
     assert spline.n_dimensions == 2
     expected_coords = np.array([x.ravel() for x in np.mgrid[:8, :10][::-1]])
@@ -262,7 +264,7 @@ def test_parse_inputs(blank_splrep_2d, tuple_args_2d):
     assert spline.weights.shape == (100,)
     assert np.allclose(spline.weights, 0.1)
 
-    small = np.random.random((2, 2))
+    small = rand.random((2, 2))
     with pytest.raises(ValueError) as err:
         spline.parse_inputs(small)
     assert "Data size" in str(err.value)
@@ -466,8 +468,8 @@ def test_iterate(gaussian_2d_data):
     assert spline.exit_code == 3
 
     # Check accuracy exit
-    np.random.seed(0)
-    noisy_data = data + np.random.random(data.shape) * 0.1
+    rand.seed(0)
+    noisy_data = data + rand.random(data.shape) * 0.1
     spline = Spline(noisy_data, degrees=3, smoothing=0.1, tolerance=1 - 1e-5)
     assert abs(spline.smoothing_difference) <= spline.accuracy
 
@@ -489,8 +491,8 @@ def test_next_iteration(gaussian_2d_data):
     assert spline.exit_code == -256
 
     # Check rank deficiency
-    np.random.seed(0)
-    noisy_data = data + np.random.random(data.shape)
+    rand.seed(0)
+    noisy_data = data + rand.random(data.shape)
     spline = Spline(noisy_data, degrees=3, solve=False,
                     smoothing=0.0, tolerance=1e-16)
     while spline.next_iteration():
@@ -499,10 +501,10 @@ def test_next_iteration(gaussian_2d_data):
     assert spline.sum_square_residual == 0
 
     # Check interpolating spline
-    np.random.seed(0)
-    c0 = np.random.random(25)
-    c1 = np.random.random(25)
-    d = np.random.random(25)
+    rand.seed(0)
+    c0 = rand.random(25)
+    c1 = rand.random(25)
+    d = rand.random(25)
     spline = Spline(c0, c1, d, degrees=3, solve=False, smoothing=0.0,
                     tolerance=1e-8)
     while spline.next_iteration():
@@ -533,8 +535,8 @@ def test_determine_smoothing_spline(complex_3d_spline):
     # Create an inexact spline and smooth further...
     z, y, x = np.mgrid[:9, :10, :11]
     values = -np.sin(10 * ((x ** 2) + (y ** 2) + (z ** 2)))
-    np.random.seed(1)
-    noisy_values = values + np.random.random(values.shape) * 0.05
+    rand.seed(1)
+    noisy_values = values + rand.random(values.shape) * 0.05
     spline = Spline(noisy_values, smoothing=510, degrees=1)
     assert spline.exit_code == 0
     assert np.isclose(spline.sum_square_residual, 510, atol=0.5)
@@ -589,5 +591,5 @@ def test_call():
     assert "Number of arguments does not match" in str(err.value)
 
     with pytest.raises(ValueError) as err:
-        spline(np.random.random((4, 10)))
+        spline(rand.random((4, 10)))
     assert "Coordinate shape[0] does not match" in str(err.value)

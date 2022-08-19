@@ -199,6 +199,10 @@ def test_init(example_reduction):
     model = FunctionalAstroModel2D(info)
     assert model.grid.resolution.x == 2 * arcsec
     assert model.grid.resolution.y == 2 * arcsec
+    info.instrument.resolution = Coordinate2D([20, 30], unit='arcsec')
+    model = FunctionalAstroModel2D(info)
+    assert model.grid.resolution.x == 4 * arcsec
+    assert model.grid.resolution.y == 6 * arcsec
 
 
 def test_copy(basic_source):
@@ -217,6 +221,13 @@ def test_copy(basic_source):
     assert source2.scans is source.scans
     assert source2.reduction is source.reduction
     assert source2.integration_time != source.integration_time
+
+
+def test_clear_all_memory(initialized_source):
+    source = initialized_source.copy()
+    source.clear_all_memory()
+    assert source.grid is None
+    assert source.smoothing == 0
 
 
 def test_projection(basic_source):
@@ -703,13 +714,13 @@ def test_write_png(obs2d, initialized_source):
     source.configuration.parse_key_value('write.png.plane', 'image')
 
     source.write_png(map_2d, file_name)
-    assert source.png_data[0] == smoothed
+    assert np.allclose(source.png_data[0].data, smoothed.data)
     assert source.png_data[1] == 'test_write_png.fits'
 
     map_2d = obs2d.copy()
     del source.configuration['write.png.plane']
     source.write_png(map_2d, file_name)
-    assert source.png_data[0] == smoothed
+    assert np.allclose(source.png_data[0].data, smoothed.data)
     assert source.png_data[1] == 'test_write_png.fits'
 
     map_2d = obs2d.copy()
@@ -792,6 +803,7 @@ def test_get_smoothing(initialized_source):
     pix_fwhm = source.get_pixelization_smoothing()
     assert source.get_smoothing(0.0) == pix_fwhm
     assert source.get_smoothing('a') == pix_fwhm
+    assert source.get_smoothing('None') == pix_fwhm
 
 
 def test_set_smoothing(initialized_source):

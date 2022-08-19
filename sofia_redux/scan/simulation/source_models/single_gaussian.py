@@ -32,6 +32,16 @@ class SingleGaussian(SimulatedSource):
         self.name = 'single_gaussian'
         self.initialize_model(**kwargs)
 
+    def copy(self):
+        """
+        Return a copy of the SingleGaussian.
+
+        Returns
+        -------
+        SingleGaussian
+        """
+        return super().copy()
+
     def initialize_model(self, **kwargs):
         """
         Initialize the model with the provided options.

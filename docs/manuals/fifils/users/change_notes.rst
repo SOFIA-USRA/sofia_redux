@@ -11,8 +11,18 @@ v2.0.0 and later were implemented in Python. For previously processed
 data, check the PIPEVERS keyword in the FITS header to determine the
 pipeline version used.
 
-FIFI-LS Redux v2.6.1
+
+FIFI-LS Redux v2.7.0
 ~~~~~~~~~~~~~~~~~~~~
+*User manual: Rev. L*
+
+- Project spatial data into a common WCS grid for correct astrometry in the
+  final spectral cube.
+- Add optional scan reduction support to the resample step for OTF data.
+
+
+FIFI-LS Redux v2.6.1 (2022-05-25)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. K*
 
 - Fix performance issues for very large maps.

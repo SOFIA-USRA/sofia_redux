@@ -300,7 +300,7 @@ def pol_raw_data(nframe=320):
     return basic_raw_data(nframe=nframe)
 
 
-def scan_raw_data(nframe=90):
+def scan_raw_data(nframe=20):
     # modify raw data to scan in RA/Dec
     hdul = basic_raw_data(nframe=nframe, smplfreq=1)
     header = hdul[0].header

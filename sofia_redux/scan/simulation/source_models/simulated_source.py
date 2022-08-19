@@ -1,6 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from abc import ABC, abstractmethod
+from copy import deepcopy
 
 from sofia_redux.scan.utilities.class_provider \
     import get_simulated_source_class
@@ -38,6 +39,16 @@ class SimulatedSource(ABC):
             return self.apply_to_horizontal(coordinates)
         else:
             return self.apply_to_offsets(coordinates)
+
+    def copy(self):
+        """
+        Return a copy of the simulated source.
+
+        Returns
+        -------
+        SimulatedSource
+        """
+        return deepcopy(self)
 
     @staticmethod
     def get_source_model(name, **kwargs):

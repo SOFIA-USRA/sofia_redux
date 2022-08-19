@@ -90,12 +90,14 @@ def test_create_phi_terms_for():
 
 
 def test_block_members():
+    rand = np.random.RandomState(42)
+
     tree = PolynomialTree((0, 0))
     with pytest.raises(RuntimeError) as err:
         tree.block_members(0)
     assert "neighborhood tree not initialized" in str(err.value).lower()
 
-    tree = PolynomialTree(np.random.random((2, 50)))
+    tree = PolynomialTree(rand.random((2, 50)))
     with pytest.raises(RuntimeError) as err:
         tree.block_members(0, get_terms=True)
     assert "phi terms have not been calculated" in str(err.value).lower()

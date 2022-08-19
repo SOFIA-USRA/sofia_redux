@@ -5,6 +5,8 @@ import itertools
 import numpy as np
 import pytest
 
+rand = np.random.RandomState(0)
+
 
 @pytest.fixture
 def knots2d4():
@@ -183,10 +185,9 @@ def test_create_ordering():
 
 
 def test_check_input_arrays():
-    np.random.RandomState(0)
     shape = (3, 100)
-    coordinates = np.random.random(shape)
-    values = np.random.random(shape[1])
+    coordinates = rand.random(shape)
+    values = rand.random(shape[1])
     weights = np.ones(shape[1])
 
     valid = su.check_input_arrays(values, coordinates, weights)
@@ -465,8 +466,8 @@ def test_determine_smoothing_spline():
 
     coordinates = np.array([x.ravel() for x in np.mgrid[:10, :10]],
                            dtype=float)
-    np.random.seed(0)
-    values = np.random.random(coordinates.shape[1])
+    rand.seed(0)
+    values = rand.random(coordinates.shape[1])
 
     spline = Spline(coordinates[0], coordinates[1], values, solve=False,
                     degrees=3, smoothing=0.001)
@@ -510,8 +511,8 @@ def test_determine_smoothing_spline():
     # Check exit code 3 (reached max iterations)
     spline = Spline(coordinates[0], coordinates[1], values, solve=False,
                     degrees=3, smoothing=100)
-    np.random.seed(0)
-    spline.values += np.random.random(spline.size)
+    rand.seed(0)
+    spline.values += rand.random(spline.size)
     spline.next_iteration()
     coefficients, sq, exit_code, fitted_knots = run_smooth(spline)
     assert exit_code == 3

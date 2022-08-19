@@ -2,6 +2,7 @@
 """Tests for the FORCAST Imaging Reduction class."""
 
 import os
+import logging
 import pickle
 import shutil
 
@@ -408,6 +409,23 @@ class TestFORCASTImagingReduction(object):
         assert 'Problem' in capt.err
         assert step in capt.err
 
+    def test_merge_skip_rotation(self, tmpdir, caplog):
+        """
+        Test standard behavior for multiple steps.
+
+        Exercises save and general error condition.
+        """
+        caplog.set_level(logging.DEBUG)
+        step = 'merge'
+        ffile, red, idx = self.standard_setup(tmpdir, step)
+        # test skip_rotation
+        parset = red.parameters.current[idx]
+        parset['skip_rotation']['value'] = True
+        parset['save']['value'] = False
+        red.step()
+
+        assert 'Skipping rotation by sky angle' in caplog.text
+
     def test_checkhead(self, tmpdir, capsys):
         # check that fails appropriately for bad header
         red = FORCASTImagingReduction()
@@ -571,6 +589,22 @@ class TestFORCASTImagingReduction(object):
         assert 'Problem in ' \
             'sofia_redux.instruments.forcast.{}'.format(step) in capt.err
 
+    def test_undistort_skip(self, tmpdir, caplog, mocker):
+
+        caplog.set_level(logging.DEBUG)
+        step = 'undistort'
+        ffile, red, idx = self.standard_setup(tmpdir, step)
+
+        # copy the reduction just before the step
+        red_copy = pickle.dumps(red)
+
+        # test skip distortion
+        red = pickle.loads(red_copy)
+        parset = red.parameters.current[idx]
+        parset['skip_undistort']['value'] = True
+        red.undistort()
+        assert 'Skipping distortion correction' in caplog.text
+
     def test_register(self, tmpdir, capsys, mocker):
         ffile, red, idx = self.standard_setup(tmpdir, 'register',
                                               nfiles=2)
@@ -692,6 +726,17 @@ class TestFORCASTImagingReduction(object):
         # test save on
         parset = red.parameters.current[idx]
         parset['save']['value'] = True
+        red.coadd()
+        saw = 0
+        for fn in red.out_files:
+            if red.prodnames[red.prodtype_map['coadd']] in fn:
+                assert os.path.isfile(fn)
+                saw += 1
+        assert saw == 1
+
+        # test rotation off
+        parset = red.parameters.current[idx]
+        parset['skip_rotation']['value'] = True
         red.coadd()
         saw = 0
         for fn in red.out_files:

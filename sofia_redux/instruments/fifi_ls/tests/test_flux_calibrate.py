@@ -20,8 +20,9 @@ class TestFluxCalibrate(FIFITestCase):
         assert isinstance(result, fits.HDUList)
         assert result[0].header['PRODTYPE'] == 'flux_calibrated'
         bunit = ['Jy/pixel', 'Jy/pixel', 'um',
-                 'arcsec', 'arcsec', '', 'adu/(Hz s Jy)', '']
-        exts = ['FLUX', 'STDDEV', 'LAMBDA', 'XS', 'YS', 'ATRAN',
+                 'arcsec', 'arcsec', 'hourangle', 'degree',
+                 '', 'adu/(Hz s Jy)', '']
+        exts = ['FLUX', 'STDDEV', 'LAMBDA', 'XS', 'YS', 'RA', 'DEC', 'ATRAN',
                 'RESPONSE', 'UNSMOOTHED_ATRAN']
         for i, extname in enumerate(exts):
             assert extname in result
@@ -32,7 +33,7 @@ class TestFluxCalibrate(FIFITestCase):
         filename = get_scm_files()[0]
         result = flux_calibrate(filename)
         assert isinstance(result, fits.HDUList)
-        for extname in ['FLUX', 'STDDEV', 'LAMBDA', 'XS', 'YS',
+        for extname in ['FLUX', 'STDDEV', 'LAMBDA', 'XS', 'YS', 'RA', 'DEC',
                         'RESPONSE']:
             assert extname in result
         assert 'ATRAN' not in result

@@ -124,7 +124,8 @@ class SofiaInstrumentInfo(CameraInstrumentInfo):
             info.append(('SLIT', self.slit_id, 'Slit identifier.'))
 
         if not np.isnan(self.spectral_resolution):
-            info.append(('RESOLUN', self.spectral_resolution,
+            info.append(('RESOLUN',
+                         to_header_float(self.spectral_resolution, 'um'),
                          'Spectral resolution.'))
 
         if self.detector_channel is not None:

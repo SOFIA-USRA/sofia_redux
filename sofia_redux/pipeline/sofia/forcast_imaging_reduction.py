@@ -460,6 +460,12 @@ class FORCASTImagingReduction(FORCASTReduction):
             self.error = msg
             return
 
+        # skip undistort
+        skip_data = param.get_value('skip_undistort')
+        if skip_data:
+            log.info('Skipping distortion correction')
+            return
+
         outdata = []
         if param.get_value('save'):
             display_files = []
@@ -523,6 +529,8 @@ class FORCASTImagingReduction(FORCASTReduction):
         dripconfig.configuration['cormerge'] = \
             self.parameters.merge_opt[cormerge_idx]
 
+        skip_rotation = param.get_value('skip_rotation')
+
         outdata = []
         if param.get_value('save'):
             display_files = []
@@ -538,8 +546,18 @@ class FORCASTImagingReduction(FORCASTReduction):
             # exposures, and rotate image to standard coordinates
             # (North up, East left)
             normmap = np.zeros_like(data)
-            result = merge(data, header, variance=err**2,
-                           normmap=normmap, strip_border=True)
+
+            if skip_rotation:
+
+                result = merge(data, header, variance=err**2,
+                               skip_rotation=True, normmap=normmap,
+                               strip_border=True)
+                log.info('Skipping rotation by sky angle')
+
+            else:
+                result = merge(data, header, variance=err**2,
+                               normmap=normmap, strip_border=True)
+
             if result is None:
                 msg = "Problem in sofia_redux.instruments.forcast.merge."
                 log.error(msg)
@@ -830,6 +848,7 @@ class FORCASTImagingReduction(FORCASTReduction):
         sigma = param.get_value('threshold')
         maxiters = param.get_value('maxiters')
         smoothing = param.get_value('smoothing')
+        rotation = not(param.get_value('skip_rotation'))
 
         if 'target' in str(reference).lower():
             log.info('Correcting for target motion, if necessary.')
@@ -851,7 +870,7 @@ class FORCASTImagingReduction(FORCASTReduction):
         outhdr, outdata, outvar, expmap = coadd(
             hdr_list, data_list, var_list, exp_list,
             method=method, weighted=weighted,
-            robust=robust, sigma=sigma, maxiters=maxiters,
+            robust=robust, sigma=sigma, maxiters=maxiters, rotate=rotation,
             smoothing=smoothing, reference=reference)
 
         # output header

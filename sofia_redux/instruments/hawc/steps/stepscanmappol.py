@@ -45,6 +45,9 @@ class StepScanMapPol(StepMOParent):
         use_frames : str
             Frames to use from the reduction. Specify a particular
             range, as '400:-400', or '400:1000'.
+        grid : float
+            Output pixel scale.  If not set, default values from scan map
+            configuration will be used.
         deep : bool
             If set, faint point-like emission is prioritized.
         faint : bool
@@ -75,6 +78,9 @@ class StepScanMapPol(StepMOParent):
                                "Frames to use from reduction. "
                                "Specify a particular range, as "
                                "'400:-400', or '400:1000'."])
+        self.paramlist.append(['grid', '',
+                               "Output pixel scale, if not default. "
+                               "Specify in arcsec."])
         self.paramlist.append(['deep', False,
                                'Attempt to recover faint point-like '
                                'emission'])
@@ -449,6 +455,14 @@ class StepScanMapPol(StepMOParent):
         use_frames = StepScanMap.check_use_frames(self.datain, use_frames)
         if use_frames != '':
             kwargs['frames'] = use_frames
+
+        # set the output pixel scale if supplied
+        try:
+            grid = float(str(self.getarg('grid')).strip())
+        except (ValueError, TypeError):
+            grid = None
+        if grid is not None:
+            kwargs['grid'] = grid
 
         # add additional options from parameters at end,
         # so they can override any defaults set by the above

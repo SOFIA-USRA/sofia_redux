@@ -35,6 +35,11 @@ def test_read(initialized_scan, scan_file):
     scan.read(scan_file)
     assert isinstance(scan.integrations[0], ExampleIntegration)
     assert scan.hdul is None
+    hdul = fits.open(scan_file)
+    scan.integrations = None
+    scan.read(hdul)
+    assert isinstance(scan.integrations[0], ExampleIntegration)
+    assert scan.hdul is None
 
 
 def test_close_fits(initialized_scan, scan_file):

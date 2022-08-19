@@ -469,6 +469,10 @@ for more information.
    -  *use_frames*: Frames (time samples) to use from the reduction. Specify
       a particular range, as '400:-400' or '400:1000'
 
+   -  *grid*: If set, the output pixel size will be modified from the default
+      value to the specified value, in arcsec. The output flux scale will also
+      be modified accordingly, for flux conservation.
+
    -  *deep*: If set, faint point-like emission is prioritized.
 
    -  *faint*: If set, faint emission (point-like or extended) is prioritized.
@@ -492,6 +496,10 @@ for more information.
 
    -  *use_frames*: Frames (time samples) to use from the reduction. Specify
       a particular range, as '400:-400' or '400:1000'
+
+   -  *grid*: If set, the output pixel size will be modified from the default
+      value to the specified value, in arcsec. The output flux scale will also
+      be modified accordingly, for flux conservation.
 
    -  *deep*: If set, faint point-like emission is prioritized.
 

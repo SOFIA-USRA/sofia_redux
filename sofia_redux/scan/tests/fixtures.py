@@ -31,6 +31,10 @@ from sofia_redux.scan.custom.hawc_plus.channels.channel_data.channel_data \
     import HawcPlusChannelData
 from sofia_redux.scan.utilities.utils import safe_sidereal_time
 from sofia_redux.scan.reduction.reduction import Reduction
+from sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data \
+    import FifiLsChannelData
+from sofia_redux.scan.custom.fifi_ls.simulation.simulation import \
+    FifiLsSimulation
 
 
 # Configuration fixtures
@@ -561,3 +565,62 @@ def small_integration(no_data_scan, full_hdu):
     integration.info.instrument.resolution = 5 * units.Unit('arcsec')
     integration.info.chopping.chopping = False
     return integration
+
+
+# FIFI-LS simulation
+
+
+@pytest.fixture
+def fifi_channels():
+    simulation = FifiLsSimulation()
+    header = simulation.create_primary_header()
+    info = simulation.info
+    info.configuration.read_fits(header)
+    info.apply_configuration()
+    return info.get_channels_instance()
+
+
+@pytest.fixture
+def fifi_channel_data(fifi_channels):
+    return FifiLsChannelData(channels=fifi_channels)
+
+
+@pytest.fixture
+def fifi_initialized_channel_data(fifi_channel_data):
+    data = fifi_channel_data.copy()
+    data.info.detector_array.initialize_channel_data(data)
+    return data
+
+
+@pytest.fixture
+def fifi_simulated_hdul():
+    simulation = FifiLsSimulation()
+    hdul = simulation.create_simulated_hdul()
+    return hdul
+
+
+@pytest.fixture
+def fifi_simulated_reduction(fifi_simulated_hdul):
+    reduction = Reduction('fifi_ls')
+    reduction.read_scans([fifi_simulated_hdul])
+    return reduction
+
+
+@pytest.fixture
+def fifi_simulated_channels(fifi_simulated_reduction):
+    return fifi_simulated_reduction.scans[0][0].channels
+
+
+@pytest.fixture
+def fifi_simulated_scan(fifi_simulated_reduction):
+    return fifi_simulated_reduction.scans[0]
+
+
+@pytest.fixture
+def fifi_simulated_integration(fifi_simulated_scan):
+    return fifi_simulated_scan[0]
+
+
+@pytest.fixture
+def fifi_simulated_frames(fifi_simulated_integration):
+    return fifi_simulated_integration.frames

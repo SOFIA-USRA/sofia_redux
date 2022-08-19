@@ -612,7 +612,7 @@ class Coordinate2D(Coordinate):
         if isinstance(default, Coordinate2D):
             dx, dy = default.x, default.y
         elif isinstance(default, np.ndarray):
-            dx, dy = default
+            dx, dy = default[:2]
         else:
             dx = dy = 0.0
 

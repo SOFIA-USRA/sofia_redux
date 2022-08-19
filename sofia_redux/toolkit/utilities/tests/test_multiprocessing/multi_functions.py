@@ -25,12 +25,13 @@ class MultiLogger(object):
         """
         Create a log message.
         """
+        rand = np.random.RandomState(42)
         x = args[run_arg]
         process = mp.current_process()
         thread = threading.current_thread()
         log.info(f"{x} Info at {Time.now()} {process} {thread}")
         # log.warning(f"{x} Warning at {Time.now()}")
-        time.sleep(np.random.random(1)[0] / 5)
+        time.sleep(rand.random(1)[0] / 5)
         return x + 100
 
     @classmethod

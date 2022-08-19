@@ -62,6 +62,18 @@ class PixelMap(AstroModel2D):
         new.pixel_maps = pixel_maps
         return new
 
+    def clear_all_memory(self):
+        """
+        Clear all memory references prior to deletion.
+
+        Returns
+        -------
+        None
+        """
+        super().clear_all_memory()
+        self.pixel_maps = {}
+        self.template = None
+
     @property
     def referenced_attributes(self):
         """

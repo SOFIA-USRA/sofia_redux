@@ -8,9 +8,10 @@ from sofia_redux.toolkit.resampling.tree.base_tree import BaseTree
 
 
 def test_regular():
+    rand = np.random.RandomState(42)
     grid = BaseGrid(np.arange(3), np.arange(3))
     assert grid.regular
-    grid = BaseGrid(np.random.random((2, 3)))
+    grid = BaseGrid(rand.random((2, 3)))
     assert not grid.regular
     with pytest.raises(AttributeError) as err:
         grid.regular = False

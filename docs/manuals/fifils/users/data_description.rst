@@ -570,12 +570,20 @@ The pipeline stores these calculated x and y coordinates for each spaxel
 in two 25 element arrays for each grating scan (extensions XS_G\ *i* and
 YS_G\ *i* for grating scan *i*).
 
+In addition, the pipeline uses the base position for the observation and the
+computed offsets to derive true sky coordinates for each spaxel, in RA
+(decimal hours) and Dec (decimal degrees).  These positions are also stored
+in the output file in separate image extensions for each grating scan
+(RA_G\ *i* and DEC_G\ *i* for grating scan *i*), with array dimensions
+matching the corresponding XS and YS extensions.
+
 For OTF data, the process is the same as described above, except that each
 ramp in the input data has its own DLAM_MAP and DBET_MAP value, recorded in
 the SCANPOS table, rather than in the primary FITS header.  The output
 spatial coordinates match the number of spaxels and ramps in the flux data,
-which has dimensions 25 x 16 x N\ :sub:`ramp`, such that the XS_G\ *i* and
-YS_G\ *i* extensions have dimensions 25 x 1 x N\ :sub:`ramp`.
+which has dimensions 25 x 16 x N\ :sub:`ramp`, such that the XS_G\ *i*,
+YS_G\ *i*, RA_G\ *i*, and DEC_G\ *i*, extensions have dimensions
+25 x 1 x N\ :sub:`ramp`.
 
 
 Apply Flat
@@ -625,11 +633,11 @@ the result in a single data array with dimensions 25 x (16 \* N\ :sub:`scan`),
 where N\ :sub:`scan` is the total number of grating scans in the input file. Note
 that the wavelengths are still irregularly sampled at this point, due to the
 differing wavelength solutions for each grating scan and spatial pixel.
-All arrays in the output FITS file (FLUX, STDDEV, LAMBDA, XS, and YS)
+All arrays in the output FITS file (FLUX, STDDEV, LAMBDA, XS, YS, RA, and DEC)
 now have dimensions 25 x (16 \* N\ :sub:`scan`).
 
 For the OTF mode, only a single grating scan exists. The output FLUX,
-STDDEV, XS, and YS arrays for this mode have dimensions 25 x 16 x N\ :sub:`ramp`.
+STDDEV, XS, YS, RA, and DEC arrays for this mode have dimensions 25 x 16 x N\ :sub:`ramp`.
 Since the wavelength solution does not depend on the sky position, the LAMBDA
 array has dimensions 25 x 16.
 
@@ -847,8 +855,9 @@ Grid Size
 ^^^^^^^^^
 
 The pipeline first determines the maximum and minimum wavelengths and spatial
-offsets present in all input files, from all dither positions for the
-observation. For OTF data, the scan positions for each ramp in each input
+offsets present in all input files by projecting all dither positions for the
+observation into a common world coordinate system (WCS) reference frame.
+For OTF data, the scan positions for each ramp in each input
 file are also considered.  The full range of sky positions and wavelengths
 observed sets the range of the output grid.
 
@@ -925,7 +934,7 @@ arcseconds\ :sup:`2` for RED).
 Algorithm
 ^^^^^^^^^
 For each pixel in the 3D output grid, the resampling algorithm finds
-all flux values with assigned wavelengths and spatial offsets
+all flux values with assigned wavelengths and spatial positions
 within a fitting window, typically 0.5 times the spectral
 FWHM in the wavelength dimension, and 3 times the spatial FWHM in the
 spatial dimensions. For the spatial grid, a larger fit window is typically
@@ -939,7 +948,7 @@ of the input data value from the grid location. The distance weighting
 function may be held constant for each output pixel, or it may optionally
 be allowed to vary in scale and shape in response to the input data
 characteristics.  This adaptive smoothing kernel may help in preserving
-peak flux values for bright, compact flux regions, but may overfit the input
+peak flux values for bright, compact flux regions, but may over-fit the input
 data in some sparsely sampled observations
 (see :numref:`fifi_resample_comparison`).
 
@@ -982,14 +991,47 @@ original wavelength calibration. The spectra from the uncorrected cube
 will appear slightly shifted with respect to the spectra from the
 telluric-corrected cube.
 
+Detector Coordinates
+^^^^^^^^^^^^^^^^^^^^
+For most observations, the output grid is determined from projected sky
+coordinates for each input data point, for the most accurate astrometry
+in the output map.  However, this is undesirable for nonsidereal data, for
+which the sky coordinates of the target change over the course of the
+observation.  For nonsidereal sources, the detector offsets
+(from input XS and YS extensions) are used instead
+of the sky coordinates (from RA and DEC extensions) to generate the output grid.
+For all other sources, detector coordinates may optionally be used instead of
+sky coordinates if desired.
+
+Additional Scan Processing
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+For OTF data, the standard sky subtraction and flat correction algorithms
+may not be sufficient to remove residual sky and detector noise.  In this
+mode, temporal variations frequently result in artifacts like striping along
+the scan direction, or residual sky backgrounds that overwhelm diffuse
+emission.
+
+In this case, it may be beneficial to apply an iterative correction to the
+detector gain and noise.  For OTF data, the FIFI-LS pipeline provides this
+correction as an optional scan reduction step, just prior to resampling.
+The iterative scan reduction algorithm is described at length in the
+`HAWC+ pipeline user's manual <https://sofia-usra.github.io/sofia_redux/manuals/hawc/users/users.html#scan-reduction-algorithms>`__
+and in the software documentation for the
+`sofia_redux.scan module <https://sofia-usra.github.io/sofia_redux/sofia_redux/scan/index.html>`__.
+
+At this time, this feature should be considered experimental.  The scan
+algorithms have a number of complex, interlinked parameters that have not
+yet been fully tested and optimized for FIFI-LS data.
+
 Output Data
 ^^^^^^^^^^^
 The pipeline stores the resampled data as a 3D FITS image extension
 with extension name FLUX. The associated error is stored in a
 separate extension, with the name ERROR. The non-telluric-corrected
 cubes are stored in UNCORRECTED\_FLUX and UNCORRECTED\_ERROR extensions,
-respectively. The output wavelengths and x and y coordinates are
-stored in WAVELENGTH, X, and Y extensions.
+respectively. The output wavelengths, x and y offsets, and RA and Dec
+coordinates are stored in WAVELENGTH, X, Y, RA---TAN, and DEC--TAN
+extensions.
 
 For reference, a model of the atmospheric
 transmission spectrum, smoothed to the resolution of the observation,
@@ -1026,6 +1068,12 @@ extensions:
 
 -  Y: The y-coordinates of the data, in arcsecond offsets from the base
    position (*ny*).
+
+-  RA---TAN: The right ascension coordinates of the data, in decimal hours, in
+   a tangent projection from the base position.
+
+-  DEC--TAN: The declination coordinates of the data, in decimal degrees, in
+   a tangent projection from the base position.
 
 -  TRANSMISSION: The atmospheric transmission model (*nw*).
 
@@ -1145,41 +1193,44 @@ separately from the FITS file products.
     +-------------+---------------------------+------------------+---------------+-----------+-------------------------------------------+
     || Spatial    || *spatial\_calibrated*    || LEVEL\_2        || XYC          || N        || 5 N\ :sub:`scan` image extensions:       |
     || Calibrate  |                           |                  |               |           || FLUX_G\ *i*, STDDEV_G\ *i*, LAMBDA_G\ *i*|
-    |             |                           |                  |               |           || XS_G\ *i*, YS_G\ *i*                     |
+    |             |                           |                  |               |           || XS_G\ *i*, YS_G\ *i*,                    |
+    |             |                           |                  |               |           || RA_G\ *i*, DEC_G\ *i*                    |
     |             |                           |                  |               |           || for *i*\ =0...N\ :sub:`scan`-1           |
     +-------------+---------------------------+------------------+---------------+-----------+-------------------------------------------+
     || Apply      || *flat\_fielded*          || LEVEL\_2        || FLF          || N        || 7 N\ :sub:`scan` image extensions:       |
     || Flat       |                           |                  |               |           || FLUX_G\ *i*, STDDEV_G\ *i*, LAMBDA_G\ *i*|
-    |             |                           |                  |               |           || XS_G\ *i*, YS_G\ *i*, FLAT_G\ *i*,       |
+    |             |                           |                  |               |           || XS_G\ *i*, YS_G\ *i*,                    |
+    |             |                           |                  |               |           || RA_G\ *i*, DEC_G\ *i*, FLAT_G\ *i*,      |
     |             |                           |                  |               |           || FLATERR_G\ *i*                           |
     |             |                           |                  |               |           || for *i*\ =0...N\ :sub:`scan`-1           |
     +-------------+---------------------------+------------------+---------------+-----------+-------------------------------------------+
-    || Combine    || *scan\_combined*         || LEVEL\_2        || SCM          || Y        || 5 image extensions:                      |
-    || Scans      |                           |                  |               |           || FLUX, STDDEV, LAMBDA, XS, YS             |
+    || Combine    || *scan\_combined*         || LEVEL\_2        || SCM          || Y        || 7 image extensions:                      |
+    || Scans      |                           |                  |               |           || FLUX, STDDEV, LAMBDA, XS, YS, RA, DEC    |
     +-------------+---------------------------+------------------+---------------+-----------+-------------------------------------------+
-    || Telluric   || *telluric\_corrected*    || LEVEL\_2        || TEL          || N        || 9 image extensions:                      |
+    || Telluric   || *telluric\_corrected*    || LEVEL\_2        || TEL          || N        || 11 image extensions:                     |
     || Correct    |                           |                  |               |           || FLUX, STDDEV, UNCORRECTED\_FLUX,         |
     |             |                           |                  |               |           || UNCORRECTED\_STDDEV,                     |
-    |             |                           |                  |               |           || LAMBDA, XS, YS, ATRAN, UNSMOOTHED_ATRAN  |
+    |             |                           |                  |               |           || LAMBDA, XS, YS, RA, DEC,                 |
+    |             |                           |                  |               |           || ATRAN, UNSMOOTHED_ATRAN                  |
     +-------------+---------------------------+------------------+---------------+-----------+-------------------------------------------+
-    || Flux       || *flux\_calibrated*       || LEVEL\_3        || CAL          || Y        || 10 image extensions:                     |
+    || Flux       || *flux\_calibrated*       || LEVEL\_3        || CAL          || Y        || 12 image extensions:                     |
     || Calibrate  |                           |                  |               |           || FLUX, STDDEV, UNCORRECTED\_FLUX,         |
     |             |                           |                  |               |           || UNCORRECTED\_STDDEV,                     |
-    |             |                           |                  |               |           || LAMBDA, XS, YS, ATRAN,                   |
+    |             |                           |                  |               |           || LAMBDA, XS, YS, RA, DEC, ATRAN,          |
     |             |                           |                  |               |           || RESPONSE, UNSMOOTHED_ATRAN               |
     +-------------+---------------------------+------------------+---------------+-----------+-------------------------------------------+
-    || Correct    || *wavelength\_shifted*    || LEVEL\_3        || WSH          || N        || 11 image extensions:                     |
+    || Correct    || *wavelength\_shifted*    || LEVEL\_3        || WSH          || N        || 13 image extensions:                     |
     || Wave       |                           |                  |               |           || FLUX, STDDEV, UNCORRECTED\_FLUX,         |
     || Shift      |                           |                  |               |           || UNCORRECTED\_STDDEV,                     |
     |             |                           |                  |               |           || LAMBDA, UNCORRECTED_LAMBDA,              |
-    |             |                           |                  |               |           || XS, YS, ATRAN,                           |
+    |             |                           |                  |               |           || XS, YS, RA, DEC, ATRAN,                  |
     |             |                           |                  |               |           || RESPONSE, UNSMOOTHED_ATRAN               |
     +-------------+---------------------------+------------------+---------------+-----------+-------------------------------------------+
-    || Spatial    || *resampled*              || LEVEL\_4        || WXY          || Y        || 11 image extensions:                     |
+    || Spatial    || *resampled*              || LEVEL\_4        || WXY          || Y        || 13 image extensions:                     |
     || Resample   |                           |                  |               |           || FLUX, ERROR,                             |
     |             |                           |                  |               |           || UNCORRECTED\_FLUX, UNCORRECTED\_ERROR,   |
-    |             |                           |                  |               |           || WAVELENGTH, X, Y, TRANSMISSION,          |
-    |             |                           |                  |               |           || RESPONSE, EXPOSURE\_MAP,                 |
+    |             |                           |                  |               |           || WAVELENGTH, X, Y, RA---TAN, DEC--TAN,    |
+    |             |                           |                  |               |           || TRANSMISSION, RESPONSE, EXPOSURE\_MAP,   |
     |             |                           |                  |               |           || UNSMOOTHED\_TRANSMISSION                 |
     +-------------+---------------------------+------------------+---------------+-----------+-------------------------------------------+
 
@@ -1203,4 +1254,3 @@ the Spatial Calibrate step additionally contain a binary table holding
 sky position data for each scan position (extension SCANPOS_G0). Intermediate
 flux and error data in this mode are 3D cubes (spaxel x spexel x scan position).
 The final product is identical to other modes.
-

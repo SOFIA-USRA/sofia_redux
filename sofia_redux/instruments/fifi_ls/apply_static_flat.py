@@ -402,6 +402,8 @@ def apply_flat_to_hdul(hdul, flatdata, skip_err=True):
         result.append(hdul[name.replace('FLUX', 'LAMBDA')].copy())
         result.append(hdul[name.replace('FLUX', 'XS')].copy())
         result.append(hdul[name.replace('FLUX', 'YS')].copy())
+        result.append(hdul[name.replace('FLUX', 'RA')].copy())
+        result.append(hdul[name.replace('FLUX', 'DEC')].copy())
 
         # also store flat and flat error, for diagnostic purposes
         # this is always 2D

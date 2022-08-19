@@ -46,6 +46,8 @@ def test_str(asymmetry2d):
     assert str(a) == 'Asymmetry: y = 30.000% +- 70.711%'
     a.y = None
     assert str(a) == "Asymmetry: empty"
+    a.x = np.arange(3)
+    assert str(a) == "Asymmetry: 3 planes."
 
 
 def test_repr(asymmetry2d):

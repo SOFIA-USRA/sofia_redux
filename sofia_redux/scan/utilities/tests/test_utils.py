@@ -907,4 +907,4 @@ def test_safe_sidereal_time():
 
     assert not lst_accurate[0] == lst_with_error[0]
     assert np.allclose(lst_accurate, lst_with_error,
-                       atol=10 * units.Unit('arcsec'))
+                       atol=60 * units.Unit('arcsec'))

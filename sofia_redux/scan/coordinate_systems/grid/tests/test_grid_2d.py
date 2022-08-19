@@ -10,6 +10,8 @@ from sofia_redux.scan.coordinate_systems.grid.grid_2d import Grid2D
 from sofia_redux.scan.coordinate_systems.grid.flat_grid_2d import FlatGrid2D
 from sofia_redux.scan.coordinate_systems.grid.spherical_grid import \
     SphericalGrid
+from sofia_redux.scan.coordinate_systems.grid.cartesian_grid import \
+    CartesianGrid
 
 
 @pytest.fixture
@@ -42,6 +44,34 @@ def test_copy():
     g = FlatGrid2D()
     g2 = g.copy()
     assert g2 == g and g2 is not g
+
+
+def test_eq(affine_offset):
+    g = affine_offset.copy()
+    g1 = affine_offset.copy()
+    g2 = affine_offset.copy()
+    assert g == g
+    assert g1 == g2
+    assert g1 != None
+    g2.projection.reference.zero()
+    assert g1 != g2
+    g2 = g.copy()
+    g2.reference_index.fill(1)
+    assert g1 != g2
+    g2 = g.copy()
+    g2.m = None
+    assert g1 != g2
+    g2.m = g1.m + 1
+    assert g1 != g2
+    g1.m = None
+    assert g1 != g2
+    g1, g2 = g.copy(), g.copy()
+    g2.i = None
+    assert g1 != g2
+    g2.i = g1.i + 1
+    assert g1 != g2
+    g1.i = None
+    assert g1 != g2
 
 
 def test_get_dimensions():
@@ -111,6 +141,8 @@ def test_eq():
     g = FlatGrid2D()
     assert g == g
     assert g is not None
+    g2 = CartesianGrid()
+    assert g != g2
     g2 = g.copy()
     g2.projection.reference = Coordinate2D([1, 1])
     assert g != g2
@@ -160,6 +192,11 @@ def test_get_coordinate_instance_for():
 
 def test_get_default_unit():
     assert Grid2D.get_default_unit() is None
+
+
+def test_get_default_coordinate_instance():
+    assert isinstance(Grid2D.get_default_coordinate_instance(),
+                      Coordinate2D)
 
 
 def test_from_header():

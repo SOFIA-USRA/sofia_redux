@@ -17,6 +17,7 @@ def test_fit_residual():
     assert residual.size == 1000
     assert np.allclose(residual, 0)
 
-    noise = np.random.random(1000)
+    rand = np.random.RandomState(42)
+    noise = rand.random(1000)
     residual = fit_residual(data + noise, xp, coefficients)
     assert np.allclose(residual, noise)

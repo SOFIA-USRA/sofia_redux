@@ -1,6 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 import numpy as np
+import sys
 
 from sofia_redux.scan.utilities import numba_functions as nf
 from sofia_redux.toolkit.splines.spline import Spline
@@ -742,6 +743,7 @@ def test_round_value():
     assert nf.round_value(2.6) == 3
     assert nf.round_value(-1.5) == -2
     assert nf.round_value(-2.5) == -3
+    assert nf.round_value(np.nan) == -sys.maxsize - 1
 
 
 def test_round_array():

@@ -92,6 +92,11 @@ class TestChannels(object):
         # initialized
         assert new.is_initialized
 
+    def test_fifi_copy(self, fifi_simulated_channels):
+        chan_1 = fifi_simulated_channels
+        chan_2 = fifi_simulated_channels.copy()
+        assert chan_1.overlap_point_size == chan_2.overlap_point_size
+
     def test_blank_properties(self):
         channels = Channels()
         assert channels.flagspace is None

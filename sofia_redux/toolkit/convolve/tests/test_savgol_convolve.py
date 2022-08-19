@@ -16,10 +16,11 @@ def nanhole():
 
 
 def test_interpolate(nanhole):
+    rand = np.random.RandomState(42)
     args = nanhole
     x, y, z, window = args
     z[2, 2] = 1000
     z[48, 49] = np.nan
-    noise = np.random.normal(0, 0.01, z.shape)
+    noise = rand.normal(0, 0.01, z.shape)
     z += noise
     SavgolConvolve(x, y, z, 10, robust=0)

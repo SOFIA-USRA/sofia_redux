@@ -72,6 +72,7 @@ class Map2D(Overlay):
         self.correcting_fwhm = np.nan * units.Unit('deg')
         self.filter_blanking = np.inf
         self.reuse_index = Coordinate2D()
+        self.skip_model_edit_header = False
 
         super().__init__(blanking_value=blanking_value, dtype=dtype,
                          data=data, shape=shape, unit=unit)
@@ -120,6 +121,17 @@ class Map2D(Overlay):
         if self.smoothing_beam != other.smoothing_beam:
             return False
         return super().__eq__(other)
+
+    @classmethod
+    def default_beam(cls):
+        """
+        Return the default beam for this map.
+
+        Returns
+        -------
+        Gaussian2D
+        """
+        return Gaussian2D
 
     @classmethod
     def numpy_to_fits(cls, coordinates):
@@ -777,7 +789,6 @@ class Map2D(Overlay):
         Returns
         -------
         anti_aliasing_beam : Gaussian2D or None
-
         """
         map_smoothing = map2d.smoothing_beam
         pixelization = self.get_pixel_smoothing()
@@ -1055,7 +1066,7 @@ class Map2D(Overlay):
 
         Parameters
         ----------
-        underlying_fwhm : units.Quantity
+        underlying_fwhm : units.Quantity or Coordinate
             The underlying FWHM of the beam used to derive the filtering
             correction factor to apply to the data.
         reference : FlaggedArray or numpy.ndarray, optional
@@ -1418,6 +1429,11 @@ class Map2D(Overlay):
         -------
         None
         """
+        if self.skip_model_edit_header:
+            self.skip_model_edit_header = False
+            super().edit_header(header)
+            return
+
         self.edit_coordinate_info(header)
         psf = self.get_image_beam()
         fits_unit = self.get_default_grid_unit()
@@ -1448,19 +1464,21 @@ class Map2D(Overlay):
                 header['SMOOTH'] = (
                     fwhm, f'{{Deprecated}} FWHM ({unit_name}) smoothing.')
 
-        if not np.isnan(self.filter_fwhm):
-            filter_beam = Gaussian2D(x_fwhm=self.filter_fwhm,
-                                     y_fwhm=self.filter_fwhm)
-            filter_beam.edit_header(header, fits_id='X',
-                                    beam_name='Extended Structure Filter',
-                                    size_unit=fits_unit)
-
-        if not np.isnan(self.correcting_fwhm):
-            correction_beam = Gaussian2D(x_fwhm=self.correcting_fwhm,
-                                         y_fwhm=self.correcting_fwhm)
-            correction_beam.edit_header(header, fits_id='C',
-                                        beam_name='Peak Corrected',
+        if isinstance(self.filter_fwhm, units.Quantity):
+            if not np.isnan(self.filter_fwhm):
+                filter_beam = Gaussian2D(x_fwhm=self.filter_fwhm,
+                                         y_fwhm=self.filter_fwhm)
+                filter_beam.edit_header(header, fits_id='X',
+                                        beam_name='Extended Structure Filter',
                                         size_unit=fits_unit)
+
+        if isinstance(self.correcting_fwhm, units.Quantity):
+            if not np.isnan(self.correcting_fwhm):
+                correction_beam = Gaussian2D(x_fwhm=self.correcting_fwhm,
+                                             y_fwhm=self.correcting_fwhm)
+                correction_beam.edit_header(header, fits_id='C',
+                                            beam_name='Peak Corrected',
+                                            size_unit=fits_unit)
 
         header['SMTHRMS'] = True, 'Is the Noise (RMS) image smoothed?'
 
@@ -1709,7 +1727,7 @@ class Map2D(Overlay):
         beam_map : numpy.ndarray (float)
             The beam map image kernel with which to smooth the map of shape
             (ky, kx).
-        reference_index : Coordinate2D
+        reference_index : Coordinate2D or numpy.ndarray
             The reference pixel index of the kernel in (x, y).
         weights : numpy.ndarray (float)
             The map weights of shape (ny, nx).
@@ -1747,7 +1765,7 @@ class Map2D(Overlay):
         super().fast_smooth(beam_map, steps, reference_index=reference_index,
                             weights=weights)
         self.add_smoothing(
-            Gaussian2D.get_equivalent(beam_map, self.grid.resolution))
+            self.default_beam().get_equivalent(beam_map, self.grid.resolution))
 
     def filter_above(self, fwhm, valid=None):
         """
@@ -1759,7 +1777,7 @@ class Map2D(Overlay):
 
         Parameters
         ----------
-        fwhm : units.Quantity
+        fwhm : units.Quantity or Coordinate2D1
             The FWHM of the Gaussian with which to filter the image.
         valid : numpy.ndarray (bool), optional
             An optional mask where `False` excludes a map element from

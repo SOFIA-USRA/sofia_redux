@@ -88,6 +88,14 @@ IMAGE_DEFAULT = {
                         'model inputs will be set to NaN.',
          'dtype': 'bool',
          'wtype': 'check_box'},
+        {'key': 'skip_undistort',
+         'name': 'Skip distortion correction',
+         'value': False,
+         'description': 'If set, no distortion correction will be '
+                        'applied.',
+         'dtype': 'bool',
+         'wtype': 'check_box'},
+
     ],
     'merge': [
         {'key': 'save',
@@ -105,6 +113,13 @@ IMAGE_DEFAULT = {
          'description': 'Select the merging style. \nCentroid '
                         'is default for flux standards; no shift '
                         'is recommended for most other data.'},
+        {'key': 'skip_rotation',
+         'name': 'Skip rotation',
+         'value': False,
+         'description': 'If set, rotation by sky angle '
+                        'will not be applied.',
+         'dtype': 'bool',
+         'wtype': 'check_box'}
     ],
     'register': [
         {'key': 'save',
@@ -165,6 +180,12 @@ IMAGE_DEFAULT = {
          'value': False,
          'description': 'Set to skip coadd of input files '
                         'and propagate separate images instead.',
+         'dtype': 'bool',
+         'wtype': 'check_box'},
+        {'key': 'skip_rotation',
+         'name': 'Skip rotation',
+         'value': False,
+         'description': 'Set to skip rotation before coadding.',
          'dtype': 'bool',
          'wtype': 'check_box'},
         {'key': 'reference',

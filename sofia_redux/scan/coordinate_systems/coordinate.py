@@ -99,6 +99,8 @@ class Coordinate(ABC):
         """
         if self.coordinates is None:
             return 0
+        elif not isinstance(self.coordinates, np.ndarray):
+            return 1
         elif self.coordinates.ndim == 1:
             return 1
         else:
@@ -359,7 +361,7 @@ class Coordinate(ABC):
         self.coordinates = coordinates
 
     def set_shape_from_coordinates(self, coordinates, single_dimension=False,
-                                   empty=False):
+                                   empty=False, change_unit=True):
         """
         Set the new shape and units from the given coordinates.
 
@@ -380,6 +382,8 @@ class Coordinate(ABC):
         empty : bool, optional
             If `True` and a new array should be created, that array will be
             empty.  Otherwise, a zero array will be created.
+        change_unit : bool, optional
+            If `True`, allow the unit to be updated.
 
         Returns
         -------
@@ -407,7 +411,7 @@ class Coordinate(ABC):
                 singular = False
                 shape = coordinates[0].shape
 
-        if self.unit is None and new_unit is not None:
+        if change_unit and self.unit is None and new_unit is not None:
             self.unit = new_unit
 
         if singular:
@@ -452,7 +456,14 @@ class Coordinate(ABC):
             coordinate_unit = coordinates.unit
 
         else:  # In the case that coordinates have been supplied weirdly
-            if hasattr(coordinates, '__len__') and len(coordinates) > 0:
+            if isinstance(coordinates, np.ndarray):
+                n = 0 if coordinates.shape == () else coordinates.shape[0]
+            elif hasattr(coordinates, '__len__'):
+                n = len(coordinates)
+            else:
+                n = 0
+
+            if n > 0:
                 if isinstance(coordinates[0], units.Quantity):
                     coordinate_unit = coordinates[0].unit
                     if coordinates[0].shape != ():
@@ -527,7 +538,7 @@ class Coordinate(ABC):
             return
         if isinstance(self.coordinates, units.Quantity):
             self.coordinates = self.coordinates.to(unit)
-        elif isinstance(self.coordinates, np.ndarray):
+        elif isinstance(self.coordinates, (np.ndarray, int, float)):
             self.coordinates = self.coordinates * unit
 
     def broadcast_to(self, thing):
@@ -566,6 +577,72 @@ class Coordinate(ABC):
         for dimension in range(n_dimensions):
             self.coordinates[dimension] = singular_coordinates[dimension]
 
+    def add(self, coordinates):
+        """
+        Add other coordinates to these.
+
+        Parameters
+        ----------
+        coordinates : Coordinate
+
+        Returns
+        -------
+        None
+        """
+        self.broadcast_to(coordinates.shape)
+        self.coordinates += coordinates.coordinates
+
+    def subtract(self, coordinates):
+        """
+        Subtract other coordinates from these.
+
+        Parameters
+        ----------
+        coordinates : Coordinate
+
+        Returns
+        -------
+        None
+        """
+        self.broadcast_to(coordinates.shape)
+        self.coordinates -= coordinates.coordinates
+
+    def scale(self, factor):
+        """
+        Scale the coordinates by a factor.
+
+        Parameters
+        ----------
+        factor : int or float or Coordinate or iterable or np.ndarray
+            If a Coordinate is supplied, it must be singular.
+
+        Returns
+        -------
+        None
+        """
+        if isinstance(factor, Coordinate):
+            self.broadcast_to(factor.shape)
+            self.coordinates *= factor.coordinates
+
+        else:
+            if not hasattr(factor, '__len__'):
+                factor = self.convert_factor(factor)
+                self.coordinates *= factor
+                return
+
+            factor, _ = self.check_coordinate_units(factor)
+            factor = self.convert_factor(factor)
+            if factor.size < 1:
+                return
+            if factor.size == 1:
+                self.coordinates *= np.atleast_1d(factor.ravel())[0]
+            elif factor.ndim <= 1 and factor.size == self.ndim:
+                for i in range(factor.size):
+                    self.coordinates[i] *= factor[i]
+            else:
+                self.broadcast_to(factor.shape[1:])
+                self.coordinates *= factor
+
     def convert_factor(self, factor):
         """
         Returns a float factor in the correct units for multiplication.
@@ -580,7 +657,7 @@ class Coordinate(ABC):
 
         Returns
         -------
-        factor : float
+        factor : float or numpy.ndarray (float)
         """
         if not isinstance(factor, units.Quantity):
             return factor
@@ -599,6 +676,48 @@ class Coordinate(ABC):
 
         return factor_value
 
+    def fill(self, value, indices=None):
+        """
+        Fill the coordinates with the given value.
+
+        Parameters
+        ----------
+        value : int or float or units.Quantity
+            The value with which to fill the coordinates.
+        indices : slice or numpy.ndarray (int or bool), optional
+            The indices to set to NaN.
+
+        Returns
+        -------
+        None
+        """
+        if self.size == 0:
+            return
+
+        if (isinstance(value, units.Quantity) and
+                value.unit == units.dimensionless_unscaled):
+            value = value.value
+
+        if not isinstance(value, units.Quantity):
+            if self.unit is not None:
+                value = value * self.unit
+        elif self.unit is None:
+            self.change_unit(value.unit)
+
+        if (not isinstance(self.coordinates, np.ndarray) or
+                self.coordinates.shape == ()):
+            if isinstance(value, units.Quantity):
+                value = value.to(self.unit)
+            self.coordinates = value
+            return
+
+        if indices is None or self.singular:
+            self.coordinates.fill(value)
+        elif self.ndim == 1 and self.coordinates.ndim == 1:
+            self.coordinates[indices] = value
+        else:
+            self.coordinates[:, indices] = value
+
     def nan(self, indices=None):
         """
         Set all coordinates to NaN.
@@ -614,6 +733,15 @@ class Coordinate(ABC):
         """
         if self.coordinates is None:
             return
+
+        if (not isinstance(self.coordinates, np.ndarray) or
+                self.coordinates.shape == ()):
+            if self.unit is not None:
+                self.coordinates = np.nan * self.unit
+            else:
+                self.coordinates = np.nan
+            return
+
         if indices is None:
             self.coordinates.fill(np.nan)
         elif self.coordinates.ndim == 1:
@@ -636,6 +764,15 @@ class Coordinate(ABC):
         """
         if self.coordinates is None:
             return
+
+        if (not isinstance(self.coordinates, np.ndarray) or
+                self.coordinates.shape == ()):
+            if self.unit is not None:
+                self.coordinates = 0.0 * self.unit
+            else:
+                self.coordinates = 0.0
+            return
+
         if indices is None:
             self.coordinates.fill(0.0)
         elif self.coordinates.ndim == 1:
@@ -1026,7 +1163,10 @@ class Coordinate(ABC):
         if self.coordinates is None:
             return new
         if self.singular:
-            mean_coordinates = self.coordinates.copy()
+            if isinstance(self.coordinates, np.ndarray):
+                mean_coordinates = self.coordinates.copy()
+            else:
+                mean_coordinates = self.coordinates
         elif self.ndim == 1:
             mean_coordinates = np.atleast_1d(np.nanmean(self.coordinates))
         else:

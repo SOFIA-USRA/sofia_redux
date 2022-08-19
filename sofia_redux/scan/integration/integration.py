@@ -3042,6 +3042,8 @@ class Integration(ABC):
         -------
         None
         """
+        if not self.configuration.get_bool('despike'):
+            return
         method = self.configuration.get(
             'despike.method', default='absolute').strip().lower()
 

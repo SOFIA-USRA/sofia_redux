@@ -894,6 +894,7 @@ class OneDimPane(Pane):
                   f'{self.ax.get_autoscale_on()}')
 
         model.extension = self.fields['y']
+
         log.debug(f'Plotting {len(self.orders[model.id])} orders '
                   f'for {model.id}')
         new_lines = list()
@@ -1114,6 +1115,9 @@ class OneDimPane(Pane):
 
         if self.plot_type == 'step' or self.plot_type == 'scatter':
             options['step'] = 'mid'
+        if error is None:
+            error = np.full(len(x), np.nan)
+
         poly = self.ax.fill_between(x, y - error, y + error,
                                     **options)
         return poly
@@ -1182,8 +1186,6 @@ class OneDimPane(Pane):
                         names_in_limits[n] = [x]
         if self.units['x'] == 'pixel':
             names_in_limits = dict()
-        else:
-            pass
 
         return names_in_limits
 
@@ -1340,6 +1342,7 @@ class OneDimPane(Pane):
                                            kind='error',
                                            updates={'visible': error_visible})
                     updates.append(line)
+
                 else:
                     line = drawing.Drawing(high_model=model_id,
                                            mid_model=order_number,
@@ -1636,10 +1639,6 @@ class OneDimPane(Pane):
                                            level='low', field='wavepos')
             wavelength_data = wave_spectrum.data
             wavelength_unit = wave_spectrum.unit_key
-            # if wavelength_unit == 'pixel' and spectrum.kind == 'flux':
-            #
-            #     # wavelength_data =
-            #     # wavelength_unit =
         else:
             wavelength_data = None
             wavelength_unit = None
@@ -1648,8 +1647,9 @@ class OneDimPane(Pane):
         if 'flux' in self.fields[axis]:
             error_spectrum = model.retrieve(
                 order=order_number, level='low', field='spectral_error')
-            error_spectrum.convert(target_unit, wavelength_data,
-                                   wavelength_unit)
+            if error_spectrum is not None:
+                error_spectrum.convert(target_unit, wavelength_data,
+                                       wavelength_unit)
 
     def get_xy_data(self, model, order):
         """
@@ -1963,7 +1963,7 @@ class OneDimPane(Pane):
                                           field=self.fields['y'])
 
                 # skip entirely if order has no data
-                if x_data is None or y_data is None:
+                if x_data is None or y_data is None:  # pragma: no cover
                     continue
 
                 # skip order if cursor is out of range

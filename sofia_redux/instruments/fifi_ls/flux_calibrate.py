@@ -107,6 +107,8 @@ def apply_response(hdul, response):
     result.append(hdul['LAMBDA'].copy())
     result.append(hdul['XS'].copy())
     result.append(hdul['YS'].copy())
+    result.append(hdul['RA'].copy())
+    result.append(hdul['DEC'].copy())
     if 'ATRAN' in hdul:
         result.append(hdul['ATRAN'].copy())
     exthdr['BUNIT'] = ('adu/(Hz s Jy)', 'Data units')

@@ -16,8 +16,24 @@ For previously processed data, check the PIPEVERS keyword in the
 FITS header to determine the pipeline version used.
 
 
-FORCAST Redux v2.5.0
+FORCAST Redux v2.6.0
 ~~~~~~~~~~~~~~~~~~~~
+*User manual: Rev. L*
+
+Imaging
+^^^^^^^
+- Add options to allow diagnostic reductions in the detector coordinate frame,
+  skipping distortion correction and rotation by the sky angle.
+
+Spectroscopy
+^^^^^^^^^^^^
+- Fix a bug in water vapor optimization, causing the pipeline to return
+  too-low PWV values for observations with strong sky lines and significant
+  wavelength shifts.
+
+
+FORCAST Redux v2.5.0 (2022-05-25)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. K*
 
 Spectroscopy

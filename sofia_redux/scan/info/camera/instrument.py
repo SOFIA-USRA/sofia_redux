@@ -51,5 +51,6 @@ class CameraInstrumentInfo(InstrumentInfo):
         None
         """
         super().edit_image_header(header, scans=scans)
-        header['BEAM'] = (to_header_float(self.resolution, 'arcsec'),
-                          'The instrument FWHM (arcsec) of the beam.')
+        if isinstance(self.resolution, units.Quantity):
+            header['BEAM'] = (to_header_float(self.resolution, 'arcsec'),
+                              'The instrument FWHM (arcsec) of the beam.')

@@ -8,15 +8,16 @@ import pytest
 
 @pytest.fixture
 def random_arrays():
+    rand = np.random.RandomState(42)
     n_sets, n_fits = 3, 20
     shape = n_sets, n_fits
-    fit_out = np.random.random(shape)
-    error_out = np.random.random(shape)
-    counts_out = np.random.random(shape)
-    weights_out = np.random.random(shape)
-    distance_weights_out = np.random.random(shape)
-    rchi2_out = np.random.random(shape)
-    offset_variance_out = np.random.random(shape)
+    fit_out = rand.random(shape)
+    error_out = rand.random(shape)
+    counts_out = rand.random(shape)
+    weights_out = rand.random(shape)
+    distance_weights_out = rand.random(shape)
+    rchi2_out = rand.random(shape)
+    offset_variance_out = rand.random(shape)
     return (fit_out, error_out, counts_out, weights_out,
             distance_weights_out, rchi2_out, offset_variance_out)
 

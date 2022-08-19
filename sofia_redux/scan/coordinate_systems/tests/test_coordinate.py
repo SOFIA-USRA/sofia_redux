@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from sofia_redux.scan.coordinate_systems.coordinate import Coordinate
+from sofia_redux.scan.coordinate_systems.coordinate_1d import Coordinate1D
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.coordinate_systems.coordinate_systems_numba_functions \
     import check_null
@@ -66,6 +67,7 @@ def test_ndim(c2d):
     assert c2d.ndim == 2
     assert Coordinate().ndim == 0
     assert Coordinate(np.arange(5)).ndim == 1
+    assert Coordinate(1).ndim == 1
 
 
 def test_shape(c2d):
@@ -336,6 +338,40 @@ def test_broadcast_to(c2d):
     assert c.singular and c.shape == ()
 
 
+def test_add(c2d):
+    c = c2d.copy()
+    c.add(c2d)
+    assert np.allclose(c.coordinates, c2d.coordinates * 2)
+
+
+def test_subtract(c2d):
+    c = c2d.copy()
+    c.subtract(c2d)
+    assert c.is_null().all()
+
+
+def test_scale(c2d):
+    c = c2d.copy()
+    c.scale(c2d)
+    x0 = c2d.coordinates.copy()
+    assert np.allclose(c.coordinates, x0 ** 2)
+    c = c2d.copy()
+    c.scale(3)
+    assert np.allclose(c.coordinates, x0 * 3)
+    c = c2d.copy()
+    c.scale(np.asarray([]))
+    assert c == c2d
+    c.scale(np.asarray(2))
+    assert np.allclose(c.coordinates, x0 * 2)
+    c = c2d.copy()
+    c.scale([2, 3])
+    assert np.allclose(c.coordinates[0], c2d.coordinates[0] * 2)
+    assert np.allclose(c.coordinates[1], c2d.coordinates[1] * 3)
+    expected = (c2d.coordinates * c.coordinates).value * units.Unit('degree')
+    c.scale(c2d.coordinates)
+    assert np.allclose(c.coordinates, expected)
+
+
 def test_convert_factor():
     c = Coordinate(np.arange(5))
     assert c.convert_factor(1.0) == 1.0
@@ -348,6 +384,34 @@ def test_convert_factor():
 
     v = c.convert_factor(1 * units.Unit('arcsec'))
     assert v == 1 / 3600
+
+
+def test_fill(c2d):
+    c = Coordinate()
+    c.fill(1)
+    assert c.size == 0
+    c = Coordinate(np.arange(10).reshape((2, 5)))
+    c.fill(1 * units.dimensionless_unscaled)
+    assert np.allclose(c.coordinates, 1) and c.unit is None
+    c = c2d.copy()
+    c.fill(2)
+    assert np.allclose(c.coordinates, 2 * units.Unit('degree'))
+    c = c2d.copy()
+    c.fill(3600 * units.Unit('arcsec'))
+    assert np.allclose(c.coordinates.value, 1)
+    c = Coordinate(np.full((2, 5), 0.5))
+    c.fill(1 * units.Unit('degree'))
+    assert np.allclose(c.coordinates, 1 * units.Unit('degree'))
+    assert c.unit == 'degree'
+    c = Coordinate(1 * units.Unit('degree'))
+    c.fill(np.arange(10) * units.Unit('degree'))
+    assert np.allclose(c.coordinates, np.arange(10) * units.Unit('degree'))
+    c = Coordinate(np.arange(10))
+    c.fill(1, indices=slice(2, 4))
+    assert np.allclose(c.coordinates, [0, 1, 1, 1, 4, 5, 6, 7, 8, 9])
+    c = Coordinate(np.arange(10).reshape((2, 5)))
+    c.fill(1, indices=slice(3, 5))
+    assert np.allclose(c.coordinates, [[0, 1, 2, 1, 1], [5, 6, 7, 1, 1]])
 
 
 def test_nan(c2d):
@@ -368,6 +432,25 @@ def test_nan(c2d):
     assert np.isnan(c.coordinates[0])
     assert np.allclose(c.coordinates[1:], [1, 2, 3])
 
+    c = Coordinate(1 * units.Unit('degree'))
+    c.nan()
+    assert np.isclose(c.coordinates, np.nan * units.Unit('degree'),
+                      equal_nan=True)
+
+    c = Coordinate(1)
+    c.nan()
+    assert np.isclose(c.coordinates, np.nan, equal_nan=True)
+
+    c = Coordinate(np.arange(5, dtype=float))
+    c.nan(indices=2)
+    assert np.allclose(c.coordinates, [0, 1, np.nan, 3, 4], equal_nan=True)
+
+    c = Coordinate2D(np.arange(10).reshape((2, 5)))
+    c.nan(indices=slice(2, 4))
+    assert np.allclose(c.coordinates,
+                       [[0, 1, np.nan, np.nan, 4],
+                        [5, 6, np.nan, np.nan, 9]], equal_nan=True)
+
 
 def test_zero(c2d):
     c = Coordinate()
@@ -387,6 +470,22 @@ def test_zero(c2d):
     assert c.coordinates[0] == 0
     assert np.allclose(c.coordinates[1:], [1, 2, 3])
 
+    c = Coordinate(1 * units.Unit('degree'))
+    c.zero()
+    assert np.isclose(c.coordinates, 0 * units.Unit('degree'))
+
+    c = Coordinate(1)
+    c.zero()
+    assert np.isclose(c.coordinates, 0)
+
+    c = Coordinate(np.arange(5, dtype=float))
+    c.zero(indices=2)
+    assert np.allclose(c.coordinates, [0, 1, 0, 3, 4])
+
+    c = Coordinate2D(np.arange(10).reshape((2, 5)))
+    c.zero(indices=slice(2, 4))
+    assert np.allclose(c.coordinates,
+                       [[0, 1, 0, 0, 4], [5, 6, 0, 0, 9]])
 
 def test_apply_coordinate_mask_function():
     c = Coordinate()
@@ -694,6 +793,9 @@ def test_mean(c2d):
     c = c2d.copy()
     m = c.mean()
     assert np.allclose(m.coordinates.value, [[2], [7]])
+
+    c = Coordinate1D(1)
+    assert c.mean() == c
 
 
 def test_copy_coordinates(c2d):

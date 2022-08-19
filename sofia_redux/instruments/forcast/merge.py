@@ -19,7 +19,7 @@ addhist = add_history_wrap('Merge')
 __all__ = ['merge']
 
 
-def merge(data, header, variance=None, normmap=None,
+def merge(data, header, variance=None, normmap=None, skip_rotation=False,
           strip_border=True, rotation_order=1, resize=True):
     """
     Merge positive and negative instances of the source in the images
@@ -54,6 +54,8 @@ def merge(data, header, variance=None, normmap=None,
         Array (nrow, ncol) of normalization values for each pixel.
         The normalization value corresponds to the number of
         exposures in each pixel.
+    skip_rotation : bool, optional
+        If True, will skip rotation correction.
     strip_border : bool, optional
         If True, will strip off any unnecessary NaN padding at the
         edges of the image, after rotation.
@@ -151,9 +153,12 @@ def merge(data, header, variance=None, normmap=None,
 
     # Rotate and strip
     skyangle = getpar(header, 'SKY_ANGL', dtype=float, default=None)
-    rotangle = 180 - skyangle if skyangle is not None else 0
-    addhist(header, 'Image rotation of %f' % rotangle)
-    log.info("Image rotation of %f" % rotangle)
+    if skip_rotation:
+        rotangle = 0
+    else:
+        rotangle = 180 - skyangle if skyangle is not None else 0
+        addhist(header, 'Image rotation of %f' % rotangle)
+        log.info("Image rotation of %f" % rotangle)
 
     try:
         center = [header['CRPIX1'] - 1, header['CRPIX2'] - 1]
@@ -175,8 +180,12 @@ def merge(data, header, variance=None, normmap=None,
     # Update WCS
     if 'CROTA2' in header and 'CRPIX1' in header and 'CRPIX2' in header:
         # Update the rotation angle.  At this stage it should be 0
-        header['CROTA2'] = 0.0
-        addhist(header, 'New CROTA2 after rotation is 0.0 degrees')
+        if skip_rotation:
+            temp_rot = 180 - skyangle if skyangle is not None else 0
+            addhist(header, 'Image rotation of %.2f degrees' % temp_rot)
+        else:
+            header['CROTA2'] = 0.0
+            addhist(header, 'New CROTA2 after rotation is 0.0 degrees')
 
         # also store the cumulative change to CRPIX
         dcrpix1 = header.get('DCRPIX1', 0.0)

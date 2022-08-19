@@ -18,7 +18,7 @@ class DataParent(object):
     This object stores a config file, header, and data.
     """
     # Pipeline version
-    pipever = '3.0.0'
+    pipever = '3.1.0'
     """str : Pipeline version."""
 
     def __init__(self, config=None):

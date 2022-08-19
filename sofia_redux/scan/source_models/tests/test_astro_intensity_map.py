@@ -71,6 +71,12 @@ def test_copy(initialized_source):
     assert source2.grid == source.grid
 
 
+def test_clear_all_memory(data_source):
+    source = data_source.copy()
+    source.clear_all_memory()
+    assert source.map is None and source.base is None
+
+
 def test_referenced_attributes(basic_source):
     assert 'base' in basic_source.referenced_attributes
 
@@ -312,17 +318,14 @@ def test_add_points(data_source):
     frames.data.fill(1.0)
     n = source.add_points(frames, pixels, frame_gains, source_gains)
     assert n == 1100
-    inds = np.arange(65, 70), np.arange(58, 63)
-    assert np.allclose(source.map.data[inds], [21.3, 17.4, 30.6, 21.3, 23.4])
-    assert np.allclose(source.map.weight.data[inds],
-                       [6.39, 5.22, 9.18, 6.39, 7.02])
-    assert np.allclose(source.map.exposure.data[inds],
-                       [7.1, 5.8, 10.2, 7.1, 7.8])
+    inds = np.arange(65, 67), np.arange(58, 60)
+    assert np.allclose(source.map.data[inds], [21.3, 17.4])
+    assert np.allclose(source.map.weight.data[inds], [6.39, 5.22])
+    assert np.allclose(source.map.exposure.data[inds], [7.1, 5.8])
     pixels.info.instrument.sampling_interval = 0.2
     source.map.exposure.fill(0)
     source.add_points(frames, pixels, frame_gains, source_gains)
-    assert np.allclose(source.map.exposure.data[inds],
-                       [14.2, 11.6, 20.4, 14.2, 15.6])
+    assert np.allclose(source.map.exposure.data[inds], [14.2, 11.6])
 
 
 def test_mask_samples(data_source):
@@ -390,11 +393,11 @@ def test_add_frames_from_integration(data_source):
     mapping_frames = source.add_frames_from_integration(
         integration, pixels, source_gains)
     assert mapping_frames == 1100
-    inds = np.arange(65, 70), np.arange(58, 63)
-    assert np.allclose(source.map.data[inds], [71, 58, 102, 71, 78])
-    assert np.allclose(source.map.weight.data[inds], [71, 58, 102, 71, 78])
+    inds = np.arange(65, 67), np.arange(58, 60)
+    assert np.allclose(source.map.data[inds], [71, 58])
+    assert np.allclose(source.map.weight.data[inds], [71, 58])
     assert np.allclose(source.map.exposure.data[inds],
-                       [7.1, 5.8, 10.2, 7.1, 7.8])
+                       [7.1, 5.8])
     assert np.isclose(source.integration_time, 110 * units.Unit('second'))
 
 

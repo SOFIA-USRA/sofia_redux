@@ -19,13 +19,13 @@ class Asymmetry2D(ABC):
 
         Parameters
         ----------
-        x : float
+        x : float or numpy.ndarray
             The asymmetry in the x-direction.
-        y : float
+        y : float or numpy.ndarray
             The asymmetry in the y-direction.
-        x_weight : float
+        x_weight : float or numpy.ndarray
             The asymmetry weight (1/variance) in the x-direction.
-        y_weight : float
+        y_weight : float or numpy.ndarray
             The asymmetry weight (1/variance) in the y-direction.
         """
         self.x = x
@@ -75,12 +75,15 @@ class Asymmetry2D(ABC):
             return "Asymmetry: empty"
 
         result = 'Asymmetry: '
-        if self.x is not None:
-            result += f'x = {self.x * 100:.3f}% +- {self.x_rms * 100:.3f}%'
-        if self.y is not None:
+        if isinstance(self.x, np.ndarray):
+            result += f'{self.x.size} planes.'
+        else:
             if self.x is not None:
-                result += ', '
-            result += f'y = {self.y * 100:.3f}% +- {self.y_rms * 100:.3f}%'
+                result += f'x = {self.x * 100:.3f}% +- {self.x_rms * 100:.3f}%'
+            if self.y is not None:
+                if self.x is not None:
+                    result += ', '
+                result += f'y = {self.y * 100:.3f}% +- {self.y_rms * 100:.3f}%'
         return result
 
     def __repr__(self):

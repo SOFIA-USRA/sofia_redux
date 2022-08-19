@@ -23,7 +23,7 @@ A more general introduction to the data
 reduction procedure and the scientific justification of the algorithms
 is available in the FORCAST Redux User's Manual.
 
-This manual applies to FORCAST Redux version 2.4.0.
+This manual applies to FORCAST Redux version 2.6.0.
 
 Redux Revision History
 ----------------------
@@ -519,4 +519,3 @@ FORCAST Redux pipeline, as defined in the Pipetools-Pipeline ICD.
 
 .. include:: include/forcast_recipe.json
    :literal:
-

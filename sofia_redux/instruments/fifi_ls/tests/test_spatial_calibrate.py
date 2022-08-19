@@ -201,6 +201,10 @@ class TestSpatialCalibrate(FIFITestCase):
             elif ('XS' in ext.header['EXTNAME']
                   or 'YS' in ext.header['EXTNAME']):
                 assert ext.header['BUNIT'] == 'arcsec'
+            elif 'RA' in ext.header['EXTNAME']:
+                assert ext.header['BUNIT'] == 'hourangle'
+            elif 'DEC' in ext.header['EXTNAME']:
+                assert ext.header['BUNIT'] == 'degree'
             else:
                 assert ext.header['BUNIT'] == 'adu/(Hz s)'
 

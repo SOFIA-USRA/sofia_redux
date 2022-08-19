@@ -22,6 +22,9 @@ from sofia_redux.scan.source_models.astro_intensity_map \
     import AstroIntensityMap
 from sofia_redux.scan.source_models.beams.instant_focus import InstantFocus
 from sofia_redux.scan.source_models.sky_dip import SkyDip
+from sofia_redux.scan.source_models.spectral_cube import SpectralCube
+from sofia_redux.scan.custom.fifi_ls.simulation.simulation import \
+    FifiLsSimulation
 
 
 class TestInfo(object):
@@ -153,6 +156,12 @@ class TestInfo(object):
         config.set_option('source.type', 'map')
         assert isinstance(info.get_source_model_instance([]),
                           AstroIntensityMap)
+
+        fifi_sim = FifiLsSimulation()
+        fifi_info = fifi_sim.info
+        fifi_info.configuration.set_option('source.type', 'cube')
+        assert isinstance(fifi_info.get_source_model_instance([]),
+                          SpectralCube)
 
         # set null or unknown types
         config.set_option('source.type', 'null')

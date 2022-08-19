@@ -116,7 +116,7 @@ class StepStdPhotCal(StepParent):
         if 'PRIMARY IMAGE' in imgnames and 'NOISE' in imgnames:
             # for scan products
             flux = self.dataout.imageget('PRIMARY IMAGE')
-            variance = self.dataout.imageget('NOISE')
+            variance = self.dataout.imageget('NOISE') ** 2
             extnames = ['PRIMARY IMAGE', 'NOISE']
         else:
             flux = self.dataout.imageget('STOKES I')

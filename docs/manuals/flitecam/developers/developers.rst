@@ -125,7 +125,7 @@ sofia_redux.calibration
 -----------------------
 
 The `sofia_redux.calibration` module contains flux calibration algorithms
-used by Redux perform photometric or flux calibration calculations on
+used by Redux to perform photometric or flux calibration calculations on
 input images and return their results. The complexity of this package is
 primarily in the organization of the reference data contained in the
 *data* directory. This directory contains a set of calibration data for
@@ -523,4 +523,3 @@ FLITECAM Redux pipeline, as defined in the Pipetools-Pipeline ICD.
 
 .. include:: include/flitecam_recipe.json
    :literal:
-

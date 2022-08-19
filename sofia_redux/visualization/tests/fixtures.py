@@ -25,6 +25,10 @@ __all__ = ['atran_params', 'atran_name', 'atran_hdul', 'atran_file',
            'loaded_eye_with_alt', 'empty_eye_app', 'empty_view', 'open_mock',
            'line_list', 'line_list_flipped', 'line_list_simple',
            'line_list_duplicates', 'line_list_whitespace',
+           'line_flux', 'spectrum_file', 'spectrum_file_units',
+           'spectrum_file_noheader', 'spectrum_file_comma',
+           'spectrum_file_units_paran',
+           'spectrum_file_single', 'spectrum_file_multi',
            'line_list_csv', 'line_list_pipe', 'line_list_empty']
 
 
@@ -648,6 +652,92 @@ def line_list_duplicates():
              '5.529520   [ArVI]',
              '5.618020   [K III]'}
     return lines
+
+
+@pytest.fixture(scope='function')
+def line_flux():
+    lines = {'3.0392023': '10',
+             '3.0916927': '15',
+             '3.2522623': '17.6',
+             '3.2969917': '18',
+             '3.7405565': '19',
+             '4.0522623': '16'}
+    return lines
+
+
+@pytest.fixture(scope='function')
+def spectrum_file(line_flux, tmp_path):
+    filename = 'spectrum.txt'
+    filename = str(tmp_path / filename)
+    with open(filename, 'w') as f:
+        f.write('# Wavelength  Flux\n')
+        for wavelength, flux in line_flux.items():
+            f.write(f'{wavelength:13s}{flux}\n')
+    return filename
+
+
+@pytest.fixture(scope='function')
+def spectrum_file_units(line_flux, tmp_path):
+    filename = 'spectrum_bracket.txt'
+    filename = str(tmp_path / filename)
+    with open(filename, 'w') as f:
+        f.write('# Flux[ergs/s] Wavelength[cm]\n')
+        for wavelength, flux in line_flux.items():
+            f.write(f'{wavelength:13s}{flux}\n')
+    return filename
+
+
+@pytest.fixture(scope='function')
+def spectrum_file_units_paran(line_flux, tmp_path):
+    filename = 'spectrum_paran.txt'
+    filename = str(tmp_path / filename)
+    with open(filename, 'w') as f:
+        f.write(' Wavelength(cm)  Flux(ergs/s)\n')
+        for wavelength, flux in line_flux.items():
+            f.write(f'{wavelength:13s}{flux}\n')
+    return filename
+
+
+@pytest.fixture(scope='function')
+def spectrum_file_noheader(line_flux, tmp_path):
+    filename = 'spectrum.txt'
+    filename = str(tmp_path / filename)
+    with open(filename, 'w') as f:
+        for wavelength, flux in line_flux.items():
+            f.write(f'{wavelength:11s}{flux}\n')
+    return filename
+
+
+@pytest.fixture(scope='function')
+def spectrum_file_comma(line_flux, tmp_path):
+    filename = 'spectrum.txt'
+    filename = str(tmp_path / filename)
+    with open(filename, 'w') as f:
+        f.write('Wavelength, Flux, error\n')
+        for wavelength, flux in line_flux.items():
+            f.write(f'{wavelength:11s} , {flux},{0.1}\n')
+    return filename
+
+
+@pytest.fixture(scope='function')
+def spectrum_file_multi(line_flux, tmp_path):
+    filename = 'spectrum.txt'
+    filename = str(tmp_path / filename)
+    with open(filename, 'w') as f:
+        f.write('Wavelength, Flux, response, error,trans,\n')
+        for wavelength, flux in line_flux.items():
+            f.write(f'{wavelength},{flux},{0.2},{0.1},{7}\n')
+    return filename
+
+
+@pytest.fixture(scope='function')
+def spectrum_file_single(line_flux, tmp_path):
+    filename = 'spectrum.txt'
+    filename = str(tmp_path / filename)
+    with open(filename, 'w') as f:
+        for wavelength, flux in line_flux.items():
+            f.write(f'{wavelength:11s}\n')
+    return filename
 
 
 @pytest.fixture(scope='function')

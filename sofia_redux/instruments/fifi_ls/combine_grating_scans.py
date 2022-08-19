@@ -74,8 +74,12 @@ def combine_extensions(hdul, correct_bias=False):
         # expand x and y values to match data shape
         xes = np.zeros_like(fluxes)
         yes = np.zeros_like(fluxes)
+        ras = np.zeros_like(fluxes)
+        decs = np.zeros_like(fluxes)
         xes[..., :] = hdul['XS_G0'].data[..., :]
         yes[..., :] = hdul['YS_G0'].data[..., :]
+        ras[..., :] = hdul['RA_G0'].data[..., :]
+        decs[..., :] = hdul['DEC_G0'].data[..., :]
 
         exthdr = hdul['FLUX_G0'].header
         mean_bg = [exthdr.get('BGLEVL_A', 0),
@@ -86,6 +90,8 @@ def combine_extensions(hdul, correct_bias=False):
         stddevs = np.zeros_like(lambdas)
         xes = np.zeros_like(lambdas)
         yes = np.zeros_like(lambdas)
+        ras = np.zeros_like(lambdas)
+        decs = np.zeros_like(lambdas)
         mval = np.full((ng, 25), np.nan)
         bgval = np.zeros((ng, 2))
         overlap_min, overlap_max = 0, 0
@@ -114,6 +120,8 @@ def combine_extensions(hdul, correct_bias=False):
             stddevs[widx, :] = stddev
             xes[widx, :] = hdul[name.replace('FLUX', 'XS')].data
             yes[widx, :] = hdul[name.replace('FLUX', 'YS')].data
+            ras[widx, :] = hdul[name.replace('FLUX', 'RA')].data
+            decs[widx, :] = hdul[name.replace('FLUX', 'DEC')].data
 
             # If correcting bias, get the mean value of all overlapping
             # data for this extension
@@ -142,6 +150,8 @@ def combine_extensions(hdul, correct_bias=False):
         stddevs = stddevs[sortidx, static_inds[1]]
         xes = xes[sortidx, static_inds[1]]
         yes = yes[sortidx, static_inds[1]]
+        ras = ras[sortidx, static_inds[1]]
+        decs = decs[sortidx, static_inds[1]]
 
         mean_bg = np.nanmean(bgval, axis=0)
 
@@ -169,6 +179,10 @@ def combine_extensions(hdul, correct_bias=False):
     exthdr['BUNIT'] = 'arcsec'
     result.append(fits.ImageHDU(xes, header=exthdr, name='XS'))
     result.append(fits.ImageHDU(yes, header=exthdr, name='YS'))
+    exthdr['BUNIT'] = 'hourangle'
+    result.append(fits.ImageHDU(ras, header=exthdr, name='RA'))
+    exthdr['BUNIT'] = 'degree'
+    result.append(fits.ImageHDU(decs, header=exthdr, name='DEC'))
     return result
 
 
@@ -194,13 +208,13 @@ def combine_grating_scans(filename, correct_bias=False,
        its associated wavelength value.
     4. Create FITS file and (optionally) write results to disk.
 
-    The output FITS file contains FLUX, STDDEV, LAMBDA, XS, and
-    YS data arrays.  For most data, all arrays have dimension
-    25 x nw, where nw is the combined number of wavelength samples
-    across all input grating scans.
+    The output FITS file contains FLUX, STDDEV, LAMBDA, XS, YS, RA, and DEC
+    data arrays.  For most data, all arrays have dimension 25 x nw, where nw
+    is the combined number of wavelength samples across all input grating
+    scans.
 
     For OTF data, only one grating scan is expected or allowed, so nw
-    is always 16. Output cubes for FLUX, STDDEV, XS, and YS are
+    is always 16. Output cubes for FLUX, STDDEV, XS, YS, RA, and DEC are
     25 x 16 x n_ramp.  The LAMBDA array is 25 x 16.
 
     Parameters

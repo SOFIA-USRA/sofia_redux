@@ -79,6 +79,14 @@ class TestInstrumentInfo(object):
         info.resolution = 10 * units.arcsec
         assert info.get_point_size() == 10 * units.arcsec
 
+    def test_get_spectral_size(self):
+        info = InstrumentInfo()
+        assert np.isnan(info.get_spectral_size())
+        assert info.get_spectral_size().unit == 'um'
+
+    def test_get_spectral_unit(self):
+        assert InstrumentInfo.get_spectral_unit() == 'um'
+
     def test_get_data_unit(self):
         info = InstrumentInfo()
         assert info.get_data_unit() == units.count

@@ -159,6 +159,8 @@ def apply_atran(hdul, atran, cutoff=0.6, skip_corr=False, unsmoothed=None):
     result.append(hdul['LAMBDA'].copy())
     result.append(hdul['XS'].copy())
     result.append(hdul['YS'].copy())
+    result.append(hdul['RA'].copy())
+    result.append(hdul['DEC'].copy())
     exthdr['BUNIT'] = ''
     result.append(fits.ImageHDU(atran_store[0], header=exthdr,
                                 name='ATRAN'))
@@ -191,7 +193,7 @@ def telluric_correct(filename, atran_dir=None, cutoff=0.6, use_wv=False,
            transmission value.
         3. Create FITS file and (optionally) write results to disk.
 
-    The output FITS file contains FLUX, STDDEV, LAMBDA, XS, and YS
+    The output FITS file contains FLUX, STDDEV, LAMBDA, XS, YS, RA, and DEC
     arrays in the same dimensions as the input. Additionally,
     UNCORRECTED_FLUX and UNCORRECTED_STDDEV image extensions are appended,
     containing a copy of the input FLUX and STDDEV arrays. An interpolated

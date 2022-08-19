@@ -9,8 +9,15 @@ for more information.
 For previously processed data, check the PIPEVERS keyword in the FITS
 header to determine the pipeline version used.
 
-HAWC DRP v3.0.0
+HAWC DRP v3.1.0
 ~~~~~~~~~~~~~~~
+*User manual: Rev. K*
+
+- Added a 'grid' parameter for the scan map steps to allow easy spatial
+  regridding without impacting flux conservation.
+
+HAWC DRP v3.0.0 (2022-02-15)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. J*
 
 - Replaced the Java sub-pipeline for reconstructing scanned maps with

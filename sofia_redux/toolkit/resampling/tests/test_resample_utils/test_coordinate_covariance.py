@@ -4,9 +4,11 @@ from sofia_redux.toolkit.resampling.resample_utils import coordinate_covariance
 
 import numpy as np
 
+rand = np.random.RandomState(42)
+
 
 def test_default_coordinate_covariance():
-    coordinates = np.random.random((3, 100))
+    coordinates = rand.random((3, 100))
     covariance = coordinate_covariance(coordinates)
 
     mean = np.mean(coordinates, axis=1)
@@ -17,7 +19,7 @@ def test_default_coordinate_covariance():
 
 
 def test_mask():
-    coordinates = np.random.random((3, 100))
+    coordinates = rand.random((3, 100))
     mask = np.full(100, True)
     mask[50:] = False
     covariance = coordinate_covariance(coordinates, mask=mask)
@@ -30,7 +32,7 @@ def test_mask():
 
 
 def test_mean():
-    coordinates = np.random.random((3, 100))
+    coordinates = rand.random((3, 100))
     mean = np.zeros(3)
     covariance = coordinate_covariance(coordinates, mean=mean)
     expected_covariance = coordinates @ coordinates.T / 99
@@ -38,7 +40,7 @@ def test_mean():
 
 
 def test_dof():
-    coordinates = np.random.random((3, 100))
+    coordinates = rand.random((3, 100))
     covariance = coordinate_covariance(coordinates, dof=10)
     mean = np.mean(coordinates, axis=1)
     dx = coordinates - mean[:, None]

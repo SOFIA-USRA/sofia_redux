@@ -12,7 +12,8 @@ class dummy_class(object):
 
 
 def test_byte_size_of_object():
-    test_float = np.random.random(100).astype(float)
+    rand = np.random.RandomState(42)
+    test_float = rand.random(100).astype(float)
     test_bool = test_float > 0.5
     float_size = byte_size_of_object(test_float)
     bool_size = byte_size_of_object(test_bool)

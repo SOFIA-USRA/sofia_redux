@@ -3644,7 +3644,7 @@ def check_orders_with_counts(orders, counts, mask=None, minimum_points=None,
 
 @njit(nogil=False, cache=True, fastmath=True, parallel=False)
 def apply_mask_to_set_arrays(mask, data, phi, error, weights,
-                             counts=None):  # pragma: no cover
+                             counts):  # pragma: no cover
     """
     Set certain arrays to a fixed size based on a mask array.
 
@@ -3663,21 +3663,15 @@ def apply_mask_to_set_arrays(mask, data, phi, error, weights,
     weights : numpy.ndarray
         An array of shape (1,) or (N,).  If an array of size 1 is supplied,
         it will be expanded to an array of `counts` size.
-    counts : int, optional
-        The number of `True` values in the mask, optionally passed in for
-        speed.  Determines the output size of all arrays.
+    counts : int
+        The number of `True` values in the mask.  Determines the output
+        size of all arrays.
 
     Returns
     -------
     data_out, phi_out, error_out, weight_out : 4-tuple of numpy.ndarray.
        Resized arrays in which the last axis is of size `counts`.
     """
-
-    if counts is None:
-        counts = 0
-        for i in range(mask.size):
-            counts += mask[i]
-
     n_terms, n_data = phi.shape
     phi_out = np.empty((n_terms, int(counts)), dtype=nb.float64)
     data_out = np.empty(counts, dtype=nb.float64)
@@ -5556,7 +5550,7 @@ def solve_fit(window_coordinates, window_phi, window_values, window_error,
     window_values, window_phi, window_error, window_distance_weights = \
         apply_mask_to_set_arrays(window_mask, window_values, window_phi,
                                  window_error, window_distance_weights,
-                                 counts=counts)
+                                 counts)
 
     # If the order varies, and the suggested order is set to zero in all
     # dimensions, a mean fit should be performed.

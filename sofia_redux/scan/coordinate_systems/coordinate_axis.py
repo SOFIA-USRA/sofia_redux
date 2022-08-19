@@ -2,6 +2,7 @@
 
 from abc import ABC
 from astropy import units
+from copy import deepcopy
 
 __all__ = ['CoordinateAxis']
 
@@ -35,6 +36,42 @@ class CoordinateAxis(ABC):
         if isinstance(unit, str):
             unit = units.Unit(unit)
         self.unit = unit
+
+    def copy(self):
+        """
+        Return a copy of the CoordinateAxis.
+
+        Returns
+        -------
+        CoordinateAxis
+        """
+        return deepcopy(self)
+
+    def __eq__(self, other):
+        """
+        Check if this axis is equal to another.
+
+        Parameters
+        ----------
+        other : CoordinateAxis
+
+        Returns
+        -------
+        equal : bool
+        """
+        if self.__class__ != other.__class__:
+            return False
+        if self.reverse is not other.reverse:
+            return False
+        if self.reverse_from != other.reverse_from:
+            return False
+        if self.label != other.label:
+            return False
+        if self.short_label != other.short_label:
+            return False
+        if self.unit != other.unit:
+            return False
+        return True
 
     def __str__(self):
         """

@@ -1634,10 +1634,27 @@ Configuration Glossary
 
          - *scans*: process scans in parallel.
          - *ops*: process each scan with parallel threads where possible.
-         - *hybrid*: process as many scans in parallel as possible, each with an
-           optimal number of threads.
+         - *hybrid*: process as many scans in parallel as possible, each with
+           an optimal number of threads.
 
        The default mode is 'hybrid'.
+
+   * - .. _parallel.scans:
+
+       **parallel.scans**
+     - | [parallel]
+       | scans=<True,False>
+     - Perform the reduction tasks for all scans in parallel.  This is not
+       recommended when dealing with large data sets due to memory pressure.
+
+   * - .. _parallel.source:
+
+       **parallel.source**
+     - | [parallel]
+       | source=<True,False>
+     - Update the scan source models in parallel if True.  This is recommended
+       when dealing with large sets of data due to better memory management
+       procedures.
 
    * - .. _pcenter:
 
@@ -2439,7 +2456,7 @@ Configuration Glossary
        modeling steps until these flags are cleared again in the reduction.
        See `correlated.<modality>.gainrange`_.
 
-   * - .. _source.couplingg.s2n:
+   * - .. _source.coupling.s2n:
 
        **source.coupling.s2n**
      - | [source]
@@ -2448,6 +2465,16 @@ Configuration Glossary
      - Set the acceptable range of S/N required in the map for using the
        position for estimating detector coupling gains when the
        `source.coupling`_ option is enabled.
+
+   * - .. _source.delete_scan:
+
+       **source.delete_scan**
+     - | [source]
+       | delete_scan=<True,False>
+     - If True, and updating the source in parallel is also True (see
+       `parallel.source`_, delete the individual scan source model once all
+       required processing has been performed.  This is recommended when
+       dealing with large sets of data to reduce memory pressure.
 
    * - .. _source.despike:
 

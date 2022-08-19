@@ -7,10 +7,12 @@ import numpy as np
 import os
 import shutil
 
+rand = np.random.RandomState(42)
+
 
 def test_pickle_object(tmpdir):
     test_file = str(tmpdir.mkdir('pickling_tests').join('pickle_object.p'))
-    data = np.random.random(100)
+    data = rand.random(100)
     assert pickle_object(data, None) is data
     out_file = pickle_object(data, test_file)
     assert out_file == test_file
@@ -19,7 +21,7 @@ def test_pickle_object(tmpdir):
 
 def test_unpickle_file(tmpdir):
     test_file = str(tmpdir.mkdir('pickling_tests').join('unpickle_file.p'))
-    data = np.random.random(50)
+    data = rand.random(50)
     out_file = pickle_object(data, test_file)
 
     result, filename = unpickle_file(None)

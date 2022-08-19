@@ -7,8 +7,9 @@ from sofia_redux.toolkit.resampling.resample_utils import fit_phi_variance
 def test_fit_phi_variance():
     # This tests the algorithm performs as expected.  Note that it is roughly
     # 1000 times faster than the standard numpy equivalent.
-    phi = np.random.random(10)
-    cov = np.random.random((10, 10))
+    rand = np.random.RandomState(42)
+    phi = rand.random(10)
+    cov = rand.random((10, 10))
     pcpt = phi @ cov @ phi.T
 
     v = fit_phi_variance(phi, cov)

@@ -7,6 +7,8 @@ from sofia_redux.toolkit.resampling.grid.base_grid import BaseGrid
 import numpy as np
 import pytest
 
+rand = np.random.RandomState(1)
+
 
 @pytest.fixture
 def test_resampler():
@@ -48,8 +50,8 @@ def test_get_grid_class(test_resampler):
 def test_check_input_arrays():
     n_features = 3
     n_samples = 100
-    coordinates = tuple(x for x in np.random.random((n_features, n_samples)))
-    data = np.random.random(n_samples)
+    coordinates = tuple(x for x in rand.random((n_features, n_samples)))
+    data = rand.random(n_samples)
     c, d, e, m = ResampleBase._check_input_arrays(coordinates, data)
     assert c.shape == (n_features, n_samples)
     assert d.size == n_samples
@@ -144,7 +146,7 @@ def test_set_sample_tree():
 
 
 def test_scale_to_window():
-    rand = np.random.RandomState(1)
+    rand.seed(1)
     coordinates = rand.random((2, 101))
     data = np.ones(coordinates.shape[1])
     r = ResampleBase(coordinates, data)

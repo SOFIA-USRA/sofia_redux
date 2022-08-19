@@ -25,6 +25,20 @@ def test_init():
     assert c.axes[1].label == 'y'
 
 
+def test_eq(c2d):
+    c1 = c2d
+    assert c1 == c1
+    assert c1 != None
+    c2 = CoordinateSystem(name='3D coordinates', dimensions=3)
+    assert c1 != c2
+    c0 = CoordinateSystem()
+    assert c0 == c0
+    c2 = CoordinateSystem(name='2D reverse', dimensions=2)
+    c2['y'].label = 'x-axis'
+    c2['x'].label = 'y-axis'
+    assert c1 != c2
+
+
 def test_len(c2d):
     assert len(CoordinateSystem()) == 0
     assert len(c2d) == 2

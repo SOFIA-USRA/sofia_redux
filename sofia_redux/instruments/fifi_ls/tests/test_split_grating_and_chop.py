@@ -493,15 +493,13 @@ class TestSplitGratingAndChop(FIFITestCase):
         header['OTFSTART'] -= 10
         result = u._derive_positions(hdul.copy(), params)
         scanpos = result['SCANPOS'].data
-        assert 'Bad OTF keywords: ' \
-               'calculated scan start' in capsys.readouterr().err
+        assert 'calculated scan start' in capsys.readouterr().err
         assert scanpos['FLAG'].sum() == nsamp
 
         header['TRK_DRTN'] += 10
         result = u._derive_positions(hdul.copy(), params)
         scanpos = result['SCANPOS'].data
-        assert 'Bad OTF keywords: ' \
-               'calculated scan end' in capsys.readouterr().err
+        assert 'calculated scan end' in capsys.readouterr().err
         assert scanpos['FLAG'].sum() == nsamp
 
         # change time keys to discard some data

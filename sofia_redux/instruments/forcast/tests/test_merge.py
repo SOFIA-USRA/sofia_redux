@@ -94,6 +94,28 @@ class TestMerge(object):
         assert header['CROTA2'] == 0
         assert header['PRODTYPE'] == 'MERGED'
 
+    def test_merge_full_skip_rotation(self):
+        dripconfig.load()
+        dripconfig.configuration['border'] = 0
+        test = npc_testdata()
+        data = test['data'].copy()
+        header = test['header'].copy()
+        setpar('cormerge', 'CENTROID')
+        header['CORMERGE'] = 'CENTROID'
+        header['SLIT'] = 'NONE'
+        header['SKY_ANGL'] = 45.0
+        variance = np.full_like(data, 2.0)
+        normmap = np.array([])
+        d, v = merge(data, header, variance=variance, normmap=normmap,
+                     rotation_order=1, skip_rotation=True)
+
+        assert np.isnan(d).any()
+        assert np.nanmax(d) > 0
+        assert d.shape == normmap.shape
+        assert np.allclose(np.nanmax(normmap), 4, atol=0.1)
+        assert np.allclose(np.nanmin(v), 0.5)
+        assert 'Image rotation of 135.00 degrees' in repr(header)
+
     def test_merge_wcs(self):
         dripconfig.load()
         dripconfig.configuration['border'] = 0

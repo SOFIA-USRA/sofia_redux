@@ -55,14 +55,19 @@ platform independent, but has been tested only on Linux and Mac OS X
 operating systems.  Running the pipeline requires a minimum of 16GB RAM,
 or equivalent-sized swap file.
 
-The pipeline is comprised of four modules within the `sofia_redux` package:
-`sofia_redux.instruments.fifi_ls`, `sofia_redux.pipeline`,
-`sofia_redux.spectroscopy`, and `sofia_redux.toolkit`.
+The pipeline is primarily comprised of four modules within the `sofia_redux`
+package: `sofia_redux.instruments.fifi_ls`, `sofia_redux.pipeline`,
+`sofia_redux.spectroscopy`, and `sofia_redux.toolkit`. Additional optional
+features are provided by the `sofia_redux.calibration` and `sofia_redux.scan`
+modules.
 
 The `fifi_ls` module provides the data processing
 algorithms, with supporting libraries from the `toolkit` and `spectroscopy`
 modules.  The `pipeline` module provides interactive and batch interfaces
-to the pipeline algorithms.
+to the pipeline algorithms.  The `calibration` module is used to provide
+interactive photometry routines in the interactive interface.  The `scan`
+module provides support for additional processing tasks specific to on-the-fly
+mapping modes.
 
 External Requirements
 ~~~~~~~~~~~~~~~~~~~~~
@@ -89,7 +94,7 @@ Source Code Installation
 
 The source code for the FIFI-LS pipeline maintained by the SOFIA Data
 Processing Systems (DPS) team can be obtained directly from the
-DPS, or from the external `GitHub repository <https://github.com/SOFIA-USRA/sofia_redux>`.
+DPS, or from the external `GitHub repository <https://github.com/SOFIA-USRA/sofia_redux>`__.
 This repository contains all needed configuration
 files, auxiliary files, and Python code to run the pipeline on FIFI-LS
 data in any observation mode.
@@ -445,7 +450,24 @@ Some key parameters to note are listed below.
          flux data will be ignored.  This option is primarily for faster
          testing and/or quicklook, when the full data product is not required.
 
+   - Scan resampling parameters
+
+      -  *Use scan reduction before resample*: If set, an iterative scan
+         reduction will be performed to attempt to remove residual correlated
+         gain and noise before resampling.
+
+      -  *Save intermediate scan product*: If set, the scan product will be
+         saved to disk as a FITS file, for diagnostic purposes.
+
+      -  *Scan options*: Parameters to pass to the scan reduction.
+         Enter as key=value pairs, space-separated.
+
    - Spatial resampling parameters
+
+      -  *Create map in detector coordinates*: If set, data are combined in
+         arsecond offsets from the base position, rather than in sky coordinates.
+         If not set, detector coordinates are used for nonsidereal targets and
+         sky coordinates otherwise.
 
       -  *Spatial oversample*: This parameter controls the resolution of the output
          spatial grid, with reference to the assumed FWHM at the observed wavelength.
@@ -511,6 +533,9 @@ Some key parameters to note are listed below.
          fewer pixels.
 
 -  **Make Spectral Map**
+
+   -  *Skip making the preview image*: If set, no preview image (PNG file)
+      will be produced.
 
    -  *Extension to map*: Extension name to display in the output image.
       This is typically 'FLUX' in the first extension, but for some

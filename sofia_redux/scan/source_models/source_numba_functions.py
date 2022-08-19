@@ -10,7 +10,8 @@ nb.config.THREADING_LAYER = 'threadsafe'
 __all__ = ['calculate_coupling_increment', 'get_sample_points',
            'blank_sample_values', 'flag_out_of_range_coupling',
            'sync_map_samples', 'get_delta_sync_parms', 'flag_outside',
-           'validate_pixel_indices', 'add_skydip_frames']
+           'validate_pixel_indices', 'add_skydip_frames',
+           'get_source_signal']
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
@@ -444,6 +445,123 @@ def sync_map_samples(frame_data, frame_valid, frame_gains, channel_indices,
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def get_source_signal(frame_data, frame_valid, frame_gains,
+                      frame_weights, channel_flags, channel_variance,
+                      map_values, map_valid, map_indices, sync_gains
+                      ):  # pragma: no cover
+    """
+    Remove map source gains from frame data and flag samples.
+
+    For a given sample at frame i and channel j, frame data d_{i,j} will be
+    decremented by dg where::
+
+        dg = fg * ( (gain(source) * map[index]) - (gain(sync) * base[index]) )
+
+    Here, fg is the frame gain and index is the index on the map of sample
+    (i,j).
+
+    Any masked map value will result in matching samples being flagged.
+
+    Parameters
+    ----------
+    frame_data : numpy.ndarray (float)
+        The frame data of shape (n_frames, all_channels).  Data will be updated
+        in-place.
+    frame_valid : numpy.ndarray (bool)
+        A boolean mask of shape (n_frames,) where `False` excludes a frame from
+        all processing.
+    frame_gains : numpy.ndarray (float)
+        An array of frame gains of shape (n_frames,).
+    frame_weights : numpy.ndarray (float)
+        The frame weights of shape (n_frames,).
+    channel_flags : numpy.ndarray (int)
+        The channel flags of shape (n_channels,).  Any nonzero value will
+    channel_variance : numpy.ndarray (int)
+        The channel variance of shape (n_channels,).
+    map_values : numpy.ndarray (float)
+        The current map supplied as a regular grid of arbitrary shape and
+        dimensions (image_shape,).
+    map_valid : numpy.ndarray (bool)
+        A boolean mask of shape (image_shape,) where `False` excludes a map
+        element from synchronization.
+    map_indices : numpy.ndarray (int)
+        The sample map indices of shape (n_dimensions, n_frames, all_channels)
+        where dimensions are ordered in (x,y) FITS format.  These contain map
+        (pixel) indices for each sample.  For pixel maps, all pixels will
+        have zero position values, so the array should be of shape
+        (n_dimensions, n_frames, 1) in this case.
+    sync_gains : numpy.ndarray (float)
+        The prior channel source gains of shape (all_channels,).
+
+    Returns
+    -------
+    source_signal, source_error : numpy.ndarray, numpy.ndarray
+    """
+    map_shape = np.asarray(map_values.shape)
+    _, _, row_col_steps = spline_utils.flat_index_mapping(map_shape)
+
+    fits_shape = map_shape[::-1]
+
+    # Convert from (row, col) to (col, row) for FITS type data indexing
+    steps = row_col_steps[::-1]
+    n_dimensions = steps.size
+
+    flat_map_values = map_values.flat
+    flat_map_valid = map_valid.flat
+    n_frames = frame_data.shape[0]
+    n_channels = channel_variance.size
+
+    is_pixel_map = map_indices.shape[2] == 1 and n_channels > 1
+
+    source_signal = np.full(frame_data.shape, np.nan)
+    source_error = np.zeros(frame_data.shape)
+
+    for frame in range(n_frames):
+        if not frame_valid[frame]:
+            continue
+
+        frame_gain = frame_gains[frame]
+        if frame_gain <= 0:
+            continue
+
+        frame_weight = frame_weights[frame]
+
+        for channel in range(n_channels):
+            if channel_flags[channel] != 0:
+                continue
+
+            if is_pixel_map:
+                map_index = map_indices[:, frame, 0]
+            else:
+                map_index = map_indices[:, frame, channel]
+            flat_index = 0
+            for dimension in range(n_dimensions):
+                index = map_index[dimension]
+                if index < 0 or index >= fits_shape[dimension]:
+                    flat_index = -1
+                    break
+                flat_index += steps[dimension] * index
+            if flat_index < 0:
+                continue  # Invalid index
+
+            if not flat_map_valid[flat_index]:
+                continue
+
+            sample_gain = sync_gains[channel] * frame_gain
+            var = channel_variance[channel]
+            if var > 0:
+                wt = sample_gain * sample_gain * frame_weight / var
+                if wt > 0:
+                    source_error[frame, channel] = np.sqrt(1.0 / wt)
+
+            map_value = flat_map_values[flat_index]
+            increment = map_value * sample_gain
+            source_signal[frame, channel] = increment
+
+    return source_signal, source_error
+
+
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def get_delta_sync_parms(channel_source_gains, channel_indices, channel_flags,
                          channel_variance, frame_weight, frame_source_gains,
                          frame_valid, frame_flags, source_flag, n_points
@@ -587,6 +705,48 @@ def flag_outside(sample_coordinates, valid_frames, channel_indices,
         valid_frames[frame_index] = valid
 
 
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def flag_z_outside(z, min_z, max_z, valid_frames, channel_indices,
+                   sample_flags, skip_flag):  # pragma: no cover
+    """
+    Flag samples outside of the allowed mapping range.
+
+    Frames with no channels inside the allowable range will be flagged
+    as invalid.
+
+    Parameters
+    ----------
+    z : numpy.ndarray (float)
+        An array of shape (n_channels,) containing the z coordinates of each
+        channel.
+    min_z : float
+        The minimum allowable z-value.
+    max_z : float
+        The maximum allowable z-value.
+    valid_frames : numpy.ndarray (bool)
+        A boolean mask of shape (n_frames,).  Frames flagged as `False` will
+        not be included in any calculations.
+    channel_indices : numpy.ndarray (int)
+        The indices mapping n_channels onto all_channels.
+    sample_flags : numpy.ndarray (int)
+        The sample flags to update.  An array of shape
+        (n_frames, all_channels).
+    skip_flag : int
+        The integer flag to mark a sample as SKIP (outside mapping range).
+
+    Returns
+    -------
+    None
+    """
+    n = sample_flags.shape[0]
+    for i, channel_index in enumerate(channel_indices):
+        if z[i] < min_z or z[i] > max_z:
+            for frame_index in range(n):
+                if not valid_frames[frame_index]:
+                    continue
+                sample_flags[frame_index, channel_index] |= skip_flag
+
+
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
 def validate_pixel_indices(indices, x_size, y_size, valid_frame=None
                            ):  # pragma: no cover
@@ -637,6 +797,72 @@ def validate_pixel_indices(indices, x_size, y_size, valid_frame=None
                     bad_samples += 1
                 continue
             if not (0 <= py < y_size):
+                indices[:, frame_index, i] = -1
+                if frame_is_valid:
+                    bad_samples += 1
+                continue
+
+    return bad_samples
+
+
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
+def validate_voxel_indices(indices, x_size, y_size, z_size, valid_frame=None
+                           ):  # pragma: no cover
+    """
+    Set pixel indices outside of the map range to (0, 0).
+
+    Parameters
+    ----------
+    indices : numpy.ndarray (int)
+        Pixel indices of shape (3, n_frames, n_channels) containing the
+        (x, y, z) pixel indices.  Any invalid sample (frame, channel) will be
+        updated to (-1, -1, -1) in-place.
+    x_size : int
+        The size of the map in x.
+    y_size : int
+        The size of the map in y.
+    z_size : int
+        The size of the map in z.
+    valid_frame : numpy.ndarray (bool), optional
+        An optional flag mask where `False` excludes the given frame from the
+        bad sample count (return value).
+
+    Returns
+    -------
+    bad_samples : int
+        The number of pixels that fall outside the range of the map extent.
+    """
+    bad_samples = 0
+    n_dimensions, n_frames, n_channels = indices.shape
+
+    if valid_frame is None:
+        check_valid = False
+        valid = np.empty(0, dtype=nb.b1)
+    else:
+        check_valid = True
+        valid = valid_frame
+
+    for frame_index in range(n_frames):
+        if check_valid:
+            frame_is_valid = valid[frame_index]
+        else:
+            frame_is_valid = True
+
+        for i in range(n_channels):  # the channel indices
+            px = indices[0, frame_index, i]
+            py = indices[1, frame_index, i]
+            pz = indices[2, frame_index, i]
+            if not (0 <= px < x_size):
+                indices[:, frame_index, i] = -1
+                if frame_is_valid:
+                    bad_samples += 1
+                continue
+            if not (0 <= py < y_size):
+                indices[:, frame_index, i] = -1
+                if frame_is_valid:
+                    bad_samples += 1
+                continue
+            if not (0 <= pz < z_size):
                 indices[:, frame_index, i] = -1
                 if frame_is_valid:
                     bad_samples += 1

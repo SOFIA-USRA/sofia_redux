@@ -20,10 +20,10 @@ class TestTelluricCorrect(FIFITestCase):
         assert result[0].header['PRODTYPE'] == 'telluric_corrected'
         bunit = ['adu/(Hz s)', 'adu/(Hz s)',
                  'adu/(Hz s)', 'adu/(Hz s)', 'um',
-                 'arcsec', 'arcsec', '', '']
+                 'arcsec', 'arcsec', 'hourangle', 'degree', '', '']
         exts = ['FLUX', 'STDDEV',
                 'UNCORRECTED_FLUX', 'UNCORRECTED_STDDEV',
-                'LAMBDA', 'XS', 'YS', 'ATRAN', 'UNSMOOTHED_ATRAN']
+                'LAMBDA', 'XS', 'YS', 'RA', 'DEC', 'ATRAN', 'UNSMOOTHED_ATRAN']
         for i, extname in enumerate(exts):
             assert extname in result
             assert result[extname].header['BUNIT'] == bunit[i]
@@ -56,7 +56,7 @@ class TestTelluricCorrect(FIFITestCase):
 
         # output does not have uncorrected extensions; should
         # have everything else
-        for extname in ['FLUX', 'STDDEV', 'LAMBDA', 'XS', 'YS',
+        for extname in ['FLUX', 'STDDEV', 'LAMBDA', 'XS', 'YS', 'RA', 'DEC',
                         'ATRAN', 'UNSMOOTHED_ATRAN']:
             assert extname in result
         for extname in ['UNCORRECTED_FLUX', 'UNCORRECTED_STDDEV']:

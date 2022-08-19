@@ -1,7 +1,9 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from astropy import units
+from astropy.io import fits
 from copy import deepcopy
+import gc
 import json
 import numpy as np
 import os
@@ -47,7 +49,6 @@ class Reduction(ReductionVersion):
         super().__init__()
         self.scans = []
         self.pipeline = None
-        self.queue = []
         self.max_jobs = 1
         self.max_cores = 1
         self.available_reduction_jobs = 1
@@ -393,7 +394,18 @@ class Reduction(ReductionVersion):
 
     @classmethod
     def return_scan_from_read_arguments(cls, filename, channels):
+        """
+        Create a scan given a FITS file and instrument channels.
 
+        Parameters
+        ----------
+        filename : str
+        channels : sofia_redux.scan.channels.channels.Channels
+
+        Returns
+        -------
+        scan : sofia_redux.scan.scan.Scan
+        """
         if isinstance(channels, str):
             channels, _ = multiprocessing.unpickle_file(channels)
 
@@ -1238,9 +1250,17 @@ class Reduction(ReductionVersion):
             raise ValueError("No rounds specified in configuration.")
 
         for iteration in range(1, self.rounds + 1):
-            log.info(f"Round {iteration}:")
+            log.info(f"Round {iteration}/{self.rounds}:")
             self.set_iteration(iteration, rounds=self.rounds)
             self.iterate()
+
+        if self.configuration.get_bool('source') and self.solve_source():
+            final_smooth = self.configuration.get_string('smooth.final')
+            if final_smooth is not None:
+                self.source.set_smoothing(
+                    self.source.get_smoothing(final_smooth))
+                self.source.smooth()
+                self.source.add_process_brief('(smooth) ')
 
         self.write_products()
         self.reduce_end_time = time.time()
@@ -1257,6 +1277,12 @@ class Reduction(ReductionVersion):
             if None not in [self.reduce_end_time, self.read_start_time]:
                 dt = self.reduce_end_time - self.read_start_time
                 log.debug(f"Total reduction time = {dt:.3f} seconds.")
+
+        if self.pipeline.pickle_directory is not None:
+            if os.path.isdir(self.pipeline.pickle_directory):
+                log.debug(f'Removing temporary pickle directory: '
+                          f'{self.pipeline.pickle_directory}')
+                shutil.rmtree(self.pipeline.pickle_directory)
 
     def reduce_sub_reductions(self):
         """
@@ -1357,8 +1383,13 @@ class Reduction(ReductionVersion):
         if len(tasks) == 0:
             return
 
-        self.queue = [scan for scan in self.scans]
         if self.solve_source() and 'source' in tasks:
+            if self.configuration.get_bool('source.delete_scan'):
+                if self.scans is not None:
+                    for scan in self.scans:
+                        del scan.source_model
+                        scan.source_model = None
+                gc.collect()
             self.source.renew()
 
         self.iterate_pipeline(tasks)
@@ -1390,22 +1421,6 @@ class Reduction(ReductionVersion):
         self.pipeline.set_ordering(tasks)
         self.pipeline.iterate()
 
-    def checkout(self, integration):
-        """
-        Remove an integration from the queue.
-
-        Parameters
-        ----------
-        integration : Integration
-
-        Returns
-        -------
-        None
-        """
-        if self.queue is not None:
-            if integration in self.queue:
-                self.queue.remove(integration)
-
     def solve_source(self):
         """
         Return whether to solve for the source.
@@ -1428,8 +1443,7 @@ class Reduction(ReductionVersion):
         """
         for scan in self.scans:
             for integration in scan.integrations:
-                if integration not in self.queue:
-                    self.summarize_integration(integration)
+                self.summarize_integration(integration)
 
     @staticmethod
     def summarize_integration(integration):
@@ -1592,6 +1606,19 @@ class Reduction(ReductionVersion):
             reduction_files = [self.reduction_files]
         else:
             reduction_files = self.reduction_files
+
+        filename_str = []
+        for i, filename in enumerate(reduction_files):
+            if isinstance(filename, fits.HDUList):
+                test_file = filename.filename()
+                if test_file is None:
+                    filename = filename[0].header.get(
+                        'FILENAME', f'scan_{i + 1}.fits')
+                else:
+                    filename = test_file
+            filename_str.append(filename)
+        reduction_files = filename_str
+
         n_files = len(reduction_files)
 
         info = [
@@ -1658,6 +1685,8 @@ class Reduction(ReductionVersion):
         ----------
         filenames : str or list (str)
             The file or files to reduce.
+        kwargs : dict, optional
+            Optional configuration options to pass into the reduction.
 
         Returns
         -------
@@ -1666,6 +1695,7 @@ class Reduction(ReductionVersion):
         """
         self.add_user_configuration(**kwargs)
         self.info.perform_reduction(self, filenames)
+        self.terminate_reduction()
 
         if self.sub_reductions is not None:
             hduls = [sub_reduction.source.hdul for sub_reduction in
@@ -1679,3 +1709,13 @@ class Reduction(ReductionVersion):
             return self.source.hdul
         else:
             return None
+
+    def terminate_reduction(self):
+        """
+        Safely stop all relevant processes following a full reduction.
+
+        Returns
+        -------
+        None
+        """
+        pass

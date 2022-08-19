@@ -311,6 +311,29 @@ class CorrelatedSignal(Signal):
         # Calculate the point-source_filtering by decorrelation.
         self.calc_filtering()
 
+    def get_frame_data_signal(self):
+        """
+        Get the signal as it would appear translated to the frame data.
+
+        Returns
+        -------
+        frame_data_signal : numpy.ndarray (float)
+            The signal contribution to the frame data of shape
+            (n_frames, n_channels).
+        """
+        channel_group = self.mode.channel_group
+        frames = self.integration.frames
+        resolution = self.mode.get_frame_resolution(self.integration)
+        frame_data_signal = snf.get_frame_data_signal(
+            frame_data=frames.data,
+            signal_values=self.value,
+            resolution=resolution,
+            gains=self.mode.get_gains(),
+            channel_indices=channel_group.indices,
+            frame_valid=frames.valid)
+
+        return frame_data_signal
+
     def get_ml_correlated(self, channel_group, modeling_frames=None):
         """
         Get the maximum-likelihood correlated gain increment and weight.

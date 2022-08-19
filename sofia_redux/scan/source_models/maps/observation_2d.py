@@ -711,7 +711,7 @@ class Observation2D(Map2D):
         self.set_weight_image(smoothed_weight)
         self.set_exposure_image(smoothed_exposure)
         self.add_smoothing(
-            Gaussian2D.get_equivalent(beam_map, self.grid.resolution))
+            self.default_beam().get_equivalent(beam_map, self.grid.resolution))
 
     def fast_smooth(self, beam_map, steps, reference_index=None, weights=None):
         """
@@ -753,7 +753,7 @@ class Observation2D(Map2D):
         self.set_weight_image(smoothed_weight)
         self.set_exposure_image(smoothed_exposure)
         self.add_smoothing(
-            Gaussian2D.get_equivalent(beam_map, self.grid.resolution))
+            self.default_beam().get_equivalent(beam_map, self.grid.resolution))
 
     def filter_correct(self, underlying_fwhm, reference=None, valid=None):
         """

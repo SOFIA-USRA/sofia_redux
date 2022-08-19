@@ -82,6 +82,17 @@ class InstrumentInfo(InfoBase):
         """
         return units.Unit('arcsec')
 
+    @staticmethod
+    def get_spectral_unit():
+        """
+        Return the size unit of the instrument.
+
+        Returns
+        -------
+        units.Unit
+        """
+        return units.Unit('um')
+
     def get_source_size(self):
         """
         Return the size of the source for the instrument.
@@ -128,6 +139,16 @@ class InstrumentInfo(InfoBase):
         units.Quantity
         """
         return self.resolution
+
+    def get_spectral_size(self):
+        """
+        Return the instrument spectral point size.
+
+        Returns
+        -------
+        units.Quantity
+        """
+        return np.nan * self.get_spectral_unit()
 
     def get_data_unit(self):
         """

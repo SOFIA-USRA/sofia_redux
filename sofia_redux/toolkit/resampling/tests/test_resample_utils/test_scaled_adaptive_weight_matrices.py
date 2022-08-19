@@ -28,9 +28,10 @@ def test_rchi2_scaling_and_shape():
 
 
 def test_fixed_dimensions():
+    rand = np.random.RandomState(42)
     sigma = np.full(3, 0.5)
     fixed = np.array([True, True, False])
-    rchi2 = np.random.random((2, 100))
+    rchi2 = rand.random((2, 100))
 
     # Just check we get different results
     standard_result = scaled_adaptive_weight_matrices(sigma, rchi2)

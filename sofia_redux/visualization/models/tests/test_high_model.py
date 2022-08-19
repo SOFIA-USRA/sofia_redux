@@ -141,6 +141,24 @@ class TestGrism(object):
 
         assert out is result
 
+    @pytest.mark.parametrize('filename,result',
+                             [('csv', True), ('dat', True), ('fits', False)])
+    def test_general_only(self, grism_hdul, filename, result):
+        model = high_model.Grism(grism_hdul)
+        model.filename = f'grism_CAL_100.{filename}'
+        out = model._general_only()
+
+        assert out is result
+
+    @pytest.mark.parametrize('instrument,result',
+                             [('General', True), ('FORCAST', False)])
+    def test_general_only_2(self, grism_hdul, instrument, result):
+        model = high_model.Grism(grism_hdul)
+        model.filename = 'grism_CAL_100.fits'
+        model.hdul[0].header['instrume'] = f'{instrument}'
+        out = model._general_only()
+        assert out is result
+
     def test_load_order(self, grism_hdul):
         model = high_model.Grism(grism_hdul)
         model.orders = list()

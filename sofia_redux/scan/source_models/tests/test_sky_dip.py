@@ -79,6 +79,13 @@ def test_copy(basic_source):
     assert source3.reduction is source.reduction
 
 
+def test_clear_all_memory(data_source):
+    source = data_source.copy()
+    source.clear_all_memory()
+    assert source.data is None
+    assert source.weight is None
+
+
 def test_logging_id(basic_source):
     assert basic_source.logging_id == 'skydip'
 

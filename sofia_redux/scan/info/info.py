@@ -21,6 +21,7 @@ from sofia_redux.scan.info.observation import ObservationInfo
 from sofia_redux.scan.info.telescope import TelescopeInfo
 from sofia_redux.scan.source_models.astro_intensity_map import \
     AstroIntensityMap
+from sofia_redux.scan.source_models.spectral_cube import SpectralCube
 from sofia_redux.scan.source_models.sky_dip import SkyDip
 
 __all__ = ['Info']
@@ -461,11 +462,12 @@ class Info(ABC):
         source_type = self.configuration.get_string('source.type')
         if source_type is None:
             return None
-
         if source_type == 'skydip':
             return SkyDip(info=self, reduction=reduction)
         elif source_type == 'map':
             return AstroIntensityMap(info=self, reduction=reduction)
+        elif source_type == 'cube':
+            return SpectralCube(info=self, reduction=reduction)
         elif source_type == 'null':
             return None
         else:

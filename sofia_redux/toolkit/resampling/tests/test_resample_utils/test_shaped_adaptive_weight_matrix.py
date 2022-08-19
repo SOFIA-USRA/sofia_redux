@@ -19,7 +19,8 @@ def test_bad_values():
     assert np.allclose(np.diag(a), 0.5 / sigma ** 2)
 
     # Bad gradient values result in a spheroid, appropriately scaled.
-    g_mscp = np.random.random((3, 3))
+    rand = np.random.RandomState(0)
+    g_mscp = rand.random((3, 3))
     g_mscp[0, 1] = np.nan
     rchi2 = 4
     a_inv = shaped_adaptive_weight_matrix(sigma, rchi2, g_mscp)

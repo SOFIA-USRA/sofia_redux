@@ -439,6 +439,8 @@ be optionally saved by selecting the 'save' parameter.
    -  *Pinhole locations*: The default pinhole mask table is automatically
       loaded. Set to a valid text file path to override it.
 
+   -  *Skip distortion*: This option allows one to skip distortion correction.
+
    -  *Extrapolate solution*: If not set, edges of the image beyond known
       pinhole inputs will be set to NaN.
 
@@ -449,6 +451,9 @@ be optionally saved by selecting the 'save' parameter.
       centroiding algorithm. If the centroiding algorithm fails, header
       data will be used instead. The default for science data is not to
       shift-and-add ('No shift').
+
+   -  *Skip rotation*: If set, the sky angle rotation correction is not
+      applied to both the image and the WCS coordinate system.
 
 -  **Register Images**
 

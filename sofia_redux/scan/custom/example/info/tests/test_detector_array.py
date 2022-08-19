@@ -4,6 +4,8 @@ from astropy import units
 import numpy as np
 
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
+    EquatorialCoordinates
 from sofia_redux.scan.custom.example.info.detector_array import \
     ExampleDetectorArrayInfo
 
@@ -40,3 +42,11 @@ def test_initialize_channel_data(populated_scan):
     assert np.allclose(data.col, index % 11)
     assert np.allclose(data.row, index // 11)
     assert isinstance(data.position, Coordinate2D)
+
+
+def test_equatorial_to_detector_coordinates():
+    info = ExampleDetectorArrayInfo()
+    equatorial = EquatorialCoordinates([1, 2])
+    coordinates = info.equatorial_to_detector_coordinates(equatorial)
+    assert coordinates.x == -1 * units.Unit('degree')
+    assert coordinates.y == 2 * units.Unit('degree')

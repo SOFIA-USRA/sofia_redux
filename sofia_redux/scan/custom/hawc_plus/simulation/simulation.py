@@ -1249,9 +1249,8 @@ class HawcPlusSimulation(ABC):
         -------
         None
         """
-        if header_options is not None:
-            if 'DATE-OBS' in header_options:
-                timestamp = header_options['DATE-OBS']
+        if header_options is not None and 'DATE-OBS' in header_options:
+            timestamp = header_options['DATE-OBS']
 
         self.start_utc = DateRange.to_time(timestamp)
         self.info.astrometry.set_mjd(self.start_utc.mjd)

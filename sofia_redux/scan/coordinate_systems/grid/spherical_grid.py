@@ -51,6 +51,32 @@ class SphericalGrid(Grid2D):
             SphericalCoordinates.get_default_system()[0])
 
     @property
+    def reference(self):
+        """
+        Return the reference value for the spherical grid.
+
+        Returns
+        -------
+        SphericalCoordinates
+        """
+        return super().reference
+
+    @reference.setter
+    def reference(self, value):
+        """
+        Return the reference value for the spherical grid.
+
+        Parameters
+        ----------
+        value : SphericalCoordinates
+
+        Returns
+        -------
+        None
+        """
+        self.set_reference(value)
+
+    @property
     def fits_x_unit(self):
         """
         Return the unit for the FITS x-axis.

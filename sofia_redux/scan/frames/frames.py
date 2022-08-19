@@ -355,29 +355,18 @@ class Frames(FlaggedData):
                 setattr(self, key, np.empty(shape, dtype=float) * value)
 
             elif isinstance(value, tuple):
-                # only handle coordinate2D tuples
+                # only handle coordinate tuples
                 if (inspect.isclass(value[0])
-                        and issubclass(value[0], Coordinate2D)):
+                        and issubclass(value[0], Coordinate)):
                     coordinate_class, fill_value = value[0], value[1]
-                    coordinate_shape = (2,) + shape
-
-                    if isinstance(fill_value, units.Quantity):
-                        unit = fill_value.unit
-                        fill_values = np.full(
-                            coordinate_shape, fill_value.value) * unit
-                    elif isinstance(fill_value, units.UnitBase):
-                        unit = fill_value
-                        fill_values = np.empty(
-                            coordinate_shape, dtype=float) * unit
-                    elif isinstance(fill_value, str):
-                        unit = units.Unit(fill_value)
-                        fill_values = np.empty(
-                            coordinate_shape, dtype=float) * unit
+                    base = coordinate_class()
+                    base.set_shape(shape)
+                    if isinstance(fill_value, (units.UnitBase, str)):
+                        base.change_unit(fill_value)
                     else:
-                        fill_values = np.full(coordinate_shape, fill_value)
+                        base.fill(fill_value)
 
-                    setattr(self, key,
-                            coordinate_class(fill_values, copy=False))
+                    setattr(self, key, base)
             else:
                 setattr(self, key, np.full(shape, value))
 

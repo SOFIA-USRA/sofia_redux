@@ -16,6 +16,8 @@ def test_fix_instrument_name():
     assert fix_instrument_name(None) == ''
     assert fix_instrument_name('HAWC+') == 'hawc_plus'
     assert fix_instrument_name(' AbCdEfG ') == 'abcdefg'
+    assert fix_instrument_name('FIFI-LS') == 'fifi_ls'
+    assert fix_instrument_name('FIFILS') == 'fifi_ls'
 
 
 def test_get_instrument_module_path():

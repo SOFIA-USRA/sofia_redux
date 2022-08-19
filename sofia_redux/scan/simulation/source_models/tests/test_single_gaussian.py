@@ -20,6 +20,13 @@ def test_init():
     assert source.model.x_fwhm == 10 * arcsec
 
 
+def test_copy():
+    source = SingleGaussian(fwhm=10 * arcsec)
+    source2 = source.copy()
+    assert isinstance(source2, SingleGaussian) and source2 is not source
+    assert source2.model.x_fwhm == 10 * arcsec
+
+
 def test_initialize_model():
     source = SingleGaussian(fwhm=1 * arcsec)
     assert source.model.amplitude == 1

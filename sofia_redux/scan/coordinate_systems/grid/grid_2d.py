@@ -7,6 +7,7 @@ import re
 
 from sofia_redux.scan.coordinate_systems.grid.grid import Grid
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.coordinate_2d1 import Coordinate2D1
 from sofia_redux.scan.coordinate_systems.horizontal_coordinates import \
     HorizontalCoordinates
 from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
@@ -51,6 +52,43 @@ class Grid2D(Grid):
         Grid2D
         """
         return super().copy()
+
+    def __eq__(self, other):
+        """
+        Check if this grid is equal to another.
+
+        Parameters
+        ----------
+        other : Grid2D
+
+        Returns
+        -------
+        equal : bool
+        """
+        if self is other:
+            return True
+        if not super().__eq__(other):
+            return False
+        if self.projection != other.projection:
+            return False
+        if self.reference_index != other.reference_index:
+            return False
+        # The uncovered statements are covered, but not picked up by coverage
+        if self.m is not None:
+            if other.m is None:  # pragma: no cover
+                return False
+            if not np.allclose(self.m, other.m):
+                return False
+        elif other.m is not None:  # pragma: no cover
+            return False
+        if self.i is not None:
+            if other.i is None:  # pragma: no cover
+                return False
+            if not np.allclose(self.i, other.i):
+                return False
+        elif other.i is not None:  # pragma: no cover
+            return False
+        return True
 
     def get_dimensions(self):
         """
@@ -203,33 +241,6 @@ class Grid2D(Grid):
         """
         return self.y_axis.unit
 
-    def __eq__(self, other):
-        """
-        Check if this grid is equal to another.
-
-        Parameters
-        ----------
-        other : Grid2D
-
-        Returns
-        -------
-        equal : bool
-        """
-        if other is self:
-            return True
-        elif not isinstance(other, Grid2D):
-            return False
-
-        if self.projection != other.projection:
-            return False
-        elif self.reference_index != other.reference_index:
-            return False
-        elif not np.allclose(self.m, other.m):
-            return False
-        elif not np.allclose(self.i, other.i):
-            return False
-        return True
-
     def __str__(self):
         """
         Return a string representation of the grid.
@@ -303,6 +314,17 @@ class Grid2D(Grid):
         None or units.Unit
         """
         return None
+
+    @classmethod
+    def get_default_coordinate_instance(cls):
+        """
+        Return a coordinate for the dimensions of the grid.
+
+        Returns
+        -------
+        Coordinate2D
+        """
+        return Coordinate2D()
 
     @classmethod
     def from_header(cls, header, alt=''):
@@ -777,14 +799,27 @@ class Grid2D(Grid):
             self.m[0, 0] *= -1
             self.m[1, 1] *= -1
 
-        one = Coordinate2D([1.0, 1.0])  # FITS origin is at (1, 1)
-        self.reference_index.parse_header(
+        reference_index = self.reference_index
+
+        if isinstance(reference_index, Coordinate2D1):
+            one = Coordinate2D1([1.0, 1.0, 1.0])  # FITS origin is at (1, 1)
+        else:
+            one = Coordinate2D([1.0, 1.0])
+
+        reference_index.parse_header(
             header, key_stem='CRPIX', alt='', default=one)
-        self.reference_index.subtract(one)
+        reference_index.subtract(one)
+        self.reference_index = reference_index
 
         reference = self.get_coordinate_instance_for(c_type)
-        reference.parse_header(header, key_stem='CRVAL', alt=alt,
-                               default=Coordinate2D([0.0, 0.0]))
+        if isinstance(reference, Coordinate2D1):
+            reference.xy_coordinates.parse_header(
+                header, key_stem='CRVAL', alt=alt,
+                default=Coordinate2D([0.0, 0.0]))
+
+        else:
+            reference.parse_header(header, key_stem='CRVAL', alt=alt,
+                                   default=Coordinate2D([0.0, 0.0]))
         self.set_reference(reference)
         self.calculate_inverse_transform()
 
@@ -876,7 +911,7 @@ class Grid2D(Grid):
         # Convert to offsets
         grid_indices = self.projection.project(
             coordinates, projected=grid_indices)
-        self.offset_to_index(grid_indices, in_place=True)
+        grid_indices = self.offset_to_index(grid_indices, in_place=True)
         return grid_indices
 
     def offset_to_index(self, offset, in_place=False):
@@ -912,7 +947,7 @@ class Grid2D(Grid):
             coordinates = coordinates.value
 
         i00, i01, i10, i11 = im.ravel()
-        rx, ry = self.reference_index.coordinates
+        rx, ry = self.reference_index.x, self.reference_index.y
         ix = (i00 * coordinates[0]) + (i01 * coordinates[1]) + rx
         iy = (i10 * coordinates[0]) + (i11 * coordinates[1]) + ry
 

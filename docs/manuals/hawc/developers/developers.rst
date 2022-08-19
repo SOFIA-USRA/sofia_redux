@@ -23,7 +23,7 @@ general introduction to the data reduction procedure and the scientific
 justification of the algorithms is available in the HAWC+ DRP Users
 Manual.
 
-This manual applies to HAWC+ DRP version 3.0.0.
+This manual applies to HAWC+ DRP version 3.1.0.
 
 HAWC DRP Revision History
 -------------------------

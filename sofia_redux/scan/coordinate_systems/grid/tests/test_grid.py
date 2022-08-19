@@ -69,6 +69,18 @@ def test_copy():
     assert g.copy_test is not g2.copy_test
 
 
+def test_eq():
+    g = GridCheck()
+    g2 = g.copy()
+    assert g == g2
+    g2.variant = 1
+    assert g != g2
+    g2.variant = g.variant
+    g2.coordinate_system = np.arange(2)
+    assert g != g2
+    assert g != 1
+
+
 def test_coordinate_system():
     g = GridCheck()
     assert g.coordinate_system.name == 'Default Coordinate System'
@@ -115,6 +127,11 @@ def test_set_coordinate_system():
     assert 'does not equal the grid dimensions' in str(err.value)
     g.set_coordinate_system(CoordinateSystem(name='FOO', dimensions=2))
     assert g.coordinate_system.name == 'FOO'
+
+
+def test_get_default_coordinate_instance():
+    assert isinstance(GridCheck().get_default_coordinate_instance(),
+                      Coordinate2D)
 
 
 def test_get_fits_id():

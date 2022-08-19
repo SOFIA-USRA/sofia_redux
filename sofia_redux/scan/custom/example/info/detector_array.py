@@ -75,3 +75,18 @@ class ExampleDetectorArrayInfo(InfoBase):
         data.channel_id = np.array(
             [f'{x[0]},{x[1]}' for x in zip(data.row, data.col)])
         data.calculate_sibs_position()
+
+    def equatorial_to_detector_coordinates(self, equatorial):
+        """
+        Convert equatorial coordinates to detector coordinates.
+
+        Parameters
+        ----------
+        equatorial : EquatorialCoordinates
+
+        Returns
+        -------
+        detector_coordinates : Coordinate2D
+        """
+        return Coordinate2D(equatorial)
+

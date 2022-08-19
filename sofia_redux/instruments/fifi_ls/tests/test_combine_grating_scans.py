@@ -34,6 +34,8 @@ class TestCombineGratingScans(FIFITestCase):
         assert result2['LAMBDA'].header['BUNIT'] == 'um'
         assert result2['XS'].header['BUNIT'] == 'arcsec'
         assert result2['YS'].header['BUNIT'] == 'arcsec'
+        assert result2['RA'].header['BUNIT'] == 'hourangle'
+        assert result2['DEC'].header['BUNIT'] == 'degree'
 
     def test_write(self, tmpdir):
         files = get_flf_files()
@@ -186,12 +188,14 @@ class TestCombineGratingScans(FIFITestCase):
         hdul[0].header['NGRATING'] = 1
         result = combine_grating_scans(hdul, write=False, outdir=None)
         assert isinstance(result, fits.HDUList)
-        assert len(result) == 6
+        assert len(result) == 8
 
         # check shapes of output extensions
         assert result['FLUX'].shape == (nramp, 16, 25)
         assert result['STDDEV'].shape == (nramp, 16, 25)
         assert result['LAMBDA'].shape == (16, 25)
-        # XS and YS are expanded to match flux shape
+        # XS, YS, RA, DEC are expanded to match flux shape
         assert result['XS'].shape == (nramp, 16, 25)
         assert result['YS'].shape == (nramp, 16, 25)
+        assert result['RA'].shape == (nramp, 16, 25)
+        assert result['DEC'].shape == (nramp, 16, 25)

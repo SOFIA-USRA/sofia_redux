@@ -10,6 +10,8 @@ from sofia_redux.toolkit.resampling.tree.base_tree import BaseTree
 from sofia_redux.toolkit.resampling.resample_polynomial import \
     ResamplePolynomial
 
+rand = np.random.RandomState(0)
+
 
 @pytest.fixture
 def tuple_2d_coordinates():
@@ -23,7 +25,6 @@ def tuple_3d_coordinates():
 
 @pytest.fixture
 def irregular_2d_coordinates():
-    rand = np.random.RandomState(0)
     return rand.random((2, 10)) * 10
 
 
@@ -141,7 +142,7 @@ def test_reshape_data():
     assert "Incompatible data dimensions" in str(err.value)
 
     # Test irregular grid
-    grid = BaseGrid((np.random.random((2, 10))))
+    grid = BaseGrid((rand.random((2, 10))))
     result = grid.reshape_data(np.arange(10))
     assert np.allclose(result, np.arange(10))
 
@@ -200,7 +201,6 @@ def test_rescale():
 
 
 def test_set_indexer():
-    rand = np.random.RandomState(0)
     coords = rand.random((2, 100)) * 10
     grid = BaseGrid(coords)
     grid.set_indexer(shape=None, build_tree=False, build_type='hood')

@@ -691,3 +691,86 @@ class TestScanMap(DRPTestCase):
 
         # return to starting directory
         os.chdir(cwd)
+
+    def test_grid(self, tmpdir, capsys, test_options):
+        """Test grid option."""
+
+        # use real data if available for a better flux check
+        data_path = os.path.join(os.path.dirname(hawc.__file__),
+                                 'tests', 'data', 'uranusD.fits')
+        if not os.path.isfile(data_path):
+            # make some data to test
+            nf = 20
+            rtol = 0.6
+            hdul = scan_raw_data(nframe=nf)
+            ffile = str(tmpdir.join('test.fits'))
+            hdul.writeto(ffile, overwrite=True)
+            hdul.close()
+        else:
+            rtol = 0.1
+            ffile = os.path.join(tmpdir, 'uranusD.fits')
+            shutil.copyfile(data_path, ffile)
+
+        df = DataFits(ffile)
+        inp = [df]
+
+        with tmpdir.as_cwd():
+            step = StepScanMap()
+
+            # run with no grid specified: uses default for band D (3.4")
+            out = step(inp, options=test_options)
+            capt = capsys.readouterr()
+            assert 'Grid Spacing: 3.4 x 3.4 arcsec' in capt.out
+            assert np.isclose(out[0].header['CDELT1'], -3.4 / 3600)
+            assert np.isclose(out[0].header['CDELT2'], 3.4 / 3600)
+            flux = np.nansum(out[0].image)
+            shape = out[0].image.shape
+
+            # run with bad grid specified: still uses default
+            out = step(inp, grid='bad', options=test_options)
+            capt = capsys.readouterr()
+            assert 'Grid Spacing: 3.4 x 3.4 arcsec' in capt.out
+            assert np.isclose(out[0].header['CDELT1'], -3.4 / 3600)
+            assert np.isclose(out[0].header['CDELT2'], 3.4 / 3600)
+            assert np.isclose(np.nansum(out[0].image), flux)
+            assert np.allclose(out[0].image.shape, shape)
+
+            # specify grid: output scale is different but total flux
+            # is the same
+            out = step(inp, grid=6.8, options=test_options)
+            capt = capsys.readouterr()
+            assert 'Grid Spacing: 6.8 x 6.8 arcsec' in capt.out
+            assert np.isclose(out[0].header['CDELT1'], -6.8 / 3600)
+            assert np.isclose(out[0].header['CDELT2'], 6.8 / 3600)
+            assert np.isclose(np.nansum(out[0].image), flux, rtol=rtol)
+            assert np.allclose(out[0].image.shape,
+                               [shape[0] / 2, shape[1] / 2], atol=1)
+
+        # make some scanpol data to test
+        angle = [5.0, 50.0, 27.0, 72.0]
+        inp = []
+        nf = 20
+        for i in range(4):
+            hdul = scan_raw_data(nframe=nf)
+            hdul[2].data['hwpCounts'] = angle[i] * 4
+            ffile = str(tmpdir.join(f'test{i}.fits'))
+            hdul.writeto(ffile, overwrite=True)
+            hdul.close()
+            inp.append(DataFits(ffile))
+
+        with tmpdir.as_cwd():
+            step = StepScanMapPol()
+
+            # run with no grid: uses default
+            out = step(inp, options=test_options)
+            capt = capsys.readouterr()
+            assert 'Grid Spacing: 3.4 x 3.4 arcsec' in capt.out
+            assert np.isclose(out[0].header['CDELT1'], -3.4 / 3600)
+            assert np.isclose(out[0].header['CDELT2'], 3.4 / 3600)
+
+            # specify grid
+            out = step(inp, grid=6.8, options=test_options)
+            capt = capsys.readouterr()
+            assert 'Grid Spacing: 6.8 x 6.8 arcsec' in capt.out
+            assert np.isclose(out[0].header['CDELT1'], -6.8 / 3600)
+            assert np.isclose(out[0].header['CDELT2'], 6.8 / 3600)

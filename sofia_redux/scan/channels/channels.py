@@ -5,6 +5,8 @@ from astropy import log, units
 from copy import deepcopy
 import numpy as np
 
+from sofia_redux.scan.coordinate_systems.coordinate import Coordinate
+from sofia_redux.scan.coordinate_systems.coordinate_2d1 import Coordinate2D1
 from sofia_redux.scan.utilities import utils
 from sofia_redux.scan.utilities.range import Range
 from sofia_redux.scan.channels.channel_group.channel_group import ChannelGroup
@@ -115,9 +117,16 @@ class Channels(ABC):
         new.groups = None
         new.divisions = None
         new.modalities = None
-        if (np.isfinite(self.overlap_point_size)
-                and self.overlap_point_size > 0):
-            new.overlap_point_size = np.nan
+        if not isinstance(self.overlap_point_size,
+                          (Coordinate, Coordinate2D1)):
+            if (np.isfinite(self.overlap_point_size)
+                    and self.overlap_point_size > 0):
+                new.overlap_point_size = np.nan
+                new.calculate_overlaps(self.overlap_point_size)
+        elif (self.overlap_point_size.is_finite() and
+              not self.overlap_point_size.is_null()):  # pragma: no cover
+            # For later development
+            new.overlap_point_size = self.overlap_point_size.__class__()
             new.calculate_overlaps(self.overlap_point_size)
 
         if self.is_initialized:

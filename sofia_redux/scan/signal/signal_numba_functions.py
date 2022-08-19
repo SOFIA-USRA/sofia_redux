@@ -313,6 +313,60 @@ def resync_gains(frame_data, signal_values, resolution, delta_gains,
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def get_frame_data_signal(frame_data, signal_values, resolution, gains,
+                          channel_indices, frame_valid):  # pragma: no cover
+    """
+    Returns the signal as it would appear in the frame data.
+
+    The frame data signal is given by:
+
+        frame_data_signal = signal[frame_index//resolution] * channel_gain
+
+    Parameters
+    ----------
+    frame_data : numpy.ndarray (float)
+        The frame data values of shape (n_frames, all_channels).  The frame
+        data values will be updated in-place.
+    signal_values : numpy.ndarray (float)
+        The signal values of shape (n_signal,).
+    resolution : int
+        The signal resolution.
+    gains : numpy.ndarray (float)
+        The channel gain deltas of shape (n_channels,).
+    channel_indices : numpy.ndarray (int)
+        An array mapping n_channels onto all channels of shape
+        (n_channels,).
+    frame_valid : numpy.ndarray (bool)
+        A boolean mask of shape (n_frames,) where `False` excludes a frame
+        from all calculations and updates.
+
+    Returns
+    -------
+    frame_data_signal : numpy.ndarray (float)
+    """
+    n_frames = frame_data.shape[0]
+    result = np.zeros(frame_data.shape, dtype=nb.float64)
+    if resolution < 1:
+        resolution = 1
+    n_signal = numba_functions.roundup_ratio(n_frames, resolution)
+    for signal_index in range(n_signal):
+        start_frame = signal_index * resolution
+        end_frame = start_frame + resolution
+        c = signal_values[signal_index]
+        if c == 0:
+            continue
+        for frame in range(start_frame, end_frame):
+            if not frame_valid[frame]:
+                continue
+            for i, channel in enumerate(channel_indices):
+                g = gains[i]
+                if g == 0:
+                    continue
+                result[frame, channel] = g * c
+    return result
+
+
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def apply_gain_increments(frame_data, frame_weight, frame_valid,
                           modeling_frames, frame_dependents, channel_g,
                           channel_fwg2, channel_indices, channel_dependents,

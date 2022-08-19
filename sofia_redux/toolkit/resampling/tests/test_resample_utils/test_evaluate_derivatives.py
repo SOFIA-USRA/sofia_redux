@@ -6,13 +6,15 @@ from sofia_redux.toolkit.resampling.resample_utils import (
 
 import numpy as np
 
+rand = np.random.RandomState(42)
+
 
 def test_evaluate_derivatives():
     exponents = polynomial_exponents([1, 2])
     derivative_map = polynomial_derivative_map(exponents)
 
-    c = np.random.random(exponents.size)  # coefficients
-    points = np.random.random((2, 100))
+    c = rand.random(exponents.size)  # coefficients
+    points = rand.random((2, 100))
     phi_points = polynomial_terms(points, exponents)
 
     derivatives = evaluate_derivatives(c, phi_points, derivative_map)
@@ -30,8 +32,8 @@ def test_evaluate_derivatives():
 def test_evaluate_derivatives_1d():
     exponents = polynomial_exponents(2)
     derivative_map = polynomial_derivative_map(exponents)
-    c = np.random.random(exponents.size)  # coefficients
-    points = np.random.random(100)[None]
+    c = rand.random(exponents.size)  # coefficients
+    points = rand.random(100)[None]
     phi_point = polynomial_terms(points, exponents)
 
     # Equation is z = c_0 + c_1.x + c_2.x^2

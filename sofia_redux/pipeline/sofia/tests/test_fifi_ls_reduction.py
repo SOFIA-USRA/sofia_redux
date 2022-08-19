@@ -630,7 +630,7 @@ class TestFIFILSReduction(object):
         red.input[0][0].header['G_WAVE_R'] = 118.6
         red.step()
         capt = capsys.readouterr()
-        assert 'Plotting at 118.600 um, near reference ' \
+        assert 'Plotting at 118.608 um, near reference ' \
                'wavelength at 118.6 um' in capt.out
         assert 'Saved image' in capt.out
         assert os.path.isfile(outfile)
@@ -645,7 +645,7 @@ class TestFIFILSReduction(object):
         red.input[0][0].header['G_WAVE_B'] = 118.6
         red.step()
         capt = capsys.readouterr()
-        assert 'Plotting at 118.600 um, near reference ' \
+        assert 'Plotting at 118.608 um, near reference ' \
                'wavelength at 118.6 um' in capt.out
         assert 'Saved image' in capt.out
 
@@ -692,7 +692,7 @@ class TestFIFILSReduction(object):
         param.set_value('slice_method', 'peak')
         red.step()
         capt = capsys.readouterr()
-        assert 'Plotting at S/N peak 118' in capt.out
+        assert 'Plotting at S/N peak' in capt.out
         assert 'Saved image' in capt.out
         shutil.copyfile(outfile, tmpdir.join('tmp3.png'))
         # image should be same as in failed line method

@@ -34,6 +34,29 @@ class CoordinateSystem(ABC):
                 self.add_axis(
                     CoordinateAxis(label=self.dimension_name(dimension)))
 
+    def __eq__(self, other):
+        """
+        Check if this coordinate system is equal to another.
+
+        Parameters
+        ----------
+        other : CoordinateSystem
+
+        Returns
+        -------
+        equal : bool
+        """
+        if self.__class__ != other.__class__:
+            return False
+        if self.size != other.size:
+            return False
+        if self.size == 0:
+            return True
+        for axis1, axis2 in zip(self.axes, other.axes):
+            if axis1 != axis2:
+                return False
+        return True
+
     def __len__(self):
         """
         Return the number of axes in the coordinate system.

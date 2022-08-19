@@ -1747,7 +1747,7 @@ def safe_sidereal_time(t, kind, longitude=None, model=None):
     kind : str
         May be one of {'mean', 'apparent'} i.e., accounting for precession
         only, or also for nutation.
-    longitude : units.Quantity or float, optional
+    longitude : units.Quantity or float or numpy.ndarray, optional
         The longitude on the Earth at which to compute the Earth rotation
         angle.  If a float is provided, it should be in degrees.
     model : str, optional

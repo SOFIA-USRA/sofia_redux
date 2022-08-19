@@ -7,12 +7,13 @@ import numpy as np
 
 
 def test_half_max_sigmoid():
+    rand = np.random.RandomState(42)
 
     # Test default is sigmoid
     x = np.linspace(-10, 10, 100)
     assert np.allclose(sigmoid(x), half_max_sigmoid(x))
 
-    x_half, c, q, b, v = np.random.random(5)
+    x_half, c, q, b, v = rand.random(5)
 
     result = half_max_sigmoid(
         x_half, x_half=x_half, a=0, k=1, c=c, q=q, b=b, v=v)

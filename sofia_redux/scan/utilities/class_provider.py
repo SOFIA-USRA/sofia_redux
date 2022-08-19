@@ -44,6 +44,8 @@ def fix_instrument_name(name):
     name = name.lower().strip()
     if name == 'hawc+':
         return 'hawc_plus'
+    elif name == 'fifi-ls' or name == 'fifils':
+        return 'fifi_ls'
     return name
 
 
@@ -396,6 +398,8 @@ def get_grid_class(name):
         [s[0].upper() + s[1:] for s in name.split('_')])
     if re.match(r'\dd', class_name[-2:]):
         class_name = class_name[:-1] + class_name[-1].upper()
+    elif class_name.endswith('2d1'):
+        class_name = class_name[:-3] + '2D1'
 
     module = importlib.import_module(module_path)  # Allow errors
     grid_class = getattr(module, class_name)

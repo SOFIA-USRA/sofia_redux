@@ -16,7 +16,7 @@ Observer’s Handbook, available from the
 `Proposing and Observing <https://www.sofia.usra.edu/science/proposing-and-observing>`__
 page on the SOFIA website.
 
-This handbook applies to FORCAST Redux version 2.4.0.
+This handbook applies to FORCAST Redux version 2.6.0.
 
 
 .. include:: ../users/data_description.rst

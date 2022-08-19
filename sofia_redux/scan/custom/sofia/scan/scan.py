@@ -211,7 +211,10 @@ class SofiaScan(Scan):
         -------
         None
         """
-        self.hdul = fits.open(filename)
+        if isinstance(filename, fits.HDUList):
+            self.hdul = filename
+        else:
+            self.hdul = fits.open(filename)
         self.read_hdul(self.hdul, read_fully=read_fully)
         self.close_fits()
 

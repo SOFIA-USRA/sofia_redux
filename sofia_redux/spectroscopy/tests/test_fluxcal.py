@@ -241,6 +241,38 @@ def test_optimize_atran():
             assert len(spec['all_corrected']) == 5
 
 
+@pytest.mark.parametrize('value,match', [(1., 1), (-1., 3), (0., 2)])
+def test_optimize_atran_with_shift(value, match):
+    spectra, atran = spectral_data()
+    atran_list = []
+    for i in range(5):
+        # add a peak to correct out, at a different position
+        # in each atran
+        atran_copy = atran.copy()
+        atran_copy[1, 7 - i] *= 2.0
+        atran_list.append(atran_copy)
+
+    for order in spectra:
+        for spec in spectra[order]:
+            spec['wave_shift'] = value
+
+    # run fluxcal with a specified wave shift, matching
+    # a file near the middle
+    result = fluxcal(spectra, atran_list, auto_shift=False,
+                     model_order=3)
+
+    # the specified file should match best
+    for order in result:
+        for spec in result[order]:
+            assert spec['atran_index'] == match
+
+            # check that additional diagnostic info is added
+            assert 'fit_chisq' in spec
+            assert 'fit_rchisq' in spec
+            assert 'all_corrected' in spec
+            assert len(spec['all_corrected']) == 5
+
+
 def test_response():
     spectra, atran = spectral_data()
 

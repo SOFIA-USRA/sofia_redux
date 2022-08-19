@@ -2,8 +2,14 @@
 
 from abc import ABC
 from astropy import log
-
+import gc
+from multiprocessing import Process
 import numpy as np
+import os
+import cloudpickle
+import shutil
+import tempfile
+
 from sofia_redux.toolkit.utilities import multiprocessing
 
 __all__ = ['Pipeline']
@@ -30,6 +36,8 @@ class Pipeline(ABC):
         self.scan_source = None
         self.current_task = None
         self.last_task = None
+        self.pickle_directory = None
+        self.add_source_queue = None
 
     @property
     def parallel_scans(self):
@@ -180,6 +188,8 @@ class Pipeline(ABC):
         self.reduction.source.add_model(self.scan_source, weight=scan.weight)
 
         self.scan_source.post_process_scan(scan)
+        if self.configuration.get_bool('source.delete_scan'):
+            scan.source_model = None
 
     def iterate(self):
         """
@@ -192,7 +202,11 @@ class Pipeline(ABC):
         n_scans = len(self.scans)
         args = self.scans, self.ordering, self.parallel_tasks
         kwargs = None
-        scan_jobs = int(np.clip(n_scans, 1, self.parallel_scans))
+
+        if self.configuration.get_bool('parallel.scans'):
+            scan_jobs = int(np.clip(n_scans, 1, self.parallel_scans))
+        else:
+            scan_jobs = 1
 
         # max_bytes set to None in order to disable memory mapping
         # Memory mapping does not allow numba to modify arrays in-place.
@@ -201,13 +215,147 @@ class Pipeline(ABC):
             jobs=scan_jobs, max_nbytes=None, force_threading=True,
             logger=log)
 
-        for scan in self.scans:
-            if 'source' in self.ordering and scan.configuration.get_bool(
-                    'source'):
+        gc.collect()
+
+        if self.configuration.get_bool('parallel.source'):
+            if ('source' in self.ordering and
+                    self.configuration.get_bool('source')):
+                self.update_source_parallel_scans()
+        else:
+            self.update_source_serial_scans()
+
+    def update_source_serial_scans(self):
+        """
+        Update the source using serial processing.
+
+        Returns
+        -------
+        None
+        """
+        for i, scan in enumerate(self.scans):
+            if ('source' in self.ordering and
+                    scan.configuration.get_bool('source')):
                 self.update_source(scan)
 
+    def update_source_parallel_scans(self):
+        """
+        Update the source in parallel.
+
+        Returns
+        -------
+        None
+        """
+        renewed_source = self.scan_source.copy()
+        renewed_source.renew()
+        renewed_source.reduction = None
+        renewed_source.scans = None
+        renewed_source.hdul = None
+        renewed_source.info = None
+        temp_directory = tempfile.mkdtemp('_sofscan_update_source_pipeline')
+
+        n_scans = len(self.scans)
+        scan_jobs = int(np.clip(n_scans, 1, self.parallel_scans))
+        delete = self.configuration.get_bool('source.delete_scan')
+
+        for i in range(scan_jobs):
+            source_file = os.path.join(temp_directory, f'renewed_source_{i}.p')
+            with open(source_file, 'wb') as f:
+                cloudpickle.dump(renewed_source, f)
+        del renewed_source
+
+        update_files = multiprocessing.multitask(
+            self.do_process, range(n_scans),
+            (self.scans, temp_directory, scan_jobs, delete), None,
+            jobs=scan_jobs, max_nbytes=None, force_threading=True, logger=log)
+
+        for i, filename in enumerate(update_files):
+            with open(filename, 'rb') as f:
+                source = cloudpickle.load(f)
+                self.reduction.source.add_model(
+                    source, weight=self.scans[i].weight)
+            del source
+            os.remove(filename)
+
+        gc.collect()
+
+        for i in range(scan_jobs):
+            source_file = os.path.join(temp_directory, f'renewed_source_{i}.p')
+            if os.path.isfile(source_file):
+                os.remove(source_file)
+
+        shutil.rmtree(temp_directory)
+
+    @classmethod
+    def do_process(cls, args, block):
+        """
+        Multiprocessing safe implementation for source processing of scans.
+
+        Parameters
+        ----------
+        args : 4-tuple
+            args[0] = scans (list (Scan))
+            args[1] = temporary directory name (str)
+            args[2] = number of parallel jobs (int)
+            args[3] = Whether to clear certain data from the scan (bool)
+        block : int
+            The index of the scan to process.
+
+        Returns
+        -------
+        scan_pickle_file : str
+            The filename pointing to the processed scan saved as a pickle file.
+        """
+        scans, temp_directory, scan_jobs, delete = args
+        scan = scans[block]
+
+        source_file = os.path.join(
+            temp_directory, f'renewed_source_{block % scan_jobs}.p')
+
+        with open(source_file, 'rb') as f:
+            source = cloudpickle.load(f)
+
+        source.set_info(scan.info)
+        source.scans = [scan]
+
+        for integration in scan.integrations:
+            if integration.has_option('jackknife'):
+                sign = '+' if integration.gain > 0 else '-'
+                integration.comments.append(sign)
+            elif integration.gain < 0:
+                integration.comments.append('-')
+            source.add_integration(integration)
+            del integration
+
+        if scan.get_source_generation() > 0:
+            source.enable_level = False
+
+        source.process_scan(scan)
+
+        # Now need to save for later
+        update_file = os.path.join(temp_directory, f'source_update_{block}.p')
+        source.info = None
+        source.reduction = None
+        source.scans = None
+        with open(update_file, 'wb') as f:
+            cloudpickle.dump(source, f)
+        source.set_info(scan.info)
+        source.scans = [scan]
+
+        source.process_scan(scan)
+        source.post_process_scan(scan)
+
+        if delete:
+            scan.source_model = None
             for integration in scan.integrations:
-                self.reduction.checkout(integration)
+                integration.frames.map_index = None
+
+        # Remove all references
+        scan.info.set_parent(scan)
+        source.info = None
+        source.scans = None
+        del source
+        del scan
+        return update_file
 
     @classmethod
     def perform_tasks_for_scans(cls, args, block):

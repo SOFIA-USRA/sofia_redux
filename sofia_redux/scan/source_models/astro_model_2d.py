@@ -9,6 +9,8 @@ import os
 import psutil
 
 from sofia_redux.toolkit.utilities import multiprocessing
+from sofia_redux.scan.coordinate_systems.coordinate import Coordinate
+from sofia_redux.scan.coordinate_systems.coordinate_2d1 import Coordinate2D1
 from sofia_redux.scan.source_models.source_model import SourceModel
 from sofia_redux.scan.utilities import numba_functions
 from sofia_redux.scan.utilities.utils import round_values
@@ -28,6 +30,7 @@ from sofia_redux.scan.coordinate_systems.index_2d import Index2D
 from sofia_redux.scan.coordinate_systems.projector.astro_projector import \
     AstroProjector
 from sofia_redux.scan.coordinate_systems.epoch.epoch import J2000
+from sofia_redux.scan.coordinate_systems.grid.grid_2d1 import Grid2D1
 
 
 __all__ = ['AstroModel2D']
@@ -37,6 +40,7 @@ class AstroModel2D(SourceModel):
 
     DEFAULT_PNG_SIZE = 300
     MAX_X_OR_Y_SIZE = 5000
+    DEFAULT_GRID_CLASS = SphericalGrid
 
     def __init__(self, info, reduction=None):
         """
@@ -54,16 +58,32 @@ class AstroModel2D(SourceModel):
             The reduction for which this source model should be applied.
         """
         super().__init__(info=info, reduction=reduction)
-        self.grid = SphericalGrid()
+        self.grid = None
         self.smoothing = 0.0 * units.Unit('arcsec')
         self.allow_indexing = True
         self.index_shift_x = 0
         self.index_mask_y = 0
+        self.create_grid()
+
+    def create_grid(self):
+        """
+        Create the grid instance for the astronomical model.
+
+        Returns
+        -------
+        None
+        """
+        self.grid = self.DEFAULT_GRID_CLASS()
         if self.has_option('grid'):
-            resolution = self.configuration.get_float(
-                'grid') * self.info.instrument.get_size_unit()
+            resolution = self.configuration.get_float('grid')
+            resolution = resolution * self.info.instrument.get_size_unit()
         else:
-            resolution = 0.2 * self.info.instrument.resolution
+            resolution = self.info.instrument.resolution
+            if isinstance(resolution, (Coordinate, Coordinate2D1)):
+                resolution = resolution.copy()
+                resolution.scale(0.2)
+            else:
+                resolution *= 0.2
 
         self.grid.set_resolution(resolution)
 
@@ -82,6 +102,18 @@ class AstroModel2D(SourceModel):
         AstroModel2D
         """
         return super().copy(with_contents=with_contents)
+
+    def clear_all_memory(self):
+        """
+        Clear all memory references prior to deletion.
+
+        Returns
+        -------
+        None
+        """
+        super().clear_all_memory()
+        self.grid = None
+        self.smoothing = 0.0 * units.Unit('arcsec')
 
     @property
     def projection(self):
@@ -421,9 +453,9 @@ class AstroModel2D(SourceModel):
 
         Returns
         -------
-        map_range : units.Quantity
-            An array of shape (4,) containing [min(x), min(y), max(x), max(y)]
-            in units of arcseconds.
+        map_range : Coordinate2D
+            A coordinate of shape (2,) containing the minimum and maximum
+            x and y coordinates.
         """
         map_range = Coordinate2D(unit='arcsec')
 
@@ -1386,6 +1418,8 @@ class AstroModel2D(SourceModel):
             optimal = self.configuration.get_float('smooth.optimal',
                                                    default=np.nan)
             fwhm = beam if np.isnan(optimal) else (optimal * size_unit)
+        elif smooth in ['none', 'None']:
+            fwhm = 0 * size_unit
         else:
             try:
                 fwhm = float(smooth) * size_unit
@@ -1418,8 +1452,11 @@ class AstroModel2D(SourceModel):
         -------
         None
         """
-        if not self.has_option('smooth'):
+        smoothing = self.configuration.get_string(
+            'smooth', default='None').strip().lower()
+        if smoothing == 'none':
             return
+
         self.set_smoothing(self.get_smoothing(
             self.configuration.get_string('smooth')))
 
@@ -1437,7 +1474,7 @@ class AstroModel2D(SourceModel):
         fwhm : units.Quantity
             The FWHM of the Gaussian smoothing kernel.
         """
-        if smooth_spec in [None, '']:
+        if smooth_spec in [None, '', 'None', 'none']:
             return self.smoothing
         return self.get_smoothing(smooth_spec)
 

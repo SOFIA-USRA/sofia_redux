@@ -254,7 +254,8 @@ def calculate_offsets(hdul, obsdate=None, flipsign=None, rotate=False):
     Returns
     -------
     fits.HDUList
-        HDUList updated with 'XS' and 'YS' spatial offsets
+        HDUList updated with 'XS', 'YS' spatial offsets, and 'RA', 'DEC'
+        equatorial coordinates.
     """
 
     result = fits.HDUList(fits.PrimaryHDU(header=hdul[0].header))
@@ -381,6 +382,8 @@ def calculate_offsets(hdul, obsdate=None, flipsign=None, rotate=False):
                 xs = xsr
                 ys = ysr
 
+        ra, dec = detector_coordinates_to_ra_dec(xs, ys, header)
+
         result.append(hdul[name].copy())
         result.append(hdul[name.replace('FLUX', 'STDDEV')].copy())
         result.append(hdul[name.replace('FLUX', 'LAMBDA')].copy())
@@ -394,13 +397,72 @@ def calculate_offsets(hdul, obsdate=None, flipsign=None, rotate=False):
             result.append(fits.ImageHDU(ys.reshape((nramp, 1, 25)),
                                         header=exthdr,
                                         name=name.replace('FLUX', 'YS')))
+            exthdr['BUNIT'] = 'hourangle'
+            result.append(fits.ImageHDU(ra.reshape((nramp, 1, 25)),
+                                        header=exthdr,
+                                        name=name.replace('FLUX', 'RA')))
+            exthdr['BUNIT'] = 'degree'
+            result.append(fits.ImageHDU(dec.reshape((nramp, 1, 25)),
+                                        header=exthdr,
+                                        name=name.replace('FLUX', 'DEC')))
         else:
             result.append(fits.ImageHDU(xs, header=exthdr,
                                         name=name.replace('FLUX', 'XS')))
             result.append(fits.ImageHDU(ys, header=exthdr,
                                         name=name.replace('FLUX', 'YS')))
+            exthdr['BUNIT'] = 'hourangle'
+            result.append(fits.ImageHDU(ra, header=exthdr,
+                                        name=name.replace('FLUX', 'RA')))
+            exthdr['BUNIT'] = 'degree'
+            result.append(fits.ImageHDU(dec, header=exthdr,
+                                        name=name.replace('FLUX', 'DEC')))
 
     return result
+
+
+def detector_coordinates_to_ra_dec(xs, ys, header):
+    """
+    Convert native XS/YS detector coordinates to RA/DEC
+
+    Parameters
+    ----------
+    xs : numpy.ndarray
+        The equatorial X offsets (not reverse longitude).
+    ys : numpy.ndarray
+        The equatorial Y offsets.
+    header : fits.Header
+        The FITS header associated with the coordinates.
+
+    Returns
+    -------
+    ra, dec : numpy.ndarray, numpy.ndarray
+        The output detector position equatorial coordinates.
+    """
+    obsra = header.get('OBSRA', 0) * 15  # hourangle to degree
+    obsdec = header.get('OBSDEC', 0)
+    sky_angle = header.get('SKY_ANGL', 0)
+    dbet_map = header.get('DBET_MAP', 0) / 3600  # arcsec to degree
+    dlam_map = header.get('DLAM_MAP', 0) / 3600  # arcsec to degree
+
+    if sky_angle != 0:
+        radians = np.radians(sky_angle)
+        cos_a, sin_a = np.cos(radians), np.sin(radians)
+        x = (xs * cos_a) - (ys * sin_a)
+        y = (xs * sin_a) + (ys * cos_a)
+    else:
+        x, y = xs, ys
+
+    center_ra, center_dec = obsra, obsdec
+    center_ra -= dlam_map / np.cos(np.radians(center_dec))
+    center_dec -= dbet_map
+
+    # xs is in native RA offsets i.e., should normally subtract but add
+    # in this case.
+
+    # Herez - change to positive
+    ra = center_ra - (x / (3600 * np.cos(np.radians(center_dec))))
+    dec = center_dec + (y / 3600)
+    return ra / 15, dec  # convert RA back to hourangle
 
 
 def spatial_calibrate(filename, obsdate=None, flipsign=None,
@@ -424,7 +486,8 @@ def spatial_calibrate(filename, obsdate=None, flipsign=None,
            offsets (DLAM_MAP and DBET_MAP, possibly with a sign-flip
            on each), and offsets of the secondary array from the
            primary (from data/secondary_offset.txt).
-        3. Create FITS file and (optionally) write results to disk.
+        3. Convert arcsecond offsets to RA and Dec coordinates.
+        4. Create FITS file and (optionally) write results to disk.
 
     For OTF mode data, each input ramp sample has a separate
     DLAM_MAP and DBET_MAP value, as recorded in the SCANPOS table in the
@@ -437,6 +500,11 @@ def spatial_calibrate(filename, obsdate=None, flipsign=None,
     DLAM_MAP and DBET_MAP keywords in the header, and are
     attached to the output as a 25-element array in the XS and YS
     image extensions.
+
+    For all data, RA and DEC image extensions are additionally attached,
+    containing the sky coordinates for each spaxel in hours and degrees,
+    respectively.  Array dimensions for these extensions match the XS and
+    YS arrays.
 
     Parameters
     ----------

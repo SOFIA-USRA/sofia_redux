@@ -398,7 +398,9 @@ class AstroData2D(AstroModel2D):
             min_integration_time = min_integration_time.to('second').value
             exposures.restrict_range(Range(min_val=min_integration_time))
 
-        if self.has_option('smooth') and not self.configuration.get_bool(
+        smooth = self.configuration.get_string(
+            'smooth', default='None').lower().strip()
+        if smooth != 'none' and not self.configuration.get_bool(
                 'smooth.external'):
             self.add_process_brief('(smooth) ')
             self.smooth()

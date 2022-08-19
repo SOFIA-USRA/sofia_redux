@@ -82,7 +82,7 @@ def test_estimate_max_bytes():
 
 
 def test_get_class_for():
-    rand = np.random.random
+    rand = np.random.RandomState(42).random
     resampler = ResamplePolynomial(rand(100), rand(100), rand(100))
     c = BaseTree.get_class_for(resampler)
     assert c == PolynomialTree

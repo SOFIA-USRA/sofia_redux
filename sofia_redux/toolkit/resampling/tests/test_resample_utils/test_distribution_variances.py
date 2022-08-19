@@ -63,7 +63,8 @@ def test_optional_covariance():
 
 
 def test_dof():
-    coordinates = np.random.random((2, 100))
+    rand = np.random.RandomState(2)
+    coordinates = rand.random((2, 100))
     v0 = distribution_variances(coordinates, dof=0)
     v50 = distribution_variances(coordinates, dof=50)
     assert np.allclose(v0, v50 * 2)

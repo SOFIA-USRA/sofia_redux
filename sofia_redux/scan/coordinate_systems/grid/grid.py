@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from copy import deepcopy
 
+from sofia_redux.scan.coordinate_systems.coordinate import Coordinate
 from sofia_redux.scan.utilities.class_provider import get_grid_class
 
 __all__ = ['Grid']
@@ -62,6 +63,26 @@ class Grid(ABC):
             else:
                 setattr(new, attribute, deepcopy(value))
         return new
+
+    def __eq__(self, other):
+        """
+        Check if this grid is equal to another.
+
+        Parameters
+        ----------
+        other : Grid
+
+        Returns
+        -------
+        equal : bool
+        """
+        if self.__class__ != other.__class__:
+            return False
+        if self.coordinate_system != other.coordinate_system:
+            return False
+        if self.variant != other.variant:
+            return False
+        return True
 
     @property
     def coordinate_system(self):
@@ -191,9 +212,19 @@ class Grid(ABC):
 
         Returns
         -------
-        grid : Grid
+        grid : Grid or Grid2D1
         """
         return get_grid_class(name)()
+
+    def get_default_coordinate_instance(self):
+        """
+        Return a coordinate for the dimensions of the grid.
+
+        Returns
+        -------
+        Coordinate
+        """
+        return Coordinate.get_instance(f'{self.ndim}d')
 
     def set_coordinate_system(self, system):
         """
@@ -207,7 +238,7 @@ class Grid(ABC):
         -------
         None
         """
-        if self.ndim != system.size:
+        if self.ndim is not None and self.ndim != system.size:
             raise ValueError(
                 f"Number of coordinate system axes ({system.size}) "
                 f"does not equal the grid dimensions ({self.ndim}).")

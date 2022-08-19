@@ -1,5 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+import math
 import numba as nb
 import numpy as np
 
@@ -352,8 +353,14 @@ def spherical_pole_transform(x, px, cos_lat, sin_lat, p_cos_lat,
 
         cos_dl, sin_dl = np.cos(dl), np.sin(dl)
 
-        new_lat = np.arcsin((p_sl * sl) + (p_cl * cl * cos_dl))
-        new_lon = offset + np.arctan2((-sl * p_cl) + (cl * p_sl * cos_dl),
+        lat_domain = (p_sl * sl) + (p_cl * cl * cos_dl)
+        if lat_domain > 1:
+            lat_domain = 1.0
+        elif lat_domain < -1:
+            lat_domain = -1.0
+
+        new_lat = math.asin(lat_domain)
+        new_lon = offset + math.atan2((-sl * p_cl) + (cl * p_sl * cos_dl),
                                       (-cl * sin_dl))
         result[0, i] = new_lon
         result[1, i] = new_lat

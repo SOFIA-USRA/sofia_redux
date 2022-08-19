@@ -2,13 +2,14 @@
 
 import json
 import os
+import pytest
 import shutil
 import time
 
 from astropy.io import fits
 from astropy import units as u
 from configobj import ConfigObj
-import pytest
+import numpy as np
 
 from sofia_redux.scan.configuration.configuration import Configuration
 from sofia_redux.scan.custom.example.channels.channels import ExampleChannels
@@ -880,7 +881,7 @@ class TestReduction(object):
         capt = capsys.readouterr().out
         assert 'Reduction will process 2 scans using 2 parallel scans' in capt
 
-    def test_reduce(self, capsys, scan_file):
+    def test_reduce(self, capsys, scan_file, tmpdir):
         reduction = Reduction('example')
 
         # no scans
@@ -914,10 +915,15 @@ class TestReduction(object):
 
         # extended can be used with any source option
         conf.apply_configuration_options({'extended': True})
+        conf.apply_configuration_options({'smooth.final': 'beam'})
+        pickle_dir = str(tmpdir.mkdir('pipeline_pickles'))
+        reduction.pipeline.pickle_directory = pickle_dir
         reduction.reduce()
         capt = capsys.readouterr()
         assert 'Default reduction' in capt.out
         assert 'Assuming extended' in capt.out
+        assert np.isclose(reduction.source.smoothing, 10 * u.Unit('arcsec'))
+        assert not os.path.isdir(pickle_dir)
         conf.apply_configuration_options({'extended': False})
 
         # set alternate rounds
@@ -998,24 +1004,26 @@ class TestReduction(object):
 
         # test an uncommon branch in iteration
         reduction.configuration.apply_configuration_options(
-            {'whiten': True, 'whiten.once': True})
+            {'whiten': True,
+             'whiten.once': True,
+             'source.delete_scan': True})
 
         reduction.read_scans(scan_file)
+        reduction.validate()
         reduction.init_pipelines()
 
         # whiten.once turns off whiten after 1 iteration
         assert reduction.configuration.is_configured('whiten')
         reduction.iterate()
         assert not reduction.configuration.is_configured('whiten')
+        assert reduction.scans[0].source_model is None
 
-    def test_checkout(self):
-        # mock integration removal from queue
-        reduction = Reduction(None)
-        reduction.queue = [1, 3, 4]
-        reduction.checkout(3)
-        assert reduction.queue == [1, 4]
-        reduction.checkout(2)
-        assert reduction.queue == [1, 4]
+    def test_solve_source(self):
+        reduction = Reduction('example')
+        assert not reduction.solve_source()
+        reduction.configuration.apply_configuration_options({'source': True})
+        reduction.source = 1
+        assert reduction.solve_source()
 
     def test_summarize_integration(self, capsys):
         integration = ExampleIntegration()
@@ -1144,7 +1152,7 @@ class TestReduction(object):
         assert not os.path.isdir(pdir)
         assert reduction.pickle_reduction_directory is None
 
-    def test_edit_header(self):
+    def test_edit_header(self, tmpdir):
         reduction = Reduction('example')
         kwargs = {'test': 'value'}
         reduction.add_user_configuration(**kwargs)
@@ -1188,6 +1196,23 @@ class TestReduction(object):
         assert header['ARGS'] == 2
         assert header['ARG1'] == 't1.fits'
         assert header['ARG2'] == 't2.fits'
+
+        d1 = np.arange(10)
+        hdul1 = fits.HDUList()
+        hdul1.append(fits.PrimaryHDU(data=d1))
+        hdul_file1 = str(tmpdir.mkdir('test_edit_header').join('file1.fits'))
+        hdul1.writeto(hdul_file1)
+        hdul1.close()
+        hdul1 = fits.open(hdul_file1)
+        d2 = np.arange(10, 20)
+        hdul2 = fits.HDUList()
+        hdul2.append(fits.PrimaryHDU(data=d2))
+        reduction.reduction_files = [hdul1, hdul2]
+        header = hcopy.copy()
+        reduction.edit_header(header)
+        assert header['ARGS'] == 2
+        assert header['ARG1'] == hdul_file1
+        assert header['ARG2'] == 'scan_2.fits'
 
     def test_run(self, mocker, scan_file):
         reduction = Reduction('example')

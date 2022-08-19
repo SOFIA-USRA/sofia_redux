@@ -76,7 +76,7 @@ class Image(FitsData):
         """
         if other is self:
             return True
-        if not isinstance(other, Image):
+        if self.__class__ != other.__class__:
             return False
         if self.id != other.id:
             return False
@@ -386,9 +386,42 @@ class Image(FitsData):
         asymmetry, asymmetry_rms : float, float
             The asymmetry and asymmetry RMS.
         """
+        return self.get_data_asymmetry(self.data, self.valid, grid,
+                                       center_index, angle, radial_range)
+
+    @staticmethod
+    def get_data_asymmetry(data, valid, grid, center_index, angle,
+                           radial_range):
+        """
+        Return the asymmetry for the given data.
+
+        Parameters
+        ----------
+        data : numpy.ndarray (float)
+            The 2-D data for which to calculate the asymmetry of shape (ny, nx)
+        valid : numpy.ndarray (bool)
+            A mask for the data of shape (ny, nx) where `False` excludes any
+            given element from inclusion in the calculation.
+        grid : Grid2D
+            The grid used to convert image pixel locations to the coordinate
+            system in which to calculate the asymmetry.
+        center_index : Coordinate2D
+            The center index on the image (x_pix, y_pix) from which to
+            calculate the asymmetry.
+        angle : units.Quantity
+            The rotation of the image with respect to the asymmetry,
+        radial_range : Range
+            The range (in `grid` units) about `center_index` on which to base
+            the asymmetry calculation.
+
+        Returns
+        -------
+        asymmetry, asymmetry_rms : float, float
+            The asymmetry and asymmetry RMS.
+        """
+        j, i = np.nonzero(valid)
+        data = data[j, i]
         center_offset = grid.index_to_offset(center_index)
-        j, i = np.nonzero(self.valid)
-        data = self.data[j, i]
         indices = Coordinate2D([i, j])
         grid_offsets = grid.index_to_offset(indices)
         grid_offsets.subtract(center_offset)

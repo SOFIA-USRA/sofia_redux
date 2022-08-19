@@ -166,7 +166,7 @@ class Eye(object):
         if not filename:
             filename = QtWidgets.QFileDialog.getOpenFileNames(
                 self.view, caption="Select Data File(s)",
-                filter="FITS files (*.fits);;"
+                filter="FITS files (*.fits *.txt);;"
                        "All files (*)")[0]
         if filename:
             added = False

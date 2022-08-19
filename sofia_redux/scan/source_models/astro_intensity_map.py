@@ -22,6 +22,9 @@ __all__ = ['AstroIntensityMap']
 
 class AstroIntensityMap(AstroData2D):
 
+    default_map_class = Observation2D
+    default_image_class = Image2D
+
     def __init__(self, info, reduction=None):
         """
         Initialize an astronomical intensity map.
@@ -38,7 +41,7 @@ class AstroIntensityMap(AstroData2D):
         reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
             The reduction for which this source model should be applied.
         """
-        self.map = Observation2D()
+        self.map = self.default_map_class()
         self.base = None  # referenced, not copied
         super().__init__(info, reduction=reduction)
         self.create_map()
@@ -61,6 +64,18 @@ class AstroIntensityMap(AstroData2D):
         if self.grid is not None and isinstance(new, AstroIntensityMap):
             new.map.set_grid(self.grid)
         return new
+
+    def clear_all_memory(self):
+        """
+        Clear all memory references prior to deletion.
+
+        Returns
+        -------
+        None
+        """
+        super().clear_all_memory()
+        self.map = None
+        self.base = None
 
     @property
     def referenced_attributes(self):
@@ -139,7 +154,7 @@ class AstroIntensityMap(AstroData2D):
         None
         """
         super().set_info(info)
-        if self.map is not None:
+        if self.map is not None and self.info is not None:
             self.map.fits_properties.set_instrument_name(
                 self.info.instrument.name)
             self.map.fits_properties.set_telescope_name(
@@ -206,8 +221,8 @@ class AstroIntensityMap(AstroData2D):
         -------
         None
         """
-        self.base = Image2D(x_size=self.size_x, y_size=self.size_y,
-                            dtype=float)
+        self.base = self.default_image_class(
+            x_size=self.size_x, y_size=self.size_y, dtype=float)
 
     def create_map(self):
         """
@@ -217,7 +232,7 @@ class AstroIntensityMap(AstroData2D):
         -------
         None
         """
-        self.map = Observation2D()
+        self.map = self.default_map_class()
         self.map.set_grid(self.grid)
         self.map.set_validating_flags(~self.mask_flag)
         self.map.add_local_unit(self.get_native_unit())
@@ -260,9 +275,8 @@ class AstroIntensityMap(AstroData2D):
         self.map.add_local_unit(self.get_kelvin_unit())
         self.map.add_local_unit(self.get_jansky_unit())
         log.info("\n".join(self.map.get_info()))
-        self.base = Image2D(x_size=self.map.shape[1],
-                            y_size=self.map.shape[0],
-                            dtype=float)
+        self.base = self.default_image_class(
+            data=np.zeros(self.map.shape, dtype=float))
 
     def post_process_scan(self, scan):
         """
@@ -416,8 +430,7 @@ class AstroIntensityMap(AstroData2D):
         Update the map mask based on significance levels and valid neighbors.
 
         If a blanking level is supplied, significance values above or equal to
-        the blanking level will be masked.  If the configuration
-
+        the blanking level will be masked.
 
         Parameters
         ----------
@@ -943,7 +956,7 @@ class AstroIntensityMap(AstroData2D):
 
         Parameters
         ----------
-        filter_fwhm : astropy.units.Quantity
+        filter_fwhm : astropy.units.Quantity or Coordinate
             The filtering FWHM for the source.
         filter_blanking : float, optional
             Only apply filtering within the optional range -filter_blanking ->

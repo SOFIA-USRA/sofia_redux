@@ -11,6 +11,8 @@ from sofia_redux.toolkit.fitting.fitpeaks1d import (
     box_convolve, get_search_model, initial_search, get_final_model,
     get_background_fit, update_model)
 
+rand = np.random.RandomState(42)
+
 
 @pytest.fixture
 def separated_peaks_offset():
@@ -34,7 +36,7 @@ def compound_peak():
     model1 = models.Gaussian1D(amplitude=3, mean=5, stddev=0.5)
     model2 = models.Gaussian1D(amplitude=4, mean=6, stddev=0.2)
     y = model1(x) + model2(x)
-    noise = np.random.normal(0, 0.1, y.shape)
+    noise = rand.normal(0, 0.1, y.shape)
     return x, y, noise
 
 
@@ -47,7 +49,7 @@ def single_peak_sloped_bg():
 
 
 def test_robust_masking():
-    data = np.random.normal(0, 1, 1000)
+    data = rand.normal(0, 1, 1000)
     data[500] += 1000
     result = robust_masking(data, threshold=10)
     assert isinstance(result[500], np.ma.core.MaskedConstant)
@@ -55,7 +57,7 @@ def test_robust_masking():
 
 
 def test_medabs_baseline():
-    y = np.random.normal(100, 0.01, 1000)
+    y = rand.normal(100, 0.01, 1000)
     x = np.arange(1000)
     result = medabs_baseline(x, y)
     assert np.allclose(result[0], 0, atol=0.1)
@@ -64,7 +66,7 @@ def test_medabs_baseline():
 
 def test_guess_xy_mad():
     x = np.arange(1000) + 0.5
-    y = np.random.normal(100, 0.01, 1000)
+    y = rand.normal(100, 0.01, 1000)
     y[np.arange(10) * 100] += np.arange(10) + 100
     result = guess_xy_mad(x, y)
     assert np.allclose(result, [900.5, 209], atol=0.1)
@@ -184,7 +186,7 @@ def test_get_min_width():
     model = models.Gaussian1D()
     x = np.arange(100) * 0.5  # 0.5 separation
     x = np.hstack((x, x))  # duplicate values
-    np.random.shuffle(x)  # not ordered
+    rand.shuffle(x)  # not ordered
     assert get_min_width(model, None, x) is None
     assert get_min_width(model, 5, x) == ('stddev', 5)
     assert get_min_width(model, ('stddev', 3), x) == ('stddev', 3)
@@ -218,7 +220,7 @@ def test_dofit():
     fitter = fitting.LevMarLSQFitter()
     model = models.Gaussian1D(1, 5, 1)
     x = np.linspace(0, 10, 100)
-    y = model(x) + np.random.normal(0, 0.01, 100)
+    y = model(x) + rand.normal(0, 0.01, 100)
     result = dofit(fitter, model, x, y[0])
     assert np.isnan(result.parameters).all()
     assert result.fit_info['y'] == y[0]
@@ -381,7 +383,7 @@ def test_initial_search(separated_peaks_offset):
 
 def test_get_background_fit(separated_peaks_offset):
     x, y, coeffs = separated_peaks_offset
-    ynoise = y + np.random.normal(0, 0.1, y.size) + x * 0.25
+    ynoise = y + rand.normal(0, 0.1, y.size) + x * 0.25
     fitter = get_fitter(fitting.LevMarLSQFitter)
     peak_model = models.Gaussian1D()
     background_class = models.Linear1D
@@ -401,7 +403,7 @@ def test_get_background_fit(separated_peaks_offset):
 
 def test_bgargs(separated_peaks_offset, capsys):
     x, y, coeffs = separated_peaks_offset
-    ynoise = y + np.random.normal(0, 0.1, y.size) + x * 0.25
+    ynoise = y + rand.normal(0, 0.1, y.size) + x * 0.25
     fitter = get_fitter(fitting.LevMarLSQFitter)
     peak_model = models.Gaussian1D
 
@@ -505,7 +507,7 @@ def test_fitpeak1d(separated_peaks_offset):
         # invalid xrange
         fitpeaks1d(x, y, xrange=(1, 2, 3))
 
-    noise = np.random.normal(0, 0.01, y.size)
+    noise = rand.normal(0, 0.01, y.size)
     y += noise
 
     # Test optional function

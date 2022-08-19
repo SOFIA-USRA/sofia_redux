@@ -58,6 +58,18 @@ class SkyDip(SourceModel):
         copy = super().copy(with_contents=with_contents)
         return copy
 
+    def clear_all_memory(self):
+        """
+        Clear all memory references prior to deletion.
+
+        Returns
+        -------
+        None
+        """
+        super().clear_all_memory()
+        self.data = None
+        self.weight = None
+
     @property
     def logging_id(self):
         """

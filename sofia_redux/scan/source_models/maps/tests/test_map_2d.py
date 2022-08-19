@@ -851,6 +851,11 @@ def test_edit_header(initialized_spike_map):
                  'HISTORY': [
                      'pasted new content: 11x10', 'pasted new content: 11x10']}
 
+    h = fits.Header()
+    m.skip_model_edit_header = True
+    m.edit_header(h)
+    assert 'SMTHRMS' not in h
+
 
 def test_claim_image(initialized_spike_map):
     m = initialized_spike_map.copy()

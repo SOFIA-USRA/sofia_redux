@@ -830,6 +830,8 @@ class FIFILSReduction(Reduction):
         skip_coadd = param.get_value('skip_coadd')
         interp = param.get_value('interpolate')
         error_weighting = param.get_value('error_weighting')
+        detector_coordinates = param.get_value('detector_coordinates')
+
         xy_oversample = param.get_value('xy_oversample')
         w_oversample = param.get_value('w_oversample')
         xy_pixsize = param.get_value('xy_pixel_size')
@@ -837,17 +839,23 @@ class FIFILSReduction(Reduction):
         xy_order = param.get_value('xy_order')
         w_order = param.get_value('w_order')
         xy_window = param.get_value('xy_window')
+
         adaptive_algorithm = param.get_value('adaptive_algorithm')
         append_weights = param.get_value('append_weights')
         skip_uncorrected = param.get_value('skip_uncorrected')
         w_window = param.get_value('w_window')
         xy_smoothing = param.get_value('xy_smoothing')
         w_smoothing = param.get_value('w_smoothing')
+
         fitthresh = param.get_value('fitthresh')
         posthresh = param.get_value('posthresh')
         negthresh = param.get_value('negthresh')
         xythresh = param.get_value('xy_edge_threshold')
         wthresh = param.get_value('w_edge_threshold')
+
+        scan_reduction = param.get_value('scan_reduction')
+        save_scan = param.get_value('save_scan')
+        scan_options = param.get_value('scan_options')
 
         # fix thresholds to expected defaults
         if fitthresh <= 0:
@@ -903,6 +911,22 @@ class FIFILSReduction(Reduction):
             adaptive_algorithm = None
             adaptive_threshold = None
 
+        # read in scan options to pass along as kwargs
+        options = dict()
+        if scan_options != '':  # pragma: no cover
+            all_val = scan_options.split()
+            for val in all_val:
+                try:
+                    k, v = val.split('=')
+                except (IndexError, ValueError, TypeError):
+                    pass
+                else:
+                    options[k] = v
+
+        # set detector coordinates to None if not explicitly set
+        if not detector_coordinates:
+            detector_coordinates = None
+
         results = []
         for inp_set in files:
             result = resample(inp_set, write=False, interp=interp,
@@ -921,7 +945,10 @@ class FIFILSReduction(Reduction):
                               edge_threshold=(xythresh, xythresh, wthresh),
                               append_weights=append_weights,
                               skip_uncorrected=skip_uncorrected,
-                              jobs=jobs, check_memory=check_memory)
+                              jobs=jobs, check_memory=check_memory,
+                              detector_coordinates=detector_coordinates,
+                              scan_reduction=scan_reduction,
+                              save_scan=save_scan, scan_kwargs=options)
             if not result:
                 msg = 'Problem in fifi_ls.resample.'
                 log.error(msg)

@@ -78,6 +78,26 @@ class SourceModel(ABC):
         new.process_brief = None
         return new
 
+    def clear_all_memory(self):
+        """
+        Clear all memory references prior to deletion.
+
+        Returns
+        -------
+        None
+        """
+        self.info = None
+        self.scans = None
+        self.hdul = None
+        self.id = ''
+        self.generation = 0
+        self.integration_time = 0.0 * units.Unit('second')
+        self.enable_weighting = True
+        self.enable_level = True
+        self.enable_bias = True
+        self.process_brief = None
+        self.reduction = None
+
     @property
     def referenced_attributes(self):
         """
@@ -361,7 +381,8 @@ class SourceModel(ABC):
         None
         """
         self.info = info
-        self.info.set_parent(self)
+        if self.info is not None:
+            self.info.set_parent(self)
 
     def add_process_brief(self, message):
         """

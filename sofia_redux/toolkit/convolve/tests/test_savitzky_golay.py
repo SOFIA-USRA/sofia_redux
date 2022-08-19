@@ -8,11 +8,12 @@ from sofia_redux.toolkit.convolve.kernel import savitzky_golay, SavgolConvolve
 
 @pytest.fixture
 def data():
+    rand = np.random.RandomState(42)
     x = np.arange(1000).astype(float)
     y = np.full_like(x, 10)
-    noise = np.random.normal(loc=0, scale=0.1, size=x.shape)
+    noise = rand.normal(loc=0, scale=0.1, size=x.shape)
     badpts = np.arange(x.size)
-    np.random.shuffle(badpts)
+    rand.shuffle(badpts)
     badpts = badpts[:100]
     return x, y, noise, badpts
 

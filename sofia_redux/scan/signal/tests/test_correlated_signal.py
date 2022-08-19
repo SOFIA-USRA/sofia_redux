@@ -211,6 +211,12 @@ class TestCorrelatedSignal(object):
         assert m7.call_count == 1
         assert m8.call_count == 1
 
+    def test_get_frame_data_signal(self, example_signal):
+        frame_signal = example_signal.get_frame_data_signal()
+        n_frames = example_signal.integration.size
+        n_channels = example_signal.integration.channels.size
+        assert frame_signal.shape == (n_frames, n_channels)
+
     def test_get_ml_correlated(self, example_signal):
         # prep temp fields
         group = example_signal.mode.channel_group

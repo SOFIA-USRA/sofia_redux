@@ -3,6 +3,7 @@
 import math
 import numba as nb
 import numpy as np
+import sys
 
 from sofia_redux.toolkit.splines import spline_utils
 
@@ -15,6 +16,9 @@ __all__ = ['smart_median_1d', 'smart_median_2d', 'smart_median',
            'regular_coarse_kernel_convolve', 'smooth_values_at',
            'smooth_value_at', 'point_aligned_smooth', 'point_smooth',
            'sequential_array_add', 'index_of_max', 'robust_mean']
+
+
+_bad_int_value = -sys.maxsize - 1
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
@@ -1641,6 +1645,8 @@ def round_value(x):  # pragma: no cover
     #.5, :func:`np.round` floors the value instead of performing a ceil.
     This function fixes that.
 
+    Note that NaN/infinite values are rounded as -sys.maxsize - 1.
+
     Parameters
     ----------
     x : float or int
@@ -1650,6 +1656,8 @@ def round_value(x):  # pragma: no cover
     -------
     rounded_x : int
     """
+    if not np.isfinite(x):
+        return _bad_int_value
     if x % 1 != 0.5:
         return int(np.round(x))
     int_x = int(x)

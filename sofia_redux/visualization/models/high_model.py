@@ -148,6 +148,8 @@ class Grism(HighModel):
             self._load_order()
         elif self._image_only():
             self._load_book()
+        elif self._general_only():
+            self._load_order()
         else:
             self._load_order()
             self._load_book()
@@ -169,6 +171,17 @@ class Grism(HighModel):
         for code in file_codes:
             if f'_{code}' in self.filename:
                 return True
+        if self.filename == 'UNKNOWN':
+            return True
+        return False
+
+    def _general_only(self) -> bool:
+        if 'fits' not in self.filename:
+            return True
+
+        if ('fits' in self.filename
+                and self.hdul[0].header['instrume'] == 'General'):
+            return True
         return False
 
     def _load_order(self) -> None:

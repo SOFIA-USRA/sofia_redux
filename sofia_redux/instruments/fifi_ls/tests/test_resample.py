@@ -214,7 +214,7 @@ class TestResample(FIFITestCase):
                 # always interp for a single file
                 assert default[key] == 'interpolate'
             else:
-                assert isinstance(default[key], np.ndarray)
+                assert isinstance(default[key], (list, np.ndarray))
 
         # multiple uncal files
         files = get_scm_files()
@@ -232,7 +232,7 @@ class TestResample(FIFITestCase):
                 # fit for a multiple files with dlam/dbet
                 assert uncal_fit[key] == 'resample'
             else:
-                assert isinstance(uncal_fit[key], np.ndarray)
+                assert isinstance(uncal_fit[key], (list, np.ndarray))
 
         # multiple files, but dlam/dbet are all zero
         inp = []
@@ -324,9 +324,9 @@ class TestResample(FIFITestCase):
         combined['PRIMEHEAD']['SKY_ANGL'] = 10.0
         combined['PRIMEHEAD']['DET_ANGL'] = 5.0
         # check target RA/DEC/WAVE
-        target_ra = combined['RA'].min()  # hourangle
-        target_dec = combined['DEC'].min()  # degree
-        target_wave = combined['WAVE'].min()  # um
+        target_ra = np.min([x.min() for x in combined['RA']])  # hourangle
+        target_dec = np.min([x.min() for x in combined['DEC']])  # degree
+        target_wave = np.min([x.min() for x in combined['WAVE']])  # um
         grid_info = get_grid_info(combined, target_x=target_ra,
                                   target_y=target_dec,
                                   target_wave=target_wave,
@@ -361,7 +361,7 @@ class TestResample(FIFITestCase):
         assert np.max(default) == 2
 
         # Test vertical lines in the coordinates by using a regular x,y grid
-        ndat, nspax = combined['FLUX'].shape[1:]
+        ndat, nspax = combined['FLUX'][0].shape
         yg, xg = np.indices((5, 5)).reshape((2, 25))
         xg += 5
         yg += 10

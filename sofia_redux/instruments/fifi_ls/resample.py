@@ -349,39 +349,39 @@ def combine_files(filenames, naif_id_key='NAIF_ID',
         else:
             combined['method'] = 'resample'
 
+        ra, dec, xs, ys, wave, flux, error, samples = (
+            [], [], [], [], [], [], [], [])
+
         if info['otf']:
-            combined.update({
-                'RA': np.concatenate([
-                    d['ra'] for d in files_info.values()], axis=0),
-                'DEC': np.concatenate(
-                    [d['dec'] for d in files_info.values()], axis=0),
-                'XS': np.concatenate(
-                    [d['lon'] for d in files_info.values()], axis=0),
-                'YS': np.concatenate([
-                    d['lat'] for d in files_info.values()], axis=0),
-                'WAVE': np.concatenate([
-                    d['wave'] for d in files_info.values()], axis=0),
-                'FLUX': np.concatenate([
-                    d['flux'] for d in files_info.values()], axis=0),
-                'ERROR': np.concatenate(
-                    [d['error'] for d in files_info.values()], axis=0),
-                'SAMPLES': np.array(
-                    [d['flux'].size for d in files_info.values()])
-            })
+            for d in files_info.values():
+                x_ra, x_dec, x_xs, x_ys = d['ra'], d['dec'], d['lon'], d['lat']
+                x_wave, x_flux, x_error = d['wave'], d['flux'], d['error']
+                samples.append(x_flux.size)
+                frames = x_flux.shape[0]
+
+                for frame in range(frames):
+                    flux.append(x_flux[frame])
+                    error.append(x_error[frame])
+                    wave.append(x_wave[frame] if x_wave.ndim == 3 else x_wave)
+                    ra.append(x_ra[frame] if x_ra.ndim == 3 else x_ra)
+                    dec.append(x_dec[frame] if x_dec.ndim == 3 else x_dec)
+                    xs.append(x_xs[frame] if x_xs.ndim == 3 else x_xs)
+                    ys.append(x_ys[frame] if x_ys.ndim == 3 else x_ys)
 
         else:
-            combined.update({
-                'RA': np.array([d['ra'] for d in files_info.values()]),
-                'DEC': np.array([d['dec'] for d in files_info.values()]),
-                'XS': np.array([d['lon'] for d in files_info.values()]),
-                'YS': np.array([d['lat'] for d in files_info.values()]),
-                'WAVE': np.array([d['wave'] for d in files_info.values()]),
-                'FLUX': np.array([d['flux'] for d in files_info.values()]),
-                'ERROR': np.array(
-                    [d['error'] for d in files_info.values()]),
-                'SAMPLES': np.array(
-                    [d['flux'].size for d in files_info.values()])
-            })
+            for d in files_info.values():
+                ra.append(d['ra'])
+                dec.append(d['dec'])
+                xs.append(d['lon'])
+                ys.append(d['lat'])
+                wave.append(d['wave'])
+                flux.append(d['flux'])
+                error.append(d['error'])
+                samples.append(d['flux'].size)
+
+        combined.update({
+            'RA': ra, 'DEC': dec, 'XS': xs, 'YS': ys, 'WAVE': wave,
+            'FLUX': flux, 'ERROR': error, 'SAMPLES': samples})
 
         if not do_uncorrected:
             return combined
@@ -398,21 +398,23 @@ def combine_files(filenames, naif_id_key='NAIF_ID',
             uw = d.get('u_wave')
             if uw is None:
                 uw = d.get('wave')
-            u_flux.append(uf)
-            u_error.append(ue)
-            u_wave.append(uw)
+
+            if info['otf']:
+                for frame in range(uf.shape[0]):
+                    u_flux.append(uf[frame])
+                    u_error.append(ue[frame])
+                    u_wave.append(uw[frame])
+            else:
+                u_flux.append(uf)
+                u_error.append(ue)
+                u_wave.append(uw)
         else:
             do_uncorrected = True
 
         if do_uncorrected:
-            if info['otf']:
-                combined['UNCORRECTED_FLUX'] = np.concatenate(u_flux, axis=0)
-                combined['UNCORRECTED_ERROR'] = np.concatenate(u_error, axis=0)
-                combined['UNCORRECTED_WAVE'] = np.concatenate(u_wave, axis=0)
-            else:
-                combined['UNCORRECTED_FLUX'] = np.array(u_flux)
-                combined['UNCORRECTED_ERROR'] = np.array(u_error)
-                combined['UNCORRECTED_WAVE'] = np.array(u_wave)
+            combined['UNCORRECTED_FLUX'] = u_flux
+            combined['UNCORRECTED_ERROR'] = u_error
+            combined['UNCORRECTED_WAVE'] = u_wave
 
     return combined
 
@@ -571,7 +573,15 @@ def get_grid_info(combined, oversample=None,
 
     u_wave = combined.get('UNCORRECTED_WAVE')
 
-    do_uncorrected = u_wave is not None and None not in u_wave
+    if u_wave is not None:
+        for uw in u_wave:
+            if uw is None:
+                do_uncorrected = False
+                break
+        else:
+            do_uncorrected = True
+    else:
+        do_uncorrected = False
 
     if do_uncorrected:
         if scan_reduction:  # pragma: no cover
@@ -629,7 +639,8 @@ def get_grid_info(combined, oversample=None,
         y_str = f'{y_range[0]:.5f} -> {y_range[1]:.5f} (arcsec)'
     else:
         x_str = ' -> '.join(
-            Angle(x_range * units.Unit('hourangle')).to_string(sep=':'))
+            Angle(x_range * units.Unit('degree')).to('hourangle').to_string(
+                sep=':'))
         x_str += ' (hourangle)'
         y_str = ' -> '.join(
             Angle(y_range * units.Unit('degree')).to_string(sep=':'))
@@ -810,8 +821,17 @@ def generate_exposure_map(combined, grid_info, get_good=False):
     dr = np.sqrt(2) * xy_pix_size
 
     if not combined.get('scan_reduction', False):
-        x, y, w = grid_info['coordinates'].reshape(
-            (3,) + combined['FLUX'].shape)
+        x, y, w, = [], [], []
+        start = 0
+        c = grid_info['coordinates']
+        for i in range(len(combined['FLUX'])):
+            flux = combined['FLUX'][i]
+            end = start + flux.size
+            x.append(c[0, start:end].reshape(flux.shape))
+            y.append(c[1, start:end].reshape(flux.shape))
+            w.append(c[2, start:end].reshape(flux.shape))
+            start = end
+
     else:  # pragma: no cover
         wcs = grid_info['wcs']
         if 'CTYPE1' in wcs.to_header():
@@ -850,7 +870,7 @@ def generate_exposure_map(combined, grid_info, get_good=False):
             # um to m (it's strange, I know)
             x, y, w = wcs.wcs_world2pix(xc, yc, wave * 1e-6, 0)
 
-    for i in range(x.shape[0]):  # loop through files or frames
+    for i in range(len(x)):  # loop through files or frames
         # Find the min and max coordinates at each point
         wi, yi, xi = w[i], y[i], x[i]
         min_w, max_w = wi.min(), wi.max()
@@ -1042,15 +1062,16 @@ def rbf_mean_combine(combined, grid_info, window=None,
 
     # exposure map for grid counts
     good_grid = generate_exposure_map(combined, grid_info, get_good=True)
-    n_frames, n_spex, n_spax = combined['FLUX'].shape
+    n_spax = combined['FLUX'][0].shape[-1]
 
     f, e = combined['FLUX'], combined['ERROR']
-    x, y, w = grid_info['coordinates'].reshape((3,) + f.shape)
+    x, y, w = grid_info['coordinates']
+
     if do_uncor:
         uf = combined['UNCORRECTED_FLUX']
         ue = combined['UNCORRECTED_ERROR']
         uw = grid_info.get('uncorrected_coordinates')
-        uw = w if uw is None else uw[2].reshape(f.shape)
+        uw = w if uw is None else uw[2]  # .reshape(f.shape)
     else:
         uf, ue, uw = f, e, w
 
@@ -1062,11 +1083,29 @@ def rbf_mean_combine(combined, grid_info, window=None,
     else:
         iuflux, iustd = None, None
 
+    start = 0
     for file_idx, (square, xr, yr) in enumerate(good_grid):
+
+        file_flux = f[file_idx]
+        end = start + file_flux.size
 
         if not square.any():
             log.debug(f'No good values in file {file_idx}')
+            start = end
             continue
+
+        file_wave = w[start:end].reshape(file_flux.shape)
+        file_x = x[start:end].reshape(file_flux.shape)
+        file_y = y[start:end].reshape(file_flux.shape)
+        file_error = e[file_idx]
+        if do_uncor:
+            file_u_flux = uf[file_idx]
+            file_u_wave = uw[start:end].reshape(file_u_flux.shape)
+            file_u_error = ue[file_idx]
+        else:
+            file_u_flux = file_flux
+            file_u_wave = file_wave
+            file_u_error = file_error
 
         x_out = x_grid[yr[0]:yr[1], xr[0]:xr[1]][square]
         y_out = y_grid[yr[0]:yr[1], xr[0]:xr[1]][square]
@@ -1078,7 +1117,7 @@ def rbf_mean_combine(combined, grid_info, window=None,
 
             try:
                 resampler = Resample(
-                    w[file_idx][s], f[file_idx][s], error=e[file_idx][s],
+                    file_wave[s], file_flux[s], error=file_error[s],
                     window=fit_wdw, order=order,
                     robust=robust, negthresh=neg_threshold)
 
@@ -1096,8 +1135,7 @@ def rbf_mean_combine(combined, grid_info, window=None,
             if do_uncor:
                 try:
                     resampler = Resample(
-                        uw[file_idx][s], uf[file_idx][s],
-                        error=ue[file_idx][s],
+                        file_u_wave[s], file_u_flux[s], error=file_u_error[s],
                         window=fit_wdw, order=order, robust=robust,
                         negthresh=neg_threshold)
                     iuflux[:, spaxel], iustd[:, spaxel] = resampler(
@@ -1112,7 +1150,7 @@ def rbf_mean_combine(combined, grid_info, window=None,
                     iuflux[:, spaxel], iustd[:, spaxel] = np.nan, np.nan
 
         # x and y coordinates for resampled fluxes -- take from first spexel
-        xi, yi = x[file_idx, 0], y[file_idx, 0]
+        xi, yi = file_x[0], file_y[0]
 
         # check for useful data
         valid = np.isfinite(iflux) & np.isfinite(istd)
@@ -1154,6 +1192,8 @@ def rbf_mean_combine(combined, grid_info, window=None,
                     ustd[wave_i, yr[0]:yr[1], xr[0]:xr[1]] += new_std
 
                     ucounts[wave_i, yr[0]:yr[1], xr[0]:xr[1]] += square
+
+        start = end
 
     # average, set zero counts to nan
     log.info('Mean-combining all resampled cubes')

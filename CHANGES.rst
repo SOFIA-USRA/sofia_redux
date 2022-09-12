@@ -1,7 +1,23 @@
+1.2.7
+=====
+
+- Updated FORCAST pipeline to v2.6.0, including additional parameters to
+  allow reduction in detecttor coordinates and a bug fix for water vapor
+  optimization in spectroscopy calibration.
+- Updated FIFI-LS pipeline to v2.7.0, including improved spatial calibration
+  and astrometry fixes for the final spectral cube and an experimental
+  scan reduction improvement for OTF data.
+- Updated HAWC pipeline to v3.1.0, including a new parameter for the
+  scan mapping steps, allowing reduction at alternate grid scales.
+- Calibration data updates for FIFI-LS flight series OC9T.
+- Added FIFI-LS support to the scan module.
+- Added support for more general spectral formats, e.g. text files and simple
+  FITS files, to the spectral viewer.
+
 1.2.6 (2022-07-25)
 ==================
 
-- Calibration data updates for HAWC flight series OCQ-R.
+- Calibration data updates for HAWC flight series OC9Q-R.
 
 1.2.5 (2022-06-10)
 ==================

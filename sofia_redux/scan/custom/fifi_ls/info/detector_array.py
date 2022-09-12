@@ -30,7 +30,6 @@ class FifiLsDetectorArrayInfo(SofiaDetectorArrayInfo):
     spaxel_rows = 5
     spaxel_cols = 5
     default_boresight_offset = Coordinate2D([0.0, 0.0], unit='arcsec')
-    # default_boresight_index = Coordinate2D([0.0, 0.0])
     center_spaxel = 12
     pixel_indices = np.arange(pixels)
     spexel_indices = pixel_indices // n_spaxel

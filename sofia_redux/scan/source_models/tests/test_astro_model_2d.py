@@ -128,13 +128,19 @@ class FunctionalAstroModel2D(AstroModel2D):  # pragma: no cover
 
 @pytest.fixture
 def example_reduction():
-    return Reduction('example')
+    reduction = Reduction('example')
+    reduction.configuration.parse_key_value('parallel.cores', '1')
+    reduction.configuration.parse_key_value('parallel.jobs', '1')
+    reduction.configuration.parse_key_value('indexing.check_memory', 'False')
+    reduction.update_parallel_config()
+    return reduction
 
 
 @pytest.fixture
 def basic_source(example_reduction):
     source = FunctionalAstroModel2D(example_reduction.info,
                                     reduction=example_reduction)
+    source.configuration.parse_key_value('indexing.check_memory', 'False')
     return source
 
 
@@ -453,6 +459,7 @@ def test_flag_outside(basic_with_projection):
 
 def test_index(basic_with_projection):
     source = basic_with_projection.copy()
+    source.configuration.parse_key_value('indexing.check_memory', 'True')
     source.input_data_shape = (1, 1)
     frames = source.scans[0][0].frames
     frames.map_index.coordinates.fill(-1)

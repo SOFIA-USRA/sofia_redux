@@ -18,10 +18,10 @@ class Observation2D1(Map2D1, Observation2D):
         """
         Initialize an Observation2D1 object.
 
-        The 2-D observation is an extension of the :class:`Map2D1` class that
-        includes weights and exposure times in addition to the observation data
-        values.  It also includes these for an additional spectral dimension
-        along the z-axis.
+        The 2-D + 1-D observation is an extension of the :class:`Map2D1` class
+        that includes weights and exposure times in addition to the
+        observation data values.  It also includes these for an additional
+        spectral dimension along the z-axis.
 
         Parameters
         ----------
@@ -78,7 +78,7 @@ class Observation2D1(Map2D1, Observation2D):
 
         Returns
         -------
-        Image2D
+        Image2D1
         """
         if data is None:
             data = Image2D1(x_size=self.shape[2],

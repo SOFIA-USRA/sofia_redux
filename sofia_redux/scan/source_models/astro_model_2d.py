@@ -30,7 +30,6 @@ from sofia_redux.scan.coordinate_systems.index_2d import Index2D
 from sofia_redux.scan.coordinate_systems.projector.astro_projector import \
     AstroProjector
 from sofia_redux.scan.coordinate_systems.epoch.epoch import J2000
-from sofia_redux.scan.coordinate_systems.grid.grid_2d1 import Grid2D1
 
 
 __all__ = ['AstroModel2D']
@@ -644,11 +643,13 @@ class AstroModel2D(SourceModel):
 
         max_available = (psutil.virtual_memory().total
                          - self.get_reduction_footprint(self.pixels()))
+        check_memory = self.configuration.get_bool(
+            'indexing.check_memory', default=True)
 
         max_used = int(max_available * max_usage)
         for scan in self.scans:
             for integration in scan.integrations:
-                if psutil.virtual_memory().used > max_used:
+                if check_memory and psutil.virtual_memory().used > max_used:
                     return
                 self.create_lookup(integration)
 

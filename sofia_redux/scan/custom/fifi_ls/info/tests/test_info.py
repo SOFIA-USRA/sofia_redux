@@ -8,6 +8,7 @@ from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.info.base import InfoBase
 from sofia_redux.scan.custom.fifi_ls.info.info import (
     FifiLsInfo, normalize_scan_coordinates)
+from sofia_redux.scan.reduction.reduction import Reduction
 
 
 second = units.Unit('second')
@@ -119,3 +120,22 @@ def test_get_si_pixel_size():
     info = FifiLsInfo()
     info.detector_array.pixel_sizes = 'a'
     assert info.get_si_pixel_size() == 'a'
+
+
+def test_perform_reduction(fifi_simulated_hdul, capsys):
+    reduction = Reduction('fifi_ls')
+    info = reduction.info
+    info.configuration.parse_key_value('fifi_ls.resample', 'False')
+    info.configuration.parse_key_value('rounds', '1')
+    info.perform_reduction(reduction, [fifi_simulated_hdul])
+    out = capsys.readouterr().out
+    assert 'Performing reduction for subsequent FIFI-LS resampling' not in out
+    info.configuration.parse_key_value('fifi_ls.resample', 'True')
+    info.configuration.parse_key_value('fifi_ls.insert_source', 'False')
+    info.perform_reduction(reduction, [fifi_simulated_hdul])
+    out = capsys.readouterr().out
+    assert 'Removing decorrelations and offsets from original data' in out
+    info.configuration.parse_key_value('fifi_ls.insert_source', 'True')
+    info.perform_reduction(reduction, [fifi_simulated_hdul])
+    out = capsys.readouterr().out
+    assert 'Reinserting source back into cleaned data' in out

@@ -1360,6 +1360,8 @@ class FlaggedArray(FlaggedData):
                 beam_map, reference_index=reference_index, weights=weights,
                 get_weights=get_weights)
 
+        steps = round_values(steps)
+
         # Perform the convolution on a coarse grid.
         course_signal, course_weight, ratio = (
             numba_functions.regular_coarse_kernel_convolve(

@@ -6,8 +6,10 @@ import numpy as np
 import pytest
 
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.coordinate_2d1 import Coordinate2D1
 from sofia_redux.scan.coordinate_systems.grid.grid_2d import Grid2D
 from sofia_redux.scan.coordinate_systems.grid.flat_grid_2d import FlatGrid2D
+from sofia_redux.scan.coordinate_systems.grid.flat_grid_2d1 import FlatGrid2D1
 from sofia_redux.scan.coordinate_systems.grid.spherical_grid import \
     SphericalGrid
 from sofia_redux.scan.coordinate_systems.grid.cartesian_grid import \
@@ -191,7 +193,14 @@ def test_get_coordinate_instance_for():
 
 
 def test_get_default_unit():
-    assert Grid2D.get_default_unit() is None
+    g = FlatGrid2D()
+    assert g.get_default_unit() == 'pixel'
+    g.resolution = Coordinate2D([1, 1] * units.Unit('arcsec'))
+    assert g.get_default_unit() == 'arcsec'
+    g = FlatGrid2D1()
+    g.resolution = Coordinate2D1([1, 1] * units.Unit('arcsec'),
+                                 1 * units.Unit('um'))
+    assert g.get_default_unit() == 'arcsec'
 
 
 def test_get_default_coordinate_instance():
@@ -393,13 +402,14 @@ def test_is_reverse_y():
 
 
 def test_parse_header():
-    nd = units.dimensionless_unscaled
+    pix = units.Unit('pixel')
+
     deg = units.Unit('degree')
     h = fits.Header()
     g = FlatGrid2D()
     g.parse_header(h)
-    assert g.x_axis.unit == nd and g.y_axis.unit == nd
-    assert np.allclose(g.m, np.eye(2))
+    assert g.x_axis.unit == pix and g.y_axis.unit == pix
+    assert np.allclose(g.m, np.eye(2) * pix)
     assert g.reference == Coordinate2D([0, 0])
     assert g.reference_index == Coordinate2D([0, 0])
 

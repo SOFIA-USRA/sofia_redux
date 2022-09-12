@@ -304,8 +304,18 @@ class Grid2D(Grid):
         """
         return Coordinate2D.get_instance(name)
 
-    @classmethod
-    def get_default_unit(cls):
+    # @classmethod
+    # def get_default_unit(cls):
+    #     """
+    #     Return the default unit for the grid.
+    #
+    #     Returns
+    #     -------
+    #     None or units.Unit
+    #     """
+    #     return None
+
+    def get_default_unit(self):
         """
         Return the default unit for the grid.
 
@@ -313,7 +323,19 @@ class Grid2D(Grid):
         -------
         None or units.Unit
         """
-        return None
+        unit = None
+        resolution = self.resolution
+        if isinstance(resolution, Coordinate2D):
+            unit = resolution.unit
+        elif isinstance(resolution, Coordinate2D1):
+            unit = resolution.xy_unit
+        elif isinstance(resolution, units.Quantity):  # pragma: no cover
+            unit = resolution.unit
+
+        if unit is None:
+            return units.Unit('pixel')
+        else:
+            return unit
 
     @classmethod
     def get_default_coordinate_instance(cls):
@@ -762,9 +784,9 @@ class Grid2D(Grid):
         else:
             y_unit = units.Unit(y_unit)
 
-        if isinstance(x_unit, units.Unit):
+        if isinstance(x_unit, units.UnitBase):
             self.x_axis.unit = x_unit
-        if isinstance(y_unit, units.Unit):
+        if isinstance(y_unit, units.UnitBase):
             self.y_axis.unit = y_unit
 
         cd_keys = [f'CD1_1{alt}', f'CD1_2{alt}', f'CD2_1{alt}', f'CD2_2{alt}']

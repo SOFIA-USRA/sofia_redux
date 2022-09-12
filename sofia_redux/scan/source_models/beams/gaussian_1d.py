@@ -129,10 +129,10 @@ class Gaussian1D(ABC):
         None
         """
         if not isinstance(value, units.Quantity):
-            if self.unit is None:
+            if self.position_unit is None:  # pragma: no cover
                 value = value * units.dimensionless_unscaled
             else:
-                value = value * self.unit
+                value = value * self.position_unit
         self.model.stddev = gaussian_fwhm_to_sigma * value
         self.validate()
 
@@ -161,10 +161,7 @@ class Gaussian1D(ABC):
         None
         """
         if not isinstance(value, units.Quantity):
-            if self.unit is None:
-                value = value * units.dimensionless_unscaled
-            else:
-                value = value * self.unit
+            value = value * self.position_unit
         self.model.stddev = value
         self.validate()
 
@@ -179,7 +176,7 @@ class Gaussian1D(ABC):
         """
         value = self.model.mean.value
         unit = self.model.mean.unit
-        if unit is None:
+        if unit is None:  # pragma: no cover
             return value
         else:
             return value * unit
@@ -197,16 +194,21 @@ class Gaussian1D(ABC):
         -------
         None
         """
-        self.model.mean = value
+        if not isinstance(value, units.Quantity):
+            self.model.mean = value * self.position_unit
+        else:
+            self.model.mean = value
 
     @property
     def peak(self):
         """
         Return the peak amplitude of the Gaussian.
 
+        Note that the result is returned as a float, not a Quantity.
+
         Returns
         -------
-        float or units.Quantity
+        float
         """
         return self.model.amplitude * 1.0
 
@@ -223,7 +225,20 @@ class Gaussian1D(ABC):
         -------
         None
         """
+        if isinstance(value, units.Quantity):
+            value = value.to(self.unit).value
         self.model.amplitude = value
+
+    @property
+    def position_unit(self):
+        """
+        Return the units of the positional coordinates.
+
+        Returns
+        -------
+        units.Unit
+        """
+        return self.stddev.unit
 
     def __str__(self):
         """
@@ -233,8 +248,12 @@ class Gaussian1D(ABC):
         -------
         str
         """
-        s = f"fwhm={self.fwhm}, mean={self.mean}, peak={self.peak} {self.unit}"
-        return s
+        if self.unit in [None, ud]:
+            peak_str = f'{self.peak}'
+        else:
+            peak_str = f'{self.peak} {self.unit}'
+
+        return f"fwhm={self.fwhm}, mean={self.mean}, peak={peak_str}"
 
     def __repr__(self):
         """
@@ -248,11 +267,11 @@ class Gaussian1D(ABC):
 
     def __eq__(self, other):
         """
-        Test if this Gaussian2D instance is functionally equivalent to another.
+        Test if this Gaussian1D instance is functionally equivalent to another.
 
         Parameters
         ----------
-        other : Gaussian2D
+        other : Gaussian1D
 
         Returns
         -------
@@ -291,7 +310,7 @@ class Gaussian1D(ABC):
 
         Parameters
         ----------
-        psf : Gaussian1D
+        psf : Gaussian1D or None
             The beam to combine.
         deconvolve : bool, optional
             If `True`, indicates a deconvolution rather than a convolution.
@@ -371,7 +390,7 @@ class Gaussian1D(ABC):
 
         Parameters
         ----------
-        psf : Gaussian2D
+        psf : Gaussian1D or units.Quantity
 
         Returns
         -------
@@ -425,7 +444,7 @@ class Gaussian1D(ABC):
 
         Parameters
         ----------
-        integral : units.Quantity of float
+        integral : units.Quantity or float
 
         Returns
         -------
@@ -479,10 +498,13 @@ class Gaussian1D(ABC):
             units.
         """
         resolution = grid.resolution
+        if isinstance(resolution, Coordinate1D):
+            resolution = resolution.x
         fwhm = self.fwhm
         if isinstance(fwhm, units.Quantity) and fwhm.unit == ud:
             fwhm = fwhm.value
-        if isinstance(resolution, units.Quantity) and resolution.unit == ud:
+        if isinstance(resolution, units.Quantity
+                      ) and resolution.unit == ud:  # pragma: no cover
             resolution = resolution.value
 
         w = sigmas * np.abs(fwhm) / resolution
@@ -498,12 +520,15 @@ class Gaussian1D(ABC):
             x0 = x0.value
 
         x += x0
+        if self.position_unit not in [None, ud]:
+            x = x.to(self.position_unit)
+
         return self.model(x)
 
     @staticmethod
     def get_equivalent(beam_map, pixel_size):
         """
-        Return a 2-D Gaussian for a beam map and given pixel size.
+        Return a 1-D Gaussian for a beam map and given pixel size.
 
         The equivalent psf if circular with a FWHM equal to that determined
         from the beam map.
@@ -516,7 +541,7 @@ class Gaussian1D(ABC):
 
         Returns
         -------
-        Gaussian2D
+        Gaussian1D
         """
         psf = Gaussian1D()
         psf.set_equivalent(beam_map, pixel_size)

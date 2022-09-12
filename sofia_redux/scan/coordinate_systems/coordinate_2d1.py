@@ -950,3 +950,47 @@ class Coordinate2D1(ABC):
         """
         return Coordinate2D1(xy=self.xy_coordinates.mean(),
                              z=self.z_coordinates.mean())
+
+    def to_coordinate_3d(self):
+        """
+        Convert the 2D+1 coordinates to full 3D coordinates.
+
+        Coordinates will be flattened and cannot maintain the current shape.
+        The output shape will be (nx * nz,).  Can only occur when the z and
+        xy units are equivalent.
+
+        Returns
+        -------
+        Coordinate3D
+        """
+        if self.x is None or self.z is None:
+            raise ValueError("Can only convert populated coordinates")
+        if self.xy_unit != self.z_unit:
+            raise ValueError("Cannot convert to 3D coordinates when xy and z "
+                             "units are not convertable.")
+
+        x, y, z = self.x, self.y, self.z
+        if self.singular:
+            return Coordinate3D([x, y, z])
+
+        nx, nz, unit = x.size, z.size, self.xy_unit
+        if unit is not None:
+            x = x.ravel()
+            y = y.ravel()
+            z = z.to(unit).ravel()
+        else:
+            x = np.asarray(x)
+            y = np.asarray(y)
+            z = np.asarray(z)
+
+        z2 = np.empty(nx * nz, dtype=float)
+        if unit is not None:
+            z2 = z2 * unit
+        for i in range(nz):
+            z2[i * nx:(i + 1) * nx] = z[i]
+
+        return Coordinate3D(
+            [np.hstack([x.copy() for _ in range(nz)]),
+             np.hstack([y.copy() for _ in range(nz)]),
+             z2]
+        )

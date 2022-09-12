@@ -591,7 +591,7 @@ class Gaussian2D(ABC):
         angle_a = self.position_angle
         angle_b = psf.position_angle
         delta = (2 * (angle_b - angle_a)) % (np.pi * units.Unit('radian'))
-        c = (a ** 2) + (b ** 2) + (2 * a * b * np.cos(delta))
+        c = (a ** 2) + (b ** 2) + (2 * direction * a * b * np.cos(delta))
         c = np.sqrt(c) if c >= 0 else np.nan
         bb = a2x + a2y + (direction * (b2x + b2y))
 

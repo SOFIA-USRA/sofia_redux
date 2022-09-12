@@ -15,12 +15,12 @@ class Image2D1(Image2D):
     def __init__(self, x_size=None, y_size=None, z_size=None, dtype=float,
                  data=None, blanking_value=np.nan, unit=None):
         """
-        Create an Image2D instance.
+        Create an Image2D1 instance.
 
-        The Image2D is an extension of the :class:`Image` class that restricts
-        the number of image dimensions to 2.  Generally, the two dimensions
-        will be referred to as x and y where x refers to data columns, and y
-        refers to data rows.
+        The Image2D1 is an extension of the :class:`Image2D` class that
+        consists of 3 (x, y, z) dimensions.  The (x, y) coordinate plane is
+        replicated at each z coordinate.  Thus, we only need to store the
+        (x, y) plane, and z values rather than each (x, y, z) coordinate.
 
         Parameters
         ----------
@@ -32,8 +32,8 @@ class Image2D1(Image2D):
             The number of pixels for the image in the y-direction.  Will only
             be applied if `data` is `None` and `x_size` and `z_size` are also
             set.
-        y_size : int, optional
-            The number of pixels for the image in the y-direction.  Will only
+        z_size : int, optional
+            The number of pixels for the image in the z-direction.  Will only
             be applied if `data` is `None` and `x_size` and `y_size` are also
             set.
         dtype : type, optional
@@ -126,7 +126,8 @@ class Image2D1(Image2D):
         -------
         None
         """
-        self.set_data_shape((y_size, x_size, z_size))
+        # self.set_data_shape((y_size, x_size, z_size))
+        self.set_data_shape((z_size, y_size, x_size))
 
     def set_data(self, data, change_type=False):
         """
@@ -261,12 +262,12 @@ class Image2D1(Image2D):
         zi = x_rms == 0
         x_weight = np.zeros(x_rms.size, dtype=float)
         x_weight[zi] = np.inf
-        x_weight[~zi] = (1 / x_rms[zi]) ** 2
+        x_weight[~zi] = (1 / x_rms[~zi]) ** 2
 
         zi = y_rms == 0
         y_weight = np.zeros(y_rms.size, dtype=float)
         y_weight[zi] = np.inf
-        y_weight[~zi] = (1 / y_rms[zi]) ** 2
+        y_weight[~zi] = (1 / y_rms[~zi]) ** 2
 
         return Asymmetry2D(x=asymmetry_x, y=asymmetry_y,
                            x_weight=x_weight, y_weight=y_weight)

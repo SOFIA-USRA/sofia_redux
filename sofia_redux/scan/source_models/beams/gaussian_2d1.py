@@ -1,22 +1,16 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 import warnings
-from abc import ABC
-from astropy import log, units
-from astropy.modeling import functional_models
-from astropy.stats import gaussian_fwhm_to_sigma, gaussian_sigma_to_fwhm
+from astropy import units
+from astropy.stats import gaussian_fwhm_to_sigma
 from copy import deepcopy
 import numpy as np
 
 from sofia_redux.scan.source_models.beams.gaussian_1d import Gaussian1D
 from sofia_redux.scan.source_models.beams.gaussian_2d import Gaussian2D
-
-from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.coordinate_systems.coordinate_3d import Coordinate3D
 from sofia_redux.scan.coordinate_systems.coordinate_2d1 import Coordinate2D1
 from sofia_redux.scan.coordinate_systems.index_3d import Index3D
-from sofia_redux.scan.utilities.utils import (
-    get_header_quantity, to_header_float)
 
 __all__ = ['Gaussian2D1']
 
@@ -30,12 +24,10 @@ class Gaussian2D1(Gaussian2D):
                  theta=0.0 * units.Unit('deg'),
                  peak_unit=None, position_unit=None, z_unit=None):
         """
-        Initializes a 2-D Gaussian beam model.
+        Initializes a 2D + 1D Gaussian beam model.
 
-        The Gaussian2D class is a wrapper around the
-        :class:`functional_models.Gaussian2D` class with additional
-        functionality including convolution/deconvolution with another beam,
-        and header parsing/editing.
+        The Gaussian2D1 is used to represent a model using an (x, y) plane
+        replicated along the z-axis.
 
         Parameters
         ----------
@@ -199,7 +191,7 @@ class Gaussian2D1(Gaussian2D):
         """
         value = self.z.model.mean.value
         unit = self.z.model.mean.unit
-        if unit is None:
+        if unit is None:  # pragma: no cover
             return value
         else:
             return value * unit
@@ -227,10 +219,14 @@ class Gaussian2D1(Gaussian2D):
         -------
         str
         """
+        if self.unit in [None, units.dimensionless_unscaled]:
+            unit_str = ''
+        else:
+            unit_str = f' {self.unit}'
         s = f"x_fwhm={self.x_fwhm}, y_fwhm={self.y_fwhm}, "
         s += f"z_fwhm={self.z_fwhm}, x_mean={self.x_mean}, "
         s += f"y_mean={self.y_mean}, z_mean={self.z_mean}, "
-        s += f"theta={self.theta}, peak={self.peak} {self.unit}"
+        s += f"theta={self.theta}, peak={self.peak}{unit_str}"
         return s
 
     def __eq__(self, other):
@@ -270,6 +266,15 @@ class Gaussian2D1(Gaussian2D):
         -------
         None
         """
+        xy_unit = self.x_stddev.unit
+        z_unit = self.z_stddev.unit
+        if not isinstance(x_fwhm, units.Quantity) and xy_unit is not None:
+            x_fwhm = x_fwhm * xy_unit
+        if not isinstance(y_fwhm, units.Quantity) and xy_unit is not None:
+            y_fwhm = y_fwhm * xy_unit
+        if not isinstance(z_fwhm, units.Quantity) and z_unit is not None:
+            z_fwhm = z_fwhm * z_unit
+
         x_stddev = x_fwhm * gaussian_fwhm_to_sigma
         y_stddev = y_fwhm * gaussian_fwhm_to_sigma
         self.model.x_stddev = x_stddev
@@ -301,7 +306,7 @@ class Gaussian2D1(Gaussian2D):
 
         Parameters
         ----------
-        psf : Gaussian2D1
+        psf : Gaussian2D1 or None
             The beam to combine.
         deconvolve : bool, optional
             If `True`, indicates a deconvolution rather than a convolution.
@@ -314,6 +319,36 @@ class Gaussian2D1(Gaussian2D):
             return
         super().combine_with(psf, deconvolve=deconvolve)
         self.z.combine_with(psf.z, deconvolve=deconvolve)
+
+    def convolve_with(self, psf):
+        """
+        Convolve with a given PSF.
+
+        Parameters
+        ----------
+        psf : Gaussian2D1
+           The Point Spread Function to convolve with.
+
+        Returns
+        -------
+        None
+        """
+        self.combine_with(psf, deconvolve=False)
+
+    def deconvolve_with(self, psf):
+        """
+        Deconvolve with a given PSF.
+
+        Parameters
+        ----------
+        psf : Gaussian2D1
+           The Point Spread Function to deconvolve with.
+
+        Returns
+        -------
+        None
+        """
+        self.combine_with(psf, deconvolve=True)
 
     def encompass(self, psf, z_psf=None):
         """
@@ -477,7 +512,7 @@ class Gaussian2D1(Gaussian2D):
             A 3-D beam map image.
         """
         if isinstance(sigmas, Coordinate2D1):
-            sigmas = np.asarray(sigmas.x, sigmas.y, sigmas.z)
+            sigmas = np.asarray([sigmas.x, sigmas.y, sigmas.z])
         elif hasattr(sigmas, '__len__'):
             if isinstance(sigmas, np.ndarray) and sigmas.shape == ():
                 sigmas = np.full(3, sigmas)

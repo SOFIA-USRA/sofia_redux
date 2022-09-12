@@ -172,7 +172,7 @@ class CartesianGrid(Grid):
 
         Parameters
         ----------
-        index : int or float or numpy.ndarray or Coordinate
+        index : int or float or Iterable or numpy.ndarray or Coordinate
 
         Returns
         -------
@@ -336,6 +336,7 @@ class CartesianGrid(Grid):
         None
         """
         alt = self.variant_id
+        ud = units.dimensionless_unscaled
         for i in range(self.ndim):
             axis = self.coordinate_system.axes[i]
             index = self.first_axis + i
@@ -349,10 +350,17 @@ class CartesianGrid(Grid):
             else:
                 axis.unit = units.dimensionless_unscaled
 
-            self.reference_index[i] = header.get(f'CRPIX{axis_id}', 1) - 1
-            self.reference_value[i] = header.get(
+            self.reference_index.coordinates[i] = header.get(
+                f'CRPIX{axis_id}', 1) - 1
+
+            if self.reference_value.unit in [None, ud]:
+                self.reference_value.change_unit(axis.unit)
+            self.reference_value.coordinates[i] = header.get(
                 f'CRVAL{axis_id}', 0.0) * axis.unit
-            self.resolution[i] = header.get(
+
+            if self.resolution.unit in [None, ud]:
+                self.resolution.change_unit(axis.unit)
+            self.resolution.coordinates[i] = header.get(
                 f'CDELT{axis_id}', 1.0) * axis.unit
 
     def edit_header(self, header):
@@ -381,13 +389,13 @@ class CartesianGrid(Grid):
             if u is not None:
                 header[f'CUNIT{axis_id}'] = str(u), f'{name} unit'
             header[f'CRPIX{axis_id}'] = (
-                self.reference_index[i],
+                self.reference_index.coordinates[i] + 1,
                 f'{name} reference grid index (1-based)')
-            ref = self.reference_value[i]
+            ref = self.reference_value.coordinates[i]
             if isinstance(ref, units.Quantity):
                 ref = ref.to(u).value
             header[f'CRVAL{axis_id}'] = ref, f'{name} value at reference index'
-            delta = self.resolution[i]
+            delta = self.resolution.coordinates[i]
             if isinstance(delta, units.Quantity):
                 delta = delta.to(u).value
             header[f'CDELT{axis_id}'] = delta, f'{name} spacing'

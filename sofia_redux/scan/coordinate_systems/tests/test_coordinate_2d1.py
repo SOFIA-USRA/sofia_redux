@@ -429,3 +429,34 @@ def test_mean():
     c = Coordinate2D1(np.arange(10).reshape(2, 5), np.arange(5))
     m = c.mean()
     assert m.x == 2 and m.y == 7 and m.z == 2
+
+
+def test_to_coordinate_3d():
+    c = Coordinate2D1()
+    with pytest.raises(ValueError) as err:
+        c.to_coordinate_3d()
+    assert 'populated coordinates' in str(err.value)
+
+    c = Coordinate2D1([1, 1] * arcsec, 2)
+    with pytest.raises(ValueError) as err:
+        c.to_coordinate_3d()
+    assert 'units are not convertable' in str(err.value)
+
+    c = Coordinate2D1([1, 2, 3])
+    c3 = c.to_coordinate_3d()
+    assert isinstance(c3, Coordinate3D)
+    assert c3.x == 1 and c3.y == 2 and c3.z == 3
+
+    x = np.arange(10) * arcsec
+    y = x.copy()
+    z = np.arange(5) * arcsec
+    c = Coordinate2D1([x, y, z])
+    c3 = c.to_coordinate_3d()
+    assert np.allclose(c3.x, (np.arange(50) % 10) * arcsec)
+    assert np.allclose(c3.y, c3.x)
+    assert np.allclose(c3.z, (np.arange(50) // 10) * arcsec)
+    c = Coordinate2D1([x.value, y.value, z.value])
+    c3 = c.to_coordinate_3d()
+    assert np.allclose(c3.x, np.arange(50) % 10)
+    assert np.allclose(c3.y, c3.x)
+    assert np.allclose(c3.z, np.arange(50) // 10)

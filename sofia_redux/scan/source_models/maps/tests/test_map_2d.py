@@ -17,6 +17,7 @@ from sofia_redux.scan.source_models.maps.map_2d import Map2D
 arcsec = units.Unit('arcsec')
 asec2 = arcsec * arcsec
 ud = units.dimensionless_unscaled
+pix = units.Unit('pixel')
 
 
 @pytest.fixture
@@ -116,6 +117,14 @@ def test_eq(spike_map):
     m2 = m.copy()
     m2.smoothing_beam = 1
     assert m2 != m
+    m2 = m.copy()
+    m.correcting_fwhm = Coordinate2D([1, 1], unit='arcsec')
+    m2.correcting_fwhm = Coordinate2D([2, 2], unit='arcsec')
+    assert m != m2
+    m2 = m.copy()
+    m.filter_fwhm = Coordinate2D([1, 1], unit='arcsec')
+    m2.filter_fwhm = Coordinate2D([2, 2], unit='arcsec')
+    assert m != m2
 
 
 def test_pixel_area(initialized_spike_map):
@@ -380,7 +389,7 @@ def test_get_default_grid_unit():
     m.grid = None
     assert m.get_display_grid_unit() == 1 * units.Unit('pixel')
     m = Map2D()
-    assert m.get_display_grid_unit() is None  # The default from the grid
+    assert m.get_display_grid_unit() == 1 * units.Unit('pixel')
 
 
 def test_get_image(initialized_spike_map, capsys):
@@ -688,7 +697,7 @@ def test_parse_coordinate_info():
     h['CDELT2'] = 2.0
     m = Map2D()
     m.parse_coordinate_info(h)
-    assert m.grid.resolution.x == 1 and m.grid.resolution.y == 2
+    assert m.grid.resolution.x == 1 * pix and m.grid.resolution.y == 2 * pix
 
 
 def test_parse_corrected_beam():
@@ -697,11 +706,11 @@ def test_parse_corrected_beam():
     h['CBMAJ'] = 2.0
     h['CBMIN'] = 2.0
     m.parse_corrected_beam(h)
-    assert m.correcting_fwhm == 2 * units.Unit('degree')
+    assert m.correcting_fwhm == 2 * pix
     h = fits.Header()
     h['CORRECTN'] = 2.5
     m.parse_corrected_beam(h)
-    assert m.correcting_fwhm == 2.5 * units.Unit('degree')
+    assert m.correcting_fwhm == 2.5 * pix
     m.set_display_grid_unit('arcsec')
     m.parse_corrected_beam(h)
     assert m.correcting_fwhm == 2.5 * arcsec
@@ -712,13 +721,12 @@ def test_parse_corrected_beam():
 def test_parse_smoothing_beam():
     m = Map2D()
     m.parse_smoothing_beam(fits.Header())
-    assert np.isclose(m.smoothing_beam.fwhm, 0.939437 * units.Unit('degree'),
-                      atol=1e-6)
+    assert np.isclose(m.smoothing_beam.fwhm, 0.939437 * pix, atol=1e-6)
     h = fits.Header()
     h['SBMAJ'] = 2.0
     h['SBMIN'] = 2.0
     m.parse_smoothing_beam(h)
-    assert m.smoothing_beam.fwhm == 2 * units.Unit('degree')
+    assert m.smoothing_beam.fwhm == 2 * pix
     m.set_display_grid_unit(arcsec)
     h = fits.Header()
     h['SMOOTH'] = 2.5
@@ -732,11 +740,11 @@ def test_parse_filter_beam():
     h['XBMAJ'] = 2.0
     h['XBMIN'] = 2.0
     m.parse_filter_beam(h)
-    assert m.filter_fwhm == 2 * units.Unit('degree')
+    assert m.filter_fwhm == 2 * pix
     h = fits.Header()
     h['EXTFLTR'] = 2.5
     m.parse_filter_beam(h)
-    assert m.filter_fwhm == 2.5 * units.Unit('degree')
+    assert m.filter_fwhm == 2.5 * pix
     m.set_display_grid_unit('arcsec')
     m.parse_filter_beam(h)
     assert m.filter_fwhm == 2.5 * arcsec
@@ -747,13 +755,13 @@ def test_parse_filter_beam():
 def test_parse_underlying_beam():
     m = Map2D()
     m.parse_underlying_beam(fits.Header())
-    assert m.underlying_beam.fwhm == 0 * units.Unit('degree')
+    assert m.underlying_beam.fwhm == 0 * pix
     m.display_grid_unit = 1 * arcsec
     h = fits.Header()
     h['IBMAJ'] = 2.0
     h['IBMIN'] = 2.0
     m.parse_underlying_beam(h)
-    assert m.underlying_beam.fwhm == 2 * units.Unit('degree')
+    assert m.underlying_beam.fwhm == 2 * pix
     h = fits.Header()
     h['BEAM'] = 2.0
     m.parse_underlying_beam(h)
@@ -762,7 +770,7 @@ def test_parse_underlying_beam():
     h['BMAJ'] = 3.0
     h['BMIN'] = 3.0
     m.parse_underlying_beam(h)
-    assert m.underlying_beam.fwhm == 3 * units.Unit('degree')
+    assert m.underlying_beam.fwhm == 3 * pix
     h = fits.Header()
     h['RESOLUTN'] = 2.5
     m.parse_underlying_beam(h)
@@ -785,11 +793,11 @@ def test_parse_header():
     h['EXTFLTR'] = 3.5
     h['BEAM'] = 4.5
     m.parse_header(h)
-    assert m.grid.resolution.x == 1 and m.grid.resolution.y == 2
-    assert m.correcting_fwhm == 1.5 * units.Unit('degree')
-    assert m.smoothing_beam.fwhm == 2.5 * units.Unit('degree')
-    assert m.filter_fwhm == 3.5 * units.Unit('degree')
-    assert m.underlying_beam.fwhm == 4.5 * units.Unit('degree')
+    assert m.grid.resolution.x == 1 * pix and m.grid.resolution.y == 2 * pix
+    assert m.correcting_fwhm == 1.5 * pix
+    assert m.smoothing_beam.fwhm == 2.5 * pix
+    assert m.filter_fwhm == 3.5 * pix
+    assert m.underlying_beam.fwhm == 4.5 * pix
 
 
 def test_edit_coordinate_info(initialized_spike_map):

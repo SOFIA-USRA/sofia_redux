@@ -17,13 +17,19 @@ arcsec = units.Unit('arcsec')
 
 @pytest.fixture
 def example_reduction():
-    return Reduction('example')
+    reduction = Reduction('example')
+    reduction.configuration.parse_key_value('parallel.cores', '1')
+    reduction.configuration.parse_key_value('parallel.jobs', '1')
+    reduction.configuration.parse_key_value('indexing.check_memory', 'False')
+    reduction.update_parallel_config()
+    return reduction
 
 
 @pytest.fixture
 def basic_source(example_reduction):
     source = PixelMap(example_reduction.info,
                       reduction=example_reduction)
+    source.configuration.parse_key_value('indexing.check_memory', 'False')
     return source
 
 
@@ -34,6 +40,7 @@ def initialized_source(basic_source, populated_scan):
     source.allow_indexing = True
     source.configuration.parse_key_value('indexing', 'True')
     source.create_from([populated_scan])
+    source.reduction.available_reduction_jobs = 1
     return source
 
 
@@ -182,7 +189,7 @@ def test_add_model_data(data_source):
 
 
 def test_add_points(initialized_source):
-    source = initialized_source
+    source = initialized_source.copy()
     integration = source.scans[0][0]
     pixels = integration.channels.get_mapping_pixels()
     frames = integration.frames

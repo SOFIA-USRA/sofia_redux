@@ -15,6 +15,7 @@ from sofia_redux.scan.coordinate_systems.grid.spherical_grid_2d1 import \
 from sofia_redux.scan.coordinate_systems.grid.grid_2d1 import Grid2D1
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.coordinate_systems.coordinate_2d1 import Coordinate2D1
+from sofia_redux.scan.coordinate_systems.coordinate_3d import Coordinate3D
 from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
     EquatorialCoordinates
 from sofia_redux.scan.coordinate_systems.projection.default_projection_2d \
@@ -424,9 +425,13 @@ def test_get_offset(spherical_grid_2d1):
     o = offset
     offset = g.get_offset(index, offset=o)
     assert offset is o and np.all(o.is_null())
+    index_3d = Coordinate3D([index.x, index.y, index.z])
+
     index = index.xy_coordinates.copy()
     offset = g.get_offset(index)
     assert isinstance(offset, Coordinate2D) and offset.is_null()
+    offset = g.get_offset(index_3d)
+    assert isinstance(offset, Coordinate2D1) and np.all(offset.is_null())
 
 
 def test_toggle_native(spherical_grid_2d1):

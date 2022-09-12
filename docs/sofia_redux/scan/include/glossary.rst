@@ -711,6 +711,39 @@ Configuration Glossary
        in applying the configuration settings found in 'faint.cfg'.  See bright_
        and deep_.
 
+   * - .. _fifi_ls.insert_source:
+
+       **fifi_ls.insert_source**
+     - | [fifi_ls]
+       | insert_source={True, False}
+     - Used in conjunction with `fifi_ls.resample`_.  If True, the source
+       model is injected back into the irregular frame data.  If False, the
+       detected correlations and drifts are removed from the original frame
+       data.  If using a filter, it is advisable to set this parameter to
+       True, as the filtered signals cannot be removed from the original data.
+
+   * - .. _fifi_ls.resample:
+
+       **fifi_ls.resample**
+     - | [fifi_ls]
+       | resample={True, False}
+     - If set to True, and reducing FIFI-LS data, instructs the reduction to
+       perform a few additional steps post-reduction.  This is to set the
+       irregular frame data to a state where it can then be manually passed
+       into a more robust resampler to generate a final output map, rather
+       than using the default nearest neighbor method.  Please see
+       `fifi_ls.insert_source`_ for more details.
+
+   * - .. _fifi_ls.uncorrected:
+
+       **fifi_ls.uncorrected**
+     - | [fifi_ls]
+       | uncorrected={True, False}
+     - If set to True, and reducing FIFI-LS data, instructs the reduction to
+       use the uncorrected wavelength, data, and error values present in the
+       UNCORRECTED_LAMBDA, UNCORRECTED_FLUX, and UNCORRECTED_STDDEV HDUs rather
+       than the LAMBDA, FLUX, and STDDEV HDUs.
+
    * - .. _fillgaps:
 
        **fillgaps**
@@ -1191,6 +1224,16 @@ Configuration Glossary
        disabled for very large reductions.  Alternatively, one may control the
        amount of memory such indexing may use via the `indexing.saturation`_
        option.  See grid_.
+
+   * - .. _indexing.check_memory:
+
+       **indexing.check_memory**
+     - | [indexing]
+       | check_memory=<True,False>
+     - If True (default), performs a memory check to see if enough space
+       exists in memory to index scans.  This should only really be turned
+       off when running unit tests on a Windows virtual maching.  See
+       indexing_.
 
    * - .. _indexing.saturation:
 
@@ -2672,6 +2715,7 @@ Configuration Glossary
        (<type>) are supported for all instruments:
 
        - *map*: Make a map of the source (default)
+       - *cube*: Make a spectral cube
        - *skydip*: Reduce skydips and determine opacities by fitting a model.
        - *pixelmap*: Create individual maps for every pixel, and use it to
          determine their location in the field of view.

@@ -8,6 +8,7 @@ from scipy.signal import fftconvolve
 import warnings
 
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.coordinate_2d1 import Coordinate2D1
 from sofia_redux.scan.coordinate_systems.index_2d import Index2D
 from sofia_redux.scan.coordinate_systems.grid.grid_2d import Grid2D
 from sofia_redux.scan.coordinate_systems.grid.flat_grid_2d import FlatGrid2D
@@ -106,11 +107,18 @@ class Map2D(Overlay):
             return False
         if self.fits_properties != other.fits_properties:
             return False
-        if not np.isclose(self.correcting_fwhm, other.correcting_fwhm,
-                          equal_nan=True):
+
+        if isinstance(self.correcting_fwhm, (Coordinate2D, Coordinate2D1)):
+            if self.correcting_fwhm != other.correcting_fwhm:
+                return False
+        elif not np.isclose(self.correcting_fwhm, other.correcting_fwhm,
+                            equal_nan=True):
             return False
-        if not np.isclose(self.filter_fwhm, other.filter_fwhm,
-                          equal_nan=True):
+        if isinstance(self.filter_fwhm, (Coordinate2D, Coordinate2D1)):
+            if self.filter_fwhm != other.filter_fwhm:
+                return False
+        elif not np.isclose(self.filter_fwhm, other.filter_fwhm,
+                            equal_nan=True):
             return False
         if self.grid != other.grid:
             return False
@@ -890,10 +898,14 @@ class Map2D(Overlay):
         size_unit = self.get_display_grid_unit()
         pxy = self.grid.get_pixel_size().coordinates
         if size_unit is not None:
-            px, py = (pxy.to(size_unit.unit) / size_unit.value).value
-            unit_str = f' {size_unit.unit}'
-        elif (isinstance(pxy, units.Quantity)
-              and pxy.unit != units.dimensionless_unscaled):
+            if isinstance(size_unit, units.UnitBase):
+                size_value = 1.0
+            else:
+                size_value, size_unit = size_unit.value, size_unit.unit
+            px, py = (pxy.to(size_unit) / size_value).value
+            unit_str = f' {size_unit}'
+        elif (isinstance(pxy, units.Quantity) and
+              pxy.unit != units.dimensionless_unscaled):  # pragma: no cover
             unit_str = f' {pxy.unit}'
             px, py = pxy.value
         else:  # pragma: no cover
@@ -1217,12 +1229,13 @@ class Map2D(Overlay):
             self.correcting_fwhm = beam.fwhm
         else:
             unit = self.get_display_grid_unit()
-            if unit is None:
+            if unit is None:  # pragma: no cover
                 unit = self.get_default_grid_unit()
+                if unit is None:
+                    unit = 'degree'
             else:
-                unit = unit.unit
-            if unit is None:
-                unit = 'degree'
+                if isinstance(unit, units.Quantity):
+                    unit = unit.unit
 
             self.correcting_fwhm = utils.get_header_quantity(
                 header, 'CORRECTN',
@@ -1254,12 +1267,12 @@ class Map2D(Overlay):
                 fits_id=self.SMOOTHING_BEAM_FITS_ID)
         else:
             unit = self.get_display_grid_unit()
-            if unit is None:
+            if unit is None:  # pragma: no cover
                 unit = self.get_default_grid_unit()
-            else:
+                if unit is None:
+                    unit = 'degree'
+            elif isinstance(unit, units.Quantity):
                 unit = unit.unit
-            if unit is None:
-                unit = 'degree'
 
             fwhm = utils.get_header_quantity(
                 header, 'SMOOTH',
@@ -1300,12 +1313,13 @@ class Map2D(Overlay):
             self.filter_fwhm = beam.fwhm
         else:
             unit = self.get_display_grid_unit()
-            if unit is None:
+            if unit is None:  # pragma: no cover
                 unit = self.get_default_grid_unit()
-            else:
+                if unit is None:
+                    unit = 'degree'
+            elif isinstance(unit, units.Quantity):
                 unit = unit.unit
-            if unit is None:
-                unit = 'degree'
+
             self.filter_fwhm = utils.get_header_quantity(
                 header, 'EXTFLTR', default=np.nan,
                 default_unit=unit).to(unit)
@@ -1330,14 +1344,14 @@ class Map2D(Overlay):
         display_unit = self.get_display_grid_unit()
         fits_unit = self.get_default_grid_unit()
 
-        if display_unit is None:
+        if display_unit is None:  # pragma: no cover
             display_unit = 'degree'
-        else:
+        elif isinstance(display_unit, units.Quantity):
             display_unit = display_unit.unit
 
-        if fits_unit is None:
+        if fits_unit is None:  # pragma: no cover
             fits_unit = 'degree'
-        else:  # pragma: no cover
+        elif isinstance(fits_unit, units.Quantity):  # pragma: no cover
             fits_unit = fits_unit.unit
 
         if major_fwhm_key in header:
@@ -1739,7 +1753,7 @@ class Map2D(Overlay):
         super().smooth(beam_map, reference_index=reference_index,
                        weights=weights)
         self.add_smoothing(
-            Gaussian2D.get_equivalent(beam_map, self.grid.resolution))
+            self.default_beam().get_equivalent(beam_map, self.grid.resolution))
 
     def fast_smooth(self, beam_map, steps, reference_index=None, weights=None):
         """
@@ -1884,6 +1898,8 @@ class Map2D(Overlay):
         """
         beam = self.get_anti_aliasing_beam_image_for(map2d)
         map_indices = self.get_index_transform_to(map2d)
+        if isinstance(map_indices, Coordinate2D1):
+            map_indices = map_indices.to_coordinate_3d()
         self.resample_from(map2d, map_indices, kernel=beam, weights=weights)
         self.copy_processing_from(map2d)
 

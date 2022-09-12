@@ -112,7 +112,7 @@ class Map2D1(Map2D):
 
         Returns
         -------
-        Gaussian2D
+        Gaussian2D1
         """
         return Gaussian2D1
 
@@ -123,14 +123,41 @@ class Map2D1(Map2D):
 
         Parameters
         ----------
-        coordinates : numpy.ndarray
+        coordinates : numpy.ndarray or Iterable or Coordinate2D1
 
         Returns
         -------
         Coordinate2D1
         """
-        coordinates = super().numpy_to_fits(coordinates)
-        return Coordinate2D1(coordinates)
+
+        xy_coordinates = super().numpy_to_fits(coordinates)
+        new = Coordinate2D1(xy=xy_coordinates)
+        if len(coordinates) == 3:
+            new.z = coordinates[0]
+        return new
+
+    @classmethod
+    def fits_to_numpy(cls, coordinates):
+        """
+        Convert FITS based (x, y, z) coordinates/indices to numpy (z, y, x).
+
+        Reverses the dimensional ordering so that (x, y, z) coordinates are
+        returned as (z, y, x) coordinates.  Note that boolean arrays remain
+        unaltered, since these usually indicate masking arrays.
+
+        Parameters
+        ----------
+        coordinates : numpy.ndarray or Coordinate or iterable
+
+        Returns
+        -------
+        numpy_coordinates : numpy.ndarray (int or float) or list
+            A list will be returned if a Coordinate2D1 is passed into
+            `coordinates`.
+        """
+        if isinstance(coordinates, Coordinate2D1):
+            coordinates = [coordinates.x, coordinates.y, coordinates.z]
+        return super().fits_to_numpy(coordinates)
 
     @property
     def pixel_volume(self):
@@ -141,7 +168,11 @@ class Map2D1(Map2D):
         -------
         volume : units.Quantity or float
         """
-        return self.pixel_area * self.grid.z.resolution
+        z_width = self.grid.z.resolution
+        if isinstance(z_width, Coordinate1D):
+            z_width = z_width.x
+
+        return self.pixel_area * z_width
 
     @property
     def reference(self):
@@ -215,7 +246,7 @@ class Map2D1(Map2D):
         -------
         filtered : bool
         """
-        return not self.filter_fwhm.is_nan()
+        return not np.all(self.filter_fwhm.is_nan())
 
     def is_corrected(self):
         """
@@ -225,7 +256,7 @@ class Map2D1(Map2D):
         -------
         bool
         """
-        return not self.correcting_fwhm.is_nan()
+        return not np.all(self.correcting_fwhm.is_nan())
 
     def set_correcting_fwhm(self, fwhm):
         """
@@ -261,7 +292,7 @@ class Map2D1(Map2D):
 
         Parameters
         ----------
-        grid : SphericalGrid2D1
+        grid : SphericalGrid2D1 or FlatGrid2D1
 
         Returns
         -------
@@ -398,19 +429,6 @@ class Map2D1(Map2D):
             raise ValueError(f"Unit must be {str}, {units.Unit}, "
                              f"{units.Quantity}, or {None}.")
 
-    def get_volume(self):
-        """
-        Return the total volume of the map.
-
-        The total volume is the number of pixels multiplied by the pixel
-        volume.
-
-        Returns
-        -------
-        area : units.Quantity or float
-        """
-        return self.count_valid_points() * self.grid.get_pixel_volume()
-
     def get_z_display_grid_unit(self):
         """
         Return the display grid unit for the z-axis.
@@ -432,8 +450,21 @@ class Map2D1(Map2D):
         units.Quantity
         """
         if self.grid is None:
-            return self.get_unit('pixel')
+            return units.Unit(self.get_unit('pixel'))
         return self.grid.z.get_default_unit()
+
+    def get_volume(self):
+        """
+        Return the total volume of the map.
+
+        The total volume is the number of pixels multiplied by the pixel
+        volume.
+
+        Returns
+        -------
+        area : units.Quantity or float
+        """
+        return self.count_valid_points() * self.grid.get_pixel_volume()
 
     def get_image_beam(self):
         """
@@ -469,6 +500,20 @@ class Map2D1(Map2D):
 
         return underlying_volume + smoothing_volume
 
+    def get_filter_area(self):
+        """
+        Get the filtering beam area.
+
+        Returns
+        -------
+        area : units.Quantity
+        """
+        if self.filter_fwhm is None:
+            return 0.0 * units.Unit('degree') ** 2
+
+        return Gaussian2D1.AREA_FACTOR * (
+                self.filter_fwhm.x * self.filter_fwhm.y)
+
     def get_filter_volume(self):
         """
         Get the filtering beam area.
@@ -502,7 +547,7 @@ class Map2D1(Map2D):
         -------
         correction_factor : float
         """
-        if self.filter_fwhm.is_nan():
+        if np.any(self.filter_fwhm.is_nan()):
             return 1.0
 
         if underlying_fwhm is None:
@@ -541,7 +586,10 @@ class Map2D1(Map2D):
         else:
             smoothing_beam_volume = self.smoothing_beam.volume
 
-        denom = underlying_beam_volume + self.get_filter_volume()
+        if underlying_beam_volume == 0:
+            denom = self.get_filter_volume()
+        else:
+            denom = underlying_beam_volume + self.get_filter_volume()
         if denom == 0:
             return 1.0
         factor = ((underlying_beam_volume - smoothing_beam_volume) / denom
@@ -554,7 +602,7 @@ class Map2D1(Map2D):
 
         Returns
         -------
-        Gaussian2D
+        Gaussian2D1
         """
         xy_factor = Gaussian2D1.FWHM_TO_SIZE
         z_factor = Gaussian1D.fwhm_to_size
@@ -592,7 +640,7 @@ class Map2D1(Map2D):
         -------
         anti_aliasing_beam_image : numpy.ndarray (float) or None
         """
-        return super().get_anti_aliasing_beam_for(map2d1)
+        return super().get_anti_aliasing_beam_image_for(map2d1)
 
     def get_anti_aliasing_beam_for(self, map2d1):
         """
@@ -629,24 +677,22 @@ class Map2D1(Map2D):
             the flattened map data.
         """
         # Just the (y, x) coordinates in a single plane
-        indices = self.numpy_to_fits(np.stack([x.ravel() for x in np.indices(
-            self.shape[1:])]))
+        indices = self.numpy_to_fits(
+            np.stack([x.ravel() for x in np.indices(self.shape[1:])]))
 
-        offsets = self.grid.get_offset(indices)
+        offsets = self.grid.get_offset(indices.xy_coordinates)
         from_projector = Projector2D(self.grid.projection)
         to_projector = Projector2D(map2d1.grid.projection)
-        from_projector.offset.copy_coordinates(offsets.xy_coordinates)
+        from_projector.offset.copy_coordinates(offsets)
         from_projector.deproject()  # Convert to coordinates
         to_projector.coordinates.convert_from(from_projector.coordinates)
         to_projector.project()  # Convert to offsets, then onto indices
 
-        xy_indices = to_projector.offset
-
+        xy_coordinates = to_projector.offset
         z1_indices = Coordinate1D(np.arange(self.size_z()))
         z1_coordinates = self.grid.z.coordinates_at(z1_indices)
-        z_indices = map2d1.grid.z.index_of(z1_coordinates)
-
-        new_indices = Coordinate2D1(xy=xy_indices, z=z_indices)
+        new_indices = Coordinate2D1(xy=xy_coordinates, z=z1_coordinates)
+        map2d1.grid.offset_to_index(new_indices, in_place=True)
         return new_indices
 
     def get_info(self):
@@ -676,22 +722,22 @@ class Map2D1(Map2D):
         px = pixel_size.x / xy_scale
         py = pixel_size.y / xy_scale
         pz = pixel_size.z / z_scale
-        if xy_unit is not None:
+        if xy_unit is not None and isinstance(xy_unit, units.Unit):
             px = px.to(xy_unit).value
             py = py.to(xy_unit).value
             xy_unit_str = f' {xy_unit}'
         else:
             xy_unit_str = ''
-        if z_unit is not None:
+        if z_unit is not None and isinstance(z_unit, units.Unit):
             pz = pz.to(z_unit).value
             z_unit_str = f' {z_unit}'
         else:
             z_unit_str = ''
 
         u_beam = self.underlying_beam
-        u_fwhm = (0.0, 0.0) if u_beam is None else u_beam.fwhm, u_beam.z_fwhm
+        u_fwhm = (0.0, 0.0) if u_beam is None else (u_beam.fwhm, u_beam.z_fwhm)
         i_beam = self.get_image_beam()
-        i_fwhm = (0.0, 0.0) if i_beam is None else i_beam.fwhm, u_beam.z_fwhm
+        i_fwhm = (0.0, 0.0) if i_beam is None else (i_beam.fwhm, u_beam.z_fwhm)
 
         info = ["Map information:",
                 f"Image Size: {self.get_size_string()} pixels "
@@ -875,8 +921,8 @@ class Map2D1(Map2D):
         -------
         None
         """
-        if self.filter_fwhm.is_nan():
-            self.filter_fwhm.copy_coordinates(self.filter_fwhm)
+        if np.any(self.filter_fwhm.is_nan()):
+            self.filter_fwhm.copy_coordinates(fwhm)
         else:
             min_x = min(self.filter_fwhm.x, fwhm.x)
             min_y = min(self.filter_fwhm.y, fwhm.y)
@@ -963,9 +1009,9 @@ class Map2D1(Map2D):
         else:
             xy_unit = self.get_display_grid_unit()
             z_unit = self.get_z_display_grid_unit()
-            if xy_unit is None:
+            if xy_unit is None:  # pragma: no cover
                 xy_unit = 'degree'
-            if z_unit is None:
+            if z_unit is None:  # pragma: no cover
                 z_unit = units.dimensionless_unscaled
 
             xy_fwhm = utils.get_header_quantity(
@@ -985,8 +1031,15 @@ class Map2D1(Map2D):
         if not isinstance(xy_pixel_smoothing, units.Quantity):
             xy_pixel_smoothing = (xy_pixel_smoothing *
                                   self.smoothing_beam.x_fwhm.unit)
-        z_pixel_smoothing = (self.grid.get_pixel_size_z() /
-                             Gaussian2D1.fwhm_to_size)
+
+        pix_z_size = self.grid.get_pixel_size_z()
+        if isinstance(pix_z_size, Coordinate1D):
+            pix_z_size = pix_z_size.x
+
+        z_pixel_smoothing = (pix_z_size / Gaussian2D1.fwhm_to_size)
+        if not isinstance(z_pixel_smoothing, units.Quantity):
+            z_pixel_smoothing = z_pixel_smoothing * z_unit
+
         pixel_smoothing = Gaussian2D1(x_fwhm=xy_pixel_smoothing,
                                       y_fwhm=xy_pixel_smoothing,
                                       z_fwhm=z_pixel_smoothing)
@@ -1021,14 +1074,14 @@ class Map2D1(Map2D):
         else:
             xy_unit = self.get_display_grid_unit()
             z_unit = self.get_z_display_grid_unit()
-            if xy_unit is None:
+            if xy_unit is None:  # pragma: no cover
                 xy_unit = self.get_default_grid_unit()
                 if xy_unit is None:
                     xy_unit = 'degree'
             elif isinstance(xy_unit, units.Quantity):
                 xy_unit = xy_unit.unit
 
-            if z_unit is None:
+            if z_unit is None:  # pragma: no cover
                 z_unit = self.get_z_default_grid_unit()
                 if z_unit is None:
                     z_unit = units.dimensionless_unscaled
@@ -1062,63 +1115,64 @@ class Map2D1(Map2D):
         """
         major_fwhm_key = f'{self.UNDERLYING_BEAM_FITS_ID}BMAJ'
         self.underlying_beam = Gaussian2D1()
+
         xy_unit = self.get_display_grid_unit()
-        xy_fits_unit = self.get_default_grid_unit()
         z_unit = self.get_z_display_grid_unit()
+        xy_fits_unit = self.get_default_grid_unit()
         z_fits_unit = self.get_z_default_grid_unit()
 
-        if xy_unit is None:
-            xy_unit = 'degree'
+        if xy_unit is None:  # pragma: no cover
+            xy_unit = units.dimensionless_unscaled
         elif isinstance(xy_unit, units.Quantity):
             xy_unit = xy_unit.unit
-        if xy_fits_unit is None:
-            xy_fits_unit = 'degree'
-        elif isinstance(xy_fits_unit, units.Quantity):
+        if xy_fits_unit is None:  # pragma: no cover
+            xy_fits_unit = xy_unit
+        elif isinstance(xy_fits_unit, units.Quantity):  # pragma: no cover
             xy_fits_unit = xy_fits_unit.unit
 
-        if z_unit is None:
+        if z_unit is None:  # pragma: no cover
             z_unit = units.dimensionless_unscaled
         elif isinstance(z_unit, units.Quantity):
             z_unit = z_unit.unit
-        if z_fits_unit is None:
-            z_fits_unit = units.dimensionless_unscaled
-        elif isinstance(z_fits_unit, units.Quantity):
+        if z_fits_unit is None:  # pragma: no cover
+            z_fits_unit = z_unit
+        elif isinstance(z_fits_unit, units.Quantity):  # pragma: no cover
             z_fits_unit = z_fits_unit.unit
 
         if major_fwhm_key in header:
             self.underlying_beam.parse_header(
-                header, size_unit=xy_unit, z_unit=z_unit,
+                header, size_unit=xy_fits_unit, z_unit=z_fits_unit,
                 fits_id=self.UNDERLYING_BEAM_FITS_ID)
 
         elif 'BEAM' in header:
             xy_fwhm = utils.get_header_quantity(
                 header, 'BEAM', default=np.nan,
-                default_unit=xy_unit).to(xy_fits_unit)
+                default_unit=xy_fits_unit).to(xy_unit)
             z_fwhm = utils.get_header_quantity(
                 header, 'BEAMZ', default=np.nan,
-                default_unit=z_fits_unit).to(z_fits_unit)
+                default_unit=z_fits_unit).to(z_unit)
             self.underlying_beam = Gaussian2D1(
                 x_fwhm=xy_fwhm, y_fwhm=xy_fwhm, z_fwhm=z_fwhm)
 
         elif 'BMAJ' in header:
             self.underlying_beam.parse_header(
-                header, size_unit=xy_unit, z_unit=z_unit, fits_id='')
+                header, size_unit=xy_fits_unit, z_unit=z_fits_unit, fits_id='')
             self.underlying_beam.deconvolve_with(self.smoothing_beam)
 
         elif 'RESOLUTN' in header:
             xy_fwhm = utils.get_header_quantity(
                 header, 'RESOLUTN', default=np.nan,
-                default_unit=xy_unit).to(xy_unit)
+                default_unit=xy_fits_unit).to(xy_unit)
             z_fwhm = utils.get_header_quantity(
                 header, 'RESOLUTZ', default=np.nan,
-                default_unit=z_fits_unit).to(z_fits_unit)
+                default_unit=z_fits_unit).to(z_unit)
 
             if self.smoothing_beam is None:
                 self.underlying_beam.set_xyz_fwhm(xy_fwhm, xy_fwhm, z_fwhm)
 
             elif xy_fwhm > self.smoothing_beam.major_fwhm:
-                xy_fwhm = np.sqrt(xy_fwhm ** 2) - (
-                    self.smoothing_beam.x_fwhm * self.smoothing_beam.y_fwhm)
+                xy_fwhm = np.sqrt((xy_fwhm ** 2) - (
+                    self.smoothing_beam.x_fwhm * self.smoothing_beam.y_fwhm))
                 if z_fwhm > self.smoothing_beam.z_fwhm:
                     z_fwhm -= self.smoothing_beam.z_fwhm
                 self.underlying_beam.set_xyz_fwhm(xy_fwhm, xy_fwhm, z_fwhm)
@@ -1189,7 +1243,7 @@ class Map2D1(Map2D):
                     z_fwhm,
                     f'{{Deprecated}} FWHM ({z_unit}) z axis smoothing.')
 
-        if not self.filter_fwhm.is_nan():
+        if not np.any(self.filter_fwhm.is_nan()):
             filter_beam = Gaussian2D1(x_fwhm=self.filter_fwhm.x,
                                       y_fwhm=self.filter_fwhm.y,
                                       z_fwhm=self.filter_fwhm.z)
@@ -1198,7 +1252,7 @@ class Map2D1(Map2D):
                                     size_unit=xy_fits_unit,
                                     z_unit=z_fits_unit)
 
-        if not self.correcting_fwhm.is_nan():
+        if not np.any(self.correcting_fwhm.is_nan()):
             correction_beam = Gaussian2D1(x_fwhm=self.correcting_fwhm.x,
                                           y_fwhm=self.correcting_fwhm.y,
                                           z_fwhm=self.correcting_fwhm.z)
@@ -1317,7 +1371,7 @@ class Map2D1(Map2D):
             span = ranges.span
             if span.xy_unit is not None:
                 distance_str = f'({span.x.value}x{span.y})x'
-            else:
+            else:  # pragma: no cover
                 distance_str = f'({span.x}x{span.y})x'
             distance_str += f'{span.z}'
 
@@ -1412,11 +1466,11 @@ class Map2D1(Map2D):
         ----------
         beam_map : numpy.ndarray (float)
             The beam map image kernel with which to smooth the map of shape
-            (ky, kx).
+            (kz, ky, kx).
         reference_index : Coordinate2D1
-            The reference pixel index of the kernel in (x, y).
+            The reference pixel index of the kernel in (x, y, z).
         weights : numpy.ndarray (float)
-            The map weights of shape (ny, nx).
+            The map weights of shape (nz, ny, nx).
 
         Returns
         -------
@@ -1463,7 +1517,7 @@ class Map2D1(Map2D):
         if isinstance(steps, Coordinate2D1):
             steps = np.asarray([steps.x, steps.y, steps.z])
         elif isinstance(steps, Coordinate):
-            steps = reference_index.coordinates.copy()
+            steps = steps.coordinates.copy()
 
         super().fast_smooth(beam_map, steps, reference_index=reference_index,
                             weights=weights)

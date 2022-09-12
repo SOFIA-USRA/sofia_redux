@@ -32,12 +32,15 @@ class SpectralCube(AstroIntensityMap):
 
     def __init__(self, info, reduction=None):
         """
-        Initialize an astronomical intensity map.
+        Initialize a spectral cube.
 
-        The astronomical intensity map represents the source as an
-        :class:`Observation2D` map containing data, noise, and exposure values.
-        It also contains a base image containing the results of the previous
-        reduction iteration in order to calculate gain and coupling increments.
+        The spectral cube map represents the source as an
+        :class:`Observation2D1` map containing data, noise, and exposure
+        values. It also contains a base image containing the results of the
+        previous reduction iteration in order to calculate gain and coupling
+        increments.  The (x, y) coordinates are spatial, and the 3rd z
+        coordinate is along the spectral dimension in which all (x, y) planes
+        are equivalent.
 
         Parameters
         ----------
@@ -174,7 +177,7 @@ class SpectralCube(AstroIntensityMap):
 
     def get_reference(self):
         """
-        Return the reference pixel of the source model WCS.
+        Return the reference position of the source model WCS.
 
         Returns
         -------
@@ -268,7 +271,7 @@ class SpectralCube(AstroIntensityMap):
             rz = 0.2 * point_size.z
         elif len(resolution) == 1:
             rx = ry = resolution[0] * xy_unit
-            rz = 0.2 * self.info.instrument.spectral_fwhm
+            rz = 0.2 * self.info.instrument.resolution.z
         elif len(resolution) == 2:
             rx = ry = resolution[0] * xy_unit
             rz = resolution[1] * z_unit
@@ -373,6 +376,7 @@ class SpectralCube(AstroIntensityMap):
             for scan in self.scans:
                 for integration in scan.integrations:
                     sf = integration.channels.flagspace.sourceless_flags()
+                    skip_flag = integration.flagspace.flags.SAMPLE_SKIP.value
                     channels = integration.channels.get_mapping_pixels(
                         discard_flag=sf)
                     snf.flag_z_outside(
@@ -382,8 +386,8 @@ class SpectralCube(AstroIntensityMap):
                         valid_frames=integration.frames.valid,
                         channel_indices=channels.indices,
                         sample_flags=integration.frames.sample_flag,
-                        skip_flag=integration.flagspace.flags.SAMPLE_SKIP)
-            z_range = Coordinate1D([min_z, max_z])
+                        skip_flag=skip_flag)
+            z_range = Coordinate1D([-z_width, z_width])
 
         else:
             min_z = np.inf * z_unit
@@ -422,7 +426,7 @@ class SpectralCube(AstroIntensityMap):
         The source indices contain 1-D lookup values for the pixel indices
         of a sample on the source model.  The map indices are stored in the
         integration frames as the 1-D `source_index` attribute, and the
-        2-D `map_index` attribute.
+        2D+1 `map_index` attribute.
 
         Parameters
         ----------
@@ -470,7 +474,7 @@ class SpectralCube(AstroIntensityMap):
             z_size=self.size_z,
             valid_frame=frames.valid)
 
-        if bad_samples > 0:
+        if bad_samples > 0:  # pragma: no cover
             log.warning(f"{bad_samples} samples have bad map indices")
 
         frames.map_index.coordinates[..., pixels.indices] = (
@@ -494,8 +498,12 @@ class SpectralCube(AstroIntensityMap):
         source_indices : numpy.ndarray (int)
             The 1-D source indices of shape (shape,).
         """
-        return np.ravel_multi_index(
-            (pixel_indices[2], pixel_indices[1], pixel_indices[0]), self.shape)
+        xi, yi, zi = pixel_indices
+        gi = (xi != -1) & (yi != -1) & (zi != -1)
+        source_indices = np.full(xi.shape, -1)
+        source_indices[gi] = np.ravel_multi_index(
+            (zi[gi], yi[gi], xi[gi]), self.shape)
+        return source_indices
 
     def source_index_to_pixel_index(self, source_indices):
         """
@@ -512,11 +520,20 @@ class SpectralCube(AstroIntensityMap):
             The pixel indices of shape (3, shape,) containing the
             (x_index, y_index) pixel indices.
         """
+        bi = source_indices < 0
+        if bi.any():
+            correct = True
+            source_indices = source_indices.copy()
+            source_indices[bi] = 0
+        else:
+            correct = False
+
         z, y, x = np.unravel_index(source_indices, self.shape)
-        invalid = np.nonzero(source_indices < 0)
-        z[invalid] = -1
-        y[invalid] = -1
-        x[invalid] = -1
+        if correct:
+            z[bi] = -1
+            y[bi] = -1
+            x[bi] = -1
+
         return np.stack((x, y, z), axis=0)
 
     def get_smoothing(self, smooth):
@@ -685,16 +702,14 @@ class SpectralCube(AstroIntensityMap):
         None
         """
         self.base = Image2D1(x_size=self.size_x, y_size=self.size_y,
-                             dtype=float)
+                             z_size=self.size_z, dtype=float)
 
     def post_process_scan(self, scan):
         """
         Perform post-processing steps on a scan.
 
-        At this stage, the map should have already been added to the main
-        reduction map and we are left with a throw-away map that can be used
-        to update settings in other objects.  The intensity map may be used to
-        update the pointing for a given scan.
+        For FIFI-LS, pointing is not necessary.  But a skeleton template
+        is commented out below if it's ever necessary.
 
         Parameters
         ----------
@@ -764,45 +779,6 @@ class SpectralCube(AstroIntensityMap):
         # scan.pointing = self.get_peak_source(degree=spline_degree,
         #                                      reduce_degrees=reduce_degrees)
 
-    def get_peak_index(self):
-        """
-        Return the peak index.
-
-        Returns
-        -------
-        index : Index3D
-            The peak (x, y, z) coordinate.
-        """
-        sign = self.configuration.get_sign('source.sign')
-        s2n = self.get_significance()
-
-        if sign > 0:
-            z, y, x = np.unravel_index(np.nanargmax(s2n.data), s2n.shape)
-        elif sign < 0:
-            z, y, x = np.unravel_index(np.nanargmin(s2n.data), s2n.shape)
-        else:
-            z, y, x = np.unravel_index(
-                np.nanargmax(np.abs(s2n.data)), s2n.shape)
-        return Index3D([x, y, z])
-
-    def get_peak_coords(self):
-        """
-        Return the coordinates of the peak value.
-
-        Returns
-        -------
-        peak_coordinates : Coordinate2D1
-            The (x, y, z) peak coordinate.
-        """
-        projector = AstroProjector(self.projection)
-        offset = self.grid.get_offset(self.get_peak_index())
-        projector.offset = offset.xy_coordinates
-        projector.deproject()
-        xy = projector.coordinates
-        z = offset.z_coordinates
-        z.add(self.grid.z.reference_value)
-        return Coordinate2D1(xy=xy, z=z)
-
     # def get_peak_source(self, degree=3, reduce_degrees=False):
     #     """
     #     Return the peak source model.
@@ -859,6 +835,45 @@ class SpectralCube(AstroIntensityMap):
     #         return None
     #     else:
     #         return peak_source
+
+    def get_peak_index(self):
+        """
+        Return the peak index.
+
+        Returns
+        -------
+        index : Index3D
+            The peak (x, y, z) coordinate.
+        """
+        sign = self.configuration.get_sign('source.sign')
+        s2n = self.get_significance()
+
+        if sign > 0:
+            z, y, x = np.unravel_index(np.nanargmax(s2n.data), s2n.shape)
+        elif sign < 0:
+            z, y, x = np.unravel_index(np.nanargmin(s2n.data), s2n.shape)
+        else:
+            z, y, x = np.unravel_index(
+                np.nanargmax(np.abs(s2n.data)), s2n.shape)
+        return Index3D([x, y, z])
+
+    def get_peak_coords(self):
+        """
+        Return the coordinates of the peak value.
+
+        Returns
+        -------
+        peak_coordinates : Coordinate2D1
+            The (x, y, z) peak coordinate.
+        """
+        projector = AstroProjector(self.projection)
+        offset = self.grid.get_offset(self.get_peak_index())
+        projector.offset = offset.xy_coordinates
+        projector.deproject()
+        xy = projector.coordinates
+        z = offset.z_coordinates
+        z.add(self.grid.z.reference_value)
+        return Coordinate2D1(xy=xy, z=z)
 
     def mask_integration_samples(self, integration, flag='SAMPLE_SKIP'):
         """

@@ -312,10 +312,11 @@ class FifiLsInfo(SofiaInfo):
             start_data = {}
 
         reduction.reduce()
-        reduction.source.sync()
 
         if not is_resample:
             return
+
+        reduction.source.sync()  # Ensure the source is synced to the data
 
         if not insert_source:
             log.info('Removing decorrelations and offsets from original data.')
@@ -327,7 +328,8 @@ class FifiLsInfo(SofiaInfo):
                                           dtype=float)
 
                     for mode, signal in integration.signals.items():
-                        if not isinstance(signal, CorrelatedSignal):
+                        if not isinstance(signal, CorrelatedSignal
+                                          ):  # pragma: no cover
                             continue
                         snf.resync_gains(
                             frame_data=correction,

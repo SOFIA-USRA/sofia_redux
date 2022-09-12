@@ -22,7 +22,8 @@ def test_check_coordinate_units():
     assert 'must be dimensionless' in str(err.value)
     x = np.arange(3) * units.dimensionless_unscaled
     coordinates, original = c.check_coordinate_units(x)
-    assert coordinates.dtype == int and np.allclose(coordinates, [0, 1, 2])
+    assert (coordinates.dtype in [int, np.int64]
+            and np.allclose(coordinates, [0, 1, 2]))
     assert not original
     coordinates, original = c.check_coordinate_units(None)
     assert coordinates is None and original
@@ -79,5 +80,5 @@ def test_insert_blanks():
 def test_set_shape():
     c = Index()
     c.set_shape((4, 5))
-    assert c.coordinates.dtype == int
+    assert c.coordinates.dtype in [int, np.int64]
     assert np.allclose(c.coordinates, np.zeros((4, 5)))

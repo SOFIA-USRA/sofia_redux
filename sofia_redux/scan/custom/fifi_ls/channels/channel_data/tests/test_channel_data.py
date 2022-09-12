@@ -87,9 +87,9 @@ def test_to_string(fifi_initialized_channel_data):
     data = fifi_initialized_channel_data.copy()
     s = data.to_string()
     lines = s.split('\n')
-    assert lines[0] == (
+    assert lines[0].startswith(
         'ch\tgain\tweight\tflag\teff\tGspex\tGspax\tidx\tspex\tspax')
-    assert lines[1] == (
+    assert lines[1].startswith(
         'B[0,0]\t1.000\t1.000e+00\t-\t1.000\t1.000\t1.000\t0\t0\t0')
     df = data.to_string(frame=True)
     assert df.columns.to_list() == ['ch', 'gain', 'weight', 'flag', 'eff',

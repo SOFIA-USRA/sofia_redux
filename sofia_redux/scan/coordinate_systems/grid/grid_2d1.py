@@ -8,7 +8,9 @@ from sofia_redux.scan.coordinate_systems.grid.grid_1d import Grid1D
 from sofia_redux.scan.coordinate_systems.grid.grid_2d import Grid2D
 from sofia_redux.scan.coordinate_systems.grid.spherical_grid import \
     SphericalGrid
+from sofia_redux.scan.coordinate_systems.coordinate_1d import Coordinate1D
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.coordinate_3d import Coordinate3D
 from sofia_redux.scan.coordinate_systems.coordinate_2d1 import Coordinate2D1
 from sofia_redux.scan.utilities.utils import round_values
 
@@ -712,11 +714,17 @@ class Grid2D1(Grid2D):
         -------
         offset : Coordinate2D1 or Coordinate2D
         """
-        if not isinstance(indices, Coordinate2D1):
+        if not isinstance(indices, (Coordinate2D1, Coordinate3D)):
             return super().get_offset(indices, offset=offset)
 
-        xy = super().get_offset(indices.xy_coordinates)
-        z = self.z.index_to_offset(indices.z_coordinates)
+        if isinstance(indices, Coordinate2D1):
+            xy = super().get_offset(indices.xy_coordinates)
+            z = indices.z_coordinates
+        else:
+            xy = super().get_offset(Coordinate2D(indices))
+            z = Coordinate1D(indices.z)
+
+        z = self.z.index_to_offset(z)
         if offset is None:
             return Coordinate2D1(xy=xy, z=z)
 

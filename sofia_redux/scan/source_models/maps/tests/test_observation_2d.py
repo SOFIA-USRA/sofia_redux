@@ -4,6 +4,7 @@ from astropy import units
 import numpy as np
 import pytest
 
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.source_models.maps.image_2d import Image2D
 from sofia_redux.scan.source_models.maps.observation_2d import Observation2D
 
@@ -19,6 +20,7 @@ def obs2d():
     o.weight.data = np.full(o.shape, 16.0)
     o.exposure.data = np.full(o.shape, 0.5)
     o.filter_fwhm = 1 * arcsec
+    o.grid.resolution = Coordinate2D([1, 1] * arcsec)
     return o
 
 
@@ -30,6 +32,7 @@ def alternate_obs2d():
     o.weight.data = np.full(o.shape, 16.0)
     o.exposure.data = np.full(o.shape, 0.5)
     o.filter_fwhm = 1 * arcsec
+    o.grid.resolution = Coordinate2D([1, 1] * arcsec)
     return o
 
 
@@ -390,7 +393,7 @@ def test_smooth(obs2d):
     assert np.allclose(o.weight.data[0], [4] + [6] * 9 + [4])
     assert np.allclose(o.exposure.data[mask], 1.2)
     assert np.allclose(o.exposure.data[~mask], 1)
-    assert np.isclose(o.smoothing_beam.fwhm, 2.818312, atol=1e-6)
+    assert np.isclose(o.smoothing_beam.fwhm, 2.818312 * arcsec, atol=1e-6)
 
     expected = o.copy()
     o = o_save.copy()
@@ -438,8 +441,8 @@ def test_undo_filter_correct(obs2d):
 def test_fft_filter_above(obs2d):
     o = obs2d.copy()
     o.filter_fwhm = np.inf * arcsec
-    o.fft_filter_above(5 * arcsec)
-    assert np.allclose(o.data, 0)
+    o.fft_filter_above(0.01 * arcsec)
+    assert np.allclose(o.data, 0, atol=1e-2)
 
 
 def test_resample_from_map(obs2d, alternate_obs2d):

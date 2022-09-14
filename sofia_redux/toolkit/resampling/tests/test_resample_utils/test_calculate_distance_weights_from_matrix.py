@@ -16,5 +16,5 @@ def test_calculate_distance_weights_from_matrix():
     weights = calculate_distance_weights_from_matrix(x, reference, alpha)
     weights = weights.reshape((11, 11))
     assert weights[5, 5] == 1
-    assert weights[5, 6] == np.exp(-(0.2 * 0.2 / 2))
-    assert weights[10, 10] == np.exp(-1)
+    assert np.isclose(weights[5, 6], np.exp(-(0.2 * 0.2 / 2)))
+    assert np.isclose(weights[10, 10], np.exp(-1))

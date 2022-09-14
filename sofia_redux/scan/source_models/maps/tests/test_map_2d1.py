@@ -254,7 +254,7 @@ def test_get_image_beam_volume(initialized_spike_map):
                       10.64909578 * units.Unit('arcsec2 um'), atol=1e-5)
     m.smoothing_beam = None
     assert np.isclose(m.get_image_beam_volume(),
-                      9.64909578  * units.Unit('arcsec2 um'), atol=1e-5)
+                      9.64909578 * units.Unit('arcsec2 um'), atol=1e-5)
     m.underlying_beam = None
     assert m.get_image_beam_volume() == 0
 
@@ -668,7 +668,7 @@ def test_convert_range_value_to_index(initialized_spike_map):
     m = initialized_spike_map.copy()
     m.verbose = True
     i = m.convert_range_value_to_index([1.5, 2.4, 2.5])
-    assert isinstance(i, np.ndarray) and i.dtype == int
+    assert isinstance(i, np.ndarray) and i.dtype in [int, np.int64]
     assert np.allclose(i, [2, 2, 3])
 
 
@@ -709,7 +709,7 @@ def test_smooth(initialized_spike_map):
     ref = Coordinate2D1([1, 1, 1])
     beam_map = np.ones((3, 3, 3))
     m.smooth(beam_map, reference_index=ref)
-    assert np.isclose(m.data.max(), 1/27, atol=1e-3)
+    assert np.isclose(m.data.max(), 1 / 27, atol=1e-3)
     m = initialized_spike_map.copy()
     ref = Coordinate3D([1, 1, 1])
     m.smooth(beam_map, reference_index=ref)

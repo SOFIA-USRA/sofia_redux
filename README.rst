@@ -16,8 +16,7 @@ for instruments on the Stratospheric Observatory for Infrared Astronomy
 
 Currently, the SOFIA instruments supported by this package are the FORCAST
 and FLITECAM imaging and spectroscopic instruments, the FIFI-LS integral field
-spectrometer, and the HAWC+ imaging and polarimetric
-instrument.
+spectrometer, and the HAWC+ imaging and polarimetric instrument.
 
 SOFIA raw and processed data can be accessed from the
 `SOFIA archive <https://irsa.ipac.caltech.edu/applications/sofia/>`__.

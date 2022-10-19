@@ -1,8 +1,17 @@
-1.2.7
+1.2.8
 =====
 
+- Calibration updates for FORCAST flight series OC9V and HAWC flight
+  series OC9W.
+- Expanded acceptable formats for reference line lists in the spectral
+  viewer.
+
+
+1.2.7 (2022-09-15)
+==================
+
 - Updated FORCAST pipeline to v2.6.0, including additional parameters to
-  allow reduction in detecttor coordinates and a bug fix for water vapor
+  allow reduction in detector coordinates and a bug fix for water vapor
   optimization in spectroscopy calibration.
 - Updated FIFI-LS pipeline to v2.7.0, including improved spatial calibration
   and astrometry fixes for the final spectral cube and an experimental

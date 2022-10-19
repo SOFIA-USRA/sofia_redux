@@ -1,16 +1,36 @@
 import copy
-import re
 import os
 
 import astropy.units as u
 import numpy as np
 from typing import Dict, List, Optional, Union
-
+import pandas as pd
 from sofia_redux.visualization import log
 from sofia_redux.visualization.utils import unit_conversion as uc
 
 
 class ReferenceData(object):
+    """
+    Backend for handling reference data.
+
+    This is the parent class of the Reference_Window class. User does not
+    interact with it directly. It parses data from the .txt/.csv files.
+    These files may contain one or two columns. However,
+    the first column must contain wavelength/wavenumber. It handles data
+    with or without a header. It enables following features:
+    - changing of axis-units is based on user selection.
+    - reset labels and lines
+
+    Parameters
+    ----------
+    line_list : Dict
+        Values are wavelengths and labels
+    line_unit : str or Unit
+        Wavelength Unit of a line
+    enabled : Dict
+        keys are `ref_line` and `ref_label`
+
+    """
 
     def __init__(self):
         self.line_list = dict()
@@ -40,64 +60,99 @@ class ReferenceData(object):
         return '\n'.join(lines)
 
     def add_line_list(self, filename: str) -> bool:
+
+        """
+        Obtains a list of spectral lines.
+
+        It sets the visibility for labels and lines while assuming the
+        default unit of wavelength to be `um`.
+
+        Parameters
+        ----------
+        filename : str
+            Name of the file containing reference data.
+
+        Returns
+        -------
+        Bool
+            True: when data is parsed successfully
+            False: When there is an error with reading the file or has
+            errors (UnicodeError, ValueError or TypeError) .
+        """
+
         log.info(f'Loading line list from {filename}')
         if not os.path.isfile(filename):
             log.error(f'Line list file {filename} not found')
             return False
+
         try:
-            with open(filename, 'r') as f:
-                lines = f.readlines()
-        except UnicodeError:  # pragma: no cover
-            return False
-        if len(lines) == 0:
-            log.info('Line list is empty')
-            return True
-        delim = self._determine_delim(lines[0])
-        try:
-            if delim is None:
-                self._read_single_column(lines)
-            else:
-                self._read_multiple_columns(lines[1:], delim)
-        except (ValueError, TypeError) as err:
+            # attempt standard formats
+            self._read_line_list(filename)
+        except ValueError:
+            try:
+                # attempt space delimited
+                self._read_line_list_space_delim(filename)
+            except (ValueError, TypeError, OSError, UnicodeError) as err:
+                log.debug(f'Error in reading line list: {err}')
+                return False
+        except (TypeError, OSError, UnicodeError) as err:
             log.debug(f'Error in reading line list: {err}')
             return False
+
+        # check for empty list
+        if len(self.line_list) == 0:
+            log.debug('Line list is empty')
+            return False
+
         self.line_unit = u.um
         self.set_visibility(['ref_line', 'ref_label'], True)
         return True
 
-    @staticmethod
-    def _determine_delim(line: str) -> Optional[str]:
-        if line.startswith('#'):
-            clean_line = line.strip().replace(' ', '').replace('#', '')
-            delim = re.findall(r'\W', clean_line)
-            if delim:
-                delim = delim[0]
-            else:
-                delim = ' '
-        else:
-            delim = None
-        log.debug(f'Line list deliminator set to {delim}')
-        return delim
-
-    def _read_single_column(self, lines):
-        log.debug('Reading line list without labels')
-        for i, line in enumerate(lines):
-            label = f'{float(line):.5g} um'
-            self.line_list[label] = [float(line.strip())]
-
-    def _read_multiple_columns(self, lines, delim):
-        log.debug('Reading line list with labels')
-        for line in lines:
-            if line.strip():
-                parts = line.strip().split(delim)
-                transition = ' '.join(parts[1:]).strip()
-                wavelength = float(parts[0])
+    def _read_line_list(self, filename):
+        # allows single column or
+        # 2+ column with comma, tab, or | as delimiter
+        log.debug('Attempting to read most common line list formats')
+        data = pd.read_table(filename, header=None, sep=r'\,|\t+|\|',
+                             engine='python', comment='#',
+                             skip_blank_lines=True)
+        shape = data.shape[1]
+        if shape >= 2:
+            for i in range(len(data[0])):
+                transition = data[1][i].strip()
+                wavelength = float(data[0][i])
                 if transition in self.line_list:
                     self.line_list[transition].append(wavelength)
                 else:
                     self.line_list[transition] = [wavelength]
+        elif shape == 1:
+            for i in range(len(data[0])):
+                wavelength = float(data[0][i])
+                transition = f'{float(wavelength):.5g} um'
+                self.line_list[transition] = [wavelength]
+        else:  # pragma: no cover
+            raise ValueError('Unexpected line list format')
+
+    def _read_line_list_space_delim(self, filename):
+        # allows space-separated two column files with
+        # the first column a number
+        log.debug('Attempting to read space delimited line list')
+        data = pd.read_table(filename, header=None, comment='#',
+                             skip_blank_lines=True,
+                             sep=r'(?<=\d)\s+', engine='python',
+                             names=['wave', 'label'], usecols=(0, 1))
+
+        for i in range(len(data['wave'])):
+            transition = str(data['label'][i]).strip()
+            wavelength = float(data['wave'][i])
+            if transition in self.line_list:
+                self.line_list[transition].append(wavelength)
+            else:
+                self.line_list[transition] = [wavelength]
 
     def set_visibility(self, targets, state):
+        """
+        Changes the visibility of lines and labels based on user input.
+        """
         if not isinstance(targets, list):
             targets = [targets]
         if 'all' in targets:
@@ -161,6 +216,9 @@ class ReferenceData(object):
         return converted
 
     def unload_data(self):
+        """
+        Resets the line_list, line_unit, and enabled.
+        """
         self.line_list = dict()
         self.line_unit = None
         self.enabled = {'ref_line': False,

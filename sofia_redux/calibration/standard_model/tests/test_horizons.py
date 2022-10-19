@@ -144,7 +144,7 @@ def ephem():
     return t
 
 
-@pytest.mark.parametrize('target', ['Ceres', 'Vesta'])
+@pytest.mark.parametrize('target', ['Ceres', 'Vesta', 'Juno'])
 def test_asteroid_query(timepoint, capsys, target):
     date = timepoint.datetime.date()
     time = timepoint.datetime.time()

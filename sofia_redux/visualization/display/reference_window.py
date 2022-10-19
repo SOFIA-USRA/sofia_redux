@@ -27,6 +27,37 @@ __all__ = ['ReferenceWindow']
 
 
 class ReferenceWindow(QtWidgets.QDialog, rd.Ui_Dialog):
+    """
+    GUI framework for displaying the spectral lines
+
+    It pops up a `Reference Data` window from the dropdown option of
+    `Analysis`, where a user can interact directly. It includes following
+    buttons:
+    -- Load List - allows to load in reference data files, only one at a time.
+    However more files can be loaded in by clicking on this button again.
+    -- Clear Lists - it removes all the loaded files as well lines and
+    labels from plots.
+
+    Each loaded file can be opened by double clicking on a selection.
+
+    Two check boxes include:
+    - unload labels -- This removes the labels from the plot
+    - unload lines -- This removed labels and lines from the plot
+
+    Parameters
+    ---------
+    connections: reference_window.Reference_window
+        Method to establish connection with the buttons and checkboxes
+    signals: sofia_redux.visualization.signals.Signals
+        Custom signals recognized by the Eye interface, used
+        to trigger callbacks from user events.
+    ref_models: reference_model.ReferenceData
+        The line list data
+    visibility: Dict
+         keys are `ref_line` and `ref_label`
+    textview: sofia_redux.visualization.display.text_view.TextView()
+        Text viewer widget
+    """
 
     def __init__(self, parent: Any) -> None:
         if not HAS_PYQT5:  # pragma: no cover
@@ -43,6 +74,11 @@ class ReferenceWindow(QtWidgets.QDialog, rd.Ui_Dialog):
         self.textview = None
 
     def connections(self):
+        """
+        Establish connection with the buttons: load_lines and clear_lists
+        and
+        checkboxes: `Show line` and `Show label`.
+        """
         self.load_file_button.clicked.connect(self.load_lines)
         self.show_lines_box.toggled.connect(
             lambda: self.toggle_visibility('ref_line'))

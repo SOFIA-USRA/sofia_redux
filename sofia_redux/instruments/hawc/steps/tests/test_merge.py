@@ -246,7 +246,8 @@ class TestMerge(DRPTestCase):
                        beamsize=[4.84, 7.80, 7.80, 13.6, 18.2],
                        **kwargs)
         assert 'Setting smoothing FWHM to beam' in capsys.readouterr().err
-        assert np.allclose(expected.image, testval.image, equal_nan=True)
+        assert np.allclose(expected.image, testval.image,
+                           equal_nan=True, rtol=.01)
 
         # run without adaptive, fwhm != beam -- no warning
         testval2 = step(inp, adaptive_algorithm=None,
@@ -255,7 +256,8 @@ class TestMerge(DRPTestCase):
                         **kwargs)
         assert 'Setting smoothing FWHM to beam' not in capsys.readouterr().err
         # result is not the same without adaptive
-        assert not np.allclose(expected.image, testval2.image, equal_nan=True)
+        assert not np.allclose(expected.image, testval2.image,
+                               equal_nan=True, rtol=.01)
 
     def test_bin_cdelt(self, tmpdir, capsys):
         inp = self.make_data(tmpdir)

@@ -59,6 +59,25 @@ class TestReferenceData(object):
                     for res, cor in zip(list(obj.line_list.values()),
                                         list(line_list.values()))])
 
+    def test_add_linelist_duplicates(self, line_list_duplicates,
+                                     line_list_csv_duplicates):
+        obj = reference_model.ReferenceData()
+        result = obj.add_line_list(line_list_csv_duplicates)
+        assert result
+        for line in line_list_duplicates:
+            parts = line.strip().split(' ')
+            transition = ' '.join(parts[1:]).strip()
+            wavelength = float(parts[0])
+            assert wavelength in obj.line_list[transition]
+
+    def test_add_linelist_noheader(self, line_list, line_list_noheader):
+        obj = reference_model.ReferenceData()
+        result = obj.add_line_list(line_list_noheader)
+        assert result
+        assert all([res[0] == float(cor)
+                    for res, cor in zip(list(obj.line_list.values()),
+                                        list(line_list.values()))])
+
     def test_add_linelist_empty(self):
         obj = reference_model.ReferenceData()
         result = obj.add_line_list('/a/bad/path')
@@ -69,40 +88,44 @@ class TestReferenceData(object):
         caplog.set_level(logging.DEBUG)
         obj = reference_model.ReferenceData()
 
-        mocker.patch.object(obj, '_read_single_column', side_effect=ValueError)
+        # failure in first attempt with ValueError
+        mocker.patch.object(obj, '_read_line_list', side_effect=ValueError)
         result = obj.add_line_list(line_list_simple)
 
+        # tries to parse with space delim
+        assert 'Error in reading line list:' not in caplog.text
+        assert 'Attempting to read space delimited' in caplog.text
+
+        # succeeds
+        assert result is True
+
+        # failure in second attempt
+        mocker.patch.object(obj, '_read_line_list_space_delim',
+                            side_effect=ValueError)
+        result = obj.add_line_list(line_list_simple)
+
+        # fails
         assert 'Error in reading line list:' in caplog.text
         assert result is False
 
-    def test_add_linelist_fail2(self, mocker, line_list_empty, caplog):
-        caplog.set_level(logging.INFO)
+    def test_add_linelist_fail2(self, mocker, line_list_simple, caplog):
+        caplog.set_level(logging.DEBUG)
+        obj = reference_model.ReferenceData()
+
+        # failure in first attempt with non-ValueError
+        mocker.patch.object(obj, '_read_line_list', side_effect=TypeError)
+        result = obj.add_line_list(line_list_simple)
+
+        # fails
+        assert 'Error in reading line list:' in caplog.text
+        assert result is False
+
+    def test_add_linelist_fail3(self, mocker, line_list_empty, caplog):
+        caplog.set_level(logging.DEBUG)
         obj = reference_model.ReferenceData()
         result = obj.add_line_list(line_list_empty)
-        assert result is True
+        assert result is False
         assert 'Line list is empty' in caplog.text
-
-    def test_read_single_column(self, caplog):
-        caplog.set_level(logging.DEBUG)
-        obj = reference_model.ReferenceData()
-        lines = ['3.0392023', '3.0916927', '3.2969917', '3.7405565',
-                 '4.0522623']
-        obj._read_single_column(lines)
-        assert 'Reading line list without labels' in caplog.text
-        for line in lines:
-            label = f'{float(line):.5g} um'
-            assert obj.line_list[label] == [float(line.strip())]
-
-    def test_read_multiple_column(self, caplog, line_list_duplicates):
-        caplog.set_level(logging.DEBUG)
-        obj = reference_model.ReferenceData()
-        obj._read_multiple_columns(line_list_duplicates, ' ')
-        assert 'Reading line list with labels' in caplog.text
-        for line in line_list_duplicates:
-            parts = line.strip().split(' ')
-            transition = ' '.join(parts[1:]).strip()
-            wavelength = float(parts[0])
-            assert wavelength in obj.line_list[transition]
 
     def test_convert_list_unit_simple(self, mocker):
         obj = reference_model.ReferenceData()

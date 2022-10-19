@@ -2,7 +2,7 @@
 """
 The starting point for EOS models.
 
-Data read in from FITS files are stored in a collection
+Data read in from FITS or non-fits files are stored in a collection
 of model object in this directory. The structure of a single
 complete FITS file is as follows:
 
@@ -108,6 +108,8 @@ class Model(object):
         elif instrument == 'exes':
             model = high_model.MultiOrder(hdul)
         elif instrument == 'none' or instrument == '':
+            # Assign the instrument to 'General' when there is no instrument
+            # information has been provided.
             hdul[0].header['instrume'] = 'General'
             if not header.get('XUNIT') or not header.get('XUNITS'):
                 hdul[0].header['XUNITS'] = 'um'
@@ -129,6 +131,28 @@ class Model(object):
 
 
 def general(filename) -> pf.HDUList:
+    """
+    Parse a non-fits file.
+
+    It convert the data  into `hdul` format.
+
+    Parameters
+    ----------
+    filename : str
+        Absolute path the non-FITS file to read and parse.
+
+    Returns
+    -------
+    hdul_read : 'astropy.io.fits.HDUList'
+        An astropy HDUList
+
+    Raises
+    ------
+    RuntimeError
+        If invalid file is passed.
+        or if invalid columns in the file.
+    """
+
     header = pf.Header()
     header['XUNITS'] = 'um'
     header['YUNITS'] = 'Jy'

@@ -71,11 +71,19 @@ class Pane(object):
     ----------
     ax : matplotlib.axes.Axes
         Plot axes to display in the pane.
+    ax_alt : matplotlib.axes.Axes
+        Alternative plot axes to display in the pane.
     models : dict
         Data models displayed in the pane.  Keys are model IDs;
         values are sofia_redux.visualization.models.HighModel instances.
+    reference : dict
+        Reference model for lines and corresponding labels.
+        Values are sofia_redux.visualization.models.reference_model
+        .ReferenceData instances.
     fields : dict
         Model fields currently displayed in the pane.
+    show_overplot: bool
+        To over plot the alternative axis.
     brewer_cycle : list of str
         Color hex values for the 'spectral' color cycle.
     tab10_cycle : list of str
@@ -554,10 +562,14 @@ class OneDimPane(Pane):
     markers : dict
         Current plot colors.  Keys are model IDs; values are marker
         symbol names.
+    ref_color: str
+        Type color range being used.
     guide_line_style : dict
         Style parameters for guide line overlays.
     data_changed : bool
         Flag to indicate that data has changed recently.
+    signals:
+        Instance of sofia_redux.visualization.signals.Signals
     """
 
     def __init__(self, signals: Signals, ax: Optional[ma.Axes] = None) -> None:
@@ -621,7 +633,8 @@ class OneDimPane(Pane):
 
     def add_model(self, model: MT) -> List[DT]:
         """
-        Copy a model to the pane.
+        Copy a model to the pane. This model does not exist in the pane
+        beforehand.
 
         The model is copied so the data can be manipulated
         without changing the root model.
@@ -662,7 +675,7 @@ class OneDimPane(Pane):
 
     def update_model(self, models: MT) -> List[DT]:
         """
-        Copy a model to the pane.
+        Update the pre-existing model in pane with a copy of original model.
 
         The model is copied so the data can be manipulated
         without changing the root model.
@@ -749,6 +762,9 @@ class OneDimPane(Pane):
     def update_reference_data(self, reference_models: Optional[RT] = None,
                               plot: Optional[bool] = True
                               ) -> Optional[List[DT]]:
+        """
+
+        """
         if reference_models is None and self.reference is None:
             return None
         if reference_models is not None:

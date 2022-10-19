@@ -141,16 +141,6 @@ class LowModel(object):
         self.unit_key = str(self.unit)
         self._verify_unit_parse()
 
-        # if self.unit_key == 'cm-1':
-        #
-        #     wave_number_unit = {'cm-1': u.kayser,
-        #                         'pixel': u.pix}
-        #     self.available_units['wavelength'] = wave_number_unit
-        # elif self.unit_key == 'sec':
-        #     time_units = {'sec': u.s,
-        #                   'pixel': u.pix}
-        #     self.available_units['time'] = time_units
-
     def _verify_unit_parse(self) -> None:
         """
         Verify the unit was successfully parsed.

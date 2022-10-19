@@ -27,9 +27,10 @@ __all__ = ['atran_params', 'atran_name', 'atran_hdul', 'atran_file',
            'line_list_duplicates', 'line_list_whitespace',
            'line_flux', 'spectrum_file', 'spectrum_file_units',
            'spectrum_file_noheader', 'spectrum_file_comma',
-           'spectrum_file_units_paran',
+           'spectrum_file_units_paran', 'line_list_noheader',
            'spectrum_file_single', 'spectrum_file_multi',
-           'line_list_csv', 'line_list_pipe', 'line_list_empty']
+           'line_list_csv', 'line_list_pipe', 'line_list_empty',
+           'line_list_csv_duplicates']
 
 
 @pytest.fixture(scope='function')
@@ -752,6 +753,16 @@ def line_list_whitespace(line_list, tmp_path):
 
 
 @pytest.fixture(scope='function')
+def line_list_noheader(line_list, tmp_path):
+    filename = 'line_list.txt'
+    filename = str(tmp_path / filename)
+    with open(filename, 'w') as f:
+        for transition, wavelength in line_list.items():
+            f.write(f'{wavelength:13s} ,{transition}\n')
+    return filename
+
+
+@pytest.fixture(scope='function')
 def line_list_pipe(line_list, tmp_path):
     filename = 'line_list.txt'
     filename = str(tmp_path / filename)
@@ -770,6 +781,17 @@ def line_list_csv(line_list, tmp_path):
         f.write('# Vacuum Wavelength  ,  ID\n')
         for transition, wavelength in line_list.items():
             f.write(f'{wavelength:11s} , {transition}\n')
+    return filename
+
+
+@pytest.fixture(scope='function')
+def line_list_csv_duplicates(line_list_duplicates, tmp_path):
+    filename = 'line_list.txt'
+    filename = str(tmp_path / filename)
+    with open(filename, 'w') as f:
+        f.write('# Vacuum Wavelength  ,  ID\n')
+        for lstr in line_list_duplicates:
+            f.write(f'{lstr[:9]} , {lstr[9:]}\n')
     return filename
 
 

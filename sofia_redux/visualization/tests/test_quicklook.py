@@ -248,11 +248,11 @@ class TestQuicklookImage(object):
         # image is always the first subplot
         hdul = simple_fits_data
         fig1 = quicklook.make_image(hdul, plot_layout=None)
-        assert fig1.axes[0].get_geometry() == (1, 1, 1)
+        assert fig1.axes[0].get_subplotspec().get_geometry() == (1, 1, 0, 0)
         fig2 = quicklook.make_image(hdul, plot_layout=(2, 1))
-        assert fig2.axes[0].get_geometry() == (2, 1, 1)
+        assert fig2.axes[0].get_subplotspec().get_geometry() == (2, 1, 0, 0)
         fig3 = quicklook.make_image(hdul, plot_layout=(1, 2))
-        assert fig3.axes[0].get_geometry() == (1, 2, 1)
+        assert fig3.axes[0].get_subplotspec().get_geometry() == (1, 2, 0, 0)
         hdul.close()
 
     def test_watermark(self, simple_fits_data):

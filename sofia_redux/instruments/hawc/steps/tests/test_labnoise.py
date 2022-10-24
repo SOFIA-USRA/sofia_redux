@@ -60,15 +60,12 @@ class TestLabNoise(DRPTestCase):
 
             # this will crash with a fatal Python error
             # if plots are not thread safe
-
             from threading import Thread
             t1 = Thread(target=_try_plot, args=(0,))
-            t1.start()
             t2 = Thread(target=_try_plot, args=(1,))
-            t2.start()
-
-            # let both finish
+            t1.start()
             t1.join()
+            t2.start()
             t2.join()
 
             # check for output from both threads

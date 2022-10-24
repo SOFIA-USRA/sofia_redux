@@ -520,9 +520,9 @@ class TestEye(object):
         assert line.get_color() == color
 
     @pytest.mark.parametrize('index,label,drawstyle,linestyle,marker',
-                             [(0, 'Step', 'steps-mid', '-', 'None'),
-                              (1, 'Line', 'default', '-', 'None'),
-                              (2, 'Scatter', 'default', 'None', 'x')])
+                             [(0, 'Step', 'steps-mid', '-', ['', 'None']),
+                              (1, 'Line', 'default', '-', ['', 'None']),
+                              (2, 'Scatter', 'default', 'None', ['x'])])
     def test_plot_type_cycle(self, loaded_eye, qtbot, index, label,
                              drawstyle, linestyle, marker):
         current = loaded_eye.view.plot_type_selector.currentText()
@@ -540,12 +540,12 @@ class TestEye(object):
         line = loaded_eye.view.figure.gallery.arts['line'][0].get_artist()
         assert line.get_drawstyle() == drawstyle
         assert line.get_linestyle() == linestyle
-        assert str(line.get_marker()) == marker
+        assert str(line.get_marker()) in marker
 
     def test_show_markers(self, loaded_eye, qtbot):
         assert not loaded_eye.view.marker_checkbox.isChecked()
         line = loaded_eye.view.figure.gallery.arts['line'][0].get_artist()
-        assert str(line.get_marker()) == 'None'
+        assert str(line.get_marker()) in ['None', '']
 
         with qtbot.wait_signal(loaded_eye.view.signals.atrophy):
             qtbot.mouseClick(loaded_eye.view.marker_checkbox,
@@ -555,7 +555,7 @@ class TestEye(object):
         with qtbot.wait_signal(loaded_eye.view.signals.atrophy):
             qtbot.mouseClick(loaded_eye.view.marker_checkbox,
                              PyQt5.QtCore.Qt.LeftButton)
-        assert str(line.get_marker()) == 'None'
+        assert str(line.get_marker()) in ['', 'None']
 
     def test_show_grid(self, loaded_eye, qtbot):
         assert not loaded_eye.view.grid_checkbox.isChecked()

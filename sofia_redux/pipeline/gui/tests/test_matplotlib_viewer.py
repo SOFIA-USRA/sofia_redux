@@ -94,25 +94,25 @@ class TestMatplotlibViewer(object):
         mpview.update(plots)
         axes = mpview.plotter.figure.get_axes()
         assert len(axes) == 4
-        geom = axes[-1].get_geometry()
-        assert geom == (2, 2, 4)
+        geom = axes[-1].get_subplotspec().get_geometry()
+        assert geom == (2, 2, 3, 3)
         mpview.reset()
 
         mpview.layout = 'rows'
         mpview.update(plots)
         axes = mpview.plotter.figure.get_axes()
         assert len(axes) == 4
-        geom = axes[-1].get_geometry()
+        geom = axes[-1].get_subplotspec().get_geometry()
         print(axes, mpview.plotter.plot_layout, geom)
-        assert geom == (4, 1, 4)
+        assert geom == (4, 1, 3, 3)
         mpview.reset()
 
         mpview.layout = 'columns'
         mpview.update(plots)
         axes = mpview.plotter.figure.get_axes()
         assert len(axes) == 4
-        geom = axes[-1].get_geometry()
-        assert geom == (1, 4, 4)
+        geom = axes[-1].get_subplotspec().get_geometry()
+        assert geom == (1, 4, 3, 3)
 
         # test null plot -- should just clear axes
         mpview.plotter.plot([])

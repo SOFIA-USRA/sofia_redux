@@ -124,6 +124,11 @@ Two versions of the model libraries are available for each instrument, except
 FLITECAM.  ATRAN files parameterized by water vapor are not available for
 FLITECAM.
 
+The EXES pipeline does not use ATRAN models for telluric correction, but it
+does attach a reference atmospheric model at a matching altitude and zenith
+angle to output spectral products, if available. The models used are derived
+from the `Planetary Spectrum Generator (PSG) <https://psg.gsfc.nasa.gov/>`__.
+
 - FORCAST:
 
   - Approximate models, not accounting for water vapor variation
@@ -162,10 +167,19 @@ FLITECAM.
     - Size: 875 MB
     - MD5 checksum: 6576883144bcc381eacdfe16688ad4d2
 
+- EXES:
+
+  - Approximate models, not accounting for water vapor variation
+
+    - Download: `psg_exes_standard.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/psg_exes_standard.tgz>`__
+    - Size: 5.4 GB
+    - MD5 checksum: 147cf56cf15f2626b75a600e1ede5410
+
 
 After downloading and unpacking the library, its location can be provided
 to the pipeline as an optional parameter in the *Calibrate Flux* step for
-FORCAST or FLITECAM or the *Telluric Correct* step for FIFI-LS.
+FORCAST or FLITECAM, the *Telluric Correct* step for FIFI-LS, or the
+*Extract Spectra* step for EXES.
 
 Standard flux models
 ~~~~~~~~~~~~~~~~~~~~
@@ -179,14 +193,22 @@ provided in the
 this package, at sofia_redux/instruments/forcast/data/grism/standard_models
 or sofia_redux/instruments/flitecam/data/grism/standard_models.
 
-FLITECAM auxiliary data
-~~~~~~~~~~~~~~~~~~~~~~~
-FLITECAM's default auxiliary calibration and reference data, including
-nonlinearity correction coefficients, spectroscopic order masks,
-and wavelength calibration files are provided in full in the
+FLITECAM and EXES auxiliary data
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The default auxiliary calibration and reference data for FLITECAM and
+EXES reductions are too large to be included in the software packages
+provided via PyPI or Anaconda.
+
+These files are provided in full in the
 `source distribution <https://github.com/SOFIA-USRA/sofia_redux>`__ of
-this package.  Since they are required for most FLITECAM data reductions,
-they are automatically downloaded as needed for non-source installations
-(i.e. via pip or conda).  Downloaded calibration files are cached for
-later use in a '.sofia_redux' directory in the user's home directory.
-For offline pipeline reductions, the source installation is recommended.
+this package.  Since they are required for most data reductions for these
+instruments, they may also be automatically downloaded as needed for
+non-source installations (i.e. via pip or conda).  Downloaded calibration
+files are cached for later use in a '.sofia_redux' directory in the user's
+home directory. For offline pipeline reductions, the source installation
+is recommended.
+
+For FLITECAM, the data provided in this manner includes nonlinearity
+correction coefficients, spectroscopic order masks, and wavelength
+calibration files.  For EXES, the large data files are bad pixel masks,
+reset dark files, and nonlinearity correction coefficients.

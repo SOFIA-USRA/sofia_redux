@@ -1,5 +1,15 @@
-1.2.8
+1.3.0
 =====
+- Added EXES support (EXES Redux v3.0.0).
+- Updated FORCAST pipeline to v2.7.0 to allow the use of measured
+  water vapor values in calibration routines.
+- Updated FIFI-LS pipeline to v2.7.1, including a bug fix to spectral
+  maps rotated to align detector orientation.
+- Updated the spectral viewer interface to better control spectra in
+  multiple files, apertures, and orders.
+
+1.2.8 (2022-10-25)
+==================
 
 - Calibration updates for FORCAST flight series OC9V and HAWC flight
   series OC9W.

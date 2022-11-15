@@ -69,6 +69,7 @@ exclude_patterns.append('manuals/*/users/data_description.rst')
 exclude_patterns.append('manuals/*/users/software_description.rst')
 exclude_patterns.append('manuals/*/users/spectral_extraction.rst')
 exclude_patterns.append('manuals/*/users/spectral_calibration.rst')
+exclude_patterns.append('manuals/*/users/spectral_display.rst')
 exclude_patterns.append('manuals/*/data_handbook')
 exclude_patterns.append('manuals/*/*/api')
 

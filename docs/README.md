@@ -7,6 +7,16 @@ To make all HTML docs:
    
 To make all manual PDFs:
 ```
+   cd manuals/exes/users/
+   make clean
+   make latexpdf
+   cd ../data_handbook
+   make clean
+   make latexpdf
+   cd ../developers
+   make clean
+   make latexpdf
+
    cd manuals/fifils/users/
    make clean
    make latexpdf

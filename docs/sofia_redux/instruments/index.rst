@@ -14,6 +14,7 @@ Submodules
 .. toctree::
     :maxdepth: 2
 
+    exes/index.rst
     fifi_ls/index.rst
     flitecam/index.rst
     forcast/index.rst

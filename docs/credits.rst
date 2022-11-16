@@ -23,15 +23,19 @@ SOFIA Pipeline Contributors
 * Melanie Clarke
 * Sebastian Colditz
 * Arpan Das
+* Curtis DeWitt
+* Sarah Eftekharzadeh
 * Dario Fadda
 * Christian Fischer
 * Nicole Karnath
 * Mark Langer
 * Enrique Lopez-Rodriguez
 * Robert Minchin
+* Ed Montiel
 * Dan Perera
 * Leslie Proudfit
 * James Radomski
+* Maisie Rashman
 * Sachin Shenoy
 * William Vacca
 * Rachel Vander Vliet
@@ -43,7 +47,7 @@ SOFIA DPS lead.
 Acknowledgements
 ================
 
-The FORCAST, FLITECAM, and FIFI-LS pipelines distributed in sofia_redux
+The FORCAST, FLITECAM, FIFI-LS, and EXES pipelines distributed in sofia_redux
 were based in part on earlier packages developed in IDL for the SOFIA
 project, with the following primary contributors.  The HAWC pipeline was
 based on a Python 2 software package with C and IDL extensions, called
@@ -70,6 +74,11 @@ packages are also listed below.
 * FDRP
    - Sachin Shenoy
    - Ralph Shuping
+* exes
+   - Melanie Clarke
+   - Curtis DeWitt
+   - Ed Montiel
+   - Matt Richter
 * pipecal
    - Miguel Charcos-Llorens
    - Melanie Clarke

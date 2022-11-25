@@ -186,3 +186,61 @@ def test_update_wcs(data):
             assert result['header'][key] == expected[key]
         else:
             assert np.allclose(result['header'][key], expected[key])
+
+
+@pytest.mark.parametrize('order_num,ymin,ymax,xmin,xmax',
+                         [(0, None, None, None, None),
+                          (1, 0, 16, 2, -2),
+                          (2, 24, 44, 3, -3),
+                          (3, 56, 64, 0, -1)])
+def test_poly_order_0(capsys, data, order_num, ymin, ymax, xmin, xmax):
+    # test trivial rectification: extract regions from
+    # already rectified data
+    y1, x1 = np.mgrid[:64, :64]
+    shape = (64, 64)
+    image = np.arange(64 * 64, dtype=float).reshape(shape)
+    image_copy = image.copy()
+
+    ordermask = np.full(shape, np.nan)
+    ordermask[:16, 2:-2] = 1
+    ordermask[24:44, 3:-3] = 2
+    ordermask[56:, 0:-1] = 3
+
+    spatcal = np.empty(shape, dtype=float)
+    spatcal[:] = y1
+    wavecal = np.empty(shape, dtype=float)
+    wavecal[:] = x1[None, :]
+
+    variance = image * 0.1
+    badpix_mask = np.full(shape, True)
+    bitmask = np.full(shape, 1)
+
+    result = rectifyorder(image, ordermask, wavecal, spatcal, order_num,
+                          variance=variance, mask=badpix_mask,
+                          bitmask=bitmask, dw=1, ds=1, ybuffer=0,
+                          poly_order=0)
+
+    if ymin is None:
+        assert result is None
+        assert "No data for order" in capsys.readouterr().err
+    else:
+        assert np.allclose(result['image'], image[ymin:ymax, xmin:xmax])
+        assert np.allclose(result['wave'], wavecal[ymin, xmin:xmax])
+        assert np.allclose(result['spatial'], spatcal[ymin:ymax, xmin])
+        assert np.allclose(result['variance'], variance[ymin:ymax, xmin:xmax])
+        assert np.allclose(result['mask'], badpix_mask[ymin:ymax, xmin:xmax])
+        assert np.allclose(result['bitmask'], bitmask[ymin:ymax, xmin:xmax])
+
+        # passing None for variance, mask bitmask sets defaults
+        result = rectifyorder(image, ordermask, wavecal, spatcal, order_num,
+                              dw=1, ds=1, ybuffer=0, poly_order=0)
+        assert np.allclose(result['image'], image[ymin:ymax, xmin:xmax])
+        assert np.allclose(result['wave'], wavecal[ymin, xmin:xmax])
+        assert np.allclose(result['spatial'], spatcal[ymin:ymax, xmin])
+        assert np.all(np.isnan(result['variance']))
+        assert np.allclose(result['mask'], True)
+        assert np.allclose(result['bitmask'], 0)
+
+        # input image is not modified, even if result is
+        result['image'] *= 10
+        assert np.allclose(image, image_copy)

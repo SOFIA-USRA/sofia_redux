@@ -15,9 +15,23 @@ processed with this pipeline.
 For previously processed data, check the PIPEVERS keyword in the
 FITS header to determine the pipeline version used.
 
-
-FORCAST Redux v2.6.0
+FORCAST Redux v2.7.0
 ~~~~~~~~~~~~~~~~~~~~
+*User manual: Rev. M*
+
+Imaging
+^^^^^^^
+- Add option to use measured water vapor values from the header (WVZ_OBS)
+  for calibration reference.
+
+Spectroscopy
+^^^^^^^^^^^^
+- Add option to use measured water vapor values from the header (WVZ_OBS)
+  for selecting the atmospheric model used for telluric correction.
+
+
+FORCAST Redux v2.6.0 (2022-09-12)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. L*
 
 Imaging

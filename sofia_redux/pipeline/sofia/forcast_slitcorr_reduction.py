@@ -22,10 +22,13 @@ from sofia_redux.pipeline.sofia.forcast_spectroscopy_reduction \
     import FORCASTSpectroscopyReduction
 from sofia_redux.pipeline.sofia.parameters.forcast_slitcorr_parameters \
     import FORCASTSlitcorrParameters
+from sofia_redux.pipeline.sofia.sofia_utilities import parse_apertures
 from sofia_redux.spectroscopy.extspec import extspec
 from sofia_redux.toolkit.utilities.fits import hdinsert
 from sofia_redux.toolkit.fitting.polynomial import polyfitnd
 from sofia_redux.toolkit.interpolate import tabinv
+
+__all__ = ['FORCASTSlitcorrReduction']
 
 
 def _err_func(var, weights):
@@ -150,7 +153,7 @@ class FORCASTSlitcorrReduction(FORCASTSpectroscopyReduction):
             profile = hdul['SPATIAL_PROFILE'].data
             spatmap = {1: hdul['SPATIAL_MAP'].data}
 
-            appos = np.array(self._parse_apertures(header['APPOSO01'], 1)[0])
+            appos = np.array(parse_apertures(header['APPOSO01'], 1)[0])
             num_aps = appos.size
             aprad = image.shape[0] // num_aps // 2
 
@@ -301,7 +304,7 @@ class FORCASTSlitcorrReduction(FORCASTSpectroscopyReduction):
             flux = hdul['FLUX'].data
             spec_flux = hdul['SPECTRAL_FLUX'].data
             spec_err = hdul['SPECTRAL_ERROR'].data
-            appos = np.array(self._parse_apertures(header['APPOSO01'], 1)[0])
+            appos = np.array(parse_apertures(header['APPOSO01'], 1)[0])
             wave = hdul['WAVEPOS'].data
             space = hdul['SLITPOS'].data
 

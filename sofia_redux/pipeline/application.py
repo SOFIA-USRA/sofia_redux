@@ -14,6 +14,8 @@ except ImportError:
 else:
     HAS_PYQT5 = True
 
+__all__ = ['Application', 'main']
+
 
 class Application(Interface):
     """

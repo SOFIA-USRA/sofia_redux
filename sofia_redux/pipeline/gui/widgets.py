@@ -74,6 +74,11 @@ except ImportError:
 else:
     HAS_PYQT5 = True
 
+__all__ = ['PipeStep', 'ProgressFrame', 'EditParam',
+           'DataTableModel', 'CustomSignals', 'TextEditLogger',
+           'RemoveFilesDialog', 'ConfigView', 'ParamView',
+           'StepRunnable', 'LoadRunnable', 'GeneralRunnable']
+
 
 class PipeStep(QtWidgets.QWidget, ui_pipe_step.Ui_Form):
     """

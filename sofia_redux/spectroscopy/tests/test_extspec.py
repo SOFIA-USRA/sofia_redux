@@ -36,7 +36,7 @@ def test_failure(data, capsys):
     medprof[2] *= np.nan
     nx = rectimg[2]['image'].shape[1]
     result = extspec(rectimg, sub_background=False,
-                     optimal=True, profile=medprof)
+                     optimal=True, profile=medprof, verbose=True)
     assert capsys.readouterr().err.count(
         'Optimal extraction failed') == nx * 2
     assert np.all(result[2][:, 3] == 9)
@@ -153,7 +153,8 @@ def test_bgsub(data, capsys, mocker):
     img_copy = rectimg[1]['image'].copy()
     apmask_copy = rectimg[1]['apmask'].copy()
 
-    kwargs = {'threshold': 0, 'bgorder': 0, 'optimal': False}
+    kwargs = {'threshold': 0, 'bgorder': 1, 'optimal': False,
+              'verbose': True}
 
     # default: subtract background from image and spectrum
     result = extspec(rectimg, sub_background=True, **kwargs)

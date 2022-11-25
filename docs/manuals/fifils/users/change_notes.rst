@@ -12,21 +12,26 @@ data, check the PIPEVERS keyword in the FITS header to determine the
 pipeline version used.
 
 
-FIFI-LS Redux v2.7.0
+FIFI-LS Redux v2.7.1
 ~~~~~~~~~~~~~~~~~~~~
+*User manual: Rev. L*
+
+- Fix a bug in the option to produce a final map aligned with the
+  detector orientation.
+
+FIFI-LS Redux v2.7.0 (2022-09-12)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. L*
 
 - Project spatial data into a common WCS grid for correct astrometry in the
   final spectral cube.
 - Add optional scan reduction support to the resample step for OTF data.
 
-
 FIFI-LS Redux v2.6.1 (2022-05-25)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. K*
 
 - Fix performance issues for very large maps.
-
 
 FIFI-LS Redux v2.6.0 (2021-12-09)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

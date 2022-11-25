@@ -292,7 +292,7 @@ class BaseTree(object):
         if leaf_size is None:
             leaf_size = 40
         n_bins = cls.estimate_n_bins(coordinates, window=window)
-        if coordinates.ndim == 1:
+        if coordinates.ndim == 1:  # pragma: no cover
             coordinates = coordinates[None]
         n_dimensions = coordinates.shape[0]
         n_samples = coordinates[0].size
@@ -323,7 +323,7 @@ class BaseTree(object):
         -------
         bytes : int
         """
-        if coordinates.ndim == 1:
+        if coordinates.ndim == 1:  # pragma: no cover
             coordinates = coordinates[None]
 
         n_dimensions = coordinates.shape[0]

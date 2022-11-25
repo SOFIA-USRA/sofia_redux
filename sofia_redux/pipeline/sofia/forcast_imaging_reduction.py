@@ -32,6 +32,8 @@ from sofia_redux.toolkit.utilities.fits import hdinsert, getheader
 from sofia_redux.toolkit.resampling import tree
 assert tree
 
+__all__ = ['FORCASTImagingReduction']
+
 
 class FORCASTImagingReduction(FORCASTReduction):
     """
@@ -70,7 +72,7 @@ class FORCASTImagingReduction(FORCASTReduction):
         Alternate processing recipe to use when input is telluric-
         corrected or calibrated.  Only calibration, registration,
         and coaddition are applied.
-    basehead : `astropy.io.fits.header.Header`
+    basehead : `astropy.io.fits.Header`
         Header for the first raw input file loaded, used for calibration
         configuration.
     calres : dict-like
@@ -755,6 +757,7 @@ class FORCASTImagingReduction(FORCASTReduction):
 
         # get parameters
         param = self.get_parameter_set()
+        use_wv = param.get_value('use_wv')
 
         outdata = []
         if param.get_value('save'):
@@ -772,7 +775,8 @@ class FORCASTImagingReduction(FORCASTReduction):
             # (in case data spans multiple flight series)
             config = pipecal_config(header)
             outimg, outvar = apply_tellcor(
-                data, header, config, variance=err**2)
+                data, header, config, variance=err**2,
+                use_wv=use_wv)
 
             # run photometry for standards
             if self.calres['obstype'] == 'STANDARD_FLUX':
@@ -819,7 +823,7 @@ class FORCASTImagingReduction(FORCASTReduction):
         """
         from sofia_redux.calibration.pipecal_util import run_photometry
         from sofia_redux.instruments.forcast.hdmerge import hdmerge
-        from sofia_redux.instruments.forcast.coadd import coadd
+        from sofia_redux.toolkit.image.coadd import coadd
 
         # get parameters
         param = self.get_parameter_set()

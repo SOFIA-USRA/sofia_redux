@@ -3,6 +3,8 @@
 
 from sofia_redux.pipeline.parameters import Parameters
 
+__all__ = ['FIFILSParameters']
+
 
 # Store default values for all parameters here.
 # They could equivalently be read from a file, or

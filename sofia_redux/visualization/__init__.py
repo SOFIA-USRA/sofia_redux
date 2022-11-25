@@ -6,10 +6,8 @@
 from ._astropy_init import *   # noqa
 # ----------------------------------------------------------------------------
 
-__all__ = ['Eye', 'log']
+__all__ = ['log']
 
 if not _ASTROPY_SETUP_:   # noqa
     from sofia_redux.visualization.utils.logger import _init_log
     log = _init_log()
-
-    from sofia_redux.visualization.eye import Eye

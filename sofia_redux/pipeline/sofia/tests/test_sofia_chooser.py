@@ -18,8 +18,6 @@ try:
         import FORCASTSpatcalReduction
     from sofia_redux.pipeline.sofia.forcast_slitcorr_reduction \
         import FORCASTSlitcorrReduction
-    from sofia_redux.pipeline.sofia.exes_quicklook_reduction import \
-        EXESQuicklookReduction
     HAS_DRIP = True
 except ImportError:
     FORCASTImagingReduction = Reduction
@@ -27,7 +25,6 @@ except ImportError:
     FORCASTWavecalReduction = Reduction
     FORCASTSpatcalReduction = Reduction
     FORCASTSlitcorrReduction = Reduction
-    EXESQuicklookReduction = Reduction
     HAS_DRIP = False
 
 try:
@@ -63,6 +60,13 @@ except ImportError:
     FLITECAMSpatcalReduction = Reduction
     FLITECAMSlitcorrReduction = Reduction
     HAS_FLITECAM = False
+
+try:
+    from sofia_redux.pipeline.sofia.exes_reduction import EXESReduction
+    HAS_EXES = True
+except ImportError:
+    EXESReduction = Reduction
+    HAS_EXES = False
 
 
 class TestSOFIAChooser(object):
@@ -153,11 +157,6 @@ class TestSOFIAChooser(object):
             ro = chz.choose_reduction(ffile3, cfg)
             assert type(ro) == FORCASTSlitcorrReduction
 
-            # exes data for quicklook
-            fits.setval(ffile3, 'INSTRUME', value='EXES')
-            ro = chz.choose_reduction(ffile3, cfg)
-            assert type(ro) == EXESQuicklookReduction
-
             # mismatched data
             ro = chz.choose_reduction([ffile1, ffile3])
             assert type(ro) == Reduction
@@ -200,6 +199,21 @@ class TestSOFIAChooser(object):
             fits.setval(ffile5, 'INSTCFG', value='IMAGING')
             ro = chz.choose_reduction(ffile5)
             assert type(ro) == FLITECAMImagingReduction
+
+        if HAS_EXES:
+            # exes data
+            ffile6 = self.make_forcast_file()
+            fits.setval(ffile6, 'INSTRUME', value='EXES')
+            ffile7 = self.make_forcast_file()
+            fits.setval(ffile7, 'INSTRUME', value='EXES')
+            fits.setval(ffile7, 'PRODTYPE', value='FLAT')
+
+            # processed flat allowed with raw data, in either
+            # order presented
+            ro = chz.choose_reduction([ffile6, ffile7])
+            assert type(ro) == EXESReduction
+            ro = chz.choose_reduction([ffile7, ffile6])
+            assert type(ro) == EXESReduction
 
     def test_choose_reduction_errors(self, capsys, tmpdir):
         chz = SOFIAChooser()

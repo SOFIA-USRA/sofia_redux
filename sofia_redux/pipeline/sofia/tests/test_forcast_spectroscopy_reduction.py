@@ -440,63 +440,6 @@ class TestFORCASTSpectroscopyReduction(object):
         with pytest.raises(ValueError):
             red.make_profiles()
 
-    def test_parse_apertures(self, capsys):
-        # test helper function for parsing apertures from
-        # parameters or headers
-        red = FORCASTSpectroscopyReduction()
-
-        # nominal input
-        input_position = '1,2,3;4,5,6'
-        expected = [[1., 2., 3.], [4., 5., 6.]]
-        assert np.allclose(red._parse_apertures(input_position, 2), expected)
-
-        # one file: error
-        with pytest.raises(ValueError):
-            red._parse_apertures(input_position, 1)
-        assert 'Could not read input_position' in capsys.readouterr().err
-
-        # two files, one input: applied to all
-        input_position = '1,2,3'
-        expected = [[1., 2., 3.], [1., 2., 3.]]
-        assert np.allclose(red._parse_apertures(input_position, 2), expected)
-
-        # bad value in aperture: error
-        input_position = '1,2,3;4,5a,6'
-        with pytest.raises(ValueError):
-            red._parse_apertures(input_position, 2)
-        assert 'Could not read input_position' in capsys.readouterr().err
-
-    def test_parse_bg(self, capsys):
-        # test helper function for parsing background regions
-        red = FORCASTSpectroscopyReduction()
-
-        # nominal input
-        input_position = '1-2,3-4;5-6'
-        expected = [[[1., 2.], [3., 4.]], [[5., 6.]]]
-        result = red._parse_bg(input_position, 2)
-        assert len(result) == 2
-        for r, e in zip(result, expected):
-            assert np.allclose(r, e)
-
-        # one file: error
-        with pytest.raises(ValueError):
-            red._parse_bg(input_position, 1)
-        assert 'Could not read background region' in capsys.readouterr().err
-
-        # two files, one input: applied to all
-        input_position = '1-2,3-4'
-        expected = [[[1., 2.], [3., 4.]], [[1., 2.], [3., 4.]]]
-        result = red._parse_bg(input_position, 2)
-        assert len(result) == 2
-        for r, e in zip(result, expected):
-            assert np.allclose(r, e)
-
-        # bad value in region: error
-        input_position = '1-2,3-4;5-6a'
-        with pytest.raises(ValueError):
-            red._parse_bg(input_position, 2)
-        assert 'Could not read background region' in capsys.readouterr().err
-
     def test_locate_apertures(self, tmpdir, capsys):
         ffile, red, idx = self.standard_setup(tmpdir, 'locate_apertures')
         red_copy = pickle.dumps(red)

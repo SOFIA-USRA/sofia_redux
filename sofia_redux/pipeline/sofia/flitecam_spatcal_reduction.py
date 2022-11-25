@@ -17,6 +17,8 @@ from sofia_redux.pipeline.sofia.parameters.flitecam_spatcal_parameters \
 from sofia_redux.pipeline.sofia.forcast_spatcal_reduction \
     import FORCASTSpatcalReduction
 
+__all__ = ['FLITECAMSpatcalReduction']
+
 
 class FLITECAMSpatcalReduction(FLITECAMSpectroscopyReduction,
                                FORCASTSpatcalReduction):

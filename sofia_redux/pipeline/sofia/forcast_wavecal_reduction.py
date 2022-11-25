@@ -25,6 +25,7 @@ from sofia_redux.pipeline.sofia.forcast_spectroscopy_reduction \
     import FORCASTSpectroscopyReduction
 from sofia_redux.pipeline.sofia.parameters.forcast_wavecal_parameters \
     import FORCASTWavecalParameters
+from sofia_redux.pipeline.sofia.sofia_utilities import parse_apertures
 
 from sofia_redux.spectroscopy.findapertures import find_apertures
 from sofia_redux.spectroscopy.getapertures import get_apertures
@@ -40,6 +41,8 @@ from sofia_redux.toolkit.fitting.fitpeaks1d import fitpeaks1d, medabs_baseline
 from sofia_redux.toolkit.fitting.polynomial import polyfitnd
 from sofia_redux.toolkit.image.adjust import unrotate90
 from sofia_redux.toolkit.interpolate import tabinv
+
+__all__ = ['FORCASTWavecalReduction']
 
 
 def _min_func(_, y):
@@ -208,19 +211,19 @@ class FORCASTWavecalReduction(FORCASTSpectroscopyReduction):
         if str(method).strip().lower() == 'fix to center':
             log.info('Fixing aperture to slit center.')
             positions = None
-            radii = self._parse_apertures(aprad, len(self.input))
+            radii = parse_apertures(aprad, len(self.input))
             fix_ap = True
         elif str(method).strip().lower() == 'fix to input':
             log.info('Fixing aperture to input position.')
-            positions = self._parse_apertures(appos, len(self.input))
-            radii = self._parse_apertures(aprad, len(self.input))
+            positions = parse_apertures(appos, len(self.input))
+            radii = parse_apertures(aprad, len(self.input))
             fix_ap = True
         else:
             log.info('Finding aperture position from Gaussian fits.')
             if str(appos).strip() == '':
                 positions = None
             else:
-                positions = self._parse_apertures(appos, len(self.input))
+                positions = parse_apertures(appos, len(self.input))
             radii = None
             fix_ap = False
 
@@ -349,9 +352,9 @@ class FORCASTWavecalReduction(FORCASTSpectroscopyReduction):
         guess_lines = []
         guess_pos = []
         if str(guess_lines_input).strip() != '':
-            guess_lines = self._parse_apertures(guess_lines_input, 1)[0]
+            guess_lines = parse_apertures(guess_lines_input, 1)[0]
         if str(guess_pos_input).strip() != '':
-            guess_pos = self._parse_apertures(guess_pos_input, 1)[0]
+            guess_pos = parse_apertures(guess_pos_input, 1)[0]
         if len(guess_lines) != len(guess_pos):
             raise ValueError('Input guess lines do not match '
                              'input guess positions.')
@@ -532,25 +535,25 @@ class FORCASTWavecalReduction(FORCASTSpectroscopyReduction):
             log.info('Stepping apertures up slit.')
             positions = None
             fix_ap = True
-            radii = self._parse_apertures(radius, len(self.input))
+            radii = parse_apertures(radius, len(self.input))
         elif str(method).strip().lower() == 'fix to input':
             log.info('Fixing aperture to input position.')
-            positions = self._parse_apertures(appos_input, len(self.input))
+            positions = parse_apertures(appos_input, len(self.input))
             fix_ap = True
             if str(radius).strip() == '':
                 radii = None
             else:
-                radii = self._parse_apertures(radius, len(self.input))
+                radii = parse_apertures(radius, len(self.input))
         else:
             log.info('Finding aperture positions from Gaussian fits.')
             if str(appos_input).strip() == '':
                 positions = None
             else:
-                positions = self._parse_apertures(appos_input, len(self.input))
+                positions = parse_apertures(appos_input, len(self.input))
             if str(radius).strip() == '':
                 radii = None
             else:
-                radii = self._parse_apertures(radius, len(self.input))
+                radii = parse_apertures(radius, len(self.input))
             fix_ap = False
 
         results = []
@@ -569,9 +572,9 @@ class FORCASTWavecalReduction(FORCASTSpectroscopyReduction):
             spatmap = {1: hdul['SPATIAL_MAP'].data}
 
             # guess line position from initial line ID
-            lines = self._parse_apertures(
+            lines = parse_apertures(
                 hdul[0].header['LINEWAV'], 1)[0]
-            guesses = self._parse_apertures(
+            guesses = parse_apertures(
                 hdul[0].header['LINEPOS'], 1)[0]
             line_type = header.get('LINETYPE', 'emission')
             sigma = header.get('LINEWID', 5.0)
@@ -869,8 +872,8 @@ class FORCASTWavecalReduction(FORCASTSpectroscopyReduction):
             # lines from previous step
             header = hdul[0].header
             hdr_list.append(header)
-            lines = self._parse_apertures(header['LINEWAV'], 1)[0]
-            appos = self._parse_apertures(header['APPOSO01'], 1)[0]
+            lines = parse_apertures(header['LINEWAV'], 1)[0]
+            appos = parse_apertures(header['APPOSO01'], 1)[0]
             all_lines.extend(lines)
 
             line_table = hdul['LINE_TABLE'].data

@@ -26,6 +26,8 @@ from sofia_redux.pipeline.sofia.parameters.forcast_parameters \
     import FORCASTParameters
 from sofia_redux.toolkit.utilities.fits import hdinsert, getheader
 
+__all__ = ['FORCASTReduction']
+
 
 class FORCASTReduction(Reduction):
     """
@@ -64,7 +66,7 @@ class FORCASTReduction(Reduction):
         Alternate processing recipe to use when input is telluric-
         corrected or calibrated.  Only calibration, registration,
         and coaddition are applied.
-    basehead : `astropy.io.fits.header.Header`
+    basehead : `astropy.io.fits.Header`
         Header for the first raw input file loaded, used for calibration
         configuration.
     calres : dict-like
@@ -225,7 +227,7 @@ class FORCASTReduction(Reduction):
 
         Parameters
         ----------
-        header : astropy.io.fits.header.Header
+        header : astropy.io.fits.Header
             Header to create filename from.
         update : bool, optional
             If set, FILENAME key will be added or updated
@@ -313,7 +315,7 @@ class FORCASTReduction(Reduction):
 
         Parameters
         ----------
-        header : `astropy.io.fits.header.Header`
+        header : `astropy.io.fits.Header`
             Header to update.
         """
         # update procstat if necessary

@@ -23,6 +23,8 @@ from sofia_redux.pipeline.sofia.forcast_spectroscopy_reduction \
     import FORCASTSpectroscopyReduction
 from sofia_redux.toolkit.utilities.fits import hdinsert, set_log_level
 
+__all__ = ['FLITECAMSpectroscopyReduction']
+
 
 class FLITECAMSpectroscopyReduction(FLITECAMReduction,
                                     FORCASTSpectroscopyReduction):

@@ -5,6 +5,7 @@ import copy
 import itertools
 import os
 import re
+import uuid
 from typing import (Dict, List, Union, TypeVar,
                     Optional, Tuple, Any, Sequence)
 import warnings
@@ -32,7 +33,7 @@ from sofia_redux.visualization.display import drawing
 try:
     matplotlib.use('QT5Agg')
     matplotlib.rcParams['axes.formatter.useoffset'] = False
-except ImportError:
+except ImportError:  # pragma: no cover
     HAS_PYQT5 = False
 else:
     HAS_PYQT5 = True
@@ -45,6 +46,7 @@ DT = TypeVar('DT', bound=drawing.Drawing)
 Num = TypeVar('Num', int, float)
 Art = TypeVar('Art', ml.Line2D, mt.Annotation, mi.AxesImage)
 ArrayLike = TypeVar('ArrayLike', List, Tuple, Sequence, np.ndarray)
+IDT = TypeVar('IDT', str, uuid.UUID)
 
 
 class Pane(object):
@@ -52,9 +54,9 @@ class Pane(object):
     Plot window management.
 
     The Pane class is analogous to a matplotlib subplot. It
-    contains plot axes and instantiates gallery associated with
+    contains plot axes and instantiates artists associated with
     them.  This class determines appropriate updates for display
-    options, but it does not manage updating gallery themselves
+    options, but it does not manage updating artists themselves
     after they are instantiated.  The `Gallery` class manages all
     artist modifications.
 
@@ -121,8 +123,10 @@ class Pane(object):
             '#d53e4f', '#f46d43', '#fdae61', '#fee08b', '#abdda4']
 
         # matplotlib default: plt.cycler("color", plt.cm.tab10.colors)
+        # Removed gray color (#f7f7f7) because gray is its own
+        # compliment, so all apertures will have the same color
         self.tab10_cycle = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
-                            '#9467bd', '#8c564b', '#e377c2', '#7f7f7f',
+                            '#9467bd', '#8c564b', '#e377c2',
                             '#bcbd22', '#17becf']
 
         # 7 visually separated colors picked from
@@ -133,6 +137,11 @@ class Pane(object):
         # default is accessible
         self.default_colors = self.accessible_cycle
 
+        self.aperture_cycle = dict()
+        self.order_cycle = list()
+
+        self.set_aperture_cycle()
+
         self.default_markers = ['x', 'o', '^', '+', 'v', '*']
         self.fit_linestyles = itertools.cycle(['dashed',
                                                'dotted', 'dashdot'])
@@ -142,6 +151,14 @@ class Pane(object):
         return self.ax == other.ax
 
     def axes(self):
+        """
+        Get primary and alternate axes.
+
+        Returns
+        -------
+        axes : list of matplotlib.axes.Axes
+            The current axes, as [primary, alternate].
+        """
         return [self.ax, self.ax_alt]
 
     def set_axis(self, ax: ma.Axes, kind: str = 'primary') -> None:
@@ -154,9 +171,9 @@ class Pane(object):
         ----------
         ax : matplotlib.axes.Axes
             The axes to assign.
-        kind : str, optional
-            If given, specifies which axis ('primary' or 'secondary')
-            is being given. Defaults to 'primary'.
+        kind : {'primary', 'secondary'}, optional
+            If given, specifies which axis is being given.
+            Defaults to 'primary'.
         """
         if kind == 'primary':
             self.ax = ax
@@ -165,11 +182,19 @@ class Pane(object):
             self.ax_alt = ax
 
     def overplot_state(self) -> bool:
+        """
+        Get current overplot state.
+
+        Returns
+        -------
+        state : bool
+            True if overplot is shown; False otherwise.
+        """
         return self.show_overplot
 
     def model_count(self) -> int:
         """
-        Return number of models attached to the pane.
+        Get the number of models attached to the pane.
 
         Returns
         -------
@@ -190,6 +215,7 @@ class Pane(object):
         raise NotImplementedError
 
     def remove_model(self, filename: Optional[str] = None,
+                     model_id: Optional[IDT] = None,
                      model: Optional[MT] = None) -> None:
         """
         Remove a model from the pane.
@@ -204,6 +230,28 @@ class Pane(object):
             Model instance to remove.
         """
         raise NotImplementedError
+
+    def model_extensions(self, model_id: str) -> List[str]:
+        """
+        Obtain a list of extensions for a model with a given model_id.
+
+        Parameters
+        ----------
+        model_id : str
+            Specific id to a model object (high_model.HighModel).
+
+        Returns
+        -------
+        model.extension() : list of str
+            Model extensions are a list of the hdu names for a given hdul.
+            If `model_id` is not found, returns empty list.
+        """
+        try:
+            model = self.models[model_id]
+        except (IndexError, KeyError):
+            return list()
+        else:
+            return model.extensions()
 
     def possible_units(self) -> Dict[str, List[Any]]:
         """
@@ -227,7 +275,11 @@ class Pane(object):
         """
         raise NotImplementedError
 
-    def set_orders(self, orders: Dict[str, List[Any]]) -> None:
+    def set_orders(self, orders: Dict[str, List[Any]],
+                   enable: Optional[bool] = True,
+                   aperture: Optional[bool] = False,
+                   return_updates:
+                   Optional[bool] = False) -> Optional[List[Any]]:
         """
         Enable specified orders.
 
@@ -236,8 +288,48 @@ class Pane(object):
         orders : dict
             Keys are model IDs; values are lists of orders
             to enable.
+        enable : bool, optional
+            Set to True to enable; False to disable.
+        aperture : bool, optional
+            True if apertures are present; False otherwise.
+        return_updates : bool, optional
+            If set, an update structure is returned.
+
+
         """
         raise NotImplementedError
+
+    def ap_order_state(self, model_ids: Union[List[IDT], IDT]
+                       ) -> Tuple[Dict[IDT, int], Dict[IDT, int]]:
+        """
+        Determine number of orders and apertures for each model_id.
+
+        Parameters
+        ----------
+        model_ids: uuid.UUID, list(uuid.UUID)
+            Single or list of model_ids.
+
+        Returns
+        -------
+        apertures, orders: dict
+            Dictionaries with model_ids as keys and values are
+            the total number of apertures and orders respectively
+            that model contains.
+
+        """
+        if not isinstance(model_ids, list):
+            model_ids = [model_ids]
+        apertures = dict.fromkeys(model_ids)
+        orders = dict.fromkeys(model_ids)
+        for model_id in model_ids:
+            try:
+                n_ap, n_ord = self.models[model_id].ap_order_count()
+            except (IndexError, KeyError):
+                n_ap = 0
+                n_ord = 0
+            apertures[model_id] = n_ap
+            orders[model_id] = n_ord
+        return apertures, orders
 
     def _add_border_highlight(self, color: Optional[str] = None,
                               width: Optional[int] = 2) -> mp.Rectangle:
@@ -475,6 +567,108 @@ class Pane(object):
             self.default_colors = self.tab10_cycle
         else:
             self.default_colors = self.accessible_cycle
+        self.set_aperture_cycle()
+
+    @staticmethod
+    def grayscale(color: str, scheme: Optional[str] = 'yiq'):
+        """
+        Translate color hex to equivalent grayscale value.
+
+        Parameters
+        ----------
+        color : str
+            Color hex value.
+        scheme : {'yiq', 'hex', 'rgb'}
+            Color scheme to use for formatting output grayscale.
+
+        Returns
+        -------
+        gray : str
+            Grayscale value equivalent to the input color.
+        """
+        if isinstance(color, list):
+            color = color[0]
+        yiq = colorsys.rgb_to_yiq(*mc.to_rgb(color))
+        if scheme == 'yiq':
+            gray = str(yiq[0])
+        elif scheme == 'hex':
+            gray = mc.to_hex(colorsys.yiq_to_rgb(yiq[0], 0, 0))
+        elif scheme == 'rgb':
+            gray = colorsys.yiq_to_rgb(yiq[0], 0, 0)
+        else:
+            raise EyeError(f'Unknown color scheme {scheme}')
+        return gray
+
+    def set_aperture_cycle(self):
+        """Set the color cycle for apertures."""
+        self.aperture_cycle = dict()
+        for color in self.default_colors:
+            self.aperture_cycle[color] = self.analogous(color)
+
+    @staticmethod
+    def split_complementary(color):
+        """
+        Produce split complementary colors to the input color.
+
+        Parameters
+        ----------
+        color : str
+            Color hex value.
+
+        Returns
+        -------
+        complements : list of str
+            Two-element list of complements to the input color.
+        """
+        r, g, b = tuple(mc.to_rgb(color))
+        # value has to be 0<x<1 in order to convert to hls
+        # hls provides color in radial scale
+        h, l, s = colorsys.rgb_to_hls(r, g, b)
+        # get hue changes at 150 and 210 degrees
+        deg_150_hue = h + (150.0 / 360.0)
+        deg_210_hue = h + (210.0 / 360.0)
+        # convert to rgb
+        color_150_rgb = list(map(lambda x: round(x * 255),
+                                 colorsys.hls_to_rgb(deg_150_hue, l, s)))
+        color_210_rgb = list(map(lambda x: round(x * 255),
+                                 colorsys.hls_to_rgb(deg_210_hue, l, s)))
+
+        color_150 = mc.rgb2hex([x / 255 for x in color_150_rgb])
+        color_210 = mc.rgb2hex([x / 255 for x in color_210_rgb])
+
+        return [color_150, color_210]
+
+    @staticmethod
+    def analogous(color, degree=130.0):
+        """
+        Produce list of analogous colors to the input color.
+
+        Parameters
+        ----------
+        color : str
+            Color hex value.
+        degree : float
+            Color wheel angle to set as the distance above and below
+            the input color.
+
+        Returns
+        -------
+        analogous : list of str
+            Two-element list of colors analogous to the input color.
+        """
+        r, g, b = tuple(mc.to_rgb(color))
+        # set color wheel angle
+        degree /= 360.0
+        # hls provides color in radial scale
+        h, l, s = colorsys.rgb_to_hls(r, g, b)
+        # rotate hue by d
+        h = [(h + d) % 1 for d in (-degree, degree)]
+        analogous_list = list()
+        for nh in h:
+            new_rgb = list(map(lambda x: round(x * 255),
+                               colorsys.hls_to_rgb(nh, l, s)))
+            analogous_list.append(mc.rgb2hex([x / 255 for x in new_rgb]))
+        return analogous_list
 
     def update_colors(self) -> None:
         """Update colors in currently displayed plots."""
@@ -518,7 +712,7 @@ class Pane(object):
         raise NotImplementedError
 
     def create_artists_from_current_models(self) -> None:
-        """Create new gallery from all current models."""
+        """Create new artists from all current models."""
         raise NotImplementedError
 
 
@@ -560,16 +754,16 @@ class OneDimPane(Pane):
         Current plot colors.  Keys are model IDs; values are color
         hex values.
     markers : dict
-        Current plot colors.  Keys are model IDs; values are marker
+        Current plot markers.  Keys are model IDs; values are marker
         symbol names.
     ref_color: str
-        Type color range being used.
+        Color value used for all reference line overlays.
     guide_line_style : dict
         Style parameters for guide line overlays.
     data_changed : bool
         Flag to indicate that data has changed recently.
-    signals:
-        Instance of sofia_redux.visualization.signals.Signals
+    signals : sofia_redux.visualization.signals.Signals
+        Custom signals, used to pass information to the controlling Figure.
     """
 
     def __init__(self, signals: Signals, ax: Optional[ma.Axes] = None) -> None:
@@ -597,7 +791,7 @@ class OneDimPane(Pane):
                                  'linewidth': 1,
                                  'animated': True}
 
-        self.data_changed = False
+        self.data_changed = True
         self.signals = signals
 
     def __eq__(self, other):
@@ -626,18 +820,19 @@ class OneDimPane(Pane):
                                  'alt_extension': self.fields['y_alt'],
                                  'model_id': model_id,
                                  'enabled': model.enabled,
-                                 'color': mc.to_hex(self.colors[model_id]),
+                                 'color': mc.to_hex(self.colors[model_id][0]),
                                  'marker': self.markers[model_id],
                                  }
         return details
 
     def add_model(self, model: MT) -> List[DT]:
         """
-        Copy a model to the pane. This model does not exist in the pane
-        beforehand.
+        Add a model to the pane.
 
-        The model is copied so the data can be manipulated
+        The model is copied before adding so the data can be manipulated
         without changing the root model.
+
+        If the model already exists in the pane, no action is taken.
 
         Parameters
         ----------
@@ -646,25 +841,39 @@ class OneDimPane(Pane):
 
         Returns
         -------
-        new_lines : dict
+        new_lines : list
             Keys are model IDs; values are dicts with order number
-            keys and dict values, containing new gallery added to
+            keys and dict values, containing new artists added to
             the Pane axes.
         """
-        # new_lines = dict()
         new_lines = list()
+
         if model.id not in self.models.keys():
             self.models[model.id] = copy.deepcopy(model)
             self.models[model.id].extension = self.fields['y']
-            color_index = model.index % len(self.default_colors)
-            log.debug(f'Model index: {model.index}; '
-                      f'color index: {color_index}')
-            self.colors[model.id] = self.default_colors[color_index]
 
             marker_index = model.index % len(self.default_markers)
             self.markers[model.id] = self.default_markers[marker_index]
 
-            self.orders[model.id] = [order.number for order in model.orders]
+            self.orders[model.id] = list()
+            self.colors[model.id] = list()
+            for order in model.orders:
+                label = f'{order.number}.{order.aperture}'
+                self.orders[model.id].append(label)
+
+                base_color_index = model.index % len(self.default_colors)
+                base_color = self.default_colors[base_color_index]
+                if order.aperture > 0:
+                    aperture_colors = [base_color]
+                    aperture_colors.extend(self.aperture_cycle[base_color])
+                    color_index = order.aperture % len(aperture_colors)
+                    color = aperture_colors[color_index]
+                else:
+                    color = base_color
+                self.colors[model.id].append(color)
+                log.debug(f'Model index: {model.index}; '
+                          f'color index: {base_color_index}')
+
             self.data_changed = True
 
             new_order_lines = self._plot_model(model)
@@ -673,24 +882,29 @@ class OneDimPane(Pane):
 
         return new_lines
 
-    def update_model(self, models: MT) -> List[DT]:
+    def update_model(self, models: MT):
         """
-        Update the pre-existing model in pane with a copy of original model.
+        Update a pre-existing model with a copy of the original model.
 
-        The model is copied so the data can be manipulated
+        The model is copied so that the data can be manipulated
         without changing the root model.
 
         Parameters
         ----------
-        model : high_model.HighModel
+        models : high_model.HighModel
             Model object to add.
         """
 
         for model_id, backup_model in models.items():
             if model_id in self.models.keys():
+                # Need to get the current enabled status of the model
+                # and apply it to the backup
+                state = self.models[model_id].enabled_state()
                 self.models[model_id] = copy.deepcopy(backup_model)
+                self.models[model_id].set_enabled_state(state)
 
     def remove_model(self, filename: Optional[str] = None,
+                     model_id: Optional[IDT] = None,
                      model: Optional[MT] = None) -> None:
         """
         Remove a model from the pane.
@@ -702,53 +916,54 @@ class OneDimPane(Pane):
         ----------
         filename : str, optional
             Name of the file corresponding to the model to remove.
+        model_id : str, optional
+            Specific id to a model object (high_model.HighModel).
         model : high_model.HighModel, optional
             Model object to remove.
         """
-        new_models = dict()
-        for k, m in self.models.items():
-            if filename is not None:
-                if filename in m.filename:
-                    log.debug(f'Removing model {m.filename}')
-                    self.data_changed = True
-                    try:
-                        del self.orders[m.id]
-                    except KeyError:
-                        pass
-                    try:
-                        del self.colors[m.id]
-                    except KeyError:
-                        pass
-                    try:
-                        del self.markers[m.id]
-                    except KeyError:
-                        pass
-                else:
-                    new_models[k] = m
-            else:
-                if m.id == model.id:
-                    log.debug(f'Removing model {m.filename}')
-                    self.data_changed = True
-                    try:
-                        del self.orders[m.id]
-                    except KeyError:
-                        pass
-                    try:
-                        del self.colors[m.id]
-                    except KeyError:
-                        pass
-                    try:
-                        del self.markers[m.id]
-                    except KeyError:
-                        pass
-                else:
-                    new_models[k] = m
-        self.models = new_models
-        if self.model_count() == 0:
-            self.units = dict()
+        target_mid = None
+        if model_id:
+            target_mid = model_id
+        else:
+            for k, m in self.models.items():
+                if model:
+                    if k == model.id:
+                        target_mid = k
+                elif filename:
+                    if filename == m.filename:
+                        target_mid = k
+        if target_mid:
+            for collection in [self.models, self.colors, self.markers,
+                               self.orders]:
+                try:
+                    del collection[target_mid]
+                except KeyError:
+                    pass
+            if self.model_count() == 0:
+                self.units = dict()
+        else:
+            log.debug(f'Unable to remove {model_id} ({model}, {filename})')
 
     def contains_model(self, model_id: str, order: Optional[int] = None
                        ) -> bool:
+        """
+        Check if a specified model exists in the pane.
+
+        Parameters
+        ----------
+        model_id : str
+            Model to be inspected.
+        order : int, optional
+            Order number to match. If provided, the order's presence
+            in the pane is verified. If not, only the model's presence
+            is verified.
+
+        Returns
+        -------
+        bool
+            True if the model/order are present; False otherwise.
+
+        """
         if model_id in self.models.keys():
             if order is not None:
                 if order in self.orders[model_id]:
@@ -761,8 +976,24 @@ class OneDimPane(Pane):
 
     def update_reference_data(self, reference_models: Optional[RT] = None,
                               plot: Optional[bool] = True
-                              ) -> Optional[List[DT]]:
+                              ) -> Optional[List[Union[DT, Dict]]]:
         """
+        Update the reference data.
+
+        Parameters
+        ----------
+        reference_models : reference_model.ReferenceData, optional
+            Reference models to update.
+        plot : bool
+            If set, reference data is (re)plotted. Otherwise, current
+            reference options are returned.
+
+        Returns
+        -------
+        reference_artists : list
+            A list of drawing.Drawing objects when `plot` is True.
+            A list of dictionaries when `plot` is False. If the
+            inputs are invalid then None is returned.
 
         """
         if reference_models is None and self.reference is None:
@@ -771,13 +1002,14 @@ class OneDimPane(Pane):
             # replace any existing reference with new one
             self.reference = reference_models
         if plot:
-            reference_artists = self._plot_reference()
+            reference_artists = self._plot_reference_lines()
         else:
             reference_artists = self._current_reference_options()
 
         return reference_artists
 
     def unload_ref_model(self):
+        """Unload the reference data."""
         if self.reference:
             self.reference.unload_data()
 
@@ -818,8 +1050,10 @@ class OneDimPane(Pane):
             if any(self.units.values()):
                 return self.units
             else:
-                for axis in ['x', 'y', 'y_alt']:
+                for axis in current.keys():
                     # take unit from first model only -- they better match
+                    if self.fields[axis] is None:
+                        continue
                     models = list(self.models.values())
                     low_model = models[0].retrieve(
                         order=0, field=self.fields[axis], level='low')
@@ -828,7 +1062,11 @@ class OneDimPane(Pane):
                     current[axis] = low_model.unit_key
                 return current
 
-    def set_orders(self, orders: Dict[str, List[int]]) -> None:
+    def set_orders(self, orders: Dict[IDT, List[int]],
+                   enable: Optional[bool] = True,
+                   aperture: Optional[bool] = False,
+                   return_updates: Optional[bool] = False
+                   ) -> Optional[List[DT]]:
         """
         Enable specified orders.
 
@@ -837,17 +1075,73 @@ class OneDimPane(Pane):
         orders : dict
             Keys are model IDs; values are lists of orders
             to enable.
+        enable : bool, optional
+            Set to True to enable; False to disable.
+        aperture : bool, optional
+            True if apertures are present; False otherwise.
+        return_updates : bool, optional
+            If set, an update structure is returned.
+
+        Returns
+        -------
+        updates : list, optional
+            Order visibility updates applied.
         """
+        updates = list()
         for model_id, model_orders in orders.items():
             try:
                 available_orders = self.orders[model_id]
             except KeyError:
                 continue
             else:
-                log.debug(f'Enabling {model_orders} in '
+                log.debug(f'{"Enabling" if enable else "Disabling"} '
+                          f' {model_orders} in '
                           f'{available_orders}')
-                self.models[model_id].enable_orders(model_orders)
+                self.models[model_id].enable_orders(model_orders, enable,
+                                                    aperture)
                 self.data_changed = True
+
+                if return_updates:
+                    updates.extend(self._order_visibility_updates(model_id))
+        return updates
+
+    def _order_visibility_updates(self, model_id, error=False):
+        model = self.models[model_id]
+        updates = list()
+        for order_number in self.orders[model_id]:
+            try:
+                o_num, a_num = order_number.split('.')
+            except ValueError:  # pragma: no cover
+                o_num = order_number
+                a_num = 0
+            order = model.retrieve(order=o_num, aperture=a_num,
+                                   level='high')
+            spectrum = model.retrieve(order=order_number, aperture=a_num,
+                                      level='low', field=self.fields['y'])
+            if order is None or spectrum is None:  # pragma: no cover
+                continue
+            visible = model.enabled & order.enabled & spectrum.enabled
+            error_visible = visible & self.show_error
+            mid_model = f'{o_num}.{a_num}'
+
+            args = {'high_model': model.filename, 'mid_model': mid_model,
+                    'model_id': model.id, 'axes': 'any'}
+            if error:
+                line = drawing.Drawing(updates={'visible': error_visible},
+                                       kind='error', **args)
+
+                updates.append(line)
+
+            else:
+                line = drawing.Drawing(updates={'visible': visible},
+                                       kind='line', **args)
+
+                updates.append(line)
+                line = drawing.Drawing(updates={'visible': error_visible},
+                                       kind='error', **args)
+
+                updates.append(line)
+        return updates
 
     def set_model_enabled(self, model_id: str, state: bool) -> None:
         """
@@ -870,7 +1164,7 @@ class OneDimPane(Pane):
         Parameters
         ----------
         state : bool
-            If True, enable the model.  If False, disable the model.
+            If True, enable all models.  If False, disable all models.
         """
         for model_id in self.models:
             self.set_model_enabled(model_id, state)
@@ -879,7 +1173,15 @@ class OneDimPane(Pane):
     # Plotting
     ####
     def create_artists_from_current_models(self) -> List[DT]:
-        """Create new gallery from all current models."""
+        """
+        Create new artists from all current models.
+
+        Returns
+        -------
+        new_artists : list
+            A list of reference_model.ReferenceData objects associated with
+            the current model.
+        """
         new_artists = list()
 
         # TODO add a clause for y-alt
@@ -902,9 +1204,8 @@ class OneDimPane(Pane):
 
         Returns
         -------
-        new_lines : dict
-            Keys are order numbers; values are dicts containing new
-            gallery added to the Pane axes, associated with the model.
+        new_lines : list of Drawing
+            New lines plotted.
         """
         log.debug(f'Starting limits: {self.get_axis_limits()}, '
                   f'{self.ax.get_autoscale_on()}')
@@ -915,127 +1216,163 @@ class OneDimPane(Pane):
                   f'for {model.id}')
         new_lines = list()
         n_orders = len(model.orders)
+        n_apertures = max([model.num_aperture, 1])
         if n_orders > 1:
             alpha_val = np.linspace(0.7, 1, n_orders)
             log.debug(f'Alpha values for {n_orders} orders: {alpha_val}')
         else:
             alpha_val = [1]
-        for order_i, orders in enumerate(model.orders):
-            order = orders.number
-            spectrum = model.retrieve(order=order, level='low',
-                                      field=self.fields['y'])
 
-            if spectrum is None:
-                continue
-            # convert to current units, or remove model and
-            # stop trying to load it
-            # log.debug(f'Current units: {self.units}')
-            if any(self.units.values()):
-                try:
-                    if self.fields['y'] == self.fields['x']:
-                        log.debug(f'TESTING SAME FIELDS: {self.fields}')
-                        x_model, y_model = self.get_xy_data(model, order)
-                        x = x_model.retrieve(order=order, level='raw',
-                                             field=self.fields['x'])
-                        y = y_model.retrieve(order=order, level='raw',
-                                             field=self.fields['y'])
+        for ap_i in range(n_apertures):
+            for order_i, orders in enumerate(model.orders):
+                order = orders.number
+                aperture = orders.aperture
+                spectrum = model.retrieve(order=order, level='low',
+                                          field=self.fields['y'],
+                                          aperture=aperture)
 
-                    else:
-                        self._convert_low_model_units(model, order,
-                                                      'y', self.units['y'])
-                        self._convert_low_model_units(model, order,
-                                                      'x', self.units['x'])
-                        x = model.retrieve(order=order, level='raw',
-                                           field=self.fields['x'])
-                        y = model.retrieve(order=order, level='raw',
-                                           field=self.fields['y'])
+                if spectrum is None:
+                    continue
+                # convert to current units, or remove model and
+                # stop trying to load it
+                # log.debug(f'Current units: {self.units}')
+                if any(self.units.values()):
+                    try:
+                        if self.fields['y'] == self.fields['x']:
+                            log.debug(f'Testing same fields: {self.fields}')
+                            x_model, y_model = self.get_xy_data(model, order,
+                                                                aperture)
+                            x = x_model.retrieve(order=order, level='raw',
+                                                 field=self.fields['x'],
+                                                 aperture=aperture)
+                            y = y_model.retrieve(order=order, level='raw',
+                                                 field=self.fields['y'],
+                                                 aperture=aperture)
+                        else:
+                            self._convert_low_model_units(model, order, 'y',
+                                                          self.units['y'],
+                                                          aperture)
+                            self._convert_low_model_units(model, order, 'x',
+                                                          self.units['x'],
+                                                          aperture)
+                            x = model.retrieve(order=order, level='raw',
+                                               field=self.fields['x'],
+                                               aperture=aperture)
+                            y = model.retrieve(order=order, level='raw',
+                                               field=self.fields['y'],
+                                               aperture=aperture)
+                    except ValueError:
+                        log.warning('Incompatible units. '
+                                    'Try a different pane.')
+                        self.remove_model(model=model)
+                        break
+                else:
+                    x = model.retrieve(order=order, level='raw',
+                                       field=self.fields['x'],
+                                       aperture=aperture)
+                    y = model.retrieve(order=order, level='raw',
+                                       field=self.fields['y'],
+                                       aperture=aperture)
 
-                except ValueError:
-                    log.warning('Incompatible units. '
-                                'Try a different pane.')
-                    self.remove_model(model=model)
-                    break
-            else:
-                x = model.retrieve(order=order, level='raw',
-                                   field=self.fields['x'])
-                y = model.retrieve(order=order, level='raw',
-                                   field=self.fields['y'])
-
-            if x is None or y is None:
-                log.debug(f'Failed to retrieve raw data for primary '
-                          f'{model.id}, {order}, {self.fields}')
-                continue
-
-            if x.shape != y.shape:
-                log.debug(f'Incompatible data shapes: '
-                          f'{x.shape} and {y.shape}; skipping.')
-                continue
-
-            visible = model.enabled or not spectrum.enabled
-            label = f'{model.id}, Order {order + 1}, {self.fields["y"]}'
-            # add line artists
-            line = self._plot_single_line(x, y, model_id=model.id,
-                                          visible=visible, label=label,
-                                          alpha=alpha_val[order_i])
-            new_line = {'artist': line, 'fields': self.fields, 'kind': 'line',
-                        'high_model': model.id, 'mid_model': order,
-                        'label': label, 'axes': 'primary'}
-
-            new_lines.append(drawing.Drawing(**new_line))
-
-            # add cursor artists
-            cursor = self._plot_cursor(x, y, model_id=model.id)
-            new_line = {'artist': cursor, 'kind': 'cursor', 'axes': 'primary',
-                        'high_model': model.id, 'mid_model': order,
-                        'fields': self.fields}
-
-            new_lines.append(drawing.Drawing(**new_line))
-
-            if 'flux' in self.fields['y'].lower():
-                error = model.retrieve(order=order, level='raw',
-                                       field='spectral_error')
-                label = f'{model.id}, Order {order + 1}, spectral_error'
-                line = self._plot_flux_error(x, y, error,
-                                             color=self.colors[model.id],
-                                             label=label)
-                if (not model.enabled or not spectrum.enabled
-                        or not self.show_error):
-                    line.set_visible(False)
-                new_line = {'artist': line, 'kind': 'error_range',
-                            'axes': 'primary',
-                            'high_model': model.id, 'mid_model': order,
-                            'label': label, 'fields': self.fields}
-                new_lines.append(drawing.Drawing(**new_line))
-            if self.show_overplot:
-                y = model.retrieve(order=order, level='raw',
-                                   field=self.fields['y_alt'])
-                if y is None:
-                    log.debug(f'Failed to retrieve raw data for alt y '
+                if x is None or y is None:
+                    log.debug(f'Failed to retrieve raw data for primary '
                               f'{model.id}, {order}, {self.fields}')
-                elif x.shape == y.shape:
-                    # only add overplot if x and y shapes match
+                    continue
 
-                    label = (f'{model.id}, Order {order + 1}, '
-                             f'{self.fields["y_alt"]}')
-                    line = self._plot_single_line(x, y, model_id=model.id,
-                                                  visible=visible, label=label,
-                                                  axis='alt')
-                    new_line = {'artist': line, 'kind': 'line',
-                                'axes': 'alt',
-                                'high_model': model.id, 'mid_model': order,
-                                'label': label, 'fields': self.fields}
-                    new_lines.append(drawing.Drawing(**new_line))
+                if x.shape != y.shape:
+                    log.debug(f'Incompatible data shapes: '
+                              f'{x.shape} and {y.shape}; skipping.')
+                    continue
 
-                    cursor = self._plot_cursor(x, y, model_id=model.id,
-                                               axis='alt')
-                    new_line = {'artist': cursor, 'kind': 'cursor',
-                                'axes': 'alt',
-                                'high_model': model.id, 'mid_model': order,
-                                'fields': self.fields}
+                visible = model.enabled and spectrum.enabled and orders.enabled
+
+                label_fields = [f'{model.filename}', f'Order {order + 1}',
+                                f'{self.fields["y"]}']
+                if n_apertures > 1:
+                    label_fields.insert(2, f'Aperture {aperture + 1}')
+                label = ', '.join(label_fields)
+
+                # add line artists
+                line = self._plot_single_line(x, y, model_id=model.id,
+                                              visible=visible, label=label,
+                                              alpha=alpha_val[order_i],
+                                              aperture=aperture)
+                new_line = {'artist': line, 'fields': self.fields,
+                            'kind': 'line', 'high_model': model.filename,
+                            'mid_model': f'{order}.{aperture}',
+                            'label': label, 'axes': 'primary',
+                            'model_id': model.id}
+
+                new_lines.append(drawing.Drawing(**new_line))
+
+                # add cursor artists
+                cursor = self._plot_cursor(x, y, model_id=model.id,
+                                           aperture=aperture)
+                new_line['artist'] = cursor
+                new_line['kind'] = 'cursor'
+
+                new_lines.append(drawing.Drawing(**new_line))
+
+                fields_with_errors = {'flux': 'spectral_error',
+                                      'response': 'response_error'}
+                for field, error_field in fields_with_errors.items():
+                    if field not in self.fields['y'].lower():
+                        continue
+                    elif error_field in self.fields['y'].lower():
+                        continue
+                    error = model.retrieve(order=order, level='raw',
+                                           field=error_field,
+                                           aperture=aperture)
+                    label_fields[-1] = f'{error_field}'
+                    label = ', '.join(label_fields)
+                    color = self.colors[model.id][aperture]
+                    line = self._plot_flux_error(x, y, error,
+                                                 color=color,
+                                                 label=label)
+                    error_visible = visible and self.show_error
+                    if not error_visible:
+                        line.set_visible(False)
+                    new_line['artist'] = line
+                    new_line['kind'] = 'error_range'
+                    new_line['label'] = label
                     new_lines.append(drawing.Drawing(**new_line))
+                if self.show_overplot:
+                    y = model.retrieve(order=order, level='raw',
+                                       field=self.fields['y_alt'])
+                    if y is None:
+                        log.debug(f'Failed to retrieve raw data for alt y '
+                                  f'{model.id}, {order}, {self.fields}')
+                    elif x.shape == y.shape:
+                        # only add overplot if x and y shapes match
+                        label_fields[-1] = f'{self.fields["y_alt"]}'
+                        label = ', '.join(label_fields)
+                        line = self._plot_single_line(x, y, model_id=model.id,
+                                                      visible=visible,
+                                                      label=label, axis='alt')
+                        new_line['axes'] = 'alt'
+                        new_line['artist'] = line
+                        new_line['kind'] = 'line'
+                        new_line['label'] = label
+                        new_lines.append(drawing.Drawing(**new_line))
+
+                        cursor = self._plot_cursor(x, y, model_id=model.id,
+                                                   axis='alt',
+                                                   aperture=aperture)
+                        new_line['artist'] = cursor
+                        new_line['kind'] = 'cursor'
+                        new_lines.append(drawing.Drawing(**new_line))
 
             # turn on/off grid lines as desired
-            self.ax.grid(self.show_grid)
+            else:
+                # This is only reached if the order loop did
+                # not break. Breaks occur if the data is incompatible
+                # with the current pane, and will be true for all
+                # apertures in the model. Without this and the following
+                # break statement the user would get a separate pop-up
+                # warning for each aperture.
+                continue
+            break
+        self.ax.grid(self.show_grid)
 
         # set initial units from first loaded model
         if not any(self.units.values()):
@@ -1052,27 +1389,38 @@ class OneDimPane(Pane):
         return new_lines
 
     def _plot_single_line(self, x, y, label, model_id, visible,
-                          axis='primary', alpha=1):
+                          axis='primary', alpha=1, aperture=None):
         if axis == 'primary':
             ax = self.ax
-            color = self.colors[model_id]
             width = 1.5
-            style = '-'
+            scalex = True
+            if self.plot_type == 'scatter':
+                style = ''
+                marker = self.markers[model_id]
+            else:
+                style = '-'
+                if self.show_markers:
+                    marker = self.markers[model_id]
+                else:
+                    marker = None
         else:
             ax = self.ax_alt
             alpha = 0.5
-            color = self.colors[model_id]
             width = 1
             style = ':'
-
+            scalex = False
+            marker = None
+        if aperture is None:
+            aper_index = 0
+        else:
+            aper_index = aperture % len(self.aperture_cycle)
+        color = self.colors[model_id][aper_index]
         style_kwargs = {'color': color,
                         'alpha': alpha,
                         'linewidth': width,
-                        'linestyle': style}
-        if self.show_markers or self.plot_type == 'scatter':
-            style_kwargs['marker'] = self.markers[model_id]
-        if self.plot_type == 'scatter':
-            style_kwargs['linestyle'] = ''
+                        'linestyle': style,
+                        'marker': marker,
+                        'scalex': scalex}
 
         if self.plot_type == 'step':
             (line,) = ax.step(x, y, where='mid', animated=True, label=label,
@@ -1084,21 +1432,43 @@ class OneDimPane(Pane):
             line.set_visible(False)
         return line
 
-    def _plot_cursor(self, x, y, model_id, axis='primary'):
+    def _plot_cursor(self, x, y, model_id, axis='primary', aperture=0):
+        """
+        Create a cursor marker artist.
+
+        Parameters
+        ----------
+        x : np.ndarray
+            Array of x-axis data points
+        y : np.ndarray
+            Array of y-axis data points
+        model_id : uuid.UUID4
+            Unique id (uuid4) associated with each hdul.
+        axis : {'primary', 'alt'}
+            It denotes which axis is being considered - primary or the
+            alternative axis. Default is set to `Primary`.
+
+        Returns
+        -------
+        Cursor : matplotlib.collections.PathCollection
+            Cursor artist for the given axis.
+        """
         if axis == 'primary':
             ax = self.ax
             alpha = 1
             marker = 'x'
-            color = self.colors[model_id]
+            color = self.colors[model_id][aperture]
         else:
             ax = self.ax_alt
             alpha = 0.5
             marker = '^'
-            color = self.colors[model_id]
+            color = self.colors[model_id][aperture]
         style_kwargs = {'marker': marker,
                         'color': color,
-                        'alpha': alpha}
-        cursor = ax.scatter(x[0], y[0], animated=True, **style_kwargs)
+                        'alpha': alpha,
+                        'linestyle': None}
+        # cursor = ax.scatter(x[0], y[0], animated=True, **style_kwargs)
+        cursor = ax.plot(x[0], y[0], animated=True, **style_kwargs)[0]
         cursor.set_visible(False)
         return cursor
 
@@ -1138,12 +1508,15 @@ class OneDimPane(Pane):
                                     **options)
         return poly
 
-    def _plot_reference(self) -> List[DT]:
-        lines = list()
-        lines.extend(self._plot_reference_lines())
-        return lines
-
     def _plot_reference_lines(self) -> List[Optional[DT]]:
+        """
+        Generate a list of reference lines.
+
+        Returns
+        -------
+        lines : list
+            List of drawing.Drawing objects for reference lines to be plotted.
+        """
         lines = list()
         if self.reference is None or len(self.models) == 0:
             return lines
@@ -1161,11 +1534,9 @@ class OneDimPane(Pane):
                     line = self.ax.axvline(wavelength, label=name,
                                            **line_style)
                     if self.reference.get_visibility('ref_label'):
-                        label = self.ax.annotate(name,
-                                                 (wavelength, label_ypos),
-                                                 xycoords=('data',
-                                                           'axes fraction'),
-                                                 **label_style)
+                        label = self.ax.annotate(
+                            name, (wavelength, label_ypos),
+                            xycoords=('data', 'axes fraction'), **label_style)
                     else:
                         label = None
                 else:
@@ -1240,6 +1611,7 @@ class OneDimPane(Pane):
                 self.ax.set_xlim(self.limits['x'])
                 self.ax.set_ylim(self.limits['y'])
                 if self.show_overplot:
+                    self.ax_alt.set_xlim(self.limits['x'])
                     self.ax_alt.set_ylim(self.limits['y_alt'])
 
     def _apply_scales(self) -> None:
@@ -1299,36 +1671,43 @@ class OneDimPane(Pane):
         return label
 
     def update_colors(self) -> List[DT]:
-        """Update plot colors for current loaded data."""
+        """
+        Update plot colors for current loaded data.
+
+        Returns
+        -------
+        updates : list of drawing.Drawing
+            Drawing objects containing all color updates.
+        """
         updates = list()
         for model_id, model in self.models.items():
-            color_index = model.index % len(self.default_colors)
-            log.debug(f'Model index: {model.index}; '
-                      f'color index: {color_index}')
-            self.colors[model.id] = self.default_colors[color_index]
+            self.colors[model.id] = list()
             for order_number in self.orders[model_id]:
-                line_color = self.colors[model_id]
-                fit_color = self.grayscale(self.colors[model_id])
-                line = drawing.Drawing(high_model=model_id,
-                                       mid_model=order_number,
-                                       kind='line', axes='primary',
-                                       updates={'color': line_color})
-                line_alt = drawing.Drawing(high_model=model_id,
-                                           mid_model=order_number,
-                                           kind='line', axes='alt',
-                                           updates={'color': line_color})
-                error = drawing.Drawing(high_model=model_id,
-                                        mid_model=order_number,
-                                        kind='error_range',
-                                        updates={'color': line_color})
-                fit = drawing.Drawing(high_model=model_id,
-                                      mid_model=order_number,
-                                      kind='fit',
-                                      updates={'color': fit_color})
-                cursor = drawing.Drawing(high_model=model_id,
-                                         mid_model=order_number,
-                                         kind='cursor',
-                                         updates={'color': line_color})
+                base_color_index = model.index % len(self.default_colors)
+                base_color = self.default_colors[base_color_index]
+                a = int(order_number.split('.')[1])
+                if a > 0:
+                    aperture_colors = self.aperture_cycle[base_color]
+                    index = a % len(aperture_colors)
+                    line_color = aperture_colors[index]
+                else:
+                    line_color = base_color
+                self.colors[model_id].append(line_color)
+                fit_color = self.grayscale(line_color)
+                args = {'high_model': model.filename,
+                        'mid_model': order_number,
+                        'model_id': model.id}
+                line = drawing.Drawing(kind='line', axes='primary',
+                                       updates={'color': line_color}, **args)
+                line_alt = drawing.Drawing(kind='line', axes='alt',
+                                           updates={'color': line_color},
+                                           **args)
+                error = drawing.Drawing(kind='error_range',
+                                        updates={'color': line_color}, **args)
+                fit = drawing.Drawing(kind='fit', updates={'color': fit_color},
+                                      **args)
+                cursor = drawing.Drawing(kind='cursor',
+                                         updates={'color': line_color}, **args)
                 updates.append(line)
                 updates.append(line_alt)
                 updates.append(error)
@@ -1336,40 +1715,30 @@ class OneDimPane(Pane):
                 updates.append(cursor)
 
         # also update border color
-        border = drawing.Drawing(high_model='border',
-                                 kind='border',
+        border = drawing.Drawing(high_model='border', kind='border',
                                  updates={'color': self.default_colors[1]})
         updates.append(border)
 
         return updates
 
     def update_visibility(self, error: Optional = False) -> List[DT]:
-        """Update plot visibility for current loaded data."""
+        """
+        Update plot visibility for current loaded data.
+
+        Parameters
+        ----------
+        error : bool, optional
+            If set, visibility update is applied to error range plots
+            only.
+
+        Returns
+        -------
+        updates : list of drawing.Drawing
+            Drawing objects containing all visibility updates.
+        """
         updates = list()
         for model_id, model in self.models.items():
-            for order_number in self.orders[model_id]:
-                spectrum = model.retrieve(order=order_number, level='low',
-                                          field=self.fields['y'])
-                visible = model.enabled & spectrum.enabled
-                error_visible = visible & self.show_error
-                if error:
-                    line = drawing.Drawing(high_model=model_id,
-                                           mid_model=order_number,
-                                           kind='error',
-                                           updates={'visible': error_visible})
-                    updates.append(line)
-
-                else:
-                    line = drawing.Drawing(high_model=model_id,
-                                           mid_model=order_number,
-                                           kind='line',
-                                           updates={'visible': visible})
-                    updates.append(line)
-                    line = drawing.Drawing(high_model=model_id,
-                                           mid_model=order_number,
-                                           kind='error',
-                                           updates={'visible': error_visible})
-                    updates.append(line)
+            updates.extend(self._order_visibility_updates(model_id, error))
         return updates
 
     ####
@@ -1438,7 +1807,12 @@ class OneDimPane(Pane):
         return self.scale
 
     def get_orders(self, enabled_only: bool = False,
-                   by_model: bool = False) -> Union[Dict[str, List], List]:
+                   by_model: bool = False,
+                   target_model: Optional[MT] = None,
+                   filename: Optional[str] = None,
+                   model_id: Optional[IDT] = None,
+                   kind: Optional[str] = 'order',
+                   ) -> Union[Dict[str, List], List]:
         """
         Get the orders available for the models in this pane.
 
@@ -1451,26 +1825,73 @@ class OneDimPane(Pane):
             If set, return a dictionary with the keys are model names
             and the values are the orders for that model. Otherwise,
             return a list of all model orders combined.
+        target_model : high_model.HighModel, optional
+            Target model
+        filename : str, optional
+            Name of file
+        model_id : uuid.UUID, optional
+            Unique UUID for an HDUL.
+        kind : str, optional
+            If 'aperture', only apertures are returned. If 'order',
+            only orders are returned. Otherwise, both are returned.
 
         Returns
         -------
         orders : list, dict
             Format and details depend on arguments.
         """
-        if by_model:
-            orders = dict()
+        target = None
+        identifiers = [model_id, target_model, filename]
+        if all([i is None for i in identifiers]):
+            targets = list(self.models.values())
         else:
-            orders = list()
-        for model_id, model in self.models.items():
+            try:
+                target = self.models[model_id]
+            except KeyError:
+                for mid, model in self.models.items():
+                    if target_model:  # pragma: no cover
+                        if model == target_model:
+                            target = model
+                        else:
+                            continue
+                    elif filename:
+                        if model.filename == filename:
+                            target = model
+                        else:  # pragma: no cover
+                            continue
+            if target is None:
+                return list()
+            else:
+                targets = [target]
+        orders = dict()
+        for target in targets:
             if enabled_only:
-                model_orders = model.list_enabled()['orders']
+                enabled = target.list_enabled()
+                if kind == 'aperture':
+                    model_orders = enabled['apertures']
+                elif kind == 'order':
+                    model_orders = enabled['orders']
+                else:
+                    model_orders = list(set(enabled['apertures']
+                                            + enabled['orders']))
             else:
-                model_orders = model.orders
-            if by_model:
-                orders[model_id] = model_orders
-            else:
-                orders.extend(model_orders)
-        return orders
+                if kind == 'aperture':
+                    model_orders = [o.aperture for o in target.orders]
+                elif kind == 'order':
+                    model_orders = [o.number for o in target.orders]
+                else:
+                    model_orders = list(set(
+                        [o.aperture for o in target.orders]
+                        + [o.number for o in target.orders]))
+            orders[target.id] = model_orders
+        if by_model:
+            return orders
+        else:
+            full_orders = list()
+            for v in orders.values():
+                full_orders.extend(list(v))
+            full_orders = list(set(full_orders))
+            return full_orders
 
     def get_field(self, axis: Optional[str] = None
                   ) -> Union[Dict[str, str], str]:
@@ -1624,7 +2045,8 @@ class OneDimPane(Pane):
                 continue
 
     def _convert_low_model_units(self, model: MT, order_number: int,
-                                 axis: str, target_unit: str) -> None:
+                                 axis: str, target_unit: str, aperture: int
+                                 ) -> None:
         """
         Convert data to new units.
 
@@ -1644,14 +2066,14 @@ class OneDimPane(Pane):
         ValueError
             If data cannot be converted to the specified units.
         """
-        spectrum = model.retrieve(order=order_number,
-                                  level='low',
-                                  field=self.fields[axis])
+        spectrum = model.retrieve(order=order_number, aperture=aperture,
+                                  level='low', field=self.fields[axis])
         if spectrum is None:
             raise EyeError(f'Retrieved None from {model} (order '
                            f'{order_number}, field {self.fields[axis]}')
         if spectrum.kind in ['flux', 'wavelength']:
             wave_spectrum = model.retrieve(order=order_number,
+                                           aperture=aperture,
                                            level='low', field='wavepos')
             wavelength_data = wave_spectrum.data
             wavelength_unit = wave_spectrum.unit_key
@@ -1661,22 +2083,40 @@ class OneDimPane(Pane):
         spectrum.convert(target_unit, wavelength_data, wavelength_unit)
 
         if 'flux' in self.fields[axis]:
-            error_spectrum = model.retrieve(
-                order=order_number, level='low', field='spectral_error')
+            error_spectrum = model.retrieve(aperture=aperture,
+                                            order=order_number,
+                                            level='low',
+                                            field='spectral_error')
             if error_spectrum is not None:
                 error_spectrum.convert(target_unit, wavelength_data,
                                        wavelength_unit)
 
-    def get_xy_data(self, model, order):
+    def get_xy_data(self, model, order, aperture):
         """
-        x_model, y_model : copies of model along x and y axis
+        Get copies of the low model data for x and y axes.
+
+        Parameters
+        ----------
+        model : high_model.HighModel
+            The model to be copied.
+        order : int
+            The spectral order to retrieve.
+        aperture : int
+            The aperture to retrieve.
+
+        Returns
+        -------
+        x_model : models.high_model.Grism
+            A copy of model along the x-axis
+        y_model : models.high_model.Grism
+            A copy of model along the y-axis
         """
         x_model = copy.deepcopy(model)
         y_model = copy.deepcopy(model)
         self._convert_low_model_units(y_model, order,
-                                      'y', self.units['y'])
+                                      'y', self.units['y'], aperture=aperture)
         self._convert_low_model_units(x_model, order,
-                                      'x', self.units['x'])
+                                      'x', self.units['x'], aperture=aperture)
         return x_model, y_model
 
     def set_units(self, units: Dict[str, str], axes: str,
@@ -1690,8 +2130,18 @@ class OneDimPane(Pane):
             Keys are axis names; values are units to set.
         axes: 'primary', 'alt', 'both', 'all'
             Which Axes object to pull data from.
+
+        Returns
+        -------
+        updates : list
+            A list of all artists for plotting the changes in units.
+            May not return anything when unable to convert units.
         """
         updates = list()
+        if 'y_alt' not in units and axes in ['alt', 'all']:
+            units['y_alt'] = units['y']
+            if axes == 'alt':
+                del units['y']
         for axis, current_unit in self.units.items():
             try:
                 target_unit = units[axis]
@@ -1713,10 +2163,11 @@ class OneDimPane(Pane):
             for model_id, model in self.models.items():
 
                 for order_number in self.orders[model_id]:
+                    o_num, a_num = (int(i) for i in order_number.split('.'))
                     try:
-                        self._convert_low_model_units(model,
-                                                      order_number,
-                                                      axis, target_unit)
+                        self._convert_low_model_units(model, o_num,
+                                                      axis, target_unit,
+                                                      a_num)
                     except ValueError:
                         log.debug(f'Cannot convert units to '
                                   f'{target_unit} for {model_id}; '
@@ -1724,12 +2175,13 @@ class OneDimPane(Pane):
                         break
                     else:
                         updated = True
-                        data = model.retrieve(order=order_number,
-                                              level='raw',
+                        data = model.retrieve(order=o_num,
+                                              level='raw', aperture=a_num,
                                               field=self.fields[axis])
                         details = {f'{axis}_data': data}
-                        update = drawing.Drawing(high_model=model_id,
+                        update = drawing.Drawing(high_model=model.filename,
                                                  mid_model=order_number,
+                                                 model_id=model.id,
                                                  fields=self.fields,
                                                  kind='line',
                                                  updates=details)
@@ -1758,25 +2210,36 @@ class OneDimPane(Pane):
         return updates
 
     def _update_error_artists(self) -> List[DT]:
-        """Update error range gallery to new data."""
+        """
+        Update error range artists to new data.
+
+        Returns
+        -------
+        updates : list
+            A list of all artists for plotting the changes
+            in units in error bars.
+        """
         updates = list()
+
         for model_id, model in self.models.items():
             for order in self.orders[model_id]:
-                error = model.retrieve(order=order, level='raw',
-                                       field='spectral_error')
-                x = model.retrieve(order=order, level='raw',
-                                   field=self.fields['x'])
-                y = model.retrieve(order=order, level='raw',
-                                   field=self.fields['y'])
-                label = f'{model.id}, Order {order + 1}, spectral_error'
+                o_num, a_num = order.split('.')
+                args = {'order': o_num, 'aperture': a_num, 'level': 'raw'}
+                error = model.retrieve(field='spectral_error', **args)
+                x = model.retrieve(field=self.fields['x'], **args)
+                y = model.retrieve(field=self.fields['y'], **args)
+                label = (f'{model.id}, Order {int(o_num) + 1}, '
+                         f'Aperture {int(a_num) + 1} spectral_error')
+                color = self.colors[model.id][int(a_num)]
                 poly = self._plot_flux_error(x, y, error, label=label,
-                                             color=self.colors[model.id])
+                                             color=color)
                 if not model.enabled or not self.show_error:
                     poly.set_visible(False)
-                update = drawing.Drawing(high_model=model_id,
+                update = drawing.Drawing(high_model=model.filename,
                                          mid_model=order, axis='primary',
                                          kind='error', label=label,
-                                         updates={'artist': poly})
+                                         updates={'artist': poly},
+                                         model_id=model.id)
                 updates.append(update)
         return updates
 
@@ -1792,13 +2255,6 @@ class OneDimPane(Pane):
         ----------
         fields : dict
             Keys are axis names; values are fields to set.
-
-        Returns
-        -------
-        updates : list
-            List of dictionaries that each describe the field
-            change to a single model.
-
         """
         for axis in self.fields.keys():
             try:
@@ -1813,7 +2269,7 @@ class OneDimPane(Pane):
                     # reset units so that conversion is not triggered
                     self.set_default_units_for_fields()
                     self.data_changed = True
-                else:
+                else:  # pragma: no cover
                     # ignore: this is likely from setting an
                     # all primary/all overplots from another pane's value
                     log.debug(f'Invalid field provided for axis {axis}: '
@@ -1848,15 +2304,15 @@ class OneDimPane(Pane):
         """
         self.plot_type = plot_type.lower()
         updates = list()
-        for model_id in self.models.keys():
+        for model_id, model in self.models.items():
             for order_number in self.orders[model_id]:
                 details = {'type': self.plot_type}
                 if self.plot_type == 'scatter' or self.show_markers:
                     details['marker'] = self.markers[model_id]
-                update = drawing.Drawing(high_model=model_id,
+                update = drawing.Drawing(high_model=model.filename,
                                          mid_model=order_number,
                                          kind='line', axes='primary',
-                                         updates=details)
+                                         updates=details, model_id=model.id)
                 updates.append(update)
         return updates
 
@@ -1866,59 +2322,126 @@ class OneDimPane(Pane):
 
         Only applies to non-scatter plots. Scatter plots
         will accept the new state but not update any
-        gallery.
+        artists.
 
         Parameters
         ----------
         state : bool
             Defines the visibility of the makers. True
             will make the markers visible, False will
-            make the markers invisible.
+            hide the markers.
 
         Returns
         -------
         updates : list
-            If updates can be made (ie, scatter plot) then
-            is is a list of dictionaries describing the
-            change for each model. Otherwise it is an
-            empty list.
+            List of drawings describing the changes for each model.
         """
         self.show_markers = bool(state)
         updates = list()
         # no-op for scatter plots
         if self.plot_type == 'scatter':
             return updates
-        for model_id in self.models.keys():
+        for model_id, model in self.models.items():
             for order_number in self.orders[model_id]:
                 if self.show_markers:
-                    update = {'marker': self.markers[model_id]}
+                    marker = {'marker': self.markers[model_id]}
                 else:
-                    update = {'marker': None}
-                update = drawing.Drawing(high_model=model_id,
-                                         mid_model=order_number,
-                                         kind='line', axes='primary',
-                                         updates=update)
-                updates.append(update)
+                    marker = {'marker': None}
+                args = {'high_model': model.filename,
+                        'mid_model': order_number,
+                        'kind': 'line', 'axes': 'primary',
+                        'model_id': model.id, 'updates': marker}
+                updates.append(drawing.Drawing(**args))
         return updates
 
+    def get_marker(self, model_id: Union[List[IDT], IDT]) -> List[str]:
+        """
+        Get the plot markers for a given model_id.
+
+        Parameters
+        ----------
+        model_id : uuid.UUID or list of uuid.UUID
+          Unique id associated with an HDUL
+
+        Returns
+        -------
+        markers : list
+            A list of markers for the model_id
+        """
+        markers = list()
+        if not isinstance(model_id, list):
+            model_id = [model_id]
+
+        for model_name, marker in self.markers.items():
+            for name in model_id:
+                if model_name == name:
+                    markers.append(marker)
+        return markers
+
+    def get_color(self, model_id):
+        """
+        Return colors for a model.
+
+        Parameters
+        ----------
+        model_id : uuid.UUID
+            Unique id of HDUL
+
+        Returns
+        -------
+        colors : list
+            List of colors
+        """
+        colors = list()
+        if not isinstance(model_id, list):
+            model_id = [model_id]
+
+        for model_name, color in self.colors.items():
+            for name in model_id:
+                if model_name == name:
+                    colors.append(color)
+        return colors
+
     def set_grid(self, state: bool) -> None:
-        """Set the plot grid visibility."""
+        """
+        Set the plot grid visibility.
+
+        Parameters
+        ----------
+        state : bool
+            True for enabling grid, otherwise False.
+        """
         self.show_grid = bool(state)
         if self.ax:
             self.ax.grid(self.show_grid)
 
     def set_error(self, state: bool) -> None:
-        """Set the plot error range visibility."""
+        """
+        Set the plot error range visibility.
+
+        Parameters
+        ----------
+        state : bool
+            True for enabling error-bars, otherwise False.
+        """
         self.show_error = bool(state)
 
     def set_overplot(self, state: bool) -> None:
-        if bool(state) is bool(self.show_overplot):
+        """
+        Enable/disable overplot, dependent axes, field, and limits.
+
+        Parameters
+        ----------
+        state : bool
+            A boolean which is assigned to the state of show_overplot.
+        """
+        if bool(state) is bool(self.show_overplot):  # pragma: no cover
             return
         self.show_overplot = bool(state)
         if self.show_overplot:
             if self.ax:
                 self.ax_alt = self.ax.twinx()
-                self.ax_alt.autoscale(enable=True)
+                self.ax_alt.autoscale(enable=True, axis='y')
                 self.fields['y_alt'] = 'transmission'
                 self.scale['y_alt'] = 'linear'
                 self.limits['y_alt'] = [0, 1]
@@ -1928,6 +2451,18 @@ class OneDimPane(Pane):
             self.limits['y_alt'] = list()
 
     def reset_alt_axes(self, remove=False):
+        """
+        Remove or reset the alternate axis.
+
+        Replaces the `ax_alt` attribute with None and resets fields,
+        scale, and limit for the 'y_alt' axis to empty values.
+
+        Parameters
+        ----------
+        remove : bool, optional
+            If set, an attempt is made to remove the alternate axis
+            from the plot before resetting it.
+        """
         if remove:
             try:
                 self.ax_alt.remove()
@@ -1965,23 +2500,40 @@ class OneDimPane(Pane):
 
         for model_id, model in self.models.items():
             data[model_id] = list()
-            for order_number in self.orders[model_id]:
-                visible = model.enabled
 
+            for order_number in self.orders[model_id]:
+                try:
+                    o, a = order_number.split('.')
+                except ValueError:  # pragma: no cover
+                    o_num = int(order_number)
+                    a_num = 0
+                else:
+                    o_num = int(o)
+                    a_num = int(a)
+                # o_num, a_num are zero-based indexing
+                order = model.retrieve(order=o_num, level='high',
+                                       aperture=a_num)
+                spectrum = model.retrieve(order=o_num, level='low',
+                                          field=self.fields['y'],
+                                          aperture=a_num)
                 if self.fields['y'] == self.fields['x']:
-                    x_model, y_model = self.get_xy_data(model, order_number)
+                    x_model, y_model = self.get_xy_data(model, o_num, a_num)
                 else:
                     x_model, y_model = model, model
 
-                x_data = x_model.retrieve(order=order_number, level='raw',
-                                          field=self.fields['x'])
-                y_data = y_model.retrieve(order=order_number, level='raw',
-                                          field=self.fields['y'])
+                x_data = x_model.retrieve(order=o_num, level='raw',
+                                          field=self.fields['x'],
+                                          aperture=a_num)
+                y_data = y_model.retrieve(order=o_num, level='raw',
+                                          field=self.fields['y'],
+                                          aperture=a_num)
 
                 # skip entirely if order has no data
-                if x_data is None or y_data is None:  # pragma: no cover
+                data_list = [x_data, y_data, model, order, spectrum]
+                if any([x is None for x in data_list]):  # pragma: no cover
                     continue
 
+                visible = model.enabled & order.enabled & spectrum.enabled
                 # skip order if cursor is out of range
                 if (cursor_x < np.nanmin(x_data)
                         or cursor_x > np.nanmax(x_data)):
@@ -1993,34 +2545,35 @@ class OneDimPane(Pane):
                 if all(np.isnan([x, y])):
                     visible = False
 
-                data[model_id].append({'order': order_number,
-                                       'bin': index,
-                                       'bin_x': x,
-                                       'bin_y': y,
+                data[model_id].append({'filename': model.filename,
+                                       'order': o_num, 'aperture': a_num,
+                                       'bin': index, 'bin_x': x, 'bin_y': y,
                                        'x_field': self.fields['x'],
                                        'y_field': self.fields['y'],
-                                       'color': self.colors[model_id],
+                                       'color': self.colors[model_id][a_num],
                                        'visible': visible,
                                        'alt': False
                                        })
                 if self.show_overplot:
-                    y_data = model.retrieve(order=order_number,
+                    y_data = model.retrieve(order=o_num,
                                             level='raw',
-                                            field=self.fields['y_alt'])
+                                            field=self.fields['y_alt'],
+                                            aperture=a_num)
                     if y_data is not None:
                         y = y_data[index]
                         if all(np.isnan([x, y])):
                             visible = False
-                        data[model_id].append({'order': order_number,
-                                               'bin': index,
-                                               'bin_x': x,
-                                               'bin_y': y,
-                                               'x_field': self.fields['x'],
-                                               'y_field': self.fields['y_alt'],
-                                               'color': self.colors[model_id],
-                                               'visible': visible,
-                                               'alt': True
-                                               })
+                        # Add a 65% alpha to alt-axis color
+                        color = '#A6' + self.colors[model_id][a_num].strip('#')
+                        data[model_id].append(
+                            {'filename': model.filename,
+                             'order': o_num, 'aperture': a_num,
+                             'bin': index, 'bin_x': x, 'bin_y': y,
+                             'x_field': self.fields['x'],
+                             'y_field': self.fields['y_alt'],
+                             'color': color, 'visible': visible, 'alt': True
+                             })
+
         return data
 
     def xy_at_cursor(self, event: mbb.MouseEvent) -> Tuple[float, float]:
@@ -2055,7 +2608,7 @@ class OneDimPane(Pane):
     def plot_crosshair(self, cursor_pos: Optional[Union[Tuple, List]] = None
                        ) -> List[DT]:
         """
-        Create crosshair gallery to show the cursor location.
+        Create crosshair artists to show the cursor location.
 
         Parameters
         ----------
@@ -2065,9 +2618,9 @@ class OneDimPane(Pane):
 
         Returns
         -------
-        crosshair : dict
-            Keys are 'v' and 'h'; values are vertical and horizontal line
-            gallery, respectively.
+        crosshair : list
+            Two element list containing the vertical and horizontal
+            crosshair drawings.
         """
         if cursor_pos is None:
             # set cursor near center of plot
@@ -2106,9 +2659,8 @@ class OneDimPane(Pane):
 
         Returns
         -------
-        guides : dict
-            Keys are 'v' and/or 'h'; values are vertical and horizontal
-            line gallery, respectively.
+        guides : list
+            Guide drawings corresponding to plotted lines.
         """
         guides = list()
         if kind in ['vertical', 'cross', 'x', 'b']:
@@ -2166,8 +2718,19 @@ class OneDimPane(Pane):
 
     def reset_zoom(self) -> None:
         """Reset plot limits to the full range for current data."""
+
         # Don't want to include reference data in the relim
         # note: relim works for lines, but not for true scatter plots
+        children = list()
+        if self.reference:
+            visibility = self.reference.get_visibility('ref_line')
+            for child in self.ax.get_children():
+                if (isinstance(child, ml.Line2D)
+                        or isinstance(child, mt.Text)):
+                    if child.get_color() == self.ref_color:
+                        child.set_visible(False)
+                        children.append(child)
+
         self.ax.relim(visible_only=True)
         self.ax.autoscale(enable=True)
 
@@ -2185,6 +2748,15 @@ class OneDimPane(Pane):
                           'y': self.ax.get_ylim(),
                           'y_alt': self.ax_alt.get_ylim()}
         self.set_limits(limits=new_limits)
+        if self.reference:
+            names_in_limits = self._window_line_list(new_limits['x'])
+            for child in children:
+                try:
+                    label = str(child.get_text())
+                except AttributeError:
+                    label = str(child.get_label())
+                if label in names_in_limits:
+                    child.set_visible(visibility)
 
     def perform_fit(self, kind: str, limits: Sequence[Sequence[Num]]
                     ) -> Tuple[Optional[Dict], Optional[Dict]]:
@@ -2231,33 +2803,61 @@ class OneDimPane(Pane):
 
     def feature_fit(self, feature: str, background: str,
                     limits: Sequence[Sequence[Num]]) -> Tuple[Dict, Dict]:
+        """
+        Fit a spectral feature.
+
+        Parameters
+        ----------
+        feature : {'moffat', 'gaussian', 'gauss'}
+            Feature model to fit.
+        background : {'linear', 'constant'}
+            Baseline model to fit (Const1D or Linear1D).
+        limits : list of list
+            Low and high limits for data to fit, as
+            [[low_x, low_y], [high_x, high_y]].  Currently
+            only the x values are used.
+
+        Returns
+        -------
+        fit_artists, fit_params : Tuple[list, list]
+             fit_artists - a list of drawing.Drawing objects for fits
+             fit_params - a list of fitting parameters objects for fits
+        """
         fit_params = list()
         successes = list()
         for model_id, model_ in self.models.items():
             # model not enabled: skip
             if not model_.enabled:
-                log.debug(f'Model {model_id} is not '
-                          f'enabled; skipping.')
+                log.debug(f'Model {model_.filename} is not enabled; skipping.')
                 continue
 
-            for orders in model_.orders:
-                order = orders.number
-                spectrum = model_.retrieve(order=order, level='low',
+            filename = model_.filename
+            for order in model_.orders:
+                order_num = order.number
+                aper_num = order.aperture
+                order_model = model_.retrieve(order=order_num, level='high',
+                                              aperture=aper_num)
+                if order_model is None or not order_model.enabled:
+                    log.debug(f'Order {order_num} of model {model_.filename} '
+                              f'is not enabled; skipping')
+                    continue
+                spectrum = model_.retrieve(order=order_num, level='low',
+                                           aperture=aper_num,
                                            field=self.fields['y'])
-                # order not available: try the next one
-                if spectrum is None:
-                    log.debug(f'Order {order} is not '
+                if spectrum is None:  # pragma: no cover
+                    log.debug(f'Order {order_num + 1} is not '
                               f'available; skipping.')
                     continue
                 if not spectrum.enabled:
-                    log.debug(f'Order {order} is not '
-                              f'enabled; skipping.')
+                    log.debug(f'Spectrum {self.fields["y"]} of order '
+                              f'{order_num}, model {model_.filename} is not '
+                              f'enabled; skipping')
                     continue
 
-                x = model_.retrieve(order=order, level='raw',
-                                    field=self.fields['x'])
-                y = model_.retrieve(order=order, level='raw',
-                                    field=self.fields['y'])
+                x = model_.retrieve(order=order_num, level='raw',
+                                    aperture=aper_num, field=self.fields['x'])
+                y = model_.retrieve(order=order_num, level='raw',
+                                    aperture=aper_num, field=self.fields['y'])
 
                 # scale data to account for units with very small increments
                 xs = np.nanmean(x)
@@ -2267,15 +2867,18 @@ class OneDimPane(Pane):
                 xnorm = x / xs
                 ynorm = y / ys
 
+                color = self.colors[model_id][aper_num]
                 blank_fit = self._initialize_model_fit(feature, background,
                                                        norm_limits, model_id,
-                                                       order)
+                                                       filename, order_num,
+                                                       aper_num, x, color)
                 try:
                     xnorm, ynorm, fit_init, bounds = self.initialize_models(
                         feature, background, xnorm, ynorm, norm_limits)
                 except EyeError as e:
                     if str(e) == 'empty_order':
-                        log.debug(f'Order {order} has no valid data '
+                        log.debug(f'Order {order_num + 1}, aperture '
+                                  f'{aper_num + 1}  has no valid data '
                                   f'in range; skipping.')
                     fit_params.append(blank_fit)
                     blank_fit.set_status(str(e))
@@ -2290,7 +2893,7 @@ class OneDimPane(Pane):
                     successes.append(False)
                     if str(e) == 'fit_failed':
                         log.debug(f'Fit failed; skipping {model_id} '
-                                  f'order {order}')
+                                  f'order {order_num + 1}')
                     blank_fit.set_status(str(e))
                     continue
                 else:
@@ -2307,8 +2910,10 @@ class OneDimPane(Pane):
         return fit_artists, fit_params
 
     def _initialize_model_fit(self, feature: str, background: str,
-                              limits: List[List[float]], model_id: str,
-                              order: int) -> model_fit.ModelFit:
+                              limits: List[List[float]], model_id: uuid.UUID,
+                              filename: str, order: int, aperture: int,
+                              columns: ArrayLike, color: str
+                              ) -> model_fit.ModelFit:
         fit = model_fit.ModelFit()
 
         # catch '-' from dropdown
@@ -2325,11 +2930,37 @@ class OneDimPane(Pane):
         fit.set_units({'x': self.units['x'], 'y': self.units['y']})
         fit.set_axis(self.ax)
         fit.set_model_id(model_id)
+        fit.set_filename(filename)
         fit.set_order(order)
+        fit.set_aperture(aperture)
+        fit.set_columns(columns)
+        fit.set_color(color)
         return fit
 
     @staticmethod
     def calculate_fit(x_data, y_data, fit, bounds):
+        """
+        Calculate the fit to a dataset.
+
+        Parameters
+        ----------
+        x_data : np.ndarray
+            x-axis data
+        y_data : np.ndarray
+            y-axis data
+        fit : astropy.modeling.Model
+            Initial fitted model.
+        bounds : tuple[list,list]
+            List of allowed upper bounds and lowers bounds to the fitting
+            parameters. Empty when feature is not available but
+            [-np.inf,np.inf] for just the background.
+
+        Returns
+        -------
+        fit : astropy.modeling.Model
+            The fit model.
+        """
+
         def fit_func(x, *params):
             fit.parameters = params
             return fit(x)
@@ -2356,6 +2987,38 @@ class OneDimPane(Pane):
     def initialize_models(self, feature, background,
                           x_data, y_data, limits):
 
+        """
+        Initialize fitting models.
+
+        Parameters
+        ----------
+        feature : {'moffat', 'gaussian', 'gauss'}
+            Feature model to fit.
+        background : {'linear', 'constant'}
+            Baseline model to fit (Const1D or Linear1D).
+        x_data : np.ndarray
+            x-axis data
+        y_data : np.ndarray
+            y-axis data
+        limits : list of lists
+            Low and high limits for data to fit, as
+            [[low_x, low_y], [high_x, high_y]].  Currently
+            only the x values are used.
+
+        Returns
+        -------
+        xval : np.nparray
+            X-array within the given limits.
+        yval : np.nparray
+            Y-array within the given limits.
+        fit_init : astropy.modeling.Model
+            The combined fit to the data and background.
+        bounds : tuple[list,list]
+            List of allowed upper bounds and lowers bounds to the fitting
+            parameters. Empty when feature is not available but
+            [-np.inf,np.inf] for just the background.
+
+        """
         xval, yval = self._subselect_data(x_data, y_data, limits)
         guess = self._generate_initial_guess(xval, yval, limits)
 
@@ -2423,6 +3086,27 @@ class OneDimPane(Pane):
 
     @staticmethod
     def _generate_initial_guess(x, y, limits):
+        """
+        Generate an initial fitting guess for a given dataset.
+
+        Parameters
+        ----------
+        x : array
+            x-axis data
+        y : array
+            y-axis data
+        limits : list of lists
+            Low and high limits for data to fit, as
+            [[low_x, low_y], [high_x, high_y]].  Currently
+            only the x values are used.
+
+        Returns
+        -------
+        guess : Dict
+            A dictionary with keys ('peak_location', 'background',
+            'amplitude', 'width', 'power_index') and their corresponding
+            values.
+        """
         guess = dict()
         mid_index = len(x) // 2
         guess['peak_location'] = x[mid_index]
@@ -2435,6 +3119,17 @@ class OneDimPane(Pane):
     def generate_fit_artists(self, model_fits: Union[model_fit.ModelFit,
                                                      List[model_fit.ModelFit]],
                              x_data: Optional[ArrayLike] = None) -> List[DT]:
+        """
+        Generate fit artists for a pane
+
+        Parameters
+        ----------
+        model_fits : model_fit.ModelFit or list of model_fit.ModelFit
+            Models to plot.
+        x_data : array-like, optional
+            Data to plot fit y-values on. If not provided, data is
+            retrieved from the low model.
+        """
         fit_artists = list()
         if not isinstance(model_fits, list):
             model_fits = [model_fits]
@@ -2444,16 +3139,20 @@ class OneDimPane(Pane):
                 continue
 
             model_id = obj.get_model_id()
+            filename = obj.get_filename()
             order = obj.get_order()
+            aperture = obj.get_aperture()
             id_tag = obj.get_id()
             if x_data is None:
                 fields = obj.get_fields()
                 limits = obj.get_limits()
                 x = self.models[model_id].retrieve(order=order,
                                                    level='raw',
+                                                   aperture=aperture,
                                                    field=fields['x'])
                 y = self.models[model_id].retrieve(order=order,
                                                    level='raw',
+                                                   aperture=aperture,
                                                    field=fields['y'])
 
                 xrange = [limits['lower'], limits['upper']]
@@ -2466,12 +3165,13 @@ class OneDimPane(Pane):
                                                  style=linestyle)
             # todo - this overwrites any previous assignment to fit_artists,
             #  should be fixed for multiple fits passed
-            fl = drawing.Drawing(high_model=model_id, mid_model=order,
+            mid_model = f'{order}.{aperture}'
+            fl = drawing.Drawing(high_model=filename, mid_model=mid_model,
                                  kind='fit_line', data_id=id_tag,
-                                 artist=fit_line)
-            fc = drawing.Drawing(high_model=model_id, mid_model=order,
+                                 artist=fit_line, model_id=model_id)
+            fc = drawing.Drawing(high_model=filename, mid_model=mid_model,
                                  kind='fit_center', data_id=id_tag,
-                                 artist=fit_center)
+                                 artist=fit_center, model_id=model_id)
             fit_artists.append(fl)
             fit_artists.append(fc)
 
@@ -2480,11 +3180,11 @@ class OneDimPane(Pane):
     def plot_fit(self, x: ArrayLike, style: str,
                  fit_obj: Optional[model_fit.ModelFit] = None,
                  fit: Optional[am.Model] = None,
-                 model_id: Optional[str] = '', order: Optional[int] = int,
-                 feature: Optional[str] = '',
+                 model_id: Optional[str] = '', order: Optional[int] = 0,
+                 aperture: Optional[int] = 0, feature: Optional[str] = '',
                  ) -> Tuple[ml.Line2D, ml.Line2D]:
         """
-        Create overlay gallery representing a fit to a plot feature.
+        Create overlay artists representing a fit to a plot feature.
 
         Overlay colors are grayscale representations of the displayed
         model colors.
@@ -2493,14 +3193,22 @@ class OneDimPane(Pane):
         ----------
         x : array-like
             Independent coordinates for the fit overlay.
-        fit : astropy.modeling.Model
-            The callable model, fit to the data.
-        model_id : str
-            Model ID associated with the fit.
-        order : int
-            Order number associated with the fit.
         style : str
             Line style for the overlay.
+        fit_obj : model_fit.ModelFit, optional
+            If provided, fit, model, orderm aperture, and feature
+            are retrieved from the provided object instead of the input
+            parameters.
+        fit : astropy.modeling.Model, optional
+            The callable model, fit to the data.
+        model_id : str, optional
+            Model ID associated with the fit.
+        order : int, optional
+            Order number associated with the fit.
+        aperture : int, optional
+            Aperture associated with the fit.
+        feature : str, optional
+            Feature type for the fit.
 
         Returns
         -------
@@ -2511,6 +3219,7 @@ class OneDimPane(Pane):
         if fit_obj is not None:
             model_id = fit_obj.get_model_id()
             order = fit_obj.get_order()
+            aperture = fit_obj.get_aperture()
             feature = fit_obj.get_feature()
             fit = fit_obj.get_fit()
             fit_obj.axis = self.ax
@@ -2519,7 +3228,8 @@ class OneDimPane(Pane):
         # from plot, but keep some separation between different models
         gray = self.grayscale(self.colors[model_id])
 
-        label = f'{model_id}, Order {order + 1}, {feature.capitalize()}'
+        label = (f'{model_id}, Order {order + 1}, Aperture {aperture + 1},'
+                 f'{feature.capitalize()}')
         (line,) = self.ax.plot(x, fit(x), animated=True,
                                label=f'{label} fit',
                                color=gray, linewidth=2, alpha=0.8,
@@ -2534,13 +3244,6 @@ class OneDimPane(Pane):
         vline.set_visible(fit_obj.get_visibility())
 
         return line, vline
-
-    @staticmethod
-    def grayscale(color):
-        """Translate color hex to equivalent grayscale value."""
-        yiq = colorsys.rgb_to_yiq(*mc.to_rgb(color))
-        gray = str(yiq[0])
-        return gray
 
 
 class TwoDimPane(Pane):

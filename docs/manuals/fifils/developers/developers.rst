@@ -99,6 +99,7 @@ The sofia_redux package has several sub-modules organized by functionality::
     sofia_redux
     ├── calibration
     ├── instruments
+    │   ├── exes
     │   ├── fifi_ls
     │   ├── flitecam
     │   ├── forcast

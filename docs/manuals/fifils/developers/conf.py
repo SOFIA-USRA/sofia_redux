@@ -104,7 +104,7 @@ latex_elements = {
     'classoptions': ',openany,oneside',
     'babel': r'\usepackage[english]{babel}',
     'maxlistdepth': 20,
-    'printindex': r'\footnotesize\def\twocolumn[#1]{#1}\printindex',
+    'printindex': r'\def\twocolumn[#1]{#1}\printindex',
     'preamble': r'''
 \pagestyle{plain}
 \setcounter{tocdepth}{2}

@@ -11,7 +11,7 @@ __all__ = ['BlitManager']
 
 class BlitManager(object):
     """
-    Manage drawing for background and animated gallery.
+    Manage drawing for background and animated artists.
 
     Parameters
     ----------
@@ -19,13 +19,14 @@ class BlitManager(object):
         The canvas to work with, this only works for sub-classes of the Agg
         canvas which have the `~FigureCanvasAgg.copy_from_bbox` and
         `~FigureCanvasAgg.restore_region` methods.
-    artists : sofia_redux.visualization.display.artist.Gallery
-        Gallery instance that tracks all gallery to draw.
+    gallery : sofia_redux.visualization.display.artist.Gallery
+        Gallery instance that tracks all artists to draw.
+    signals : sofia_redux.visualization.signals.Signals
+        Collection of PyQt signals for passing on information to
+        other parts of the Eye.
 
     Attributes
     ----------
-    canvas : matplotlib.canvas.Canvas
-        The canvas to draw on.
     draw_cid : int
         The matplotlib event CID for the draw_event signal.
     """
@@ -61,11 +62,11 @@ class BlitManager(object):
             self._canvas.fig.bbox)
 
     def update_animated(self) -> None:
-        """Update all animated gallery."""
+        """Update all animated artists."""
         self.blit()
 
     def update_all(self, event=None) -> None:
-        """Update the background and gallery."""
+        """Update the background and artists."""
         self.update_background()
         self._draw_animated()
         self._catch_overlaps()
@@ -75,7 +76,7 @@ class BlitManager(object):
         Blit the canvas.
 
         Restore the background without updating it, then update
-        the animated gallery on top of the restored background.
+        the animated artists on top of the restored background.
         """
         self._canvas.restore_region(self._background)
         self._draw_animated()
@@ -83,7 +84,7 @@ class BlitManager(object):
         self._canvas.flush_events()
 
     def _draw_animated(self) -> None:
-        """Draw all of the animated gallery."""
+        """Draw all animated artists."""
         artists = self._gallery.gather_artists(mode='viable')
         log.debug(f'Drawing {len(artists)} artists')
         for artist in artists:

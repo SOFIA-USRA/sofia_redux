@@ -5,6 +5,9 @@ from sofia_redux.pipeline.sofia.parameters.forcast_parameters import DEFAULT
 from sofia_redux.pipeline.sofia.parameters.forcast_spectroscopy_parameters \
     import FORCASTSpectroscopyParameters, SPECTRAL_DEFAULT
 
+__all__ = ['FORCASTWavecalParameters']
+
+
 WAVECAL_DEFAULT = {
     'make_profiles': [
         {'key': 'save',

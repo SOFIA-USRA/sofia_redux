@@ -122,20 +122,22 @@ def test_get_si_pixel_size():
     assert info.get_si_pixel_size() == 'a'
 
 
-def test_perform_reduction(fifi_simulated_hdul, capsys):
-    reduction = Reduction('fifi_ls')
-    info = reduction.info
-    info.configuration.parse_key_value('fifi_ls.resample', 'False')
-    info.configuration.parse_key_value('rounds', '1')
-    info.perform_reduction(reduction, [fifi_simulated_hdul])
-    out = capsys.readouterr().out
-    assert 'Performing reduction for subsequent FIFI-LS resampling' not in out
-    info.configuration.parse_key_value('fifi_ls.resample', 'True')
-    info.configuration.parse_key_value('fifi_ls.insert_source', 'False')
-    info.perform_reduction(reduction, [fifi_simulated_hdul])
-    out = capsys.readouterr().out
-    assert 'Removing decorrelations and offsets from original data' in out
-    info.configuration.parse_key_value('fifi_ls.insert_source', 'True')
-    info.perform_reduction(reduction, [fifi_simulated_hdul])
-    out = capsys.readouterr().out
-    assert 'Reinserting source back into cleaned data' in out
+def test_perform_reduction(fifi_simulated_hdul, capsys, tmpdir):
+    with tmpdir.as_cwd():
+        reduction = Reduction('fifi_ls')
+        info = reduction.info
+        info.configuration.parse_key_value('fifi_ls.resample', 'False')
+        info.configuration.parse_key_value('rounds', '1')
+        info.perform_reduction(reduction, [fifi_simulated_hdul])
+        out = capsys.readouterr().out
+        assert 'Performing reduction for subsequent ' \
+               'FIFI-LS resampling' not in out
+        info.configuration.parse_key_value('fifi_ls.resample', 'True')
+        info.configuration.parse_key_value('fifi_ls.insert_source', 'False')
+        info.perform_reduction(reduction, [fifi_simulated_hdul])
+        out = capsys.readouterr().out
+        assert 'Removing decorrelations and offsets from original data' in out
+        info.configuration.parse_key_value('fifi_ls.insert_source', 'True')
+        info.perform_reduction(reduction, [fifi_simulated_hdul])
+        out = capsys.readouterr().out
+        assert 'Reinserting source back into cleaned data' in out

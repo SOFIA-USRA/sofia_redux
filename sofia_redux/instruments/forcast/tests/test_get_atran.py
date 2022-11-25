@@ -166,54 +166,54 @@ class TestGetAtran(object):
         # use_wv option: without wv keywords, should warn
         # and produce same result
         hdr = header.copy()
-        try:
-            del hdr['WVZ_STA']
-            del hdr['WVZ_END']
-        except KeyError:
-            pass
         result = get_atran(hdr, resolution, use_wv=True)
         assert np.allclose(result, default)
         capt = capsys.readouterr()
-        assert 'Bad WV value' in capt.out
+        assert 'Bad WV value' in capt.err
 
-        # add a WV value (start and/or end), but no ATRAN repo with WV files
+        # add a WV value, but no ATRAN repo with WV files
         hdr = header.copy()
-        hdr['WVZ_STA'] = 6.0
+        hdr['WVZ_OBS'] = 6.0
         result = get_atran(hdr, resolution, use_wv=True)
         assert np.allclose(result, default)
         capt = capsys.readouterr()
+        assert "Alt, ZA, WV: 40.00 44.25 6.00" in capt.out
         assert 'Using nearest Alt/ZA' in capt.out
         assert 'Using nearest Alt/ZA/WV' not in capt.out
 
-        hdr = header.copy()
-        hdr['WVZ_END'] = 6.0
-        result = get_atran(hdr, resolution, use_wv=True)
-        assert np.allclose(result, default)
-        capt = capsys.readouterr()
-        assert 'Using nearest Alt/ZA' in capt.out
-        assert 'Using nearest Alt/ZA/WV' not in capt.out
-
-        hdr = header.copy()
-        hdr['WVZ_STA'] = 6.0
-        hdr['WVZ_END'] = 8.0
-        result = get_atran(hdr, resolution, use_wv=True)
-        assert np.allclose(result, default)
-        capt = capsys.readouterr()
-        assert "Alt, ZA, WV: 40.00 44.25 7.00" in capt.out
-        assert 'Using nearest Alt/ZA' in capt.out
-        assert 'Using nearest Alt/ZA/WV' not in capt.out
-
-        # now add wvz_obs -- should be used in place of sta/end
-        hdr['WVZ_OBS'] = 5.0
-        get_atran(hdr, resolution, use_wv=True)
-        capt = capsys.readouterr()
-        assert "Alt, ZA, WV: 40.00 44.25 5.00" in capt.out
-
-        # but not if it has a bad value
+        # if it has a bad value, default is used
         hdr['WVZ_OBS'] = -9999.
         get_atran(hdr, resolution, use_wv=True)
         capt = capsys.readouterr()
-        assert "Alt, ZA, WV: 40.00 44.25 7.00" in capt.out
+        assert "Alt, ZA, WV: 40.00 44.25 6.00" in capt.out
+        assert "Bad WV value" in capt.err
+
+    def test_zeroval(self, capsys, tmpdir):
+        header = fits.Header()
+        resolution = 123
+
+        # make a file that should match alt/za and
+        # one that matches alt/za/wv
+        atran1 = 'atran_40K_45deg_4-50mum.fits'
+        atran2 = 'atran_40K_45deg_6pwv_4-50mum.fits'
+        afile1 = str(tmpdir.join(atran1))
+        afile2 = str(tmpdir.join(atran2))
+
+        data = np.arange(100).reshape(2, 50).astype(float)
+        hdul = fits.HDUList(fits.PrimaryHDU(data=data))
+        hdul.writeto(afile1, overwrite=True)
+        hdul.writeto(afile2, overwrite=True)
+
+        get_atran(header, resolution, atran_dir=str(tmpdir))
+        capt = capsys.readouterr()
+        assert "Alt, ZA, WV: 0.00 0.00 0.00" in capt.out
+        assert 'Using nearest Alt/ZA' in capt.out
+
+        get_atran(header, resolution, use_wv=True, atran_dir=str(tmpdir))
+        capt = capsys.readouterr()
+        assert "Alt, ZA, WV: 0.00 0.00 6.00" in capt.out
+        assert 'Bad WV value: 0.0' in capt.err
+        assert 'Using nearest Alt/ZA/WV' in capt.out
 
     def test_atran_dir(self, tmpdir, capsys):
         hdul = raw_specdata()
@@ -253,8 +253,7 @@ class TestGetAtran(object):
         assert result1 is not None
 
         # with use_wv, will get the other one (but the data is the same)
-        header['WVZ_STA'] = 6.
-        header['WVZ_END'] = 6.
+        header['WVZ_OBS'] = 6.
         result2 = get_atran(header, resolution, atran_dir=str(tmpdir),
                             use_wv=True)
         capt = capsys.readouterr()

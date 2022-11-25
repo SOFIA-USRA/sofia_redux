@@ -16,8 +16,8 @@ For previously processed data, check the PIPEVERS keyword in the
 FITS header to determine the pipeline version used.
 
 
-FLITECAM Redux v2.0.0
-~~~~~~~~~~~~~~~~~~~~~
+FLITECAM Redux v2.0.0 (2021-09-24)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. B*
 
 All modes

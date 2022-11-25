@@ -5,6 +5,9 @@ from sofia_redux.pipeline.sofia.parameters.forcast_parameters import DEFAULT
 from sofia_redux.pipeline.sofia.parameters.forcast_spectroscopy_parameters \
     import SPECTRAL_DEFAULT, FORCASTSpectroscopyParameters
 
+__all__ = ['FORCASTSlitcorrParameters']
+
+
 SLITCORR_DEFAULT = {
     'stack': [
         {'key': 'save',

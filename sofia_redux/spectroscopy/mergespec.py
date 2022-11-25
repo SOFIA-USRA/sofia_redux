@@ -1,17 +1,23 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+import warnings
+
+from astropy import log
+import numba as nb
 import numpy as np
+
 from sofia_redux.toolkit.utilities.func import nantrim
 from sofia_redux.toolkit.stats import meancomb
 from sofia_redux.spectroscopy.combflagstack import combflagstack
 from sofia_redux.spectroscopy.interpflagspec import interpflagspec
 from sofia_redux.spectroscopy.interpspec import interpspec
-import warnings
 
 __all__ = ['mergespec']
 
 
-def mergespec(spec1, spec2, info=None, sum_flux=False):
+def mergespec(spec1, spec2, info=None, sum_flux=False, s2n_threshold=None,
+              s2n_statistic='median', noise_test=False, local_noise=False,
+              local_radius=3):
     """
     Combine two spectra into a single spectrum
 
@@ -65,6 +71,22 @@ def mergespec(spec1, spec2, info=None, sum_flux=False):
                 The (min, max) wavelength range over which arrays overlap.
     sum_flux : bool, optional
         If True, sum the flux instead of averaging.
+    s2n_threshold : float, optional
+        If set and the value is greater than 0, and errors are provided,
+        data below this value times the reference signal-to-noise (S/N)
+        value in the spectrum will be clipped before combination.
+    s2n_statistic : {'median', 'mean', 'max'}, optional
+        Statistic to use for computing the reference S/N value.
+        Default is median.
+    noise_test : bool, optional
+        If set, only the noise is considered for thresholding spectra.
+        The s2n_threshold is interpreted as a fraction of 1/noise.
+    local_noise : bool, optional
+        If set, noise for the spectrum is computed from the standard deviation
+        in a sliding window with radius local_radius.
+    local_radius : int, optional
+        Sets the local window in pixels for computing noise if local_noise
+        is set.
 
     Returns
     -------
@@ -85,14 +107,61 @@ def mergespec(spec1, spec2, info=None, sum_flux=False):
     elif shape[0] != spec2.shape[0]:
         raise ValueError("spec1 and spec2 must have equal rows")
 
+    if s2n_statistic == 'mean':
+        func = np.nanmean
+    elif s2n_statistic == 'max':
+        func = np.nanmax
+    else:
+        func = np.nanmedian
+
     doerr = shape[0] >= 3
     dobit = shape[0] >= 4
+
+    if doerr:
+        # Check for zero-error data
+        bad_error = ~np.isfinite(spec1[2]) | (spec1[2] == 0)
+        spec1[1][bad_error] = np.nan
+        spec1[2][bad_error] = np.nan
+        bad_error = ~np.isfinite(spec2[2]) | (spec2[2] == 0)
+        spec2[1][bad_error] = np.nan
+        spec2[2][bad_error] = np.nan
 
     # Trim NaNs from the beginning and ends of the spectrum
     spec1 = spec1[:, nantrim(spec1[1], 2)]
     spec2 = spec2[:, nantrim(spec2[1], 2)]
     range1 = np.nanmin(spec1[0]), np.nanmax(spec1[0])
     range2 = np.nanmin(spec2[0]), np.nanmax(spec2[0])
+
+    # get good S/N range if desired
+    ok_s2n, s2n_1, s2n_2 = None, None, None
+    if doerr and s2n_threshold is not None and s2n_threshold > 0:
+        if local_noise:
+            log.debug('Using sliding standard deviation for noise')
+            noise_1 = _sliding_stddev(spec1[1], local_radius)
+            noise_2 = _sliding_stddev(spec2[1], local_radius)
+        else:
+            log.debug('Using input error for noise')
+            noise_1 = spec1[2]
+            noise_2 = spec2[2]
+
+        if noise_test:
+            log.debug(f'Threshold statistic is {func} on 1/N')
+            s2n_1 = 1 / noise_1
+            s2n_2 = 1 / noise_2
+        else:
+            log.debug(f'Threshold statistic is {func} on S/N')
+            s2n_1 = spec1[1] / noise_1
+            s2n_2 = spec2[1] / noise_2
+
+        # compute threshold from equal sized portions at ends
+        # of spectra
+        ok_s2n = [s2n_threshold * func(s2n_1),
+                  s2n_threshold * func(s2n_2)]
+        log.debug(f'S/N threshold: {ok_s2n}')
+        if not (ok_s2n[0] > 0 and ok_s2n[1] > 0):
+            log.warning(f'Bad S/N; ignoring threshold '
+                        f'values {ok_s2n}')
+            ok_s2n = None
 
     overlapped, overlap_range = False, [np.nan, np.nan]
     overlap = np.empty((shape[0], 0))
@@ -103,6 +172,12 @@ def mergespec(spec1, spec2, info=None, sum_flux=False):
         if2 = interpspec(spec2[0, overlap2], spec2[1, overlap2],
                          spec1[0], error=ie2, leavenans=True, cval=np.nan)
         if2, ie2 = if2 if doerr else (if2, None)
+
+        if ok_s2n is not None:
+            i_s2n_2 = interpspec(spec2[0, overlap2], s2n_2[overlap2],
+                                 spec1[0], leavenans=True, cval=np.nan)
+        else:
+            i_s2n_2 = None
 
         overlap1 = nantrim(if2, 2)
         overlapped = overlap1.any()
@@ -118,6 +193,23 @@ def mergespec(spec1, spec2, info=None, sum_flux=False):
                 overlap[1] = np.sum(if2, axis=0)
                 if doerr:
                     overlap[2] = np.sqrt(np.sum(ie2, axis=0))
+
+            elif ok_s2n is not None:
+                use_s1 = ((s2n_1[overlap1] > ok_s2n[0])
+                          & (i_s2n_2[overlap1] <= ok_s2n[1]))
+                use_s2 = ((s2n_1[overlap1] <= ok_s2n[0])
+                          & (i_s2n_2[overlap1] > ok_s2n[1]))
+                combined = meancomb(if2, variance=ie2, ignorenans=False,
+                                    axis=0, returned=doerr)
+
+                overlap[1] = combined[0]
+                overlap[1][use_s1] = if2[0][use_s1]
+                overlap[1][use_s2] = if2[1][use_s2]
+
+                overlap[2] = np.sqrt(combined[1])
+                overlap[2][use_s1] = np.sqrt(ie2[0][use_s1])
+                overlap[2][use_s2] = np.sqrt(ie2[1][use_s2])
+
             else:
                 if2 = meancomb(if2, variance=ie2, ignorenans=False,
                                axis=0, returned=doerr)
@@ -169,3 +261,19 @@ def mergespec(spec1, spec2, info=None, sum_flux=False):
         info['overlap_range'] = np.array(overlap_range)
 
     return overlap
+
+
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def _sliding_stddev(data, radius):  # pragma: no cover
+    n = data.size
+    r = int(radius)
+    result = np.empty(n, dtype=nb.float64)
+    for i in range(n):
+        start = i - r
+        end = i + r
+        if start < 0:
+            start = 0
+        if end > n:
+            end = n
+        result[i] = np.nanstd(data[start:end])
+    return result

@@ -21,11 +21,14 @@ from sofia_redux.pipeline.sofia.parameters.forcast_spatcal_parameters \
     import FORCASTSpatcalParameters
 from sofia_redux.pipeline.sofia.forcast_wavecal_reduction \
     import FORCASTWavecalReduction
+from sofia_redux.pipeline.sofia.sofia_utilities import parse_apertures
 from sofia_redux.spectroscopy.readwavecal import readwavecal
 from sofia_redux.toolkit.utilities.fits import hdinsert, getheader
 from sofia_redux.toolkit.fitting.polynomial import polyfitnd
 from sofia_redux.toolkit.image.adjust import unrotate90
 from sofia_redux.toolkit.interpolate import tabinv
+
+__all__ = ['FORCASTSpatcalReduction']
 
 
 class FORCASTSpatcalReduction(FORCASTWavecalReduction):
@@ -100,7 +103,7 @@ class FORCASTSpatcalReduction(FORCASTWavecalReduction):
             arcsec = sim_spatcal[:, data_shape[1] // 2]
 
             # calibrated aperture positions
-            appos = np.array(self._parse_apertures(header['APPOSO01'], 1)[0])
+            appos = np.array(parse_apertures(header['APPOSO01'], 1)[0])
             appos_arc = np.interp(appos, np.arange(arcsec.size), arcsec)
             appos_arcs.extend(appos_arc)
 

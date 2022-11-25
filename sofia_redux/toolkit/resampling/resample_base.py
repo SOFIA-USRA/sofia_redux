@@ -1011,7 +1011,7 @@ class ResampleBase(object):
         if self.memory_info is not None and jobs is not None:
             # Check the maximum number of jobs here
             jobs = relative_cores(jobs)
-            if self.memory_info['large_data']:
+            if self.memory_info['large_data']:  # pragma: no cover
                 max_jobs = self.memory_info['max_split_jobs']
             else:
                 max_jobs = self.memory_info['max_full_jobs']

@@ -18,7 +18,6 @@ Reference/API
 .. automodapi:: sofia_redux.instruments.forcast.check_readout_shift
 .. automodapi:: sofia_redux.instruments.forcast.chopnod_properties
 .. automodapi:: sofia_redux.instruments.forcast.clean
-.. automodapi:: sofia_redux.instruments.forcast.coadd
 .. automodapi:: sofia_redux.instruments.forcast.configuration
 .. automodapi:: sofia_redux.instruments.forcast.distcorr_model
 .. automodapi:: sofia_redux.instruments.forcast.droop

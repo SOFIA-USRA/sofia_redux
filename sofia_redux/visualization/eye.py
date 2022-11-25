@@ -14,6 +14,7 @@ from sofia_redux.visualization import signals, setup
 from sofia_redux.visualization.display import view
 from sofia_redux.visualization.models import model
 from sofia_redux.visualization.utils.logger import StreamLogger
+from sofia_redux.visualization.utils.eye_error import EyeError
 
 try:
     from PyQt5 import QtCore, QtGui, QtWidgets
@@ -117,7 +118,11 @@ class Eye(object):
         # be overridden in arguments
         for hand in log.handlers:
             if isinstance(hand, StreamLogger):
-                hand.setLevel(self.log_level)
+                try:
+                    hand.setLevel(self.log_level)
+                except ValueError:
+                    # Invalid log level passed -> ignore
+                    pass
 
     def open_eye(self) -> None:
         """Open the GUI."""
@@ -172,16 +177,18 @@ class Eye(object):
             added = False
             for fname in filename:
                 log.debug(f'Adding data from {fname}')
-                added_filename = self.\
-                    _add_model(fname)
-                if added_filename is not None:
+                added_id = self._add_model(filename=fname)
+                if added_id is not None:
                     added = True
-                    self.view.display_filenames(added_filename)
+                    self.view.add_filename(added_id, fname)
             if added:
                 self.signals.atrophy.emit()
 
     def _add_model(self, filename: str = '',
-                   hdul: Optional[pf.hdu.hdulist.HDUList] = None) -> str:
+                   hdul: Optional[pf.hdu.hdulist.HDUList] = None,
+                   return_filename: bool = False
+                   ) -> Optional[Union[str, Tuple[str, str],
+                                       Tuple[None, str]]]:
         """
         Create a Model from provided data and add it to the Eye.
 
@@ -211,50 +218,60 @@ class Eye(object):
             raise RuntimeError('Eye._add_model can only accept `filename` '
                                'or `hdu`, not both')
         if filename:
-            log.info('Adding model from filename')
-            if filename not in self.models.keys():
-                try:
-                    m = model.Model.add_model(filename=filename)
-
-                except FileNotFoundError:
-                    log.warning(f'No such file: {filename}')
-                    filename = None
-                except (NotImplementedError, OSError,
-                        RuntimeError, KeyError) as err:
-                    log.debug(f'Error encountered: {str(err)}')
-                    log.warning('Input data is not supported.')
-                    filename = None
+            if os.path.isfile(filename):
+                args = {'filename': filename}
+                log.debug(f'Adding model from filename {filename}')
+            else:
+                log.warning(f'No such file: {filename}')
+                if return_filename:
+                    return None, ''
                 else:
-                    log.debug(f'Model index: {self.model_index}')
-                    m.index = self.model_index
-                    self.model_index += 1
-                    self.models[filename] = m
+                    return None
         elif hdul is not None:
-            log.info('Adding model from hdul')
+            args = {'hdul': hdul}
+            log.debug('Adding model from hdul')
             try:
                 filename = hdul.filename()
             except TypeError:
                 filename = hdul[0].header.get('FILENAME', None)
-            if not filename:
-                filename = hdul[0].header.get('FILENAME', 'UNKNOWN')
+            finally:
+                if not filename:
+                    filename = hdul[0].header.get('FILENAME', 'UNKNOWN')
             log.debug(f'Found filename: {filename}')
-            if filename not in self.models.keys():
-                try:
-                    m = model.Model.add_model(hdul=hdul)
-                except (NotImplementedError, OSError,
-                        RuntimeError, KeyError) as err:
-                    log.debug(f'Error encountered: {str(err)}')
-                    log.warning('Input data is not supported.')
-                    filename = None
-                else:
-                    log.debug(f'Model index: {self.model_index}')
-                    m.index = self.model_index
-                    self.model_index += 1
-                    self.models[filename] = m
         else:
             raise RuntimeError('Need to provide either a filename or HDUL')
 
-        return filename
+        if return_filename:
+            result = (None, filename)
+        else:
+            result = None
+        preexisting = any([m.filename == filename
+                           for m in self.models.values()])
+        if preexisting:
+            return result
+        else:
+            try:
+                m = model.Model.add_model(**args)
+            except FileNotFoundError:
+                log.warning(f'No such file: {filename}')
+                return result
+            except (NotImplementedError, OSError,
+                    RuntimeError, KeyError) as err:
+                log.debug(f'Error encountered: {str(err)}')
+                log.warning('Input data is not supported.')
+                return result
+            except EyeError as err:
+                log.warning(str(err))
+                return result
+            else:
+                log.debug(f'Model index: {self.model_index}')
+                m.index = self.model_index
+                self.model_index += 1
+                self.models[m.id] = m
+            if return_filename:
+                return m.id, filename
+            else:
+                return m.id
 
     # API
     def set_parent(self, parent: QtWidgets.QWidget) -> None:
@@ -295,17 +312,18 @@ class Eye(object):
                            f'HDUList objects. Provided {type(data)}')
                 log.error(message)
                 raise TypeError(message)
-            added_filename = self._add_model(hdul=hdul)
+            added_id, filename = self._add_model(hdul=hdul,
+                                                 return_filename=True)
             hdul.close()
-            if added_filename is not None:
-                self.view.display_filenames(added_filename)
+            if added_id is not None:
+                self.view.add_filename(added_id, filename)
 
         self.signals.atrophy.emit()
 
     def unload(self) -> None:
         """Remove all loaded data."""
-        filenames = list(self.models.keys())
-        self.remove_data(filenames=filenames)
+        model_ids = list(self.models.keys())
+        self.remove_data(model_ids=model_ids)
 
     def add_panes(self, layout='grid', n_panes=1, kind='spectrum') -> None:
         """
@@ -504,7 +522,7 @@ class Eye(object):
 
     def get_model_backup(self):
         """
-        return a copy of raw data
+        Return a copy of raw loaded data.
         """
         self.view.model_backup(self.models)
 
@@ -608,10 +626,6 @@ class Eye(object):
         """Toggle the file panel visibility."""
         self.view.toggle_file_panel()
 
-    def toggle_pane_panel(self) -> None:
-        """Toggle the pane panel visibility."""
-        self.view.toggle_pane_panel()
-
     def toggle_order_panel(self) -> None:
         """Toggle the order panel visibility."""
         self.view.toggle_order_panel()
@@ -647,7 +661,7 @@ class Eye(object):
         log.info(f'Saving image to {filename}')
         self.view.save(filename, **kwargs)
 
-    def remove_data(self, filenames: Optional[List[str]] = None) -> None:
+    def remove_data(self, model_ids: Optional[List[str]] = None) -> None:
         """
         Remove loaded data from the view.
 
@@ -657,19 +671,19 @@ class Eye(object):
             If not provided, currently selected files in the file panel
             will be removed.
         """
-        if not filenames:
-            filenames = self.view.current_files_selected()
-        if not filenames:
+        if not model_ids:
+            model_ids = self.view.current_files_selected()
+        if not model_ids:
             return
-        if isinstance(filenames, str):
-            filenames = [filenames]
-        for filename in filenames:
+        if not isinstance(model_ids, list):
+            model_ids = [model_ids]
+        for model_id in model_ids:
             try:
-                del self.models[filename]
+                del self.models[model_id]
             except KeyError:
-                log.warning(f'File {filename} not found')
+                log.warning(f'File {model_id} not found')
                 continue
-            self.view.remove_data_from_all_panes(filename)
+            self.view.remove_data_from_all_panes(model_id)
 
         # reset model index if count has gone to zero
         if len(self.models) == 0:
@@ -694,40 +708,19 @@ class Eye(object):
 
     def display_selected_model(self) -> None:
         """Display a selected file in the current pane."""
-        filenames = self.view.current_files_selected()
-        if not filenames:
+        model_ids = self.view.current_files_selected()
+        if not model_ids:
             return
-        for filename in filenames:
-            model_ = self._select_model_with_filename(filename)
-            self.view.display_model(model_)
+        # self.view.hold_atrophy()
+        if self.view.timer:
+            self.view.timer.stop()
+        for model_id in model_ids:
+            try:
+                self.view.display_model(self.models[model_id])
+            except KeyError:
+                # self.view.release_atrophy()
+                raise RuntimeError(f'Cannot locate model {model_id}')
+        # self.view.release_atrophy()
         self.signals.atrophy.emit()
-
-    def _select_model_with_filename(self, filename: str) -> model.Model:
-        """
-        Select a model by associated filename.
-
-        Parameters
-        ----------
-        filename : str
-            The filename to search for.
-
-        Returns
-        -------
-        model : `models.Model`
-            The high-level model matching the input filename.
-
-        Raises
-        ------
-        RuntimeError
-            If no model matching the filename is found.
-        """
-        model_ = None
-        for k, v in self.models.items():
-            if k == filename:
-                model_ = v
-        if model_ is None:
-            raise RuntimeError(f'Cannot locate model matching '
-                               f'{filename} in model list '
-                               f'{self.models}.')
-        else:
-            return model_
+        if self.view.timer:
+            self.view.timer.start()

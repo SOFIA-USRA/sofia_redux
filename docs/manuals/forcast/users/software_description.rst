@@ -89,7 +89,7 @@ Configuration and execution
 Installation
 ------------
 
-The FORCAST pipeline is written entirely in Python.  TThe pipeline is
+The FORCAST pipeline is written entirely in Python.  The pipeline is
 platform independent and has been tested on Linux, Mac OS X, and Windows
 operating systems.  Running the pipeline requires a minimum of 16GB RAM,
 or equivalent-sized swap file.
@@ -481,6 +481,12 @@ be optionally saved by selecting the 'save' parameter.
       shift in pixels for the cross-correlation algorithm.  This limit is
       applied for shifts in both x- and y-direction.
 
+-  **Telluric Correct**
+
+   -  *Use WV values*: If set, water vapor values from the header (WVZ_OBS)
+      will be used to correct for atmospheric transmission, instead of
+      altitude.
+
 -  **Coadd**
 
    -  *Skip coaddition*: If selected, each input registered file will be
@@ -576,6 +582,8 @@ Grism Reduction
 .. |ref_eye_controls| replace:: :numref:`forcast_eye_controls_image`
 
 .. include::  spectral_extraction.rst
+
+.. include::  spectral_display.rst
 
 .. figure:: images/profile_plot.png
    :name: forcast_profile_plot
@@ -839,6 +847,10 @@ be optionally saved by selecting the 'save' parameter.
          to use for telluric correction. If blank, the default ATRAN
          file on disk will be used. Set to a valid FITS file path to override the
          default ATRAN file with a new one.
+
+      -  *Use WV values*: If set, and optimize is not set, water vapor values
+         from the header (WVZ_OBS) will be used to choose the correct
+         ATRAN file.
 
       -  *S/N threshold for optimization*: If the median S/N for a spectrum
          is below this threshold, optimization will not be attempted.  Automatic

@@ -205,22 +205,11 @@ def get_atran(header, resolution, filename=None,
             alt = 0.5 * (alt_start + alt_end)
         alt /= 1000
 
-        wv_obs = float(header.get('WVZ_OBS', 0))
-        if wv_obs > 0:
-            wv = wv_obs
-        else:
-            wv_start = float(header.get('WVZ_STA', 0))
-            wv_end = float(header.get('WVZ_END', 0))
-            if wv_start > 0 >= wv_end:
-                wv = wv_start
-            elif wv_end > 0 >= wv_start:
-                wv = wv_end
-            else:
-                wv = 0.5 * (wv_start + wv_end)
-        if use_wv and (wv < 2 or wv > 50):
-            # wv values aren't really used for forcast -- just pick one
-            log.debug(f'Bad WV value: {wv}')
-            log.debug('Using default value 6.0 um.')
+        wv = float(header.get('WVZ_OBS', 0))
+        if use_wv and (wv < 1 or wv > 50):
+            # Pick a backup value, for base file purposes
+            log.warning(f'Bad WV value: {wv}')
+            log.warning('Using default value 6.0 um.')
             wv = 6.0
 
         log.info(f'Alt, ZA, WV: {alt:.2f} {za:.2f} {wv:.2f}')
@@ -256,7 +245,10 @@ def get_atran(header, resolution, filename=None,
                     # file alt, za, or wv
                     file_val = float(match.group(i + 1))
                     # check difference from true value
-                    d_val = abs(file_val - true_value[i]) / true_value[i]
+                    if true_value[i] != 0:
+                        d_val = abs(file_val - true_value[i]) / true_value[i]
+                    else:
+                        d_val = abs(file_val - true_value[i])
                     match_val += d_val
                 if match_val < wv_overall_val:
                     wv_overall_val = match_val
@@ -270,7 +262,11 @@ def get_atran(header, resolution, filename=None,
                         # file alt or za
                         file_val = float(match.group(i + 1))
                         # check difference from true value
-                        d_val = abs(file_val - true_value[i]) / true_value[i]
+                        if true_value[i] != 0:
+                            d_val = abs(file_val
+                                        - true_value[i]) / true_value[i]
+                        else:
+                            d_val = abs(file_val - true_value[i])
                         match_val += d_val
                     if match_val < overall_val:
                         overall_val = match_val

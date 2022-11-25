@@ -110,11 +110,13 @@ The sofia_redux package has several sub-modules organized by functionality::
     sofia_redux
     ├── calibration
     ├── instruments
+    │   ├── exes
     │   ├── fifi_ls
     │   ├── flitecam
     │   ├── forcast
     │   └── hawc
     ├── pipeline
+    ├── scan
     ├── spectroscopy
     ├── toolkit
     └── visualization
@@ -291,7 +293,7 @@ class:
 
     - Telluric Correct: calls `sofia_redux.calibration.pipecal_util.apply_tellcor`
       and `sofia_redux.calibration.pipecal_util.run_photometry`
-    - Combine Images: calls `sofia_redux.instruments.forcast.coadd`
+    - Combine Images: calls `sofia_redux.toolkit.image.coadd`
     - Flux Calibrate: calls `sofia_redux.calibration.pipecal_util.apply_fluxcal`
       and `sofia_redux.calibration.pipecal_util.run_photometry`
     - Make Image Map: calls `sofia_redux.visualization.quicklook.make_image`
@@ -315,7 +317,7 @@ All other steps in the pipeline are implemented in `FORCASTSpectroscopyReduction
       `sofia_redux.spectroscopy.mkapmask`
     - Subtract Background: calls `sofia_redux.spectroscopy.extspec.col_subbg`
     - Extract Spectra: calls `sofia_redux.spectroscopy.extspec.extspec`
-    - Combine Spectra: calls `sofia_redux.instruments.forcast.coadd`
+    - Combine Spectra: calls `sofia_redux.toolkit.image.coadd`
       `sofia_redux.instruments.forcast.register_datasets.get_shifts`,
       and `sofia_redux.toolkit.image.combine_images`
     - Make Response: calls `sofia_redux.instruments.forcast.getmodel`
@@ -395,8 +397,6 @@ sofia_redux.instruments.flitecam
 sofia_redux.instruments.forcast
 -------------------------------
 
-.. automodapi:: sofia_redux.instruments.forcast.coadd
-   :headings: ~^
 .. automodapi:: sofia_redux.instruments.forcast.getatran
    :headings: ~^
 .. automodapi:: sofia_redux.instruments.forcast.getmodel
@@ -414,21 +414,43 @@ sofia_redux.instruments.forcast
 sofia_redux.toolkit
 -------------------
 
-.. automodapi:: sofia_redux.toolkit.convolve
+.. automodapi:: sofia_redux.toolkit.convolve.base
    :headings: ~^
-.. automodapi:: sofia_redux.toolkit.fitting
+.. automodapi:: sofia_redux.toolkit.convolve.kernel
    :headings: ~^
-.. automodapi:: sofia_redux.toolkit.image
+.. automodapi:: sofia_redux.toolkit.convolve.filter
    :headings: ~^
-.. automodapi:: sofia_redux.toolkit.interpolate
+.. automodapi:: sofia_redux.toolkit.fitting.fitpeaks1d
    :headings: ~^
-   :no-inheritance-diagram:
-.. automodapi:: sofia_redux.toolkit.resampling
+.. automodapi:: sofia_redux.toolkit.fitting.polynomial
    :headings: ~^
-   :no-inheritance-diagram:
-.. automodapi:: sofia_redux.toolkit.stats
+.. automodapi:: sofia_redux.toolkit.image.adjust
    :headings: ~^
-.. automodapi:: sofia_redux.toolkit.utilities
+.. automodapi:: sofia_redux.toolkit.image.coadd
+   :headings: ~^
+.. automodapi:: sofia_redux.toolkit.image.combine
+   :headings: ~^
+.. automodapi:: sofia_redux.toolkit.image.fill
+   :headings: ~^
+.. automodapi:: sofia_redux.toolkit.image.resize
+   :headings: ~^
+.. automodapi:: sofia_redux.toolkit.image.smooth
+   :headings: ~^
+.. automodapi:: sofia_redux.toolkit.image.utilities
+   :headings: ~^
+.. automodapi:: sofia_redux.toolkit.image.warp
+   :headings: ~^
+.. automodapi:: sofia_redux.toolkit.interpolate.interpolate
+   :headings: ~^
+.. automodapi:: sofia_redux.toolkit.stats.stats
+   :headings: ~^
+.. automodapi:: sofia_redux.toolkit.utilities.base
+   :headings: ~^
+.. automodapi:: sofia_redux.toolkit.utilities.fits
+   :headings: ~^
+.. automodapi:: sofia_redux.toolkit.utilities.func
+   :headings: ~^
+.. automodapi:: sofia_redux.toolkit.utilities.multiprocessing
    :headings: ~^
 
 sofia_redux.spectroscopy

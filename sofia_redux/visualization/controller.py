@@ -1,6 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """Standalone front-end for Eye of SOFIA display tool."""
 
+import os
 import sys
 import argparse
 from typing import List
@@ -52,6 +53,7 @@ def main():
         raise ImportError('PyQt5 package is required for the Eye.')
 
     args = parse_args(sys.argv[1:])
+    args = check_args(args)
 
     app = QtWidgets.QApplication(sys.argv)
 
@@ -95,9 +97,6 @@ def check_args(args: argparse.Namespace) -> argparse.Namespace:
     """
     Check arguments for validity.
 
-    No checks currently implemented; this function is a placeholder
-    for future implementation.
-
     Parameters
     ----------
     args : argparse.Namespace
@@ -107,4 +106,9 @@ def check_args(args: argparse.Namespace) -> argparse.Namespace:
     -------
     argparse.Namespace
     """
+    args.filenames = [os.path.abspath(f) for f in args.filenames]
     return args
+
+
+if __name__ == '__main__':  # pragma: no cover
+    main()

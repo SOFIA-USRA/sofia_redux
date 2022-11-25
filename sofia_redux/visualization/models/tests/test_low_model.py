@@ -1,13 +1,15 @@
 #  Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-import pytest
 import logging
+
+import astropy.units as u
+import pytest
 import numpy as np
 import numpy.testing as npt
-import astropy.units as u
 
 from sofia_redux.visualization.models import low_model
 from sofia_redux.visualization.utils import unit_conversion as uc
+from sofia_redux.visualization.utils.eye_error import EyeError
 
 
 class TestLowModel(object):
@@ -26,7 +28,6 @@ class TestLowModel(object):
         assert model.kind == ''
         assert len(model.kind_names) == 0
         assert model.default_ndims == 0
-        assert model.default_field is None
         assert model.id is None
         assert model.enabled
 
@@ -120,7 +121,10 @@ class TestImage(object):
         model = low_model.Image(image_hdu, 'image.fits')
         assert model.default_ndims == 2
         assert model.kind == 'flux'
-        assert model.kind_names['unitless'] == ['badmask', 'spatial_map']
+        assert model.kind_names['unitless'] == ['badmask', 'spatial_map',
+                                                'flat', 'flat_error',
+                                                'flat_illumination',
+                                                'order_mask', 'mask']
 
     def test_data_mean(self, image_hdu):
         model = low_model.Image(image_hdu, 'image.fits')
@@ -144,12 +148,20 @@ class TestSpectrum(object):
         filename = 'test.fits'
         model = low_model.Spectrum(spectrum_hdu, filename)
         assert model.id == f'{filename}/{spectrum_hdu.name.lower()}'
-        assert model.kind_names['flux'] == ['spectral_flux', 'spectral_error']
+        assert model.kind_names['flux'] == ['spectral_flux', 'spectral_error',
+                                            'flux', 'error']
         assert model.kind == 'flux'
+
+    def test_init_error(self, spectrum_hdu):
+        spectrum_hdu.data = np.zeros((10, 10, 10))
+        with pytest.raises(EyeError) as err:
+            low_model.Spectrum(spectrum_hdu, 'bad.fits')
+        assert 'can only have 1' in str(err)
 
     @pytest.mark.parametrize('kind,fc_count,wv_count,vv_count,fail',
                              [('flux', 1, 0, 1, False),
                               ('wavelength', 0, 1, 1, False),
+                              ('response', 1, 0, 1, False),
                               ('position', 0, 1, 1, False),
                               ('scale', 0, 0, 0, False),
                               ('unitless', 0, 0, 0, False),
@@ -191,11 +203,12 @@ class TestSpectrum(object):
         with pytest.raises(ValueError):
             model.convert('other', wave, 'um')
 
-    def test_convert_pixel(self, spectrum_hdu):
+    @pytest.mark.parametrize('kind', ['wavelength', 'response', 'position'])
+    def test_convert_pixel(self, spectrum_hdu, kind):
         # set an unrecognized unit in the header
         spectrum_hdu.header['XUNIT'] = 'um'
         model = low_model.Spectrum(spectrum_hdu, 'spec.fits')
-        model.kind = 'wavelength'
+        model.kind = kind
         wave = np.arange(len(spectrum_hdu.data))
         model.convert('pixel', wave, 'um')
         assert model.unit == 'pixel'

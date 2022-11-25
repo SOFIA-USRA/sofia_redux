@@ -10,7 +10,8 @@ import warnings
 __all__ = ['col_subbg', 'extspec']
 
 
-def col_subbg(col_arc, col_image, col_var, col_apmask, col_mask, bgorder):
+def col_subbg(col_arc, col_image, col_var, col_apmask, col_mask,
+              bgorder, robust=4.0, **kwargs):
     """
     Fit background to a single column.
 
@@ -29,6 +30,10 @@ def col_subbg(col_arc, col_image, col_var, col_apmask, col_mask, bgorder):
         bad pixel.
     bgorder : int
         Order of polynomial to fit to the background
+    robust : float
+        Robust threshold.
+    kwargs : dict
+        Additional parameters to pass to polyfitnd.
 
     Returns
     -------
@@ -41,14 +46,24 @@ def col_subbg(col_arc, col_image, col_var, col_apmask, col_mask, bgorder):
     if region.sum() < (bgorder + 2):
         log.error("Not enough background points found.")
         return
-    bgmodel = polyfitnd(col_arc[region], col_image[region], bgorder,
-                        error=np.sqrt(col_var[region]), robust=4,
-                        mask=col_mask[region], covar=True, model=True)
-    if not bgmodel.success:
-        log.error("Polynomial fit failed.")
-        return
-    bgfit, bgvar = bgmodel(col_arc, dovar=True)
-    return col_image - bgfit, col_var + bgvar, bgmodel.coefficients
+    if bgorder == 0:
+        # do simple robust mean for bgorder=0
+        data = col_image[region][col_mask[region]]
+        var = col_var[region][col_mask[region]]
+        bgfit, bgvar = meancomb(data, variance=var, robust=robust)
+        bgcoeff = (bgfit,)
+    else:
+        # otherwise fit a polynomial
+        bgmodel = polyfitnd(col_arc[region], col_image[region], bgorder,
+                            error=np.sqrt(col_var[region]), robust=robust,
+                            mask=col_mask[region], covar=True, model=True,
+                            **kwargs)
+        if not bgmodel.success:
+            log.error("Polynomial fit failed.")
+            return
+        bgfit, bgvar = bgmodel(col_arc, dovar=True)
+        bgcoeff = bgmodel.coefficients
+    return col_image - bgfit, col_var + bgvar, bgcoeff
 
 
 def col_fixdata(fix, col_image, col_var, col_bits, col_mask, model_profile,
@@ -97,7 +112,7 @@ def col_fixdata(fix, col_image, col_var, col_bits, col_mask, model_profile,
 def extspec(rectimg, profile=None, spatial_map=None,
             optimal=False, sub_background=True, fix_bad=False,
             bgorder=2, threshold=5.0, sum_function=None,
-            error_function=None):
+            error_function=None, verbose=False):
     """
     Extracts spectra from a rectified spectral image.
 
@@ -185,6 +200,9 @@ def extspec(rectimg, profile=None, spatial_map=None,
         when optimal=False.  Default is np.sqrt(np.nansum(flux * weights)).
         The provided function should accept two array arguments
         (variance and weights).
+    verbose : bool, optional
+        If set, columns that fail background fit or optimal extraction
+        will generate warnings for the log.
 
     Returns
     -------
@@ -272,7 +290,7 @@ def extspec(rectimg, profile=None, spatial_map=None,
             if sub_background:
                 bgresult = col_subbg(
                     space, col_image, col_var, col_apmask, col_mask, bgorder)
-                if bgresult is None:
+                if bgresult is None and verbose:
                     msg = "Background fit failed at order=%i" % order
                     msg += " column=%i" % wavei
                     msg += " wavelength=%f" % wave[wavei]
@@ -344,10 +362,12 @@ def extspec(rectimg, profile=None, spatial_map=None,
                         oflux[api, wavei] = np.nan
                         oerr[api, wavei] = np.nan
                         obits[api, wavei] += 8
-                        msg = "Optimal extraction failed at order=%i " % order
-                        msg += "aperture=%i " % api
-                        msg += "column=%i wavelength=%f" % (wavei, wave[wavei])
-                        log.warning(msg)
+                        if verbose:
+                            msg = "Optimal extraction failed at "
+                            msg += "order=%i aperture=%i " % (order, api)
+                            msg += "column=%i wavelength=%f" % (wavei,
+                                                                wave[wavei])
+                            log.warning(msg)
                 else:
                     # Sum accounting for pixels partially on aperture
                     weight = psfmask[zap] - api

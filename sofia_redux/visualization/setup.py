@@ -25,6 +25,7 @@ class Setup(object):
         self.setup_controls()
         self.setup_line_controls()
         self.setup_model_controls()
+        self.setup_order_controls()
         self.setup_mouse_events()
         self.setup_signals()
         self.setup_messages()
@@ -37,17 +38,17 @@ class Setup(object):
     def setup_controls(self):
         """Connect control panel events to callbacks."""
         # default: hide a couple control panels
-        self.view.order_panel.hide()
+        # self.view.order_panel.hide()
         self.view.axis_panel.hide()
         self.view.plot_panel.hide()
         self.view.analysis_panel.hide()
 
         # order panel has TBD functionality; hide it for now
-        self.view.order_panel_frame.hide()
+        # self.view.order_panel_frame.hide()
 
         # connect signals
-        self.view.hightlight_pane_checkbox.toggled.connect(
-            self.view.toggle_pane_highlight)
+        # self.view.hightlight_pane_checkbox.toggled.connect(
+        #     self.view.toggle_pane_highlight)
 
         self.view.x_property_selector.activated.connect(self.view.set_field)
         self.view.y_property_selector.activated.connect(self.view.set_field)
@@ -83,8 +84,6 @@ class Setup(object):
             self.view.toggle_cursor)
         self.view.collapse_file_choice_button.clicked.connect(
             self.view.toggle_file_panel)
-        self.view.collapse_pane_button.clicked.connect(
-            self.view.toggle_pane_panel)
         self.view.collapse_order_button.clicked.connect(
             self.view.toggle_order_panel)
         self.view.collapse_axis_button.clicked.connect(
@@ -111,9 +110,6 @@ class Setup(object):
         # pane controls
         self.view.add_pane_button.clicked.connect(self.view.add_pane)
         self.view.remove_pane_button.clicked.connect(self.view.remove_pane)
-        self.view.pane_tree_display.itemChanged.connect(self.view.enable_model)
-        self.view.pane_tree_display.itemDoubleClicked.connect(
-            self.view.select_pane)
 
         # plot controls
         self.view.color_cycle_selector.currentTextChanged.connect(
@@ -134,9 +130,32 @@ class Setup(object):
         self.view.add_file_button.clicked.connect(self.parent.add_data)
         self.view.remove_file_button.clicked.connect(self.parent.remove_data)
 
+    def setup_order_controls(self):
+        """Connect order controls to view callbacks."""
+        self.view.pane_selector.currentIndexChanged.connect(
+            self.view.pane_order_selector_changed)
+        self.view.all_panes_checkbox.stateChanged.connect(
+            self.view.all_panes_checking)
+
+        self.view.all_filenames_checkbox.stateChanged.connect(
+            self.view.all_filenames_selection_changed)
+
+        self.view.on_orders_selector.returnPressed.connect(
+            self.view.on_orders_changed)
+        self.view.all_enabled_orders_button.clicked.connect(
+            self.view.enable_all_orders)
+
+        self.view.off_orders_selector.returnPressed.connect(
+            self.view.off_orders_changed)
+        self.view.all_disabled_orders_button.clicked.connect(
+            self.view.disable_all_orders)
+
+        self.view.remove_file_from_pane_button.clicked.connect(
+            self.view.remove_file_from_pane)
+
     def setup_mouse_events(self):
         """Connect mouse events to callbacks."""
-        self.view.file_table_widget.itemDoubleClicked.connect(
+        self.view.loaded_files_table.itemDoubleClicked.connect(
             self.parent.display_selected_model)
         self.view.figure_widget.canvas.mpl_connect(
             'button_press_event', self.view.figure_clicked)
@@ -149,8 +168,12 @@ class Setup(object):
             self.view.atrophy_background_full)
         self.view.signals.atrophy_bg_partial.connect(
             self.view.atrophy_background_partial)
-        self.view.signals.refresh_order_list.connect(
-            self.view.refresh_order_list)
+        # self.view.signals.refresh_order_list.connect(
+        #     self.view.refresh_order_list)
+        self.view.signals.on_orders_changed.connect(
+            self.view.on_orders_changed)
+        self.view.signals.off_orders_changed.connect(
+            self.view.off_orders_changed)
 
         self.view.signals.axis_limits_changed.connect(
             self.view.axis_limits_changed)
@@ -160,8 +183,9 @@ class Setup(object):
             self.view.axis_unit_changed)
         self.view.signals.axis_field_changed.connect(
             self.view.axis_field_changed)
+        self.view.filename_table.cellClicked.connect(
+            self.view.filename_table_selection_changed)
 
-        self.view.signals.panes_changed.connect(self.view.update_pane_tree)
         self.view.signals.current_pane_changed.connect(
             self.view.current_pane_changed)
         self.view.signals.model_selected.connect(
@@ -189,10 +213,13 @@ class Setup(object):
         # remove any old GUI or file handlers
         for hand in log.handlers:
             if isinstance(hand, StreamLogger):
-                hand.setLevel(self.parent.log_level)
-            elif isinstance(hand, StatusLogger) \
-                    or isinstance(hand, DialogLogger) \
-                    or isinstance(hand, FileHandler):
+                try:
+                    hand.setLevel(self.parent.log_level)
+                except ValueError:  # pragma: no cover
+                    pass
+            elif (isinstance(hand, StatusLogger)
+                    or isinstance(hand, DialogLogger)
+                    or isinstance(hand, FileHandler)):
                 log.removeHandler(hand)
 
         # INFO goes to status bar

@@ -75,6 +75,7 @@ The sofia_redux package has several sub-modules organized by functionality::
     sofia_redux
     ├── calibration
     ├── instruments
+    │   ├── exes
     │   ├── fifi_ls
     │   ├── flitecam
     │   ├── forcast
@@ -572,15 +573,107 @@ most likely to be of interest to the developer.
 sofia_redux.instruments.hawc
 ----------------------------
 
-.. automodapi:: sofia_redux.instruments.hawc
+.. automodapi:: sofia_redux.instruments.hawc.datafits
    :headings: ~^
-.. automodapi:: sofia_redux.instruments.hawc.steps
+.. automodapi:: sofia_redux.instruments.hawc.dataparent
    :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.datatext
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steploadaux
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.stepmiparent
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.stepmoparent
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.stepparent
+   :headings: ~^
+
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepbgsubtract
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepbinpixels
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepcalibrate
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepcheckhead
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepcombine
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepdemodulate
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepdmdcut
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepdmdplot
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepflat
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepfluxjump
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepfocus
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepimgmap
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepip
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.steplabchop
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.steplabpolplots
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepmerge
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepmkflat
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepnodpolsub
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepnoisefft
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepnoiseplots
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepopacity
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.steppoldip
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.steppolmap
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.steppolvec
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepprepare
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepregion
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.steprotate
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepscanmap
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepscanmapflat
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepscanmapfocus
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepscanmappol
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepscanstokes
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepshift
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepskycal
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepskydip
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepsplit
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepstdphotcal
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepstokes
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepwcs
+   :headings: ~^
+.. automodapi:: sofia_redux.instruments.hawc.steps.stepzerolevel
+   :headings: ~^
+
 .. automodapi:: sofia_redux.instruments.hawc.steps.basehawc
    :headings: ~^
 .. automodapi:: sofia_redux.instruments.hawc.steps.basemap
    :headings: ~^
-   :no-inheritance-diagram:
+
 
 sofia_redux.scan
 ----------------
@@ -632,7 +725,6 @@ sofia_redux.scan
    :headings: ~^
 .. automodapi:: sofia_redux.scan.custom.hawc_plus.scan.scan
    :headings: ~^
-
 
 
 sofia_redux.calibration
@@ -1126,4 +1218,3 @@ Notes
    files have the same format as the raw files except that the columns R
    array and T array contain demodulated values. All other columns will
    contain values averaged over each chop cycle.
-

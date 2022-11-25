@@ -64,6 +64,7 @@ def get_rect_xy(xarray, yarray, xvals, yvals, dx=None, dy=None, mask=None,
 
     xv, yv = xvals[gi].copy(), yvals[gi].copy()
     xa, ya = xarray[gi].copy(), yarray[gi].copy()
+
     xrange, yrange = np.ptp(xa), np.ptp(ya)
     if dx is None:
         dx = xrange / np.ptp(xv)
@@ -477,22 +478,52 @@ def rectifyorder(image, ordermask, wavecal, spatcal, order,
         y, x = np.mgrid[:nrows, :ncols]
     omask = (ordermask == order)
 
-    # Straighten the wavelength and spatial coordinates
-    rect_xy = get_rect_xy(wavecal, spatcal, x, y, dy=ds, dx=dw,
-                          mask=omask, poly_order=poly_order)
-    if rect_xy is None:
-        log.error("failed to rectify image")
-        return
+    if poly_order == 0:
+        if not omask.any():
+            log.warning(f'No data for order {order}')
+            return
+        xmin, xmax = x[omask].min(), x[omask].max() + 1
+        ymin, ymax = y[omask].min(), y[omask].max() + 1
+        nx = xmax - xmin
+        ny = ymax - ymin
 
-    # Trim bad values around the edges of new coordinate arrays
-    rect_xy = trim_xy(*rect_xy, xbuffer=xbuffer, ybuffer=ybuffer,
-                      xrange=[2, ncols - 2], yrange=[2, nrows - 2])
+        # Assume already rectified and trimmed
+        if header is None:
+            header = fits.Header()
+        result = {'image': image[ymin:ymax, xmin:xmax].copy(),
+                  'wave': wavecal[ymin, xmin:xmax].copy(),
+                  'spatial': spatcal[ymin:ymax, xmin].copy(),
+                  'pixsum': np.ones((ny, nx)),
+                  'header': header}
+        if variance is None:
+            result['variance'] = np.full((ny, nx), np.nan)
+        else:
+            result['variance'] = variance[ymin:ymax, xmin:xmax].copy()
+        if mask is None:
+            result['mask'] = np.full((ny, nx), True)
+        else:
+            result['mask'] = mask[ymin:ymax, xmin:xmax].copy()
+        if bitmask is None:
+            result['bitmask'] = np.zeros((ny, nx))
+        else:
+            result['bitmask'] = bitmask[ymin:ymax, xmin:xmax].copy()
+    else:
+        # Straighten the wavelength and spatial coordinates
+        rect_xy = get_rect_xy(wavecal, spatcal, x, y, dy=ds, dx=dw,
+                              mask=omask, poly_order=poly_order)
+        if rect_xy is None:
+            log.error("Failed to rectify image")
+            return
 
-    result = reconstruct_slit(image, *rect_xy,
-                              header=header, variance=variance,
-                              bitmask=bitmask, badpix_mask=mask,
-                              badfrac=badfrac, xrange=[0, ncols],
-                              yrange=[0, nrows])
+        # Trim bad values around the edges of new coordinate arrays
+        rect_xy = trim_xy(*rect_xy, xbuffer=xbuffer, ybuffer=ybuffer,
+                          xrange=[2, ncols - 2], yrange=[2, nrows - 2])
+
+        result = reconstruct_slit(image, *rect_xy,
+                                  header=header, variance=variance,
+                                  bitmask=bitmask, badpix_mask=mask,
+                                  badfrac=badfrac, xrange=[0, ncols],
+                                  yrange=[0, nrows])
 
     # update the WCS for the new image
     update_wcs(result, spatcal)

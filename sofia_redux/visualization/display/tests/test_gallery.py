@@ -60,9 +60,9 @@ class TestGallery(object):
                              drawing.Drawing(high_model='test',
                                              artist=blank_3)]
 
-        obj.set_pane_highlight_flag(pane_number=1, state=False)
+        obj.set_pane_highlight_flag(pane_numbers=1, state=False)
         assert not obj.arts['patch'][0].get_artist().get_visible()
-        assert not obj.arts['patch'][1].get_artist().get_visible()
+        assert obj.arts['patch'][1].get_artist().get_visible()
         assert obj.arts['patch'][2].get_artist().get_visible()
 
     def test_add_crosshairs(self, caplog):
@@ -157,13 +157,13 @@ class TestGallery(object):
         lines = list()
         for high, kind, artist in zip(highs, kinds, arts):
             draw = drawing.Drawing(high_model=high, kind=kind, artist=artist,
-                                   **common_options)
+                                   model_id=high, **common_options)
             lines.append(draw)
         updates = list()
         highs = ['line', 'scatter', 'patch']
         arts = [ma.Artist(), ma.Artist(), list()]
         for high, kind, artist in zip(highs, kinds, arts):
-            draw = drawing.Drawing(high_model=high, kind=kind,
+            draw = drawing.Drawing(high_model=high, kind=kind, model_id=high,
                                    updates={'artist': artist},
                                    **common_options)
             updates.append(draw)
@@ -212,18 +212,24 @@ class TestGallery(object):
 
     @pytest.mark.parametrize('new_type,drawstyle,linestyle',
                              [('step', 'steps-mid', '-'),
+                              ('step', 'steps-mid', None),
+                              ('step', 'steps-mid', 'None'),
                               ('line', 'default', '-'),
+                              ('line', 'default', 'None'),
+                              ('line', 'default', None),
                               ('scatter', 'default', 'None')])
     def test_update_line_type_line(self, mocker, new_type, drawstyle,
                                    linestyle):
         points = np.array([[1, 2], [3, 4], [5, 6]])
         model_id = 'mid'
         order = 1
-        line_options = {'artist': ml.Line2D(points[:, 0], points[:, 1],
-                                            label='orig points'),
+        line_artist = ml.Line2D(points[:, 0], points[:, 1],
+                                label='orig points')
+        line_options = {'artist': line_artist,
                         'high_model': model_id, 'mid_model': order,
                         'state': 'stale'}
         line = drawing.Drawing(**line_options)
+
         mocker.patch.object(gallery.Gallery, 'artists_in_pane',
                             return_value=[line])
 
@@ -235,7 +241,14 @@ class TestGallery(object):
         obj.update_line_type(1, [update])
 
         assert line.get_artist().get_drawstyle() == drawstyle
-        assert line.get_artist().get_linestyle() == linestyle
+        if str(linestyle) == 'None' and new_type != 'scatter':
+            assert line.get_artist().get_linestyle() == '-'
+        else:
+            assert line.get_artist().get_linestyle() == linestyle
+
+        # exercise empty linestyle clause
+        mocker.patch.object(line_artist, 'get_linestyle', return_value='')
+        obj.update_line_type(1, [update])
 
     def test_update_line_type_scatter(self, mocker, fig):
         points = np.array([[1, 2], [3, 4], [5, 6]])
@@ -426,7 +439,7 @@ class TestGallery(object):
         obj.arts = {'line': list(), 'crosshair': list()}
         obj.reset_artists(selection='all')
         assert clear_mock.call_count == 2
-        assert 'Resetting all gallery' in caplog.text
+        assert 'Resetting all artists' in caplog.text
 
     def test_reset_artists_alt(self, caplog, mocker):
         caplog.set_level(logging.DEBUG)
@@ -437,7 +450,7 @@ class TestGallery(object):
                     'line': list()}
         obj.reset_artists(selection='alt')
         assert clear_mock.call_count == 2
-        assert 'Resetting alt gallery' in caplog.text
+        assert 'Resetting alt artists' in caplog.text
 
     @pytest.mark.parametrize('kind', ['lines', 'cursor', 'collections',
                                       'crosshair', 'patch', 'fit',
@@ -471,7 +484,7 @@ class TestGallery(object):
         obj = gallery.Gallery()
         obj.reset_artists(selection=selection)
 
-        assert f'Resetting {selection} gallery' in caplog.text
+        assert f'Resetting {selection} artists' in caplog.text
         assert 'Invalid' in caplog.text
 
     @pytest.mark.parametrize('flag,panes,n_remain,count',
@@ -704,22 +717,26 @@ class TestGallery(object):
         assert all([draw.get_state() == 'stale' for draw in obj.arts['line']])
 
     @pytest.mark.parametrize('alt', [True, False])
-    def test_update_marker(self, scatter, alt):
-        orig = copy.copy(scatter)
+    def test_update_marker(self, cursor, alt):
+        orig = copy.copy(cursor)
         model_id = 'one'
-        order = 1
+        order = '1'
+        aperture = '1'
+        mid_model = f'{order}.{aperture}'
         if alt:
-            draw = {'artist': scatter, 'state': 'stale',
-                    'high_model': model_id,
-                    'mid_model': order, 'axes': 'alt',
+            draw = {'artist': cursor, 'state': 'stale',
+                    'high_model': model_id, 'model_id': model_id,
+                    'mid_model': mid_model, 'axes': 'alt',
+                    'aperture': aperture, 'order': order,
                     'fields': {'x': 'wavepos', 'y_alt': 'flux'}}
             arts = {'cursor': list(),
                     'cursor_alt': [drawing.Drawing(**draw)]}
             field = 'cursor_alt'
         else:
-            draw = {'artist': scatter, 'state': 'stale',
-                    'high_model': model_id,
-                    'mid_model': order, 'axes': 'primary',
+            draw = {'artist': cursor, 'state': 'stale',
+                    'high_model': model_id, 'model_id': model_id,
+                    'mid_model': mid_model, 'axes': 'primary',
+                    'aperture': aperture, 'order': order,
                     'fields': {'x': 'wavepos', 'y': 'flux'}}
             arts = {'cursor': [drawing.Drawing(**draw)],
                     'cursor_alt': list()}
@@ -727,7 +744,7 @@ class TestGallery(object):
 
         x, y = 2, 4
         data = {model_id: [{'order': order, 'visible': False,
-                            'bin_x': x, 'bin_y': y,
+                            'bin_x': x, 'bin_y': y, 'aperture': aperture,
                             'x_field': 'wavepos', 'y_field': 'flux',
                             'alt': alt}],
                 'other_mode': None}
@@ -738,22 +755,22 @@ class TestGallery(object):
         assert obj.arts[field][0].state == 'new'
         assert not obj.arts[field][0].visible
         npt.assert_array_equal(
-            orig.get_offsets(),
-            obj.arts[field][0].get_artist().get_offsets())
+            orig.get_data(),
+            obj.arts[field][0].get_artist().get_data())
 
         data = {model_id: [{'order': order, 'visible': True,
-                            'bin_x': x, 'bin_y': y,
+                            'bin_x': [x], 'bin_y': [y], 'aperture': aperture,
                             'x_field': 'wavepos', 'y_field': 'flux',
                             'alt': alt}]}
         obj.update_marker(data)
         assert obj.arts[field][0].visible
         npt.assert_array_equal(
-            [[x, y]], obj.arts[field][0].get_artist().get_offsets())
+            [[x], [y]], obj.arts[field][0].get_artist().get_data())
 
-    def test_hide_cursor_markers(self, scatter):
-        cursor_1 = copy.copy(scatter)
-        cursor_2 = copy.copy(scatter)
-        cursor_3 = copy.copy(scatter)
+    def test_hide_cursor_markers(self, cursor):
+        cursor_1 = copy.copy(cursor)
+        cursor_2 = copy.copy(cursor)
+        cursor_3 = copy.copy(cursor)
 
         arts = {'cursor': [drawing.Drawing(artist=cursor_1),
                            drawing.Drawing(artist=cursor_2)],

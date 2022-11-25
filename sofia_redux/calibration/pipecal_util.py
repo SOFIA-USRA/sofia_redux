@@ -14,8 +14,9 @@ from sofia_redux.calibration.pipecal_rratio import pipecal_rratio
 from sofia_redux.toolkit.utilities.fits import hdinsert
 
 
-__all__ = ['average_za', 'average_alt', 'guess_source_position',
-           'add_calfac_keys', 'add_phot_keys', 'get_fluxcal_factor',
+__all__ = ['average_za', 'average_alt', 'average_pwv',
+           'guess_source_position', 'add_calfac_keys',
+           'add_phot_keys', 'get_fluxcal_factor',
            'apply_fluxcal', 'get_tellcor_factor', 'apply_tellcor',
            'run_photometry']
 
@@ -120,10 +121,8 @@ def average_pwv(header):
     """
     Robust average of precipitable water vapor from FITS header.
 
-    Keys used are WVZ_STA and WVZ_END.  If both are good
-    (>= 0), they will be averaged.  If only one is good,
-    it will be returned.  If both are bad, a PipeCalError
-    will be raised.
+    Header key used is WVZ_OBS only. WVZ_STA and WVZ_END may be present
+    in header, but are considered unreliable.
 
     Parameters
     ----------
@@ -141,23 +140,14 @@ def average_pwv(header):
         If no valid PWV is found.
     """
     try:
-        pwvsta = float(header['WVZ_STA'])
+        pwv = float(header['WVZ_OBS'])
     except (ValueError, TypeError, KeyError):
-        pwvsta = -9999
-    try:
-        pwvend = float(header['WVZ_END'])
-    except (ValueError, TypeError, KeyError):
-        pwvend = -9999
-    if pwvsta > 0 and pwvend < 0:
-        pwv = pwvsta
-    elif pwvsta < 0 and pwvend > 0:
-        pwv = pwvend
-    elif pwvsta < 0 and pwvend < 0:
+        pwv = -9999
+
+    if pwv < 0:
         msg = 'Bad PWV value in header'
         log.error(msg)
         raise PipeCalError(msg)
-    else:
-        pwv = (pwvsta + pwvend) / 2
 
     return pwv
 
@@ -231,7 +221,7 @@ def add_calfac_keys(header, config):
 
     The following keys are added or updated:
     PROCSTAT, BUNIT, CALFCTR, ERRCALF, LAMREF, LAMPIVOT,
-    COLRCORR, REFCALZA, REFCALAW, and REFCALF3.
+    COLRCORR, REFCALZA, REFCALAW, REFCALWV, and REFCALF3.
 
     Parameters
     ----------
@@ -267,6 +257,8 @@ def add_calfac_keys(header, config):
              'Reference calibration zenith angle')
     hdinsert(header, 'REFCALAW', config['rfit_alt']['altwvref'],
              'Reference calibration altitude')
+    hdinsert(header, 'REFCALWV', config['rfit_pwv']['altwvref'],
+             'Reference calibration PWV')
     hdinsert(header, 'REFCALF3', f3,
              'Calibration reference file')
 
@@ -283,7 +275,7 @@ def add_phot_keys(header, phot, config=None, srcpos=None):
     from the `config` or `srcpos` input:
     SRCPOSX, SRCPOSY, MODLFLX, MODLFLXE, REFSTD1, REFSTD2,
     REFSTD3, LAMREF, LAMPIVOT, COLRCORR, REFCALZA,
-    REFCALAW, AVGCALFC, AVGCALER, and RUNITS.
+    REFCALAW, REFCALWV, AVGCALFC, AVGCALER, and RUNITS.
 
     Parameters
     ----------
@@ -355,6 +347,8 @@ def add_phot_keys(header, phot, config=None, srcpos=None):
                      'Reference calibration zenith angle')
             hdinsert(header, 'REFCALAW', config['rfit_alt']['altwvref'],
                      'Reference calibration altitude')
+            hdinsert(header, 'REFCALWV', config['rfit_pwv']['altwvref'],
+                     'Reference calibration PWV')
 
         # check for an average cal factor
         if 'avgcalfc' in config:
@@ -558,10 +552,18 @@ def get_tellcor_factor(header, config, update=False, use_wv=False):
         The telluric correction factor.
     """
     # get ALT, ZA, PWV from header
+    altwv = -9999.
     if use_wv:
         altwv = average_pwv(header)
-    else:
+        if altwv < 0 or altwv > 50:
+            log.warning(f'Bad WV value: {altwv}')
+            log.warning('Using altitude instead.')
+            use_wv = False
+        else:
+            log.debug(f'Using WV value {altwv}')
+    if not use_wv:
         altwv = average_alt(header)
+        log.debug(f'Using Alt value {altwv}')
     za = average_za(header)
 
     # reference files
@@ -608,8 +610,12 @@ def get_tellcor_factor(header, config, update=False, use_wv=False):
                      'Telluric correction factor to ZA/{}'.format(altwv_str))
             hdinsert(header, 'REFCALZA', zaref,
                      'Reference calibration zenith angle')
-            hdinsert(header, 'REFCALAW', altwvref,
-                     'Reference calibration {}'.format(altwv_str))
+            if use_wv:
+                hdinsert(header, 'REFCALWV', altwvref,
+                         'Reference calibration PWV')
+            else:
+                hdinsert(header, 'REFCALAW', altwvref,
+                         'Reference calibration altitude')
             hdinsert(header, 'REFCALF1', f1,
                      'Calibration reference file')
             hdinsert(header, 'REFCALF2', f2,
@@ -628,7 +634,8 @@ def get_tellcor_factor(header, config, update=False, use_wv=False):
     return corr_fac
 
 
-def apply_tellcor(data, header, config, variance=None, covariance=None):
+def apply_tellcor(data, header, config, variance=None, covariance=None,
+                  use_wv=False):
     """
     Apply a telluric correction factor to an image.
 
@@ -658,6 +665,9 @@ def apply_tellcor(data, header, config, variance=None, covariance=None):
         Variance image to propagate, if desired.
     covariance : array, optional
         Covariance image to propagate, if desired.
+    use_wv : bool, optional
+        If set, precipitable water vapor will be used as the
+        reference value, instead of altitude.
 
     Returns
     -------
@@ -674,9 +684,10 @@ def apply_tellcor(data, header, config, variance=None, covariance=None):
         If no valid telluric correction factor is found.
     """
 
-    # correction factor to reference Alt/ZA
+    # correction factor to reference Alt/ZA/WV
     try:
-        corr_fac = get_tellcor_factor(header, config, update=True)
+        corr_fac = get_tellcor_factor(header, config,
+                                      update=True, use_wv=use_wv)
     except (KeyError, AttributeError, ValueError, TypeError) as err:
         log.debug(str(err))
         raise PipeCalError('Response data not found; cannot apply '

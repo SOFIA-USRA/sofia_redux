@@ -23,15 +23,12 @@ try:
         FORCASTSpatcalReduction
     from sofia_redux.pipeline.sofia.forcast_slitcorr_reduction import \
         FORCASTSlitcorrReduction
-    from sofia_redux.pipeline.sofia.exes_quicklook_reduction import \
-        EXESQuicklookReduction
 except SOFIAImportError:  # pragma: no cover
     FORCASTImagingReduction = Reduction
     FORCASTSpectroscopyReduction = Reduction
     FORCASTWavecalReduction = Reduction
     FORCASTSpatcalReduction = Reduction
     FORCASTSlitcorrReduction = Reduction
-    EXESQuicklookReduction = Reduction
     FORCAST_ERROR = None
 except ImportError as err:  # pragma: no cover
     FORCASTImagingReduction = None
@@ -39,7 +36,6 @@ except ImportError as err:  # pragma: no cover
     FORCASTWavecalReduction = None
     FORCASTSpatcalReduction = None
     FORCASTSlitcorrReduction = None
-    EXESQuicklookReduction = None
     FORCAST_ERROR = err
 else:
     FORCAST_ERROR = None
@@ -94,12 +90,25 @@ except ImportError as err:  # pragma: no cover
 else:
     FLITECAM_ERROR = None
 
+try:
+    from sofia_redux.pipeline.sofia.exes_reduction import EXESReduction
+except SOFIAImportError:  # pragma: no cover
+    EXESReduction = Reduction
+    EXES_ERROR = None
+except ImportError as err:  # pragma: no cover
+    EXESReduction = None
+    EXES_ERROR = err
+else:
+    EXES_ERROR = None
+
+__all__ = ['SOFIAChooser']
+
 
 class SOFIAChooser(Chooser):
     """
     Choose SOFIA Redux reduction objects.
 
-    Currently, HAWC+, FORCAST, FIFI-LS, and FLITECAM instruments
+    Currently, HAWC+, FORCAST, FIFI-LS, FLITECAM, and EXES instruments
     are fully supported.
 
     Input data that cannot be read as a FITS file by `astropy.io.fits`
@@ -126,9 +135,8 @@ class SOFIAChooser(Chooser):
     and a FLITECAMImagingReduction or FLITECAMSpectroscopyReduction
     object is returned, as appropriate.
 
-    Final EXES data products are supported for quicklook products only.
-    These data have keyword INSTRUME = 'EXES' and should be either
-    combined or merged spectral products (CMB, MRD).
+    EXES data has keyword INSTRUME = 'EXES'.  An EXESReduction object
+    is returned for all EXES data.
 
     If input data types do not match, or if no more specific
     reduction object was found, a generic Reduction object is returned.
@@ -144,14 +152,15 @@ class SOFIAChooser(Chooser):
             'FIFI-LS': FIFILSReduction,
             'FLITECAM Imaging': FLITECAMImagingReduction,
             'FLITECAM Spectroscopy': FLITECAMSpectroscopyReduction,
+            'EXES': EXESReduction,
         }
 
         # check for any failed imports
         for instrument in self.supported:
             if self.supported[instrument] == Reduction:  # pragma: no cover
-                log.warning("{} modules not found.  "
-                            "{} reductions will not "
-                            "be available.".format(instrument, instrument))
+                log.warning(f"{instrument} modules not found.  "
+                            f"{instrument} reductions will not "
+                            f"be available.")
 
     def get_key_value(self, header, key):
         """
@@ -255,21 +264,34 @@ class SOFIAChooser(Chooser):
                 # these keys have to match to return a consistent
                 # reduction object
                 param = [instrume, instmode, prodtype]
+
             elif instrume == 'HAWC' or \
                     instrume == 'HAWC+' or \
                     instrume == 'HAWC_PLUS':
                 instrume = 'HAWC'
                 param = [instrume, prodtype]
+
             elif instrume == 'FIFI-LS':
                 obstype = self.get_key_value(header, 'OBSTYPE')
                 detchan = self.get_key_value(header, 'DETCHAN')
                 param = [instrume, prodtype, obstype, detchan]
+
             elif instrume == 'EXES':
-                # ignore product type mismatch for quicklook
-                param = [instrume]
+                datatype = self.get_key_value(header, 'DATATYPE')
+
+                # allow mismatched prodtype only if input is a processed flat
+                if test_params is not None and prodtype != test_params[2]:
+                    if prodtype == 'FLAT':
+                        prodtype = test_params[2]
+                    elif test_params[2] == 'FLAT':
+                        test_params[2] = prodtype
+
+                param = [instrume, datatype, prodtype]
+
             elif instrume == 'FLITECAM':
                 instcfg = self.get_key_value(header, 'INSTCFG')
                 param = [instrume, prodtype, instcfg]
+
             else:
                 param = [instrume, prodtype]
 
@@ -324,10 +346,13 @@ class SOFIAChooser(Chooser):
             reduction = FIFILSReduction()
 
         elif instrume == 'EXES':
-            # quicklook is borrowed from the forcast pipeline
+            # some functionality is borrowed from the
+            # forcast pipeline
             if FORCAST_ERROR:  # pragma: no cover
                 raise FORCAST_ERROR
-            reduction = EXESQuicklookReduction()
+            if EXES_ERROR:  # pragma: no cover
+                raise EXES_ERROR
+            reduction = EXESReduction()
 
         elif instrume == 'FLITECAM':
             # some functionality is borrowed from the

@@ -3,7 +3,7 @@ import os
 
 import astropy.units as u
 import numpy as np
-from typing import Dict, List, Optional, Union
+from typing import Optional
 import pandas as pd
 from sofia_redux.visualization import log
 from sofia_redux.visualization.utils import unit_conversion as uc
@@ -11,25 +11,29 @@ from sofia_redux.visualization.utils import unit_conversion as uc
 
 class ReferenceData(object):
     """
-    Backend for handling reference data.
+    Model and manage reference data.
 
-    This is the parent class of the Reference_Window class. User does not
-    interact with it directly. It parses data from the .txt/.csv files.
-    These files may contain one or two columns. However,
-    the first column must contain wavelength/wavenumber. It handles data
-    with or without a header. It enables following features:
-    - changing of axis-units is based on user selection.
-    - reset labels and lines
+    This class is intended for use with the `ReferenceWindow`
+    interface. The user does not interact with it directly.
 
-    Parameters
+    Methods implemented here parse data from .txt or .csv files.
+    These files may contain one or two columns. If two columns are
+    provided, the first column must contain wavelength/wavenumber.
+    Input files may optionally contain headers.
+
+    This class also implements the following features:
+        - change axis units based on user selection.
+        - reset labels and lines
+
+    Attributes
     ----------
-    line_list : Dict
-        Values are wavelengths and labels
-    line_unit : str or Unit
-        Wavelength Unit of a line
-    enabled : Dict
-        keys are `ref_line` and `ref_label`
-
+    line_list : dict
+        Values are wavelengths and labels.
+    line_unit : str or astropy.units.Unit
+        Wavelength unit for reference lines.
+    enabled : dict
+        Keys are `ref_line` and `ref_label`. Values are boolean flags
+        indicating whether lines and labels are displayed.
     """
 
     def __init__(self):
@@ -60,12 +64,13 @@ class ReferenceData(object):
         return '\n'.join(lines)
 
     def add_line_list(self, filename: str) -> bool:
-
         """
-        Obtains a list of spectral lines.
+        Add new spectral lines.
 
-        It sets the visibility for labels and lines while assuming the
-        default unit of wavelength to be `um`.
+        Reads in reference data from a file and sets the visibility
+        for the corresponding labels and lines.
+
+        Wavelength units are currently assumed to be microns (um).
 
         Parameters
         ----------
@@ -74,12 +79,9 @@ class ReferenceData(object):
 
         Returns
         -------
-        Bool
-            True: when data is parsed successfully
-            False: When there is an error with reading the file or has
-            errors (UnicodeError, ValueError or TypeError) .
+        bool
+            True if data is parsed successfully; False otherwise.
         """
-
         log.info(f'Loading line list from {filename}')
         if not os.path.isfile(filename):
             log.error(f'Line list file {filename} not found')
@@ -151,7 +153,14 @@ class ReferenceData(object):
 
     def set_visibility(self, targets, state):
         """
-        Changes the visibility of lines and labels based on user input.
+        Set the visibility of lines and labels.
+
+        Parameters
+        ----------
+        targets : list of str or str
+            May be 'all', 'ref_line', or 'ref_label'.
+        state : bool
+            The visibility state to set.
         """
         if not isinstance(targets, list):
             targets = [targets]
@@ -162,29 +171,41 @@ class ReferenceData(object):
                 self.enabled[target] = bool(state)
 
     def get_visibility(self, target: str) -> Optional[bool]:
+        """
+        Get current visibility setting.
+
+        Parameters
+        ----------
+        target : {'ref_line', 'ref_label'}
+            The target to examine (lines or labels).
+
+        Returns
+        -------
+        visibility : bool or None
+            Visibility for the specified target. If the target is not
+            found, None is returned.
+        """
         try:
             return self.enabled[target]
         except KeyError:
             return None
 
-    def convert_line_list_unit(self, target_unit: Union[str, u.Unit],
-                               names: Optional[List[str]] = None
-                               ) -> Dict[str, float]:
+    def convert_line_list_unit(self, target_unit, names=None):
         """
-        Convert line list to new units.
+        Convert line list data to new units.
 
         Parameters
         ----------
-        target_unit : str or Unit
+        target_unit : str or astropy.units.Unit
             Unit to convert to.
         names : list or dict
             If list, return all wavelengths matching the name.
-            If dict, matching wavelength values only are returned. Wavelengths
-            should be specified in before units.
+            If dict, matching wavelength values only are returned.
+            Wavelengths should be specified in units before conversion.
 
         Returns
         -------
-        converted_list : dict
+        converted : dict
             If names is provided, matching lines are returned. Otherwise,
             the full line list is returned.
         """
@@ -216,9 +237,7 @@ class ReferenceData(object):
         return converted
 
     def unload_data(self):
-        """
-        Resets the line_list, line_unit, and enabled.
-        """
+        """Reset the line_list, line_unit, and enabled flags."""
         self.line_list = dict()
         self.line_unit = None
         self.enabled = {'ref_line': False,

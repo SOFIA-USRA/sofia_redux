@@ -197,3 +197,13 @@ def test_aperture_overlap_fail(aperture_data, capsys):
     assert 'Apertures overlap' in capt.err
     assert 'Auto-set failed for order 1, ' \
            'aperture center 96' in capt.err
+
+
+def test_aperture_refit_fail(aperture_data, capsys, mocker):
+    profile, apertures = aperture_data
+
+    mocker.patch('sofia_redux.spectroscopy.getapertures.curve_fit',
+                 side_effect=ValueError('failed'))
+
+    get_apertures(profile, apertures, refit_fwhm=True)
+    assert 'Refit failed; using input FWHM' in capsys.readouterr().err

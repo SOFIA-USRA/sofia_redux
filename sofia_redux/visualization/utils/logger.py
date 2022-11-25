@@ -143,7 +143,7 @@ class StatusLogger(logging.Handler):
         ----------
         record : `logging.LogRecord`
            The log record, with an additional 'origin' attribute
-           attached by `astropy.log`.
+           attached.
         """
         if record.levelno == logging.INFO:
             msg = str(record.msg)

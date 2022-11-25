@@ -12,6 +12,8 @@ import sofia_redux.pipeline
 from sofia_redux.pipeline.parameters import Parameters, ParameterSet
 from sofia_redux.pipeline.viewer import Viewer
 
+__all__ = ['Reduction']
+
 
 class Reduction(object):
     """
@@ -344,6 +346,37 @@ class Reduction(object):
             # parameter class, run it.  This allows custom
             # behavior for parameters, based on currently
             # loaded data.
+            if hasattr(self.parameters, step):
+                par_function = getattr(self.parameters, step)
+                par_function(idx)
+
+        # override any default parameters with a defined param file
+        if self.param_file is not None:
+            self.parameters.from_config(self.param_file)
+
+    def update_parameters(self):
+        """
+        Update parameter values for the current reduction.
+
+        For each reduction step, this method checks for a method
+        corresponding to each step name in the Parameters object.
+        If such a method is defined, it is called.
+
+        If the `param_file` attribute is not null, loaded parameters
+        are overridden with any values defined in that file (via the
+        `Parameters.from_config` method).
+
+        Unlike the `load_parameters` method, any previously edited parameters
+        not affected by either the step methods or the input file retain
+        their edited values.  If parameters have not yet been loaded, this
+        function has no effect.
+        """
+        if len(self.parameters.current) != len(self.recipe):
+            # unloaded parameters
+            return
+        for idx, step in enumerate(self.recipe):
+            # if the step has a corresponding function in the
+            # parameter class, run it
             if hasattr(self.parameters, step):
                 par_function = getattr(self.parameters, step)
                 par_function(idx)

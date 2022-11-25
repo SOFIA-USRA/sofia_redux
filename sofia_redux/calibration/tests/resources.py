@@ -24,8 +24,7 @@ def basic_data():
     header['ALTI_END'] = 40005
     header['ZA_START'] = 44.0
     header['ZA_END'] = 44.5
-    header['WVZ_STA'] = 4.0
-    header['WVZ_END'] = 5.0
+    header['WVZ_OBS'] = 4.5
     header['OBSTYPE'] = 'STANDARD_FLUX'
     header['CRPIX1'] = nx // 2
     header['CRPIX2'] = ny // 2

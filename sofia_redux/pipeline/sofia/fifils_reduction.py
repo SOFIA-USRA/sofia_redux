@@ -31,6 +31,8 @@ from sofia_redux.spectroscopy import smoothres
 assert resample_utils
 assert smoothres
 
+__all__ = ['FIFILSReduction']
+
 
 class HeaderValidationError(ValueError):
     pass
@@ -310,7 +312,7 @@ class FIFILSReduction(Reduction):
                     log.warning('Header could not be read '
                                 'from {}'.format(os.path.basename(datafile)))
                     hdr = fits.Header()
-                self.input.append(hdr)
+                self.input.append([hdr])
 
         # log all input files
         for datafile in self.raw_files:

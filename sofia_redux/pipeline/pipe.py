@@ -6,6 +6,8 @@ import argparse
 from sofia_redux.pipeline.interface import Interface
 from sofia_redux.pipeline.configuration import Configuration
 
+__all__ = ['Pipe', 'main']
+
 
 class Pipe(Interface):
     """Command-line interface to data reduction steps."""

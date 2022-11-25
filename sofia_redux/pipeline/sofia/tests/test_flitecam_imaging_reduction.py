@@ -399,7 +399,6 @@ class TestFLITECAMImagingReduction(object):
                 bunit = 'Jy/pixel'
             hdul = red.input[0]
             for hdu in hdul:
-                print(hdu.header['EXTNAME'], hdu.header['BUNIT'])
                 if hdu.header['EXTNAME'] == 'EXPOSURE':
                     assert hdu.header['BUNIT'] == exp_unit
                 elif hdu.header['EXTNAME'] == 'BADMASK':

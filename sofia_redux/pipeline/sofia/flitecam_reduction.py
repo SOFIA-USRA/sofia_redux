@@ -19,6 +19,8 @@ from sofia_redux.pipeline.sofia.parameters.flitecam_parameters \
     import FLITECAMParameters
 from sofia_redux.toolkit.utilities.fits import hdinsert
 
+__all__ = ['FLITECAMReduction']
+
 
 class FLITECAMReduction(FORCASTReduction):
     """

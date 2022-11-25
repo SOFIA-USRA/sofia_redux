@@ -7,6 +7,9 @@ from sofia_redux.pipeline.sofia.parameters.forcast_spectroscopy_parameters \
 from sofia_redux.pipeline.sofia.parameters.forcast_wavecal_parameters \
     import FORCASTWavecalParameters, WAVECAL_DEFAULT
 
+__all__ = ['FORCASTSpatcalParameters']
+
+
 SPATCAL_DEFAULT = {
     'trace_continuum': [
         {'key': 'save',

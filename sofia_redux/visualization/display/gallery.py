@@ -23,10 +23,10 @@ class Gallery(object):
     """
     Track display gallery for viewer plots.
 
-    Gallery held by this class are associated with matplotlib
+    Artists held by this class are associated with matplotlib
     axes, instantiated and controlled by the
     `sofia_redux.visualization.pane` interface.  This class implements
-    updates and modifications to the existing gallery.  It does not
+    updates and modifications to the existing artists.  It does not
     create them, or explicitly track their associated axes.
 
     Attributes
@@ -60,7 +60,7 @@ class Gallery(object):
 
     def add_patches(self, patches: Dict) -> None:
         """
-        Add patch gallery for tracking.
+        Add patch artists for tracking.
 
         Parameters
         ----------
@@ -76,7 +76,8 @@ class Gallery(object):
                                    high_model=name)
             self.arts['patch'].append(draw)
 
-    def set_pane_highlight_flag(self, pane_number: int, state: bool) -> None:
+    def set_pane_highlight_flag(self, pane_numbers: Union[List[int], int],
+                                state: bool) -> None:
         """
         Set visibility for border pane patches.
 
@@ -91,15 +92,19 @@ class Gallery(object):
             Visibility state to set.  If True, the patch will be visible;
             if False, it will be hidden.
         """
+        if not isinstance(pane_numbers, list):
+            pane_numbers = [pane_numbers]
         for patch in self.arts['patch']:
-            if patch.match_high_model(f'border_pane_{pane_number}'):
-                patch.set_visible(state)
-            elif patch.match_high_model('border'):
-                patch.set_visible(False)
+            if patch.high_model.startswith('border_pane_'):
+                number = int(patch.high_model.split('_')[-1])
+                if number in pane_numbers:
+                    patch.visible = state
+                else:
+                    patch.visible = not state
 
     def add_crosshairs(self, crosshairs: List[DT]) -> None:
         """
-        Add crosshair gallery for tracking.
+        Add crosshair artists for tracking.
 
         Parameters
         ----------
@@ -151,19 +156,19 @@ class Gallery(object):
                 crosshair.set_visible(False)
 
     def hide_crosshair(self) -> None:
-        """Hide all crosshair gallery."""
+        """Hide all crosshair artists."""
         for crosshair in self.arts['crosshair']:
             crosshair.set_visible(False)
 
     def update_line_data(self, pane_: Pane, updates: List[DT],
                          axes: Optional[str] = 'primary') -> None:
         """
-        Update data associated with line gallery in a single pane.
+        Update data associated with line artists in a single pane.
 
         Parameters
         ----------
         pane_ : Pane
-            Pane object holding the line gallery to update.
+            Pane object holding the lines to update.
         updates : list of dict
             Updates to apply.  The dicts must contain 'model_id',
             'order', and 'field'. Keys are from 'new_x_data',
@@ -195,7 +200,7 @@ class Gallery(object):
         Parameters
         ----------
         pane_ : Pane
-            Pane object holding the line gallery to update.
+            Pane object holding the line artists to update.
         updates : list of dict
             Updates to apply.  The dicts must contain 'model_id',
             'order', and 'new_field' keys, as well as either
@@ -224,13 +229,13 @@ class Gallery(object):
         """
         Update plot line type.
 
-        Line2D gallery are updated in place; PathCollection gallery
+        Line2D artists are updated in place; PathCollection artists
         are replaced with an equivalent new artist.
 
         Parameters
         ----------
         pane_ : Pane
-            Pane object holding the line gallery to update.
+            Pane object holding the line artist to update.
         updates : list of dict
             Updates to apply.  The dicts must contain 'model_id',
             'order', and 'type' keys.  The 'type' should
@@ -244,17 +249,22 @@ class Gallery(object):
                     details = update.get_updates()
                     marker = details.get('marker')
                     if isinstance(line.get_artist(), Line2D):
-                        props = {'drawstyle': 'default', 'linestyle': '-',
+                        props = {'drawstyle': 'default',
+                                 'linestyle': line.get_linestyle(),
                                  'marker': marker}
                         if details['type'] == 'step':
                             props['drawstyle'] = 'steps-mid'
+                            if str(props['linestyle']) in ['', 'None']:
+                                props['linestyle'] = 'solid'
                         elif details['type'] == 'line':
-                            pass
+                            if str(props['linestyle']) in ['', 'None']:
+                                props['linestyle'] = 'solid'
                         elif details['type'] == 'scatter':
                             props['linestyle'] = ''
                         line.get_artist().update(props)
 
-                    elif isinstance(line.get_artist(), PathCollection):
+                    elif isinstance(line.get_artist(),
+                                    PathCollection):  # pragma: no cover
                         line.convert_to_line(drawstyle=details['type'],
                                              marker=marker)
 
@@ -266,18 +276,18 @@ class Gallery(object):
         Update artist display options.
 
         Currently supported options for each artist type are:
-           - 'line' gallery: 'color', 'visibility', 'marker'
-           - 'error_range' gallery: 'color', 'visibility'
-           - 'fit' gallery: 'color', 'visibility'
-           - 'patch' gallery: 'color'
-           - 'cursor' gallery: 'color'
+           - 'line' artist: 'color', 'visibility', 'marker'
+           - 'error_range' artist: 'color', 'visibility'
+           - 'fit' artist: 'color', 'visibility'
+           - 'patch' artist: 'color'
+           - 'cursor' artist: 'color'
 
         Parameters
         ----------
         pane_ : Pane
-            Pane object holding the gallery to update.
+            Pane object holding the artists to update.
         kinds : str, list
-            Kinds of gallery to update. If all gallery are to be
+            Kinds of artists to update. If all artists are to be
             updated, set to 'all'.
         options : list of dict
             Options to apply.  The dicts must contain 'model_id' and
@@ -296,6 +306,7 @@ class Gallery(object):
         elif not isinstance(kinds, list):
             kinds = [kinds]
 
+        kinds = list(set(kinds))
         results = list()
 
         for kind in kinds:
@@ -328,9 +339,9 @@ class Gallery(object):
         Parameters
         ----------
         pane_ : Pane
-            Pane associated with artist
+            Pane associated with artist.
         options : list
-            List of dictionaries describing the updates to make
+            List of dictionaries describing the updates to make.
 
         Returns
         -------
@@ -346,6 +357,8 @@ class Gallery(object):
         for line in pri_lines + alt_lines:
             for option in options:
                 if option.get_data_id():  # pragma: no cover
+                    # Data ID is only populated for reference lines
+                    # which should not be affected by these updates
                     continue
                 if line.matches(option) and line.match_axes(option.axes):
                     results.append(line.update_options(option, kind='line'))
@@ -360,9 +373,9 @@ class Gallery(object):
         Parameters
         ----------
         pane_ : Pane
-            Pane associated with artist
+            Pane associated with artist.
         options : list
-            List of dictionaries describing the updates to make
+            List of dictionaries describing the updates to make.
 
         Returns
         -------
@@ -451,7 +464,7 @@ class Gallery(object):
     def _update_fit_artist_options(self, pane_: PT,
                                    options: List[DT]) -> bool:
         """
-        Update options for gallery of curve fits.
+        Update options for curve fit artists.
 
         Parameters
         ----------
@@ -516,17 +529,17 @@ class Gallery(object):
 
     def update_error_ranges(self, pane_: Pane, updates: List[DT]) -> None:
         """
-        Update data associated with error range gallery.
+        Update data associated with error range artists.
 
         Typically called with the `update_line_data` method, which
         updates data associated with a line plot.  However,
-        error range gallery are always replaced with a new artist,
+        error range artists are always replaced with new artists,
         rather than updated in place.
 
         Parameters
         ----------
         pane_ : Pane
-            Pane object holding the line gallery to update.
+            Pane object holding the line artists to update.
         updates : list of dict
             Updates to apply.  The dicts must contain 'model_id',
             'order', and 'new_artist' keys.
@@ -542,15 +555,14 @@ class Gallery(object):
 
     def update_reference_data(self, pane_: Pane, updates: List[DT]) -> None:
         """
+        Update reference data lines.
 
         Parameters
         ----------
-        pane_
-        updates
-
-        Returns
-        -------
-
+        pane_ : Pane
+            Pane object holding the reference lines to update.
+        updates : list of dict
+            Updates to apply
         """
         # Remove original ref lines as the number of lines might
         # have changed and the labels almost definitely have
@@ -559,6 +571,19 @@ class Gallery(object):
         self.add_drawings(updates)
 
     def catch_label_overlaps(self, renderer: RendererBase) -> List:
+        """
+        Fix overlapping reference line labels.
+
+        Parameters
+        ----------
+        renderer : RendererBase
+            Canvas renderer containing the reference lines.
+
+        Returns
+        -------
+        updated : list of str
+            Updated label values.
+        """
         to_remove = set()
         updated = list()
         labels = self.arts['ref_label']
@@ -607,22 +632,22 @@ class Gallery(object):
     def reset_artists(self, selection: str,
                       panes: Optional[List] = None) -> None:
         """
-        Reset and remove all gallery for a given selection.
+        Reset and remove all artists for a given selection.
 
         Parameters
         ----------
         selection : str
-            Type of gallery to reset. Acceptable values are 'lines'
+            Type of artist to reset. Acceptable values are 'lines'
             which resets the data lines, 'cursor' which resets the
             marker for the cursor location, 'collections' which
             resets scatter plots, 'v_guides', 'h_guides', 'f_guides',
             'a_guides' which resets vertical, horizontal, fit,
             and all guides, respectively. The 'all' flag clears everything.
         panes : list, optional
-            The pane to clear the selected gallery from. If not provided,
-            the selected gallery will be cleared from all panes.
+            The pane to clear the selected artist from. If not provided,
+            the selected artists will be cleared from all panes.
         """
-        log.debug(f'Resetting {selection} gallery')
+        log.debug(f'Resetting {selection} artists')
         if selection == 'all':
             for kind, arts in self.arts.items():
                 self._clear_artists(kind=kind, panes=panes)
@@ -642,7 +667,7 @@ class Gallery(object):
 
     def _clear_guides(self, flag: str, panes: List[PT]) -> None:
         """
-        Remove guide gallery.
+        Remove guide artists.
 
         Parameters
         ----------
@@ -670,14 +695,14 @@ class Gallery(object):
     def _clear_artists(self, kind: Union[List[str], str],
                        panes: List) -> None:
         """
-        Clear gallery.
+        Clear artists.
 
         Parameters
         ----------
         kind : str
             Denotes the kind of artist to clear.
         panes : list
-            List of panes to clear gallery from.
+            List of panes to clear artist from.
         """
         if panes is None:
             to_clear = self.artists_in_pane(panes, kinds=kind)
@@ -700,12 +725,38 @@ class Gallery(object):
             self.arts[k] = new_draws
 
     def add_drawings(self, drawings: List[DT]) -> int:
+        """
+        Add drawings to the gallery.
+
+        Parameters
+        ----------
+        drawings : list of Drawing
+            Drawings to add.
+
+        Returns
+        -------
+        int
+            The number of drawings successfully added.
+        """
         results = list()
         for d in drawings:
             results.append(self.add_drawing(d))
         return sum(results)
 
     def add_drawing(self, drawing_: DT) -> bool:
+        """
+        Add a single drawing to the gallery.
+
+        Parameters
+        ----------
+        drawing_ : Drawing
+            The drawing to add.
+
+        Returns
+        -------
+        success : bool
+            True if drawing was successfully added; False otherwise.
+        """
         if not isinstance(drawing_, drawing.Drawing):
             raise TypeError(f'Drawing {drawing_} is not of a valid type')
         success = False
@@ -726,7 +777,7 @@ class Gallery(object):
                         kinds: Optional[Union[List[str], str]] = None
                         ) -> List[DT]:
         """
-        Find gallery in a given pane.
+        Find artists in a given pane.
 
         Parameters
         ----------
@@ -734,15 +785,14 @@ class Gallery(object):
             Pane to query.
         kinds : str, optional
             Type of artist to search for, such as line. If not
-            provided, return gallery of all kind.
+            provided, return artists of all kind.
 
         Returns
         -------
         targets : list
-            List of gallery in the pane
+            List of artists in the pane
         """
         targets = list()
-        # gallery = list()
         if not isinstance(kinds, list):
             kinds = [kinds]
         for kind in kinds:
@@ -765,13 +815,13 @@ class Gallery(object):
                        preserve: Optional[bool] = False,
                        return_drawing: Optional[bool] = False) -> List[DT]:
         """
-        Gather up all gallery of a mode.
+        Gather all artists of a specified mode.
 
         Parameters
         ----------
         mode : str, optional
-            Mode of gallery to grab. If not provided, grab all
-            gallery.
+            Mode of artists to grab. If not provided, grab all
+            artists.
         preserve : bool, optional
             If set, do not update the state of the artist.
             Otherwise, mark all stats as `fresh`.
@@ -779,7 +829,7 @@ class Gallery(object):
         Returns
         -------
         gathered : list
-            List of all requested gallery.
+            List of all requested artists.
         """
         gathered = list()
         for kind, artists in self.arts.items():
@@ -795,7 +845,7 @@ class Gallery(object):
 
     def artists_at_event(self, event) -> List:  # pragma: no cover
         """
-        Gather the gallery located at an event.
+        Gather the artists located at an event.
 
         Parameters
         ----------
@@ -805,7 +855,7 @@ class Gallery(object):
         Returns
         -------
         selected : list
-            All gallery that occur at the event.
+            All artists that occur at the event.
         """
         selected = list()
         artists = self.gather_artists(mode='all', preserve=True)
@@ -815,7 +865,7 @@ class Gallery(object):
         return selected
 
     def print_artists(self) -> None:
-        """Print all gallery to screen."""
+        """Print all artists to screen."""
         artists = self.gather_artists(mode='all')
         for artist in artists:
             print(artist)
@@ -831,7 +881,7 @@ class Gallery(object):
             Artist properties dictionary.
         mode : str
             Mode being queries. Options are 'new', 'all', or
-            'viable'. 'Viable' does not include stale gallery.
+            'viable'. 'Viable' does not include stale artists.
 
         Returns
         -------
@@ -868,7 +918,7 @@ class Gallery(object):
 
     def age_artists(self, mode: Optional[str] = 'all') -> None:
         """
-        Mark gallery as stale.
+        Mark artists as stale.
 
         Parameters
         ----------
@@ -904,18 +954,23 @@ class Gallery(object):
                               'y': datum['y_field']}
 
                 for marker in cursor_arts:
-                    checks = [marker.match_high_model(model_id),
-                              marker.match_mid_model(datum['order']),
+                    mid_model = f"{datum['order']}.{datum['aperture']}"
+                    checks = [marker.match_id(model_id),
+                              marker.match_mid_model(mid_model),
                               marker.match_fields(fields),
                               marker.match_axes(axes)]
                     if all(checks):
-                        if not datum['visible']:
+                        if datum['visible']:
+                            # marker.set_data(axis='all', data=[datum['bin_x'],
+                            #                                   datum['bin_y']])
+                            marker.set_data(update={'x_data': datum['bin_x']})
+                            marker.set_data(update={'y_data': datum['bin_y']})
+                            # marker.set_data(data=[datum['bin_x'],
+                            #                                   datum['bin_y']])
+                            marker.set_visible(True)
+                        else:
                             # just hide if data is out of range
                             marker.set_visible(False)
-                        else:
-                            marker.set_data(axis='all', data=[datum['bin_x'],
-                                                              datum['bin_y']])
-                            marker.set_visible(True)
                         marker.set_state('new')
 
     def hide_cursor_markers(self) -> None:

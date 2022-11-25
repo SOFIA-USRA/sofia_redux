@@ -708,7 +708,19 @@ class TestMainWindow(object):
         assert orig.to_text() != new_text
         assert "message = new_value" in '\n'.join(new_text)
 
-        # reset parameters
+        # mock confirmation dialog to decline
+        mocker.patch.object(QtWidgets.QMessageBox, 'question',
+                            return_value=QtWidgets.QMessageBox.No)
+
+        # reset parameters: nothing happens
+        mw.onResetParameters()
+        assert new_text == mw.interface.reduction.parameters.to_text()
+
+        # mock confirmation dialog to confirm
+        mocker.patch.object(QtWidgets.QMessageBox, 'question',
+                            return_value=QtWidgets.QMessageBox.Yes)
+
+        # reset parameters: parameters back to original
         mw.onResetParameters()
         assert orig.to_text() == mw.interface.reduction.parameters.to_text()
 
@@ -971,6 +983,18 @@ class TestMainWindow(object):
             == ['log_input', 'log_input']
         assert mw.interface.configuration.config['test_key'] == 'test_value'
 
-        # reset configuration
+        # mock confirmation dialog to decline
+        mocker.patch.object(QtWidgets.QMessageBox, 'question',
+                            return_value=QtWidgets.QMessageBox.No)
+
+        # reset config: nothing happens
+        mw.onResetConfiguration()
+        assert updated != mw.interface.configuration.config.write()
+
+        # mock confirmation dialog to confirm
+        mocker.patch.object(QtWidgets.QMessageBox, 'question',
+                            return_value=QtWidgets.QMessageBox.Yes)
+
+        # reset config: config back to original
         mw.onResetConfiguration()
         assert updated == mw.interface.configuration.config.write()

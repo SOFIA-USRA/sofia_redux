@@ -26,7 +26,7 @@ overall Verification and Validation (V&V) approach can be found in the
 Data Processing System V&V Plan (SV01-2232). Both documents can be
 obtained from the SOFIA document library in Windchill.
 
-This manual applies to FORCAST Redux version 2.6.0.
+This manual applies to FORCAST Redux version 2.7.0.
 
 .. include:: data_description.rst
 

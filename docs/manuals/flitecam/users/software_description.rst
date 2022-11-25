@@ -482,6 +482,8 @@ Grism Reduction
 
 .. include::  ../../forcast/users/spectral_extraction.rst
 
+.. include::  ../../forcast/users/spectral_display.rst
+
 .. figure:: images/profile_plot.png
    :name: flitecam_profile_plot
    :alt: A display window with a profile plot and lines marking the aperture.

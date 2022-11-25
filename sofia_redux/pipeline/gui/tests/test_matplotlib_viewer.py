@@ -41,6 +41,7 @@ class TestMatplotlibViewer(object):
         for i in range(nplot):
             disp = {'args': [np.arange(10), np.arange(10)],
                     'kwargs': {'title': f'test {i}',
+                               'titlesize': 'large',
                                'xlabel': 'x',
                                'ylabel': 'y'},
                     'plot_kwargs': {}}

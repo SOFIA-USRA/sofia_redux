@@ -175,16 +175,26 @@ def map_coordinates(data, coordinates, order=3, mode='constant', cval=np.nan,
     # Pre-filtering not necessary for order 0 or 1 interpolation
     prefilter = order > 1
     ndi_mode = to_ndimage_mode(mode)
-    if np.isnan(cval) and ndi_mode == 'grid-constant':
+
+    # handle any input NaNs
+    nan_data = ~np.isfinite(data)
+    if nan_data.sum() > 0:
+        masked_data = data.copy()
+        masked_data[nan_data] = 0
+    else:
+        masked_data = data
+
+    if nan_data.sum() > 0 or (np.isnan(cval) and ndi_mode == 'grid-constant'):
         # Need to do the masking manually
         if output is not None:
             mask_output = output.copy()
         else:
             mask_output = None
         warped = ndimage.map_coordinates(
-            data, coordinates, prefilter=prefilter, output=output,
+            masked_data, coordinates, prefilter=prefilter, output=output,
             mode='nearest', order=order, cval=0.0)
-        mask = np.ones_like(data, dtype=float)
+        mask = np.ones_like(masked_data, dtype=float)
+        mask[nan_data] = 0
         warped_mask = ndimage.map_coordinates(
             mask, coordinates, prefilter=prefilter, output=mask_output,
             mode='grid-constant', order=order, cval=-1.0)

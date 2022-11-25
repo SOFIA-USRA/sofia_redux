@@ -1,5 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-"""Text viewer widget for use with QAD and Redux."""
+"""Text viewer widget for use with the Eye of SOFIA."""
 
 try:
     from PyQt5 import QtWidgets, QtGui, QtCore

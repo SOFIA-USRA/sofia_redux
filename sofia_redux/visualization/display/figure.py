@@ -3,6 +3,7 @@
 from typing import (List, Any, Dict, Union,
                     Optional, TypeVar, Tuple)
 
+import uuid
 import matplotlib.axes as ma
 from matplotlib import gridspec
 from matplotlib import style as ms
@@ -16,13 +17,13 @@ from sofia_redux.visualization.display import pane, blitting, gallery, drawing
 from sofia_redux.visualization.utils.eye_error import EyeError
 from sofia_redux.visualization.utils.model_fit import ModelFit
 
-
 __all__ = ['Figure']
 
 MT = TypeVar('MT', bound=high_model.HighModel)
 RT = TypeVar('RT', bound=reference_model.ReferenceData)
 PT = TypeVar('PT', bound=pane.Pane)
 PID = TypeVar('PID', int, str)
+IDT = TypeVar('IDT', uuid.UUID, str)
 
 
 class Figure(object):
@@ -34,7 +35,7 @@ class Figure(object):
     created for the Eye. Each plot resides in a `Pane` object.
     The `Figure` receives commands from the `View` object
     and decides which `Pane` it applies to, as well as how it should
-    be formatted. The `Figure` does not deal with any Qt objects.
+    be formatted. The `Figure` does not manage any Qt objects.
 
     Parameters
     ----------
@@ -43,15 +44,14 @@ class Figure(object):
         canvas to display to.
     signals : sofia_redux.visualization.signals.Signals
         Custom signals recognized by the Eye interface, used
-        to trigger callbacks outside of the Figure.
+        to trigger callbacks outside the Figure.
 
     Attributes
     ----------
     widget : QtWidgets.QWidget
         The widget in the Qt window that `Figure` connects to.
     fig : matplotlib.figure.Figure
-        The figure object typically thought of inside of the Qt
-        widget.
+        The Matplotlib Figure object contained in the Qt widget.
     panes : list
         A list of `Pane` objects.
     gs : gridspec.GridSpec
@@ -60,10 +60,28 @@ class Figure(object):
     signals : sofia_redux.visualization.signals.Signals
         Collection of PyQt signals for passing on information to
         other parts of the Eye.
-    _current_pane : int
-        Index of the currently selected pane in `panes`.
+    _current_pane : list
+        List of indices of the currently selected panes in `panes`.
     highlight_pane : bool
         Flag to specify if the current pane should be highlighted.
+    layout : {'grid', 'rows', 'columns'}
+        Determines the layout in a plot.
+    color_cycle : {'spectral', 'tableau', 'accessible'}
+        Color cycle to set.
+    plot_type : {'line', 'step', 'scatter'}
+        Plot type to set.
+    show_markers : bool
+        If set, markers will be shown.
+    show_grid : bool
+        If set, a background grid is shown.
+    dark_mode : bool
+        If set, dark mode is enabled.
+    recording : bool
+        Status flag, indicating whether a cursor mode is active.
+    gallery : gallery.Gallery
+        Gallery object tracking plot artists in the figure.
+    blitter : blitting.Blitmanager
+        Blitting manager for the figure.
     """
 
     def __init__(self, figure_widget, signals: Signals) -> None:
@@ -72,7 +90,7 @@ class Figure(object):
         self.panes = list()
         self.gs = None
         self.signals = signals
-        self._current_pane = 0
+        self._current_pane = list()
         self.block_current_pane_signal = False
         self.highlight_pane = True
         self.layout = 'grid'
@@ -82,6 +100,7 @@ class Figure(object):
         self.show_grid = False
         self.show_error = True
         self.dark_mode = False
+        self.recording = False
         self._cursor_locations = list()
         self._cursor_mode = None
         self._cursor_pane = None
@@ -93,16 +112,46 @@ class Figure(object):
                                             signals=signals)
 
     @property
-    def current_pane(self) -> int:
-        """Pane: Currently active pane."""
+    def current_pane(self) -> List[int]:
+        """list of int : Currently active panes."""
         return self._current_pane
 
     @current_pane.setter
-    def current_pane(self, value: int) -> None:
-        """Set the current pane index to `value`."""
-        self._current_pane = value
+    def current_pane(self, value: List[int]) -> None:
+        if not isinstance(value, list):
+            value = [value]
+        value = filter(lambda i: self.valid_pane(i, len(self.panes)), value)
+        self._current_pane = list(value)
         if not self.block_current_pane_signal:
             self.signals.current_pane_changed.emit()
+
+    @staticmethod
+    def valid_pane(index: Any, pane_count: int) -> bool:
+        """
+        Check if a pane index is valid.
+
+        Parameters
+        ----------
+        index : int
+            Index of a pane
+        pane_count : int
+            Total number of panes
+
+        Returns
+        -------
+        bool
+            If the index is an int and less than pane_count, returns True
+            otherwise False.
+        """
+        try:
+            index = int(index)
+        except (ValueError, TypeError):
+            return False
+        else:
+            if 0 <= index <= pane_count:
+                return True
+            else:
+                return False
 
     def set_pane_highlight_flag(self, state: bool) -> None:
         """
@@ -114,7 +163,7 @@ class Figure(object):
             True to show; False to hide.
         """
         self.highlight_pane = state
-        self.gallery.set_pane_highlight_flag(pane_number=self.current_pane,
+        self.gallery.set_pane_highlight_flag(pane_numbers=self.current_pane,
                                              state=state)
 
     def set_block_current_pane_signal(self, value: bool = True) -> None:
@@ -210,10 +259,10 @@ class Figure(object):
             n_dims = [n_dims] * n_panes
         else:
             if len(n_dims) != n_panes:
-                raise RuntimeError(f'Length of pane dimensions '
-                                   f'does not match number of panes'
-                                   f'requested: {len(n_dims)} != '
-                                   f'{n_panes}')
+                raise RuntimeError(f'Length of pane dimensions does not match '
+                                   f'number of panes requested: {len(n_dims)} '
+                                   f'!= {n_panes}')
+
         for i, dimension in zip(range(n_panes), n_dims):
             if dimension == 0:
                 new_pane = pane.OneDimPane(self.signals)
@@ -231,14 +280,15 @@ class Figure(object):
             new_pane.set_markers(self.show_markers)
             new_pane.set_grid(self.show_grid)
             new_pane.set_error(self.show_error)
+            new_pane.data_changed = True
 
             self.panes.append(new_pane)
 
         self._assign_axes()
         self.reset_artists()
-        self.current_pane = len(self.panes) - 1
+        self.current_pane = [len(self.panes) - 1]
         self.set_block_current_pane_signal(False)
-        self.signals.atrophy_bg_full.emit()
+        self.signals.atrophy_bg_partial.emit()
 
     def _assign_axes(self) -> None:
         """Assign axes to all current panes."""
@@ -273,18 +323,18 @@ class Figure(object):
         self.gs = gridspec.GridSpec(n_rows, n_cols, figure=self.fig)
 
     def remove_artists(self) -> None:
-        """Remove all gallery."""
+        """Remove all artists."""
         self.gallery.reset_artists('all')
 
     def reset_artists(self) -> None:
-        """Recreate all gallery from models."""
+        """Recreate all artists from models."""
         self.gallery.reset_artists('all')
         for pane_ in self.panes:
             new_drawings = pane_.create_artists_from_current_models()
             successes = 0
             successes += self.gallery.add_drawings(new_drawings)
             if successes != len(new_drawings):
-                log.debug('Error encountered while creating gallery')
+                log.debug('Error encountered while creating artists')
 
         # add borders back in
         self._add_pane_artists()
@@ -296,11 +346,12 @@ class Figure(object):
         self.signals.update_reference_lines.emit()
 
     def _add_pane_artists(self) -> None:
-        """Track existing border gallery."""
+        """Track existing border artists."""
         borders = dict()
         for pane_number, pane_ in enumerate(self.panes):
             if self.highlight_pane:
-                if pane_number == self._current_pane:
+                if (self.current_pane is not None
+                        and pane_number in self.current_pane):
                     visible = True
                 elif self._current_pane is None and pane_number == 0:
                     # catch for case where border is added before
@@ -310,14 +361,13 @@ class Figure(object):
                     visible = False
             else:
                 visible = False
-            borders[f'pane_{pane_number}'] = {
-                'kind': 'border',
-                'artist': pane_.get_border(),
-                'visible': visible}
+            borders[f'pane_{pane_number}'] = {'kind': 'border',
+                                              'artist': pane_.get_border(),
+                                              'visible': visible}
         self.gallery.add_patches(borders)
 
     def _add_crosshair(self) -> None:
-        """Track existing crosshair gallery."""
+        """Track existing crosshair artists."""
         crosshairs = list()
         for pane_number, pane_ in enumerate(self.panes):
             pane_lines = pane_.plot_crosshair()
@@ -358,7 +408,7 @@ class Figure(object):
         self.current_pane = None
         self.set_block_current_pane_signal(False)
 
-    def remove_pane(self, pane_id: List[int]) -> None:
+    def remove_pane(self, pane_id: Optional[List[int]] = None) -> None:
         """
         Remove a specified pane.
 
@@ -373,21 +423,25 @@ class Figure(object):
         # delete specified pane
         keep_panes = list()
         for idx in range(len(self.panes)):
-            if idx not in pane_id:
-                keep_panes.append(self.panes[idx])
+            if pane_id is not None:
+                if idx not in pane_id:
+                    keep_panes.append(self.panes[idx])
+            else:
+                if idx not in self.current_pane:
+                    keep_panes.append(self.panes[idx])
+
         self.panes = keep_panes
 
         # reset current pane
         if self.populated():
             self._assign_axes()
-            self.current_pane = len(self.panes) - 1
+            self.current_pane = [len(self.panes) - 1]
         else:
             # no panes left - leave figure blank
             self.current_pane = None
 
         self.reset_artists()
         self.set_block_current_pane_signal(False)
-        self.signals.atrophy_bg_full.emit()
 
     def pane_details(self) -> Dict[str, Dict[str, Any]]:
         """
@@ -404,7 +458,7 @@ class Figure(object):
             details[f'pane_{i}'] = _pane.model_summaries()
         return details
 
-    def change_current_pane(self, pane_id: int) -> bool:
+    def change_current_pane(self, pane_id: List[int]) -> bool:
         """
         Set the current pane to the index provided.
 
@@ -421,13 +475,18 @@ class Figure(object):
         """
         if self.current_pane == pane_id:
             return False
-        elif len(self.panes) > pane_id >= 0:
+        elif len(pane_id) == 0:
+            self.current_pane = list()
+            return True
+        elif all([len(self.panes) > p >= 0 for p in pane_id]):
             self.current_pane = pane_id
             return True
         else:
             return False
 
-    def determine_selected_pane(self, ax: ma.Axes) -> Optional[int]:
+    def determine_selected_pane(self, ax: Optional[ma.Axes] = None,
+                                all_ax: Optional[bool] = False
+                                ) -> List[int]:
         """
         Determine what pane corresponds to a provided axes.
 
@@ -435,6 +494,8 @@ class Figure(object):
         ----------
         ax : matplotlib.axes.Axes
             The axes to find.
+        all_ax : bool
+            True if all axis are to be selected.
 
         Returns
         -------
@@ -442,20 +503,40 @@ class Figure(object):
             The pane index of the correct pane, or None if the
             axes were not found.
         """
-        for i, _pane in enumerate(self.panes):
-            if ax in _pane.axes():
-                return i
-        return None
+        if all_ax:
+            panes = list(range(len(self.panes)))
+        else:
+            panes = list()
+            for i, _pane in enumerate(self.panes):
+                if ax in _pane.axes():
+                    panes.append(i)
+        return panes
 
     def determine_pane_from_model(self, model_id: str,
                                   order: Optional[int] = None) -> List[PT]:
+        """
+        Determine pane containing specified model.
+
+        Parameters
+        ----------
+        model_id : str
+            Specific model_id associated with the model to be found.
+        order : int, optional
+            Specific order (aperture number) to be found.
+
+        Returns
+        -------
+        found : list[(int,sofia_redux.visualization.display.pane.Pane)]
+            List of panes containing given model_id and order number.
+
+        """
         found = list()
-        for pane_ in self.panes:
+        for i, pane_ in enumerate(self.panes):
             if pane_.contains_model(model_id, order=order):
-                found.append(pane_)
+                found.append((i, pane_))
         return found
 
-    def get_current_pane(self) -> Optional[PT]:
+    def get_current_pane(self) -> Optional[List[PT]]:
         """
         Return the current pane.
 
@@ -466,7 +547,8 @@ class Figure(object):
             None otherwise.
         """
         if self.populated():
-            return self.panes[self.current_pane]
+            panes = [self.panes[i] for i in self.current_pane]
+            return panes
         else:
             return None
 
@@ -516,7 +598,13 @@ class Figure(object):
             units.append(_pane.get_unit(axis=axes))
         return units
 
-    def get_orders(self, target: Optional[Any] = None) -> Dict:
+    def get_orders(self, target: Optional[Any] = None,
+                   enabled_only: Optional[bool] = True,
+                   model: Optional[MT] = None,
+                   filename: Optional[str] = None,
+                   model_id: Optional[IDT] = None,
+                   group_by_model: Optional[bool] = True,
+                   kind: Optional[str] = 'order') -> Dict:
         """
         Get the orders associated with a given pane selection.
 
@@ -526,6 +614,18 @@ class Figure(object):
             May be set to 'all' to apply to all panes, None
             to apply only to the current pane, or a list of
             pane indices to modify.
+        enabled_only : bool, optional
+            Determines if an order is going to be visible or not.
+        model : high_model.HighModel, optional
+            Target model
+        filename : str
+            Name of file
+        model_id : uuid.UUID
+            Unique UUID for an HDUL.
+        group_by_model : bool, optional.
+            If set, return a dictionary with the keys are model names
+            and the values are the orders for that model. Otherwise,
+            return a list of all model orders combined.
 
         Returns
         -------
@@ -535,14 +635,48 @@ class Figure(object):
         """
         panes, axes = self.parse_pane_flag(target)
         orders = dict()
-        for i, _pane in enumerate(panes):
-            orders[i] = _pane.get_orders(enabled_only=True,
-                                         by_model=True)
+
+        if panes:
+            for i, _pane in enumerate(panes):
+                pane_index = self.panes.index(_pane)
+                orders[pane_index] = _pane.get_orders(
+                    enabled_only=enabled_only, by_model=group_by_model,
+                    target_model=model, filename=filename,
+                    model_id=model_id, kind=kind)
         return orders
+
+    def ap_order_state(self, target, model_ids):
+        """
+        Get the current aperture and order configuration.
+
+        Parameters
+        ----------
+        target : str, None, list of int, or list of Panes
+            Panes to examine.
+        model_ids : list of UUID
+            Model IDs to examine.
+
+        Returns
+        -------
+        apertures, orders : dict, dict
+            Keys are pane index for which the specified model was
+            found. Values are numbers of apertures and orders displayed,
+            respectively, for that pane.
+        """
+        panes, axes = self.parse_pane_flag(target)
+        apertures = dict()
+        orders = dict()
+        if panes:
+            for i, pane_ in enumerate(panes):
+                pane_index = self.panes.index(pane_)
+                ap_count, ord_count = pane_.ap_order_state(model_ids)
+                orders[pane_index] = ord_count
+                apertures[pane_index] = ap_count
+        return apertures, orders
 
     def get_scales(self, target: Optional[Any] = None) -> List:
         """
-        Get the axes scales associated with a given pane selection.
+        Get the axis scales associated with a given pane selection.
 
         Parameters
         ----------
@@ -569,10 +703,18 @@ class Figure(object):
     ####
 
     def model_backup(self, models: MT, target):
-        '''
-        Obtaining the backup model
-        and assign them to panes
-        '''
+        """
+        Obtain the backup models and assign them to panes.
+
+        Parameters
+        ----------
+        models : high_model.HighModel
+            HighModels to be loaded into pane
+        target : str, None, or list of int
+            May be set to 'all' to apply to all panes, None
+            to apply only to the current pane, or a list of
+            pane indices to modify.
+        """
         panes, axes = self.parse_pane_flag(target)
         for _pane in panes:
             if _pane is not None:
@@ -614,13 +756,13 @@ class Figure(object):
                 model_count = models_per_pane[i]
                 for j in range(model_count):
                     model_ = models[model_keys.pop(0)]
-                    self.add_model_to_pane(model_=model_, pane_=pane_)
+                    self.add_model_to_pane(model_=model_, panes=pane_)
         elif mode == 'first':
             for model_ in models.values():
-                self.add_model_to_pane(model_=model_, pane_=self.panes[0])
+                self.add_model_to_pane(model_=model_, panes=self.panes[0])
         elif mode == 'last':
             for model_ in models.values():
-                self.add_model_to_pane(model_=model_, pane_=self.panes[-1])
+                self.add_model_to_pane(model_=model_, panes=self.panes[-1])
         elif mode == 'assigned':
             # TODO: This method assumes the dictionary remains ordered,
             #  which is the default behavior of dictionaries. However,
@@ -628,7 +770,7 @@ class Figure(object):
             #  a dict with the same keys as models.
             for model_, pane_index in zip(models.values(), indices):
                 self.add_model_to_pane(model_=model_,
-                                       pane_=self.panes[pane_index])
+                                       panes=self.panes[pane_index])
         else:
             raise RuntimeError('Invalid mode')
 
@@ -674,7 +816,7 @@ class Figure(object):
         return count
 
     def add_model_to_pane(self, model_: MT,
-                          pane_: Optional[PT] = None) -> None:
+                          panes: Optional[Union[PT, List[PT]]] = None) -> None:
         """
         Add model to current pane.
 
@@ -687,23 +829,28 @@ class Figure(object):
         ----------
         model_ : sofia_redux.visualization.models.high_model.HighModel
             Model to add.
-        pane_ : sofia_redux.visualization.display.pane.Pane
-            Pane to add model to. If not provided, add
-            to current pane
+        panes : sofia_redux.visualization.display.pane.Pane, Optional
+            A list of panes to which we add model. If not provided, add
+            to current pane.
         """
-        if pane_ is None:
+        if panes is None:
             if not self.populated():
                 self.add_panes(model_.default_ndims, n_panes=1)
-            pane_ = self.panes[self.current_pane]
-        if self.model_matches_pane(pane_, model_):
+            panes = [self.panes[p] for p in self.current_pane]
+        elif not isinstance(panes, list):
+            panes = [panes]
 
-            additions = pane_.add_model(model_)
+        successes = list()
+        for pane_ in panes:
+            if self.model_matches_pane(pane_, model_):
+                additions = pane_.add_model(model_)
+            else:
+                self.add_panes(n_dims=model_.default_ndims, n_panes=1)
+                additions = list()
+                for p in self.current_pane:
+                    additions.extend(self.panes[p].add_model(model_))
 
-        else:
-            self.add_panes(n_dims=model_.default_ndims, n_panes=1)
-            additions = self.panes[self.current_pane].add_model(model_)
-
-        successes = self.gallery.add_drawings(additions)
+            successes.append(self.gallery.add_drawings(additions))
 
         if successes:
             log.info('Added model to panes')
@@ -711,6 +858,7 @@ class Figure(object):
 
     def remove_model_from_pane(
             self, filename: Optional[str] = None,
+            model_id: Optional[IDT] = None,
             model_: Optional[MT] = None,
             panes: Optional[Union[PT, List[PT]]] = None) -> None:
         """
@@ -723,6 +871,8 @@ class Figure(object):
         ----------
         filename : str, optional
             Name of the file to remove
+        model_id : uuid.UUID
+            Unique Id associated with an HDUL
         model_ : sofia_redux.visualization.spectrum.model.Model, optional
             Model object to remove
         panes : sofia_redux.visualization.spectrum.panes.Pane, optional
@@ -736,16 +886,39 @@ class Figure(object):
             If neither ``filename`` nor ``model`` are
             provided.
         """
-        if filename is None and model_ is None:
+        if filename is None and model_ is None and model_id is None:
             raise RuntimeError('Must specify which model to remove '
                                'with either its filename or the '
                                'model itself.')
+        if filename is not None and not isinstance(filename, list):
+            filename = [filename]
+        if model_id is not None and not isinstance(model_id, list):
+            model_id = [model_id]
+
         if panes is None:
             panes = self.panes
         elif not isinstance(panes, list):
             panes = [panes]
-        for _pane in panes:
-            _pane.remove_model(filename=filename, model=model_)
+
+        parsed = list()
+        for i, p in enumerate(panes):
+            if isinstance(p, int):
+                try:
+                    parsed.append(self.panes[p])
+                except IndexError:
+                    pass
+            elif not isinstance(p, pane.Pane):
+                pass
+            else:
+                parsed.append(p)
+
+        for _pane in parsed:
+            if filename:
+                for name in filename:
+                    _pane.remove_model(filename=name, model=model_)
+            elif model_id:
+                for mid in model_id:
+                    _pane.remove_model(model_id=mid, model=model_)
 
         # trigger full artist and background regeneration
         self.clear_all()
@@ -753,13 +926,14 @@ class Figure(object):
 
     def update_reference_lines(self, models: RT):
         """
-        Updating reference lines requires removing the lines entirely and
-        replotting them.
+        Remove and replot reference lines.
 
         Parameters
         ----------
-        models
+        models : reference_model.ReferenceData
+             reference_model.ReferenceData objects for the reference lines.
         """
+
         self.gallery.reset_artists(selection='reference')
         if models.get_visibility('ref_line'):
             for pane_ in self.panes:
@@ -769,10 +943,41 @@ class Figure(object):
                     log.debug('Updated reference data')
         self.signals.atrophy_bg_partial.emit()
 
+    def model_extensions(self, model_id, pane_=None,
+                         pane_index: Optional[int] = None) -> List[str]:
+        """
+        Obtain an extension list of a model in a pane.
+
+        Parameters
+        ----------
+        model_id : uuid.UUID
+            Unique model id associated with an HDUL
+        pane_ : sofia_redux.visualization.spectrum.panes.Pane, optional
+            Pane object containing the model. If not provided, all panes
+            will be checked.
+        pane_index : int, optional
+            Index of the pane from which model extensions are desired when
+            no pane has been specified.
+
+        Returns
+        -------
+        ext : list
+            List of extensions.
+        """
+        if pane_ is None:
+            if pane_index is None:
+                return list()
+            else:
+                pane_ = self.panes[pane_index]
+        ext = pane_.model_extensions(model_id)
+        return ext
+
     ####
     # Plotting
     ####
     def unload_reference_model(self, models):
+        """Unload the reference model."""
+        # TODO: argument is unnecessary here
         for pane_ in self.panes:
             pane_.unload_ref_model()
 
@@ -801,7 +1006,7 @@ class Figure(object):
             self.blitter.update_animated()
 
     def clear_all(self) -> None:
-        """Clear all gallery and redraw panes."""
+        """Clear all artists and redraw panes."""
         self.set_block_current_pane_signal(True)
         self.fig.clear()
         self._assign_axes()
@@ -897,7 +1102,9 @@ class Figure(object):
             # trigger full artist regeneration
             self.clear_all()
 
-    def set_orders(self, orders: Dict[int, Dict[str, List[int]]]) -> None:
+    def set_orders(self, orders: Dict[int, Dict[IDT, List[int]]],
+                   enable: Optional[bool] = True,
+                   aperture: Optional[bool] = False) -> None:
         """
         Enable specified orders.
 
@@ -906,14 +1113,23 @@ class Figure(object):
         orders : dict
             Keys are indices for the panes to update. Values
             are dicts, with model ID keys, order list values.
+        enable : bool, optional
+            If set enable the orders, otherwise disable orders.
+            Defaults to True.
+        aperture : bool, optional
+            If set the order numbers in `orders` are actually
+            aperture numbers. Defaults to False.
         """
         for pane_id, pane_orders in orders.items():
-            _pane = self.parse_pane_flag([pane_id])[0]
-            if _pane is None:
+            pane_ = self.parse_pane_flag([pane_id])
+            pane_ = pane_[0]
+            if pane_ is None:
                 continue
-            elif isinstance(_pane, list):
-                _pane = _pane[0]
-            _pane.set_orders(pane_orders)
+            elif isinstance(pane_, list):
+                pane_ = pane_[0]
+            updates = pane_.set_orders(pane_orders, enable, aperture,
+                                       return_updates=True)
+            self.gallery.update_artist_options(pane_=pane_, options=updates)
 
     def set_scales(self, scales: Dict[str, str],
                    target: Optional[Any] = None) -> None:
@@ -944,7 +1160,18 @@ class Figure(object):
 
     def set_overplot_state(self, state: bool, target: Optional[Any] = None
                            ) -> None:
-        """Set the pane overplot flag"""
+        """
+        Set the pane overplot flag.
+
+        Parameters
+        ----------
+        state : bool
+            True to show overplot; False to hide
+        target : str, None, or list of int
+            May be set to 'all' to apply to all panes, None
+            to apply only to the current pane, or a list of
+            pane indices to modify.
+        """
         panes, axes = self.parse_pane_flag(target)
         if state:  # Turning on
             for _pane in panes:
@@ -963,8 +1190,8 @@ class Figure(object):
         self.clear_all()
 
     def parse_pane_flag(
-            self, flags: Optional[Union[List, Dict, List[Union[int, PID]]]]) \
-            -> Tuple[List[PT], str]:
+            self, flags: Optional[Union[List, Dict, List[Union[int, PID]]]]
+    ) -> Tuple[List[PT], str]:
         """
         Parse the specified panes from an input flag.
 
@@ -977,16 +1204,22 @@ class Figure(object):
 
         Returns
         -------
-        list of Pane
-            List of panes corresponding to input flag.
+        panes, axis : list, str
+            List of panes corresponding to input flag and corresponding axis
         """
         log.debug(f'Parsing {flags} ({type(flags)})')
         axis = ''
         panes = None
         if flags is None:
-            panes = [self.get_current_pane()]
+            panes = self.get_current_pane()
         elif flags == 'all':
             panes = self.panes
+        elif isinstance(flags, int):
+            try:
+                panes = [self.panes[flags]]
+            except IndexError:
+                log.info(f'Unable to parse pane flag {flags}: '
+                         f'Invalid index')
         elif isinstance(flags, list):
             if all([isinstance(p, int) for p in flags]):
                 panes = list(map(self.panes.__getitem__, flags))
@@ -997,14 +1230,28 @@ class Figure(object):
                 panes = flags
         elif isinstance(flags, dict):
             try:
-                flag = flags['pane']
+                pane_flags = flags['pane']
             except KeyError:
                 raise EyeError(f'Unable to parse pane flag {flags}')
             else:
-                if flag == 'all':
+                if pane_flags == 'all':
                     panes = self.panes
-                elif flag == 'current':
+                elif pane_flags == 'current':
                     panes = [self.get_current_pane()]
+                elif isinstance(pane_flags, list):
+                    panes = list()
+                    for flag in pane_flags:
+                        if isinstance(flag, pane.Pane):
+                            panes.append(flag)
+                        elif isinstance(flag, int):
+                            try:
+                                panes.append(self.panes[flag])
+                            except IndexError:
+                                log.debug(f'Invalid pane flag: {flag}')
+                                continue
+                        else:
+                            log.debug(f'Invalid pane flag: {flag}')
+                            continue
                 else:
                     raise EyeError(f'Unable to parse pane flag {flags}')
                 axis = flags.get('axis', axis)
@@ -1021,13 +1268,16 @@ class Figure(object):
             Color cycle to set.
         """
         self.color_cycle = cycle_name
+        full_updates = dict()
         if self.populated():
-            for pane_ in self.panes:
+            for i, pane_ in enumerate(self.panes):
                 pane_.set_color_cycle_by_name(cycle_name)
                 updates = pane_.update_colors()
                 self.gallery.update_artist_options(pane_=pane_,
                                                    options=updates)
+                full_updates[i] = updates
         self.signals.atrophy.emit()
+        return full_updates
 
     def set_plot_type(self, plot_type: str) -> None:
         """
@@ -1063,6 +1313,50 @@ class Figure(object):
                 self.gallery.update_artist_options(pane_=pane_,
                                                    options=marker_updates)
         self.signals.atrophy.emit()
+
+    def get_markers(self, model_id, pane_):
+        """
+        Get the markers in a pane.
+
+        Parameters
+        ----------
+        model_id : uuid.UUID
+            Unique id associated with an HDUL
+        pane_ : sofia_redux.visualization.display.pane.Pane
+            The pane object from which markers are to be obtained.
+
+        Returns
+        -------
+        markers : list
+            A list of markers in a pane for a model_id
+        """
+        panes, _ = self.parse_pane_flag(pane_)
+        markers = list()
+        for pane_ in panes:
+            markers.extend(pane_.get_marker(model_id))
+        return markers
+
+    def get_colors(self, model_id, pane_):
+        """
+        Get the colors in a pane.
+
+        Parameters
+        ----------
+        model_id : uuid.UUID
+            Unique id associated with an HDUL
+        pane_ : sofia_redux.visualization.display.pane.Pane
+            The pane object from which colors are to be obtained.
+
+        Returns
+        -------
+        colors : list
+            A list of colors in a pane for a model_id
+        """
+        panes, _ = self.parse_pane_flag(pane_)
+        colors = list()
+        for pane_ in panes:
+            colors.extend(pane_.get_color(model_id))
+        return colors
 
     def set_grid(self, state: bool = True) -> None:
         """
@@ -1249,11 +1543,13 @@ class Figure(object):
             'x_field', 'y_field', 'color', and 'visible'
             values for the displayed models.
         """
-        pane_index = self.determine_selected_pane(event.inaxes)
-        data_point = self.panes[pane_index].data_at_cursor(event)
-        self.gallery.update_marker(data_point)
+        pane_indexes = self.determine_selected_pane(event.inaxes)
+        data_points = dict()
+        for pane_index in pane_indexes:
+            data_points.update(self.panes[pane_index].data_at_cursor(event))
+        self.gallery.update_marker(data_points)
 
-        return data_point
+        return data_points
 
     def crosshair(self, event: mbb.MouseEvent) -> None:
         """
@@ -1265,7 +1561,9 @@ class Figure(object):
             Mouse motion event.
         """
         pane_index = self.determine_selected_pane(event.inaxes)
-        if pane_index is not None and pane_index == self._current_pane:
+        if isinstance(pane_index, list):
+            pane_index = pane_index[0]
+        if pane_index is not None and pane_index in self._current_pane:
             data_point = self.panes[pane_index].xy_at_cursor(event)
             direction = self._parse_cursor_direction(mode='crosshair')
             self.gallery.update_crosshair(pane_index, data_point=data_point,
@@ -1281,7 +1579,8 @@ class Figure(object):
         if self.populated():
             self.gallery.hide_cursor_markers()
 
-    def reset_zoom(self, all_panes: Optional[bool] = False) -> None:
+    def reset_zoom(self, all_panes: Optional[bool] = False,
+                   targets: Optional[Dict] = None) -> None:
         """
         Reset axis limits to defaults.
 
@@ -1290,13 +1589,25 @@ class Figure(object):
         all_panes : bool, optional
             If True, all axes will be reset. Otherwise, only
             the current pane will be reset.
+        targets : dict, optional
+            Specific panes to reset, specified as a list of int
+            under the 'pane' key in the input dictionary.
         """
         if not self.populated():
             return
         if all_panes:
             panes = self.panes
+        elif targets:
+            try:
+                pane_numbers = targets['pane']
+            except KeyError:  # pragma: no cover
+                # missing 'pane' in targets - shouldn't happen under
+                # normal circumstances
+                panes = [self.panes[p] for p in self.current_pane]
+            else:
+                panes = [self.panes[p] for p in pane_numbers]
         else:
-            panes = [self.panes[self.current_pane]]
+            panes = [self.panes[p] for p in self.current_pane]
         # Don't want to include reference data in relim
         for _pane in panes:
             self.gallery.reset_artists(selection='reference', panes=[_pane])
@@ -1325,8 +1636,11 @@ class Figure(object):
         self.clear_crosshair()
         self._cursor_pane = None
         if mode != '':
+            self.recording = True
             self._cursor_pane = self._current_pane
             self._add_crosshair()
+        else:
+            self.recording = False
         self.signals.atrophy_bg_partial.emit()
 
     def record_cursor_location(self, event: mbb.MouseEvent) -> None:
@@ -1343,8 +1657,8 @@ class Figure(object):
         event : matplotlib.backend_bases.MouseEvent
             Mouse motion event.
         """
-        pane_index = self.determine_selected_pane(event.inaxes)
-        if pane_index is not None and pane_index == self._cursor_pane:
+        pane_index = self.determine_selected_pane(event.inaxes)[0]
+        if pane_index in self._cursor_pane:
             location = self.panes[pane_index].xy_at_cursor(event)
             if None in location:  # pragma: no cover
                 # could happen if overplot data is present and
@@ -1353,14 +1667,14 @@ class Figure(object):
             self._cursor_locations.append(location)
 
             if len(self._cursor_locations) == 2:
-                self.end_cursor_records(pane_index)
+                self.end_cursor_records()
             else:
                 guide_drawings = self.panes[pane_index].plot_guides(
                     location, kind=self._parse_cursor_direction())
                 self.gallery.add_drawings(guide_drawings)
                 self.signals.atrophy.emit()
 
-    def end_cursor_records(self, pane_index: int) -> None:
+    def end_cursor_records(self, pane_index: Optional[int] = None) -> None:
         """
         Complete zoom or fit interactions.
 
@@ -1372,14 +1686,21 @@ class Figure(object):
         pane_index : int
             Index of the pane to update.
         """
-        if 'zoom' in self._cursor_mode:
-            self._end_zoom(pane_index)
-        elif 'fit' in self._cursor_mode:
-            self._end_fit(pane_index)
+        if pane_index is None:
+            pane_index = self.current_pane
+        if not isinstance(pane_index, list):  # pragma: no cover
+            # this should not be reachable
+            pane_index = [pane_index]
+        for index in pane_index:
+            if 'zoom' in self._cursor_mode:
+                self._end_zoom(index)
+            elif 'fit' in self._cursor_mode:
+                self._end_fit(index)
         # reset cursor, but not fit params -- is needed for the
         # cursor recording
         self._cursor_mode = ''
         self._cursor_locations = list()
+        self.recording = False
 
         self.signals.atrophy.emit()
         # this signal will clear guides
@@ -1452,9 +1773,6 @@ class Figure(object):
             self.gallery.update_reference_data(pane_=self.panes[pane_index],
                                                updates=ref_updates)
 
-        # partial background: reset limits, data has not changed
-        self.signals.atrophy_bg_partial.emit()
-
     def _end_fit(self, pane_index: int) -> None:
         """
         Finish the feature fit interaction.
@@ -1509,7 +1827,7 @@ class Figure(object):
         if all_panes:
             panes = self.panes
         else:
-            panes = [self.panes[self.current_pane]]
+            panes = [self.panes[p] for p in self.current_pane]
 
         if not isinstance(flags, list):
             flags = [flags]
@@ -1520,14 +1838,24 @@ class Figure(object):
                 self.gallery.reset_artists(f'{flag}_guide', panes=panes)
 
     def toggle_fits_visibility(self, fits: List[ModelFit]) -> None:
-        # Tell artist to update fit artist
-        # If failure, loop over panes. Ask each one to make new
-        #   drawing for fit. If model, order, fields don't match,
-        #   pane does nothing. Else remake fit drawing and return them.
-        #   Then add new drawing to Gallery
+        """
+        Update fit artist visibility.
+
+        If failure, loop over panes. Ask each one to make new
+        drawing for fit. If model, order, fields don't match,
+        pane does nothing. Else remake fit drawing and return them.
+        Then add new drawing to Gallery.
+
+        Parameters
+        ----------
+        fits : list of ModelFit
+            Models fit to spectral selections.
+        """
         for fit in fits:
-            options = {'high_model': fit.get_model_id(), 'kind': 'fit',
-                       'mid_model': fit.get_order(), 'data_id': fit.get_id(),
+            options = {'high_model': fit.get_filename(), 'kind': 'fit',
+                       'model_id': fit.get_model_id(),
+                       'mid_model': f'{fit.get_order()}.{fit.get_aperture()}',
+                       'data_id': fit.get_id(),
                        'updates': {'visible': fit.get_visibility()}}
             options = [drawing.Drawing(**options)]
             for pane_ in self.panes:
@@ -1541,18 +1869,38 @@ class Figure(object):
                       and fit.get_fields('y') == pane_.get_field('y')):
                     self._regenerate_fit_artists(pane_, fit, options)
 
-    def stale_fit_artists(self, fits: List[Dict]):
+    def stale_fit_artists(self, fits: List[ModelFit]):
+        """
+        Recreate fit artists for a list of model fits.
+
+        Removes all Drawing instances for fits on a given pane and makes
+        them anew. It accommodates any changes (unit, scale, etc) that doesn't
+        change the data at all but does invalidate the current artists
+        (which are now marked "stale").
+
+        Parameters
+        ----------
+        fits : list of ModelFit
+            Models fit to spectral selections.
+        """
         matching_panes = self._panes_matching_model_fits(fits)
         for pane_idx, fits in matching_panes.items():
             pane_ = self.panes[pane_idx]
-            self.gallery.reset_artists(selection='fit',
-                                       panes=[pane_])
+            self.gallery.reset_artists(selection='fit', panes=[pane_])
             for fit in fits:
                 self._regenerate_fit_artists(pane_, fit)
 
     def _regenerate_fit_artists(self, pane_, fit, options=None):
-        # fit_params = {fit['model_id']: {fit['order']: fit}}
-        # fit_artists = pane_.generate_gauss_fit_artists(fit_params)
+        """
+        Assign fit artists to a pane.
+
+        Parameters
+        ----------
+        fit : ModelFit
+            Models fit to spectral selections.
+        pane_ : pane.Pane
+            Pane object to add fit artists to.
+        """
         try:
             fit_drawings = pane_.generate_fit_artists(fit)
         except (KeyError, IndexError):
@@ -1565,6 +1913,20 @@ class Figure(object):
 
     def _panes_matching_model_fits(self, fits: List[ModelFit]
                                    ) -> Dict[int, List[ModelFit]]:
+        """
+        Get matching panes for a given list of model fits.
+
+        Parameters
+        ----------
+        fits : list of ModelFit
+            Models fit to spectral selections.
+
+        Returns
+        -------
+        matching_panes : dict
+            The key is the index of the pane and values are  list of all the
+            Modelfits in that pane.
+        """
         matching_panes = dict()
         for fit in fits:
             for idx, pane_ in enumerate(self.panes):

@@ -90,9 +90,13 @@ def rectify(image, ordermask, wavecal, spatcal, header=None,
 
     result = {}
     for order in orders:
+        if header is not None:
+            use_header = header.copy()
+        else:
+            use_header = None
         result[order] = rectifyorder(
             image, ordermask, wavecal, spatcal, order,
-            header=header, variance=variance,
+            header=use_header, variance=variance,
             mask=mask, bitmask=bitmask,
             x=x, y=y, dw=dw, ds=ds, badfrac=badfrac,
             ybuffer=ybuffer, xbuffer=xbuffer,

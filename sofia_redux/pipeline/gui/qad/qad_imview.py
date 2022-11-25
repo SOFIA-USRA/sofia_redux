@@ -54,6 +54,9 @@ else:
     HAS_REGIONS = True
 
 
+__all__ = ['QADImView']
+
+
 class ViewerSignals(QtCore.QObject):
     make_radial_plot = QtCore.pyqtSignal()
     make_histogram_plot = QtCore.pyqtSignal()
@@ -933,6 +936,9 @@ class QADImView(object):
             if str(self.cs).strip().lower() != 'none':
                 self.run('match frame ' + self.cs)
             if self.disp_parameters['zoom_fit']:
+                frames = self.run('frame active', via='get').split()
+                if len(frames) > 0:
+                    self.run(f'frame {frames[0]}')
                 self.run('zoom to fit')
             if self.disp_parameters['cmap'].lower() != 'none':
                 self.run('cmap ' + self.disp_parameters['cmap'].lower())
@@ -1230,8 +1236,11 @@ class QADImView(object):
                         regions.extend([s4, s5])
                     except IndexError:
                         pass
-            if 'BGR' in hdr:
-                bgreg = re.split('[,;]', hdr['BGR'])
+            bgr = hdr.get('BGR')
+            if not bgr:
+                bgr = hdr.get('BGR_O01')
+            if bgr:
+                bgreg = re.split('[,;]', bgr)
                 for bg in bgreg:
                     r1, r2 = bg.split('-')
                     s6 = line_template.format(minval, float(r1), maxval,
@@ -1846,6 +1855,7 @@ class QADImView(object):
         hdr_str = self.run('fits header', via='get')
         phdr = fits.Header()
         hdr = phdr.fromstring(hdr_str, sep='\n')
+
         try:
             with set_log_level('ERROR'):
                 hwcs = wcs.WCS(hdr)
@@ -1994,8 +2004,14 @@ class QADImView(object):
         str
             'spectrum', 'spectrum_only', or 'image'.
         """
-        if 'spectral_flux' in hdul:
-            return 'spectrum'
+        # check for mixed spectral product in
+        # single spectral extension or multi-order spectra
+        # (may be SPECTRAL_FLUX or SPECTRAL_FLUX_ORDER_*)
+        for hdu in hdul:
+            extname = str(hdu.header.get('EXTNAME', 'UNKNOWN')).lower()
+            if 'spectral_flux' in extname:
+                return 'spectrum'
+
         header = hdul[0].header
         if 'NAXIS1' in header:
             xdim = header['NAXIS1']

@@ -1,5 +1,6 @@
 #  Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+import os
 import copy
 
 import pytest
@@ -13,10 +14,10 @@ from sofia_redux.visualization import eye, signals
 from sofia_redux.visualization.display import view
 from sofia_redux.visualization.tests import resources
 
-__all__ = ['atran_params', 'atran_name', 'atran_hdul', 'atran_file',
-           'grism_name', 'grism_hdul', 'multi_ap_grism_hdul',
+__all__ = ['grism_name', 'grism_hdul', 'multi_ap_grism_hdul',
            'multiorder_name_merged', 'multiorder_name_spec',
            'multiorder_hdul_merged', 'multiorder_hdul_spec',
+           'multiorder_multiap_hdul',
            'forcast_image_name', 'forcast_hdul_image',
            'forcast_fits_image', 'exes_fits_image', 'multi_order_filenames',
            'spectral_filenames', 'spectral_hduls', 'split_order_hdul',
@@ -30,39 +31,19 @@ __all__ = ['atran_params', 'atran_name', 'atran_hdul', 'atran_file',
            'spectrum_file_units_paran', 'line_list_noheader',
            'spectrum_file_single', 'spectrum_file_multi',
            'line_list_csv', 'line_list_pipe', 'line_list_empty',
-           'line_list_csv_duplicates']
-
-
-@pytest.fixture(scope='function')
-def atran_params():
-    params = {'altitude': 40000, 'za': 55, 'pwv': 40,
-              'min_wave': 40, 'max_wave': 300}
-    return params
-
-
-@pytest.fixture(scope='function')
-def atran_name(atran_params):
-    name = pf.file._File()
-    alt = f"{atran_params['altitude'] // 1000:d}K"
-    za = f"{atran_params['za']:d}deg"
-    pwv = f"{atran_params['pwv']:d}pwv"
-    wave = f"{atran_params['min_wave']:d}-{atran_params['max_wave']:d}mum"
-    name.name = f'atran_{alt}_{za}_{pwv}_{wave}.fits'
-    return name
-
-
-@pytest.fixture(scope='function')
-def atran_hdul(atran_params, atran_name):
-    hdul = resources.atran_data(atran_params)
-    hdul._file = atran_name
-    return hdul
-
-
-@pytest.fixture(scope='function')
-def atran_file(atran_hdul, atran_name, tmp_path):
-    filename = str(tmp_path / atran_name.name)
-    atran_hdul.writeto(filename)
-    return filename
+           'line_list_csv_duplicates', 'general_hdul',
+           'exes_aps', 'exes_ccr', 'exes_cln', 'exes_coa',
+           'exes_cmb_o5_a1', 'exes_com_o5_a1',
+           'exes_cmb_o5_a2', 'exes_com_o5_a2',
+           'exes_cmb_o1_a1', 'exes_com_o1_a1',
+           'exes_cmb_o1_a2', 'exes_com_o1_a2',
+           'exes_mrd_a1', 'exes_mrm_a1',
+           'exes_mrd_a2', 'exes_mrm_a2',
+           'exes_spc_o5_a1', 'exes_spm_o5_a1',
+           'exes_spc_o5_a2', 'exes_spm_o5_a2',
+           'exes_spc_o1_a1', 'exes_spm_o1_a1',
+           'exes_spc_o1_a2', 'exes_spm_o1_a2',
+           ]
 
 
 @pytest.fixture(scope='function')
@@ -91,7 +72,7 @@ def grism_hdul(grism_name):
 
     extensions = ['FLUX', 'ERROR', 'EXPOSURE', 'WAVEPOS',
                   'SPECTRAL_FLUX', 'SPECTRAL_ERROR',
-                  'TRANSMISSION', 'RESPONSE']
+                  'TRANSMISSION', 'RESPONSE', 'RESPONSE_ERROR']
     for i in range(len(hdul), len(extensions)):
         hdu = hdul[0].copy()
         hdul.append(hdu)
@@ -100,6 +81,8 @@ def grism_hdul(grism_name):
         hdu.header['EXTNAME'] = extension
 
     shape = (296, 240)
+    hdul[0].header['NAXIS1'] = shape[0]
+    hdul[0].header['NAXIS2'] = shape[1]
     hdul[0].data = _grism_flux(shape)
     hdul[1].data = _grism_flux_error(shape)
     hdul[2].data = _grism_exposure(shape)
@@ -108,6 +91,7 @@ def grism_hdul(grism_name):
     hdul[5].data = _grism_spectral_error(shape)
     hdul[6].data = _grism_transmission(shape)
     hdul[7].data = _grism_response(shape)
+    hdul[8].data = _grism_response_error(shape)
 
     hdul._file = grism_name
 
@@ -189,6 +173,11 @@ def _grism_response(shape):
     return data
 
 
+def _grism_response_error(shape):
+    data = np.abs(np.random.normal(0, 1, shape[0]))
+    return data
+
+
 @pytest.fixture(scope='function')
 def multiorder_name_merged():
     name = pf.file._File()
@@ -205,8 +194,7 @@ def multiorder_name_spec():
 
 @pytest.fixture(scope='function')
 def multiorder_hdul_merged(multiorder_name_merged):
-    hdul = resources.exes_data()
-    hdul.pop(1)
+    hdul = resources.exes_merged_data()
     header = hdul[0].header
 
     header['FILENAME'] = multiorder_name_merged.name
@@ -216,7 +204,7 @@ def multiorder_hdul_merged(multiorder_name_merged):
     header['PRODTYPE'] = 'mrgordspec'
     header['NORDERS'] = 1
 
-    hdul[0].data = _multiorder_merged_data()
+    hdul[0].data = _multiorder_merged_data().T
     hdul._file = multiorder_name_merged
 
     return hdul
@@ -234,12 +222,28 @@ def multiorder_hdul_spec(multiorder_name_spec):
     header['SLIT'] = 'EXE_S32'
     header['PRODTYPE'] = 'spec'
     header['NORDERS'] = 10
+    header['NAPS'] = 1
     header['XUNITS'] = 'cm-1'
     header['YUNITS'] = 'erg s-1 cm-2 sr-1 (cm-1)-1'
 
     hdul[0].data = _multiorder_spec_data(header['NORDERS'])
+
+    header['NAXIS1'] = hdul[0].data.shape[0]
+    header['NAXIS2'] = hdul[0].data.shape[1]
+
     hdul._file = multiorder_name_spec
 
+    return hdul
+
+
+@pytest.fixture(scope='function')
+def multiorder_multiap_hdul(tmp_path):
+    hdul = resources.exes_spec_data(5, 3)
+    hdul[0].header['EXTNAME'] = 'SPECTRAL_FLUX'
+
+    name = pf.file._File()
+    name.name = 'exes_SPC_100.fits'
+    hdul._file = name
     return hdul
 
 
@@ -354,6 +358,7 @@ def multi_order_filenames(multiorder_hdul_spec, tmp_path):
         hdul._file = name
         hdul.writeto(filename)
         hdul.close()
+        filenames.append(filename)
     return filenames
 
 
@@ -488,29 +493,24 @@ def empty_view(mocker, qtbot, qapp):
 @pytest.fixture(scope='function')
 def empty_eye_app(qtbot, qapp, empty_view, log_args):
     eye_app = eye.Eye(log_args, view_=empty_view)
-    # set terminal print level to debug
     return eye_app
 
 
 @pytest.fixture(scope='function')
 def loaded_eye(qapp, mocker, qtbot, spectral_filenames):
-    mocker.patch.object(QtWidgets.QMainWindow, 'show',
-                        return_value=None)
-    mocker.patch.object(QtWidgets.QMainWindow, 'raise_',
-                        return_value=None)
-    mocker.patch.object(QtWidgets, 'QApplication',
-                        return_value=qapp)
-    mocker.patch.object(QtWidgets.QFileDialog,
-                        'getOpenFileNames',
+    mocker.patch.object(QtWidgets.QMainWindow, 'show', return_value=None)
+    mocker.patch.object(QtWidgets.QMainWindow, 'raise_', return_value=None)
+    mocker.patch.object(QtWidgets, 'QApplication', return_value=qapp)
+    mocker.patch.object(QtWidgets.QFileDialog, 'getOpenFileNames',
                         return_value=[spectral_filenames])
 
     app = eye.Eye()
     qtbot.mouseClick(app.view.add_file_button, QtCore.Qt.LeftButton)
     app.view.refresh_controls()
-    app.view.file_table_widget.selectRow(0)
-    mocker.patch.object(app.view.file_table_widget, 'hasFocus',
+    app.view.loaded_files_table.selectRow(0)
+    mocker.patch.object(app.view.loaded_files_table, 'hasFocus',
                         return_value=True)
-    qtbot.keyClick(app.view.file_table_widget,
+    qtbot.keyClick(app.view.loaded_files_table,
                    QtCore.Qt.Key_Return)
     app.view.refresh_controls()
     app.view.open_eye()
@@ -533,10 +533,10 @@ def loaded_eye_with_alt(qapp, mocker, qtbot, spectral_filenames):
     app = eye.Eye()
     qtbot.mouseClick(app.view.add_file_button, QtCore.Qt.LeftButton)
     app.view.refresh_controls()
-    app.view.file_table_widget.selectRow(0)
-    mocker.patch.object(app.view.file_table_widget, 'hasFocus',
+    app.view.loaded_files_table.selectRow(0)
+    mocker.patch.object(app.view.loaded_files_table, 'hasFocus',
                         return_value=True)
-    qtbot.keyClick(app.view.file_table_widget,
+    qtbot.keyClick(app.view.loaded_files_table,
                    QtCore.Qt.Key_Return)
     qtbot.mouseClick(app.view.enable_overplot_checkbox,
                      QtCore.Qt.LeftButton)
@@ -812,3 +812,310 @@ def line_list_empty(tmp_path):
     with open(filename, 'w') as f:
         f.write('')
     return filename
+
+
+# EXES products without spectral data
+
+
+@pytest.fixture(scope='function')
+def exes_aps(tmp_path):
+    hdul = resources.exes_intermediate_with_orders()
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_ccr(tmp_path):
+    hdul = resources.exes_intermediate_pre_orders()
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_cln(tmp_path):
+    hdul = resources.exes_intermediate_pre_orders(
+        prodtype='cleaned', file_code='CLN', include_cal=False)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_coa(tmp_path):
+    hdul = resources.exes_intermediate_pre_orders(
+        prodtype='coadded', file_code='COA')
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+# EXES products with spectral data
+
+
+@pytest.fixture(scope='function')
+def exes_cmb_o5_a1(tmp_path):
+    """CMB, 5 orders, 1 aperture"""
+    hdul = resources.exes_intermediate_with_spectra(
+        prodtype='combined_spectrum_1d', file_code='CMB', merge=True)
+    hdul = resources.make_1d_exes(hdul)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_com_o5_a1(tmp_path):
+    """COM, 5 orders, 1 aperture"""
+    hdul = resources.exes_intermediate_with_spectra(
+        prodtype='coadded_spectrum', file_code='COM', merge=True)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_cmb_o5_a2(tmp_path):
+    """CMB, 5 orders, 2 apertures"""
+    hdul = resources.exes_intermediate_with_spectra(
+        prodtype='combined_spectrum_1d', file_code='CMB',
+        merge=True, n_aps=2)
+    hdul = resources.make_1d_exes(hdul)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_com_o5_a2(tmp_path):
+    """COM, 5 orders, 2 aperture"""
+    hdul = resources.exes_intermediate_with_spectra(
+        prodtype='coadded_spectrum', file_code='COM',
+        merge=True, n_aps=2)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_cmb_o1_a1(tmp_path):
+    """CMB, 1 order, 1 aperture"""
+    hdul = resources.exes_intermediate_with_spectra(
+        prodtype='combined_spectrum_1d', file_code='CMB',
+        merge=True, n_orders=1)
+    hdul = resources.make_1d_exes(hdul)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_com_o1_a1(tmp_path):
+    """COM, 1 order, 1 aperture"""
+    hdul = resources.exes_intermediate_with_spectra(
+        prodtype='coadded_spectrum', file_code='COM',
+        merge=True, n_orders=1)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_cmb_o1_a2(tmp_path):
+    """CMB, 1 order, 2 apertures"""
+    hdul = resources.exes_intermediate_with_spectra(
+        prodtype='combined_spectrum_1d', file_code='CMB',
+        merge=True, n_aps=2, n_orders=1)
+    hdul = resources.make_1d_exes(hdul)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_com_o1_a2(tmp_path):
+    """COM, 1 order, 2 aperture"""
+    hdul = resources.exes_intermediate_with_spectra(
+        prodtype='coadded_spectrum', file_code='COM',
+        merge=True, n_aps=2, n_orders=1)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_mrd_a1(tmp_path):
+    """MRD, 1 aperture"""
+    hdul = resources.exes_final(
+        prodtype='orders_merged_1d', file_code='MRD')
+    hdul = resources.make_1d_exes(hdul)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_mrm_a1(tmp_path):
+    """MRM, 1 aperture"""
+    hdul = resources.exes_final()
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_mrd_a2(tmp_path):
+    """MRD, 2 apertures"""
+    hdul = resources.exes_final(
+        prodtype='orders_merged_1d', file_code='MRD', n_aps=2)
+    hdul = resources.make_1d_exes(hdul)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_mrm_a2(tmp_path):
+    """MRM, 2 apertures"""
+    hdul = resources.exes_final(n_aps=2)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_spc_o5_a1(tmp_path):
+    """SPC, 5 orders, 1 aperture"""
+    hdul = resources.exes_intermediate_with_spectra(
+        prodtype='spectra_1d', file_code='SPC')
+    hdul = resources.make_1d_exes(hdul)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_spm_o5_a1(tmp_path):
+    """SPM, 5 orders, 1 aperture"""
+    hdul = resources.exes_intermediate_with_spectra()
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_spc_o5_a2(tmp_path):
+    """SPC, 5 orders, 2 apertures"""
+    hdul = resources.exes_intermediate_with_spectra(
+        prodtype='spectra_1d', file_code='SPC', n_aps=2)
+    hdul = resources.make_1d_exes(hdul)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_spm_o5_a2(tmp_path):
+    """SPM, 5 orders, 2 apertures"""
+    hdul = resources.exes_intermediate_with_spectra(n_aps=2)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_spc_o1_a1(tmp_path):
+    """SPC, 1 order, 1 aperture"""
+    hdul = resources.exes_intermediate_with_spectra(
+        prodtype='spectra_1d', file_code='SPC', n_orders=1)
+    hdul = resources.make_1d_exes(hdul)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_spm_o1_a1(tmp_path):
+    """SPM, 1 order, 1 aperture"""
+    hdul = resources.exes_intermediate_with_spectra(n_orders=1)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_spc_o1_a2(tmp_path):
+    """SPC, 1 orders, 2 apertures"""
+    hdul = resources.exes_intermediate_with_spectra(
+        prodtype='spectra_1d', file_code='SPC', n_orders=1, n_aps=2)
+    hdul = resources.make_1d_exes(hdul)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def exes_spm_o1_a2(tmp_path):
+    """SPM, 1 orders, 2 apertures"""
+    hdul = resources.exes_intermediate_with_spectra(n_orders=1, n_aps=2)
+    filename = hdul[0].header['FILENAME']
+    location = str(tmp_path / filename)
+    hdul.writeto(location)
+    return location
+
+
+@pytest.fixture(scope='function')
+def general_hdul(tmp_path):
+    filename = str(tmp_path / 'general.fits')
+
+    nx = 100
+    ny = 5
+    header = pf.header.Header()
+    header['XUNITS'] = 'um'
+    header['YUNITS'] = 'Jy'
+    header['INSTRUME'] = 'General'
+    header['FILENAME'] = os.path.basename(filename)
+    header['PRODTYPE'] = 'spectra_1d'
+    header['NAXIS1'] = nx
+    header['NAXIS2'] = ny
+
+    data = np.zeros((ny, nx))
+    x = np.linspace(5, 10, nx)
+    g = models.Gaussian1D(amplitude=2, stddev=0.2, mean=7)
+    flux = g(x)
+    error = np.random.normal(0, 0.05, nx)
+    response = np.ones_like(x)
+    transmission = np.ones_like(x)
+    data[0] = x
+    data[1] = flux
+    data[2] = error
+    data[3] = response
+    data[4] = transmission
+
+    primary = pf.PrimaryHDU(data=data, header=header)
+    hdul = pf.HDUList([primary])
+    return hdul

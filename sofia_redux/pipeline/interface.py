@@ -14,6 +14,8 @@ from configobj import ConfigObj
 import sofia_redux.pipeline
 from sofia_redux.pipeline.configuration import Configuration
 
+__all__ = ['TidyLogHandler', 'Interface']
+
 
 class TidyLogHandler(logging.StreamHandler):
     """Simple log handler for printing INFO messages."""
@@ -521,7 +523,6 @@ class Interface(object):
                     old_log = hand.baseFilename
                     log.removeHandler(hand)
                     del hand
-                    # TODO - possible race condition here
                     if os.path.isfile(old_log):
                         shutil.move(old_log, filename)
 

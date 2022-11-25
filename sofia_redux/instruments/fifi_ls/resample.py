@@ -59,7 +59,6 @@ def extract_info_from_file(filename, get_atran=True):
     obsra = header.get('OBSRA', 0) * 15  # hourangle to degree
     obsdec = header.get('OBSDEC', 0)
     sky_angle = header.get('SKY_ANGL', 0)
-    det_angle = header.get('DET_ANGL', 0)
     dbet_map = header.get('DBET_MAP', 0) / 3600  # arcsec to degree
     dlam_map = header.get('DLAM_MAP', 0) / 3600  # arcsec to degree
     obs_lam = header.get('OBSLAM', 0)
@@ -126,7 +125,6 @@ def extract_info_from_file(filename, get_atran=True):
         'xs': xs,
         'ys': ys,
         'sky_angle': sky_angle,
-        'det_angle': det_angle,
         'flip_sign': flip_sign,
         'atran': atran}
     return result
@@ -548,10 +546,15 @@ def get_grid_info(combined, oversample=None,
         }
         x_key, y_key = 'XS', 'YS'
     else:
+        # If not rotated at spatial calibration, resampling should
+        # be done at sky angle
+        sky_angl = prime_header.get('SKY_ANGL', 0)
+
         wcs_dict = {
             'CTYPE1': ctype1.upper(), 'CUNIT1': 'deg',
             'CTYPE2': ctype2.upper(), 'CUNIT2': 'deg',
             'CTYPE3': ctype3.upper(), 'CUNIT3': 'um',
+            'CROTA2': -sky_angl
         }
         x_key, y_key = 'RA', 'DEC'
 
@@ -564,9 +567,9 @@ def get_grid_info(combined, oversample=None,
         y = combined[y_key].copy()
     else:
         ux_key, uy_key = x_key, y_key
-        wave = np.hstack([x.ravel() for x in combined['WAVE']])
-        x = np.hstack([x.ravel() for x in combined[x_key]])
-        y = np.hstack([x.ravel() for x in combined[y_key]])
+        wave = np.hstack([n.ravel() for n in combined['WAVE']])
+        x = np.hstack([n.ravel() for n in combined[x_key]])
+        y = np.hstack([n.ravel() for n in combined[y_key]])
 
     if not detector_coordinates:
         x *= 15  # hourangle to degrees
@@ -575,7 +578,8 @@ def get_grid_info(combined, oversample=None,
 
     if u_wave is not None:
         for uw in u_wave:
-            if uw is None:
+            if uw is None:  # pragma: no cover
+                # unreachable under normal circumstances
                 do_uncorrected = False
                 break
         else:
@@ -728,13 +732,6 @@ def get_grid_info(combined, oversample=None,
     n_pix = np.round(np.nanmax(pix_xyw, axis=1)).astype(int) + 1
     ni = x.size
 
-    # Rotation angle before calibration.  If not rotated at calibration,
-    # detector rotation is zero.
-    if prime_header.get('SKY_ANGL', 0) != 0:
-        det_angle = 0.0
-    else:
-        det_angle = -prime_header.get('DET_ANGL', 0.0)
-
     log.info('')
     log.info(f'Output grid size (nw, ny, nx): '
              f'{n_pix[2]} x {n_pix[1]} x {n_pix[0]}')
@@ -751,6 +748,7 @@ def get_grid_info(combined, oversample=None,
     x_out = np.arange(n_pix[0], dtype=float)
     y_out = np.arange(n_pix[1], dtype=float)
     w_out = np.arange(n_pix[2], dtype=float)
+
     grid = x_out, y_out, w_out
 
     x_max, x_min = np.nanmax(pix_xyw[0]), np.nanmin(pix_xyw[0])
@@ -780,7 +778,6 @@ def get_grid_info(combined, oversample=None,
         'wave_fwhm': wave_fwhm * um, 'xy_fwhm': xy_fwhm * 3600 * arcsec,
         'resolution': resolution,
         'pix_size': pix_size * arcsec,
-        'det_angle': det_angle * degree,
         'coordinates': pix_xyw,
         'uncorrected_coordinates': u_pix_xyw,
         'grid': grid}
@@ -877,7 +874,7 @@ def generate_exposure_map(combined, grid_info, get_good=False):
         max_x = xi.max()
 
         # Since the coordinates are already rotated, we need to determine
-        # the corners of the detector footprint, then store then in clockwise
+        # the corners of the detector footprint, then store them in clockwise
         # order
         points = np.stack([xi.ravel(), yi.ravel()], axis=1)
         hull = np.array([points[index] for index in

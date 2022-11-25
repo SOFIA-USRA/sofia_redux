@@ -10,6 +10,8 @@ from astropy import log
 from sofia_redux.pipeline.pipe import Pipe
 from sofia_redux.pipeline.sofia.sofia_configuration import SOFIAConfiguration
 
+__all__ = ['main']
+
 
 def main():
     """

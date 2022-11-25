@@ -27,6 +27,8 @@ except ImportError:
 else:
     HAS_PYQT5 = True
 
+__all__ = ['QADViewerSettings', 'QADViewer']
+
 
 class QADViewerSettings(QtWidgets.QWidget, ui_qad_settings.Ui_Form):
     """

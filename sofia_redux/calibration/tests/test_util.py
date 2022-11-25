@@ -81,28 +81,26 @@ class TestUtil(object):
         # minimal header
         header = fits.header.Header()
 
-        # start/end both good
-        header['WVZ_STA'] = 4.0
-        header['WVZ_END'] = 5.0
-        assert np.allclose(util.average_pwv(header), 4.5)
+        # if wvz_obs present and good, is used
+        header['WVZ_OBS'] = 3.0
+        assert np.allclose(util.average_pwv(header), 3.0)
+        capt = capsys.readouterr()
+        assert 'Bad PWV value' not in capt.err
 
-        # start good, end bad
-        header['WVZ_STA'] = 4.0
-        header['WVZ_END'] = -9999
-        assert np.allclose(util.average_pwv(header), 4.0)
-        header['WVZ_END'] = 'BAD'
-        assert np.allclose(util.average_pwv(header), 4.0)
+        # if bad, error is raised
+        header['WVZ_OBS'] = -9999
+        with pytest.raises(PipeCalError):
+            util.average_pwv(header)
+        capt = capsys.readouterr()
+        assert 'Bad PWV value' in capt.err
 
-        # start bad, end good
-        header['WVZ_STA'] = -9999
-        header['WVZ_END'] = 5.0
-        assert np.allclose(util.average_pwv(header), 5.0)
-        header['WVZ_STA'] = 'BAD'
-        assert np.allclose(util.average_pwv(header), 5.0)
+        header['WVZ_OBS'] = 'BAD'
+        with pytest.raises(PipeCalError):
+            util.average_pwv(header)
+        capt = capsys.readouterr()
+        assert 'Bad PWV value' in capt.err
 
-        # both bad
-        del header['WVZ_STA']
-        header['WVZ_END'] = -9999
+        del header['WVZ_OBS']
         with pytest.raises(PipeCalError):
             util.average_pwv(header)
         capt = capsys.readouterr()
@@ -185,6 +183,8 @@ class TestUtil(object):
                              'Reference calibration zenith angle'),
                 'REFCALAW': (config['rfit_alt']['altwvref'],
                              'Reference calibration altitude'),
+                'REFCALWV': (config['rfit_pwv']['altwvref'],
+                             'Reference calibration PWV'),
                 'REFCALF3': (config['refcal_file'].partition(
                     config['caldata'])[-1], 'Calibration reference file')}
         expected = fits.header.Header()
@@ -401,7 +401,7 @@ class TestUtil(object):
         assert np.allclose(c_cov, cov)
         assert 'CALFCTR' not in test
 
-    def test_get_tellcor_factor(self):
+    def test_get_tellcor_factor(self, capsys):
         # simulated data
         hdul = resources.forcast_data()
         header = hdul[0].header
@@ -449,13 +449,24 @@ class TestUtil(object):
                                config['rfit_am']['coeff'],
                                config['rfit_pwv']['coeff'],
                                pwv=True)
-        expected = ref_r / obs_r
+        expected2 = ref_r / obs_r
 
         test = header.copy()
         util.get_tellcor_factor(test, config, update=True, use_wv=True)
-        assert test['TELCORR'] == expected
+        assert test['TELCORR'] == expected2
         assert 'Telluric correction factor' in str(test['HISTORY'])
         assert 'PWV=' in str(test['HISTORY'])
+        capsys.readouterr()
+
+        # bad pwv: falls back to altitude
+        test = header.copy()
+        test['WVZ_OBS'] = 100
+        util.get_tellcor_factor(test, config, update=True, use_wv=True)
+        assert test['TELCORR'] == expected
+        assert 'Telluric correction factor' in str(test['HISTORY'])
+        assert 'PWV=' not in str(test['HISTORY'])
+        assert 'altitude=' in str(test['HISTORY'])
+        assert 'Bad WV value' in capsys.readouterr().err
 
     def test_apply_tellcor(self):
         # simulated data

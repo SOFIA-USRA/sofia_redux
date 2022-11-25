@@ -8,6 +8,8 @@ from astropy.io import fits
 from sofia_redux.pipeline.sofia.parameters.forcast_parameters import \
     FORCASTParameters, DEFAULT
 
+__all__ = ['FORCASTImagingParameters']
+
 
 # Store default values for all parameters here.
 # They could equivalently be read from a file, or
@@ -165,6 +167,14 @@ IMAGE_DEFAULT = {
          'name': 'Save output',
          'value': True,
          'description': 'Save output data to disk',
+         'dtype': 'bool',
+         'wtype': 'check_box'},
+        {'key': 'use_wv',
+         'name': 'Use WV values',
+         'value': False,
+         'description': 'If set, water vapor values from the header will '
+                        'be used \n'
+                        'to choose the correct response, instead of altitude.',
          'dtype': 'bool',
          'wtype': 'check_box'},
     ],

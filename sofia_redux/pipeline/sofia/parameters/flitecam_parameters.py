@@ -5,6 +5,8 @@ from copy import deepcopy
 
 from sofia_redux.pipeline.parameters import Parameters
 
+__all__ = ['FLITECAMParameters']
+
 
 # Store default values for all parameters here.
 # They could equivalently be read from a file, or

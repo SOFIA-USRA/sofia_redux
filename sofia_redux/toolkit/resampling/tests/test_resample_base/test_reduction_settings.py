@@ -77,3 +77,34 @@ def test_parallel_settings(data_2d):
     settings = r.reduction_settings(use_processes=False, use_threading=True)
     assert not settings['use_processes']
     assert settings['use_threading']
+
+
+def test_check_memory(data_2d):
+    coordinates, data, error = data_2d
+
+    r = ResamplePolynomial(coordinates, data, error=error, order=2,
+                           check_memory=False, large_data=None)
+    assert r.memory_info is None
+    assert r.sample_tree.large_data is False
+
+    r = ResamplePolynomial(coordinates, data, error=error, order=2,
+                           check_memory=False, large_data=True)
+    assert r.memory_info is None
+    assert r.sample_tree.large_data is True
+    settings = r.reduction_settings()
+    assert settings['block_memory_usage'] is None
+
+    r = ResamplePolynomial(coordinates, data, error=error, order=2,
+                           check_memory=False, large_data=False)
+    assert r.memory_info is None
+    assert r.sample_tree.large_data is False
+    settings = r.reduction_settings()
+    assert settings['block_memory_usage'] is None
+
+    r = ResamplePolynomial(coordinates, data, error=error, order=2,
+                           check_memory=True, large_data=True)
+    assert r.memory_info is not None
+    assert r.memory_info['large_data'] is True
+    assert r.sample_tree.large_data is True
+    settings = r.reduction_settings()
+    assert settings['block_memory_usage'] is not None

@@ -8,6 +8,8 @@ import warnings
 from sofia_redux.pipeline.application import Application
 from sofia_redux.pipeline.sofia.sofia_configuration import SOFIAConfiguration
 
+__all__ = ['main']
+
 
 def main():
     """

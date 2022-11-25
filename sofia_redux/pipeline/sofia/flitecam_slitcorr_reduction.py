@@ -17,6 +17,8 @@ from sofia_redux.pipeline.sofia.parameters.flitecam_slitcorr_parameters \
 from sofia_redux.pipeline.sofia.forcast_slitcorr_reduction \
     import FORCASTSlitcorrReduction
 
+__all__ = ['FLITECAMSlitcorrReduction']
+
 
 class FLITECAMSlitcorrReduction(FLITECAMSpectroscopyReduction,
                                 FORCASTSlitcorrReduction):

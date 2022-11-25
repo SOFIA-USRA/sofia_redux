@@ -1,43 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-"""
-The starting point for EOS models.
 
-Data read in from FITS or non-fits files are stored in a collection
-of model object in this directory. The structure of a single
-complete FITS file is as follows:
-
-- High Level Model
-   - Grism : for files with multiple images and a single spectrum
-   - MultiOrder: For files with no images and multiple spectra.
-   - Described in `high_model.py`, the high level models hold an
-     entire FITS file. The controls and views for EOS hold
-     these objects, thus all interactions happen on them. The
-     user should not call anything from the lower models.
-
-- Mid Level Models
-   - Book: For holding multiple images of the same target.
-   - Order: For holding multiple spectra of the same target.
-   - Described in `mid_model.py`, the mid level models hold all
-     data structures that would need to included together to
-     be considered valid.
-
-- Low Level Models
-   - Image: For holding a single 2d data set.
-   - Spectrum: For holding a single 1d data set.
-   - Described in `low_model.py`, the low level models hold the
-     most simple data sets. For example, a single `Order` is made
-     of multiple `Spectrum` objects, one for the wavelength data,
-     one for the flux data, one for the error data, etc. These are
-     the most basic levels of models. All operations are done on
-     this level, such as unit conversions, but the only by
-     interacting through the upper models. The user should not
-     interact with these directly.
-
-This module contains the interface controlling the initialization
-of a high level model. Once the high level model is created, EOS
-operates on that object. The `Model` object here is not to be instantiated;
-it is merely used to implement the `add_model` method.
-"""
+import os.path
 import re
 import astropy.io.fits as pf
 from typing import Optional
@@ -47,10 +10,48 @@ import pandas as pd
 from sofia_redux.visualization import log
 from sofia_redux.visualization.models import high_model
 
-__all__ = ['Model']
+__all__ = ['Model', 'parse_general']
 
 
 class Model(object):
+    """
+    The starting point for Eye of SOFIA models.
+
+    Data read in from FITS or non-fits files are stored in a collection
+    of model object in this directory. The structure of a single
+    complete FITS file is as follows:
+
+    - High-Level Model
+       - High-level models hold the contents of an entire FITS file.
+         All interfaces should interact with the high level
+         model, which controls and manages the lower level models.
+       - Available models are:
+           - Grism : for files with multiple images and a single spectrum.
+           - MultiOrder: for files with multiple images and multiple spectra.
+
+    - Mid-Level Models
+       - Mid-level models hold all data structures that would need to
+         be included together to be considered valid.
+       - Available models are:
+           - Book: For holding multiple images of the same target.
+           - Order: For holding multiple spectra of the same target.
+
+    - Low-Level Models
+       - Low-level models hold the simplest data sets. For example, a
+         single `Order` is made of multiple `Spectrum` objects, one for the
+         wavelength data, one for the flux data, one for the error data, etc.
+         All operations are performed at this level, such as unit conversions,
+         but only by interacting through the higher-level models. The user
+         should not interact with low level models directly.
+       - Available models are:
+           - Image: For holding a single 2d data set.
+           - Spectrum: For holding a single 1d data set.
+
+    This module contains the interface controlling the initialization
+    of a high level model. Once the high level model is created, the viewer
+    operates on that object. The `Model` object here is not to be instantiated;
+    it is merely used to implement the `add_model` method.
+    """
 
     @staticmethod
     def add_model(filename: str = '',
@@ -63,8 +64,7 @@ class Model(object):
         Parameters
         ----------
         filename : str, optional
-            Absolute path the FITS file to read and parse.
-
+            Absolute path to the FITS file to read and parse.
         hdul : `astropy.io.fits.HDUList`, optional
             An astropy HDUList to parse.
 
@@ -77,8 +77,7 @@ class Model(object):
         Raises
         ------
         NotImplementedError
-            If the current instrument/data type is not supported
-            by EOS.
+            If the current instrument/data type is not supported.
         RuntimeError
             If invalid arguments are passed.
         """
@@ -89,7 +88,7 @@ class Model(object):
         if hdul is None:
             if filename:
                 if 'fits' not in filename:
-                    hdul = general(filename)
+                    hdul = parse_general(filename)
                 else:
                     hdul = pf.open(filename, memmap=False)
             else:
@@ -104,25 +103,25 @@ class Model(object):
             if model.num_orders == 0:
                 raise NotImplementedError('Image display is not supported.')
         elif instrument == 'general':
-            model = high_model.Grism(hdul)
+            model = high_model.MultiOrder(hdul, general=True)
         elif instrument == 'exes':
             model = high_model.MultiOrder(hdul)
         elif instrument == 'none' or instrument == '':
-            # Assign the instrument to 'General' when there is no instrument
+            # Assign the instrument to 'General' when no instrument
             # information has been provided.
             hdul[0].header['instrume'] = 'General'
+            hdul[0].header['prodtype'] = 'General'
             if not header.get('XUNIT') or not header.get('XUNITS'):
                 hdul[0].header['XUNITS'] = 'um'
             if not header.get('YUNIT') or not header.get('YUNITS'):
                 hdul[0].header['YUNITS'] = 'Jy'
-            model = high_model.Grism(hdul)
+            model = high_model.MultiOrder(hdul, general=True)
         else:
             raise NotImplementedError('Instrument is not supported')
 
         # if true filename was supplied, store it in the model
         if filename:
             model.filename = filename
-            model.id = filename
 
         log.debug(f'Created model with id: {model.id}')
 
@@ -130,16 +129,21 @@ class Model(object):
         return model
 
 
-def general(filename) -> pf.HDUList:
+def parse_general(filename: str) -> pf.HDUList:
     """
-    Parse a non-fits file.
+    Parse a text-based data file.
 
-    It convert the data  into `hdul` format.
+    Data is converted into a FITS-style HDUList for further handling.
+
+    Based on the number of columns in this dataset, it is parsed
+    accordingly. If column labels have been provided, it uses them,
+    otherwise, it assumes a general order of [wavelength, flux, error,
+    transmission, response] for the columns.
 
     Parameters
     ----------
     filename : str
-        Absolute path the non-FITS file to read and parse.
+        Absolute path to the non-FITS file to read and parse.
 
     Returns
     -------
@@ -149,20 +153,21 @@ def general(filename) -> pf.HDUList:
     Raises
     ------
     RuntimeError
-        If invalid file is passed.
-        or if invalid columns in the file.
+        If invalid file is passed or invalid columns in the file.
     """
 
     header = pf.Header()
     header['XUNITS'] = 'um'
     header['YUNITS'] = 'Jy'
     header['INSTRUME'] = 'General'
-    header['FILENAME'] = filename.split('/')[-1]
+    header['FILENAME'] = os.path.basename(filename)
+
+    # determining the delimiter in the file
     with open(filename, 'r') as f:
         skip_rows = 0
-        names = []
+        names = list()
         for line in f:
-            if is_number(line.strip()):
+            if _is_number(line.strip()):
                 break
             else:
                 names = line.replace('#', '').strip()
@@ -177,6 +182,7 @@ def general(filename) -> pf.HDUList:
                 break
     f.close()
 
+    # Attempting to read the file using pandas
     try:
         data = pd.read_csv(filename, sep=r'\,|\t+|\s+', skiprows=skip_rows,
                            names=names, engine='python')
@@ -187,6 +193,9 @@ def general(filename) -> pf.HDUList:
         n_columns = data.shape[1]
     except IndexError:  # pragma: no cover
         n_columns = 1
+
+    # Data with single column is assumed to be flux and
+    # is plotted against pixels.
 
     if n_columns == 1:
         # assuming its flux
@@ -228,6 +237,7 @@ def general(filename) -> pf.HDUList:
             data = data_new
             cols = data.columns
 
+    # Parsing units
     if '[' in str(cols[0]):
         header['XUNITS'] = cols[0][cols[0].find('[') + 1:cols[
             0].find(']')]
@@ -242,12 +252,25 @@ def general(filename) -> pf.HDUList:
         header['YUNITS'] = cols[1][cols[1].find('(') + 1:cols[
             1].find(')')]
 
+    header['NAXIS1'] = data.shape[0]
+    header['NAXIS2'] = data.shape[1]
+
     hdu_read = pf.PrimaryHDU(data.T, header)
+
+    # Converting it to hdul
     hdul_read = pf.HDUList(hdu_read)
     return hdul_read
 
 
-def is_number(s):
+def _is_number(s) -> bool:
+    """
+    Determines if a string is a number or not.
+
+    Returns
+    -------
+    bool
+        True if input can be converted to float; False otherwise
+    """
     try:
         float(s)
     except ValueError:

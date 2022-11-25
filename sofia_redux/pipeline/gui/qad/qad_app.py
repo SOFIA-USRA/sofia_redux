@@ -19,6 +19,8 @@ except ImportError:
 else:
     HAS_PYQT5 = True
 
+__all__ = ['main']
+
 
 def main():
     """

@@ -188,6 +188,16 @@ class TestModelFit(object):
         assert mf.get_fit() != fit
         assert str(mf.get_fit()) == str(fit)
 
+    def test_get_set_columns(self):
+        mf = model_fit.ModelFit()
+        assert mf.columns is None
+        assert mf.get_columns() is None
+
+        columns = np.arange(100)
+        mf.set_columns(columns)
+        assert mf.get_columns() is columns
+        assert np.allclose(mf.get_columns(), np.arange(100))
+
     def test_get_set_units(self):
         mf = model_fit.ModelFit()
 
@@ -232,14 +242,16 @@ class TestModelFit(object):
         mf = model_fit.ModelFit(gauss_params)
         ax = gauss_params['model_id_name'][1]['axis']
 
-        params = {'model_id': 'model_id_name', 'order': '1',
+        params = {'model_id': 'model_id_name', 'order': '2',
+                  'aperture': '1', 'filename': '',
                   'x_field': 'wavelength [nm]', 'y_field': 'flux [Jy]',
                   'lower_limit': '5', 'upper_limit': '15',
                   'type': 'gauss, linear', 'axis': ax,
                   'visible': False, 'baseline': '2',
                   'mean': '0', 'stddev': '0.2', 'amplitude': '1',
                   'slope': '0.5', 'intercept': '2',
-                  'fwhm': '0.47096', 'mid_point': '0'
+                  'fwhm': '0.470964009', 'mid_point': '0',
+                  'mid_point_column': 'nan'
                   }
 
         output = mf.parameters_as_string()
@@ -251,12 +263,14 @@ class TestModelFit(object):
         fit = gauss_params['model_id_name'][1]['fit']
 
         params = {'model_id': 'model_id_name', 'order': 1,
+                  'aperture': 0, 'filename': '',
                   'x_field': 'wavelength', 'y_field': 'flux',
                   'x_unit': 'nm', 'y_unit': 'Jy',
                   'lower_limit': 5, 'upper_limit': 15,
                   'type': ['gauss', 'linear'], 'axis': ax,
                   'visible': False, 'fit': fit,
-                  'baseline': 2.0, 'fwhm': fit[0].fwhm, 'mid_point': 0.0,
+                  'baseline': 2.0, 'fwhm': fit[0].fwhm,
+                  'mid_point': 0.0, 'mid_point_column': np.nan,
                   'slope': 0.5, 'intercept': 2.0, 'mean': 0.0,
                   'stddev': 0.2, 'amplitude': 1.0
                   }
@@ -267,10 +281,10 @@ class TestModelFit(object):
     def test_parameters_as_list(self, gauss_params):
         mf = model_fit.ModelFit(gauss_params)
 
-        params = ['model_id_name', 1, 'wavelength', 'flux',
+        params = ['', 1, 0, 'wavelength', 'flux',
                   'nm', 'Jy', '0', '0.2', '1',
-                  '2', '0.5', '2', '0',
-                  '0.47096', 5, 15, False]
+                  '2', '0.5', '2', '0', 'nan',
+                  '0.470964009', 5, 15, False]
 
         output = mf.parameters_as_list()
         assert output == params
@@ -281,8 +295,9 @@ class TestModelFit(object):
         params = ('<html><br>Last fit status: '
                   '<span style="color: green">Pass</span><br>'
                   'Parameters: <pre><br>'
-                  '  model_id: model_id_name<br>'
-                  '  order: 1<br>'
+                  '  filename: <br>'
+                  '  order: 2<br>'
+                  '  aperture: 1<br>'
                   '  x_field: wavelength [nm]<br>'
                   '  y_field: flux [Jy]<br>'
                   '  lower_limit: 5<br>'
@@ -290,7 +305,8 @@ class TestModelFit(object):
                   '  type: gauss, linear<br>'
                   '  baseline: 2<br>'
                   '  mid_point: 0<br>'
-                  '  fwhm: 0.47096<br>'
+                  '  mid_point_column: nan<br>'
+                  '  fwhm: 0.470964009<br>'
                   '  mean: 0<br>'
                   '  stddev: 0.2<br>'
                   '  amplitude: 1<br>'
@@ -325,6 +341,30 @@ class TestModelFit(object):
 
         mf.set_fit(lorentz_fit)
         value = mf.get_mid_point()
+        assert np.isnan(value)
+
+    def test_get_mid_point_column(self, gauss_fit, single_gauss_fit,
+                                  moffat_fit, lorentz_fit):
+        mf = model_fit.ModelFit()
+        mf.set_columns(np.arange(1000))
+
+        value = mf.get_mid_point_column()
+        assert np.isnan(value)
+
+        mf.set_fit(gauss_fit)
+        value = mf.get_mid_point_column()
+        assert value == 0
+
+        mf.set_fit(moffat_fit)
+        value = mf.get_mid_point_column()
+        assert value == 5
+
+        mf.set_fit(single_gauss_fit)
+        value = mf.get_mid_point_column()
+        assert value == 0
+
+        mf.set_fit(lorentz_fit)
+        value = mf.get_mid_point_column()
         assert np.isnan(value)
 
     def test_get_fwhm(self, gauss_fit, moffat_fit, single_gauss_fit,

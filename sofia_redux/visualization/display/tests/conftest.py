@@ -51,6 +51,14 @@ def line_alt(one_dim_pane):
 
 
 @pytest.fixture(scope='function')
+def cursor(one_dim_pane):
+    x = [5]
+    y = [6]
+    art = one_dim_pane.ax.plot(x, y, linestyle=None)[0]
+    return art
+
+
+@pytest.fixture(scope='function')
 def scatter(one_dim_pane):
     x = np.arange(1, 10, 1)
     y = x + 2
@@ -86,10 +94,10 @@ def text(one_dim_pane):
 
 
 @pytest.fixture(scope='function')
-def basic_arts(line, scatter, fit, guide):
+def basic_arts(line, scatter, fit, guide, cursor):
     arts = {'line': [{'artist': line,
                       'model_id': 'model_1'}],
-            'cursor': [{'artist': scatter,
+            'cursor': [{'artist': cursor,
                         'model_id': 'model_1'}],
             'error_range': list(),
             'crosshair': list(),
@@ -205,7 +213,7 @@ def gauss_params(gauss_fit):
               'x_field': 'wavelength', 'x_unit': 'nm',
               'y_field': 'flux', 'y_unit': 'Jy',
               'visible': False, 'lower_limit': 5,
-              'upper_limit': 15}
+              'upper_limit': 15, 'filename': 'gauss_file.fits'}
     return {'gauss_file.fits': {1: params}}
 
 

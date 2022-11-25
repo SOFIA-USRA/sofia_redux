@@ -137,7 +137,12 @@ class TestDrawing(object):
                                                   ('true', True, True),
                                                   ('all test', 'test', True),
                                                   ('test', 'all test', False),
-                                                  ('test', 'wrong', False)])
+                                                  ('test', 'wrong', False),
+                                                  ('0.1', '0.1', True),
+                                                  ('0.0', '0.1', False),
+                                                  ('0.a', '0.a', True),
+                                                  ('1', '1', True),
+                                                  ('1', '0', False)])
     def test_match_mid_model(self, own, other, result):
         draw = drawing.Drawing(mid_model=own)
         output = draw.match_mid_model(other)
@@ -188,6 +193,8 @@ class TestDrawing(object):
 
         other = fig.add_subplot()
         assert not draw.match_axes(other)
+
+        assert draw.match_axes('any')
 
     def test_match_text(self, one_dim_pane, patch):
         text = one_dim_pane.ax.text(1, 1, 'test')
@@ -311,6 +318,42 @@ class TestDrawing(object):
         assert scatter_mock.call_count == 0
         assert 'Unable to process' in caplog.text
 
+    def test_set_data_no_drawing(self, mocker, caplog):
+        caplog.set_level(logging.DEBUG)
+        line_mock = mocker.patch.object(drawing.Drawing, '_set_line_data')
+        scatter_mock = mocker.patch.object(drawing.Drawing,
+                                           '_set_scatter_data')
+
+        artist = ml.Line2D([1], [2])
+        draw = drawing.Drawing(artist=artist)
+
+        update = {'x_data': [3], 'y_data': [5]}
+        draw.set_data(update=update)
+        assert line_mock.call_count == 1
+        assert scatter_mock.call_count == 0
+        assert line_mock.called_with({'data': update['x_data'], 'artist': None,
+                                      'axis': None})
+
+        update = {'z_data': [3], 'y_data': [5]}
+        line_mock.reset_mock()
+        scatter_mock.reset_mock()
+
+        draw.set_data(update=update)
+        assert line_mock.call_count == 1
+        assert scatter_mock.call_count == 0
+        assert line_mock.called_with({'data': update['y_data'], 'artist': None,
+                                      'axis': None})
+
+        update = {'artist': ml.Line2D([3], [4])}
+        line_mock.reset_mock()
+        scatter_mock.reset_mock()
+
+        draw.set_data(update=update)
+        assert line_mock.call_count == 1
+        assert scatter_mock.call_count == 0
+        assert line_mock.called_with({'data': None, 'artist': update['artist'],
+                                      'axis': None})
+
     def test_set_line_data(self, patch):
         x, y = [2], [3]
         draw = drawing.Drawing(artist=ml.Line2D(x, y))
@@ -351,7 +394,13 @@ class TestDrawing(object):
 
         # bad axis value sets both x and y, like all
         draw._set_scatter_data(data=update, axis='bad')
-        assert np.all(new_data_2 / points == 1)
+        new_data_3 = draw.get_artist().get_offsets()
+        assert np.all(new_data_3 / points == 1)
+
+        # 'all' sets both x and y but expects an array
+        draw._set_scatter_data(data=points * factor, axis='all')
+        new_data_4 = draw.get_artist().get_offsets()
+        assert np.all(new_data_4 / points == factor)
 
     @pytest.mark.parametrize('marker,correct', [('x', 'x'), (None, 'o')])
     def test_convert_to_scatter(self, marker, correct, line, fig):
@@ -488,7 +537,7 @@ class TestDrawing(object):
 
     @pytest.mark.parametrize('value', ['high_model', 'mid_model',
                                        'kind', 'data_id', 'state', 'pane',
-                                       'label'])
+                                       'label', 'model_id'])
     def test_simple_setting(self, value):
         draw = drawing.Drawing()
 
@@ -539,6 +588,15 @@ class TestDrawing(object):
         get_func = getattr(draw, f'get_{key}')
         set_func(value)
         assert get_func() == value
+
+    def test_get_linestyle(self, line):
+        draw = drawing.Drawing()
+        # no artist
+        assert draw.get_linestyle() is None
+
+        # with line artist
+        draw.artist = line
+        assert draw.get_linestyle() == '-'
 
     def test_set_animated(self, line):
         draw = drawing.Drawing()

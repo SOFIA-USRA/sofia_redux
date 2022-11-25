@@ -5,6 +5,9 @@ from sofia_redux.pipeline.sofia.parameters.flitecam_parameters import DEFAULT
 from sofia_redux.pipeline.sofia.parameters.flitecam_spectroscopy_parameters \
     import SPECTRAL_DEFAULT, FLITECAMSpectroscopyParameters
 
+__all__ = ['FLITECAMSlitcorrParameters']
+
+
 SLITCORR_DEFAULT = {
     'make_image': [
         {'key': 'save',

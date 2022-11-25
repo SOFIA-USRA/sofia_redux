@@ -7,7 +7,7 @@ import signal
 import subprocess
 import sys
 
-import astropy.io.fits as pf
+from astropy.io import fits
 from astropy import log
 import configobj
 
@@ -33,6 +33,8 @@ except ImportError:
             pass
 else:
     HAS_PYQT5 = True
+
+__all__ = ['QADMainWindow']
 
 
 class QADMainWindow(QtWidgets.QMainWindow, ui_qad_main.Ui_MainWindow):
@@ -183,7 +185,7 @@ class QADMainWindow(QtWidgets.QMainWindow, ui_qad_main.Ui_MainWindow):
             fpath = os.path.abspath(self.model.filePath(i))
             if os.path.isfile(fpath) and fpath.endswith('.fits'):
                 try:
-                    hdul = pf.open(fpath)
+                    hdul = fits.open(fpath)
                 except (OSError, ValueError, TypeError):
                     log.error(f'Cannot load {fpath} as FITS; ignoring')
                 else:
@@ -441,7 +443,6 @@ class QADMainWindow(QtWidgets.QMainWindow, ui_qad_main.Ui_MainWindow):
         if len(other_files) > 0:
             # if not FITS related, try xdg-open (for Linux)
             # or open (for Mac)
-            # TODO - check windows
             from sys import platform
             if platform == 'darwin':
                 cmd = ['open']

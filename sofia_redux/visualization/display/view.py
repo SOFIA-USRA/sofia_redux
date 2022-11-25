@@ -2,10 +2,11 @@
 import warnings
 from contextlib import contextmanager
 import os
+import uuid
 from typing import (Dict, List, Optional, Sequence,
                     Union, Tuple, TypeVar)
 
-from more_itertools import unique_everseen
+from more_itertools import unique_everseen, consecutive_groups
 import numpy as np
 import matplotlib.backend_bases as mbb
 
@@ -28,7 +29,14 @@ except ImportError:
 
     # duck type parents to allow class definition
     class QtWidgets:
+
         class QMainWindow:
+            pass
+        
+        class QWidget:
+            pass
+
+        class QWidget:
             pass
 
     class ssv:
@@ -36,6 +44,7 @@ except ImportError:
             pass
 
     class QtCore:
+
         @staticmethod
         @contextmanager
         def pyqtSlot():
@@ -50,7 +59,8 @@ __all__ = ['View']
 MT = TypeVar('MT', bound=high_model.HighModel)
 Num = TypeVar('Num', int, float)
 PaneID = TypeVar('PaneID', str, List[int], None, List[pane.Pane])
-PaneType = TypeVar('PaneType', bound=pane.Pane)
+PT = TypeVar('PT', bound=pane.Pane)
+IDT = TypeVar('IDT', str, uuid.UUID)
 
 
 class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
@@ -92,6 +102,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
     cursor_location_window : cursor_location.CursorLocation
         Dialog window for table display of fit parameters.
     """
+
     def __init__(self, signals: vs.Signals) -> None:
         if not HAS_PYQT5:  # pragma: no cover
             raise ImportError('PyQt5 package is required for the Eye.')
@@ -105,7 +116,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         self.figure = figure.Figure(self.figure_widget, signals)
         self.signals = signals
         self.cid = dict()
-        self.model_collection = list()
+        self.model_collection = dict()
         self.reference_models = reference_model.ReferenceData()
         self.reference_window = None
         self.timer = None
@@ -150,21 +161,25 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
                 # C clears zoom/fit status
                 self.clear_selection()
                 self.clear_fit()
-            elif event.key() == QtCore.Qt.Key_Return:
+            elif (event.key() == QtCore.Qt.Key_Return
+                  or event.key() == QtCore.Qt.Key_Enter):
                 # enter in the file table displays selected models
-                if self.file_table_widget.hasFocus():
+                if self.loaded_files_table.hasFocus():
                     # send display_model signal
                     self.signals.model_selected.emit()
-            elif event.key() == QtCore.Qt.Key_Delete \
-                    or event.key() == QtCore.Qt.Key_Backspace:
-                if self.file_table_widget.hasFocus():
+            elif (event.key() == QtCore.Qt.Key_Delete
+                  or event.key() == QtCore.Qt.Key_Backspace):
+                if self.loaded_files_table.hasFocus():
                     # delete key in the file table removes selected models
                     self.signals.model_removed.emit()
-                elif (self.pane_tree_display.hasFocus()
-                      or self.figure_widget.hasFocus()):
+                elif self.figure_widget.hasFocus():
                     # delete key in the pane table or figure removes
                     # selected pane
                     self.remove_pane()
+                elif self.filename_table.hasFocus():
+                    # delete key in filename table removes the selected
+                    # filenames from the selected pane
+                    self.remove_file_from_pane()
             elif event.key() == QtCore.Qt.Key_A:
                 self.print_current_artists()
 
@@ -188,7 +203,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
     def reset(self) -> None:
         """Remove all loaded models and panes."""
         self.figure.remove_all_panes()
-        self.model_collection = list()
+        self.model_collection = dict()
 
     def refresh_loop(self) -> None:
         """Refresh the view."""
@@ -219,12 +234,25 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
 
             self.timer.start()
 
+    def hold_atrophy(self):
+        """Disconnect atrophy signals."""
+        self.signals.atrophy.disconnect()
+        self.signals.atrophy_bg_full.disconnect()
+        self.signals.atrophy_bg_partial.disconnect()
+
+    def release_atrophy(self):
+        """Reconnect atrophy signals."""
+        self.signals.atrophy.connect(self.atrophy)
+        self.signals.atrophy_bg_full.connect(self.atrophy_background_full)
+        self.signals.atrophy_bg_partial.connect(
+            self.atrophy_background_partial)
+
     def refresh_controls(self) -> None:
         """Refresh all control widgets."""
         self.refresh_file_table()
-        self.update_pane_tree()
-        self.refresh_order_list()
         self.update_controls()
+        self.populate_order_selectors()
+        self.signals.controls_updated.emit()
 
     ####
     # Signals
@@ -258,26 +286,13 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         self.stale_background_partial = True
 
     @QtCore.pyqtSlot()
-    def toggle_pane_highlight(self) -> None:
-        """Toggle the pane border visibility."""
-        state = self.hightlight_pane_checkbox.isChecked()
-        self.figure.set_pane_highlight_flag(state)
-        self.signals.atrophy.emit()
-
-    @QtCore.pyqtSlot()
     def current_pane_changed(self) -> None:
         """Set a new pane as the active pane."""
-        self.figure.set_pane_highlight_flag(
-            state=self.hightlight_pane_checkbox.isChecked())
+        self.figure.set_pane_highlight_flag(True)
         self.clear_selection()
         self.update_controls()
-        self.refresh_order_list()
+        self.populate_order_selectors(True)
         self.signals.atrophy.emit()
-
-    @QtCore.pyqtSlot()
-    def refresh_orders(self) -> None:
-        """Refresh the list of displayed orders."""
-        self.refresh_order_list()
 
     @QtCore.pyqtSlot()
     def axis_limits_changed(self) -> None:
@@ -287,10 +302,6 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         except ValueError:
             log.debug('Illegal limits entered')
         else:
-            # if self.all_axes_button.isChecked():
-            #     panes = 'all'
-            # else:
-            #     panes = None
             targets = self.selected_target_axis()
             self.figure.change_axis_limits(limits, target=targets)
         self.signals.atrophy_bg_partial.emit()
@@ -421,24 +432,36 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
             Keys are 'x', 'y'; values are field strings
             for the axes.
         """
-        fields = {'x': str(self.x_property_selector.currentText()).lower(),
-                  'y': str(self.y_property_selector.currentText()).lower()}
+        x = self._parse_field_name(self.x_property_selector.currentText())
+        y = self._parse_field_name(self.y_property_selector.currentText())
+        fields = {'x': x, 'y': y}
         return fields
 
     @QtCore.pyqtSlot()
     def current_cursor_location(self, event: Event) -> None:
-        """Update the cursor location displays."""
+        """
+        Update the cursor location displays.
+
+        Parameters
+        ----------
+        event : QEvent
+            Keypress event.
+        """
         if self.cursor_checkbox.isChecked():
             if event.inaxes and self.figure.populated():
 
-                data_point = self.figure.data_at_cursor(event)
-                idx = self.figure.determine_selected_pane(event.inaxes)
-                cursor_position = self.figure.panes[idx].xy_at_cursor(event)
+                data_points = self.figure.data_at_cursor(event)
+                idxes = self.figure.determine_selected_pane(event.inaxes)
+                for idx in idxes:
+                    cursor_position = self.figure.panes[
+                        idx].xy_at_cursor(event)
 
-                if self._cursor_popout:
-                    self._update_cursor_loc_window(data_point, cursor_position)
-                else:
-                    self._update_cursor_loc_labels(data_point, cursor_position)
+                    if self._cursor_popout:
+                        self._update_cursor_loc_window(data_points,
+                                                       cursor_position)
+                    else:
+                        self._update_cursor_loc_labels(data_points,
+                                                       cursor_position)
                 self.signals.atrophy.emit()
 
     def _update_cursor_loc_labels(self,
@@ -544,7 +567,10 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         if event.inaxes:
             log.debug('Figure was clicked on inside the axis')
             pane_index = self.figure.determine_selected_pane(event.inaxes)
-            if pane_index is not None:
+            if pane_index is not None and not self.figure.recording:
+                self.all_panes_checkbox.blockSignals(True)
+                self.all_panes_checkbox.setChecked(False)
+                self.all_panes_checkbox.blockSignals(False)
                 self.set_current_pane(pane_index)
 
     def enable_cursor_position(self) -> None:
@@ -566,6 +592,8 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         if self.cursor_location_window is None:
             self.cursor_location_window = cl.CursorLocation(self)
             self.cursor_location_window.show()
+        else:
+            self.cursor_location_window.raise_()
         self.cursor_checkbox.setChecked(True)
         self.enable_cursor_position()
         self._cursor_popout = True
@@ -587,21 +615,40 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         self.figure.toggle_fits_visibility(fits)
         self.signals.atrophy.emit()
 
+    @QtCore.pyqtSlot()
+    def filename_table_selection_changed(self):
+        """Set selection for a cell in the filename table."""
+        self.all_filenames_checkbox.blockSignals(True)
+        self.all_filenames_checkbox.setChecked(False)
+        self.all_filenames_checkbox.blockSignals(False)
+
+        self._update_order_selector()
+
+    @QtCore.pyqtSlot()
+    def all_filenames_selection_changed(self):
+        """Set selection for all files in the filename table."""
+        state = bool(self.all_filenames_checkbox.checkState())
+        self._update_filename_table_selection(all_=state)
+        self._update_order_selector()
+
     ####
     # Setup
     ####
-    def setup_property_selectors(self, pane_: Optional[PaneType] = None,
+    def setup_property_selectors(self,
+                                 panes: Optional[Union[List[PT], PT]] = None,
                                  target: Optional[Dict] = None) -> None:
         """
         Set up plot field selectors based on loaded data.
 
         Parameters
         ----------
-        pane_ : pane.Pane, optional
-            The pane containing loaded data. If not
+        panes : pane.Pane or list of pane.Pane, optional
+            The panes containing loaded data. If not
             provided, apply to the current pane.
+        target : dict, optional
+            Keys are `axis`, `pane` and values can be str, int or list.
         """
-        log.debug(f'Updating property selector for pane {pane_}')
+        log.debug(f'Updating property selector for pane {panes}')
         y_label = 'y'
         try:
             if target['axis'] == 'alt':
@@ -612,44 +659,81 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
                      y_label: self.y_property_selector}
         for selector in selectors.values():
             selector.clear()
-        if pane_ is None:
-            pane_ = self.figure.get_current_pane()
-        if pane_ is None:
+        if panes is None:
+            panes = self.figure.get_current_pane()
+        elif not isinstance(panes, list):
+            panes = [panes]
+        if panes is None:
             # No panes present
             log.debug('No panes present, clearing property selectors')
         else:
-            fields = pane_.fields
-            if pane_.models:
-                if pane_.plot_kind == 'spectrum':
-                    order = list(pane_.models.values())[0].retrieve(
-                        order=0, level='high')
-                    fields = order.data.keys()
-                elif pane_.plot_kind == 'image':  # pragma: no cover
-                    fields = list(pane_.models.values())[0].images.keys()
-            else:
-                fields = ['-']
+            all_fields = list()
+            current_fields = {k: list() for k in selectors.keys()}
+            for pane_ in panes:
+                fields = pane_.fields
+                if pane_.models:
+                    if pane_.plot_kind == 'spectrum':
+                        order = list(pane_.models.values())[0].retrieve(
+                            order=0, level='high')
+                        if order:
+                            fields = order.data.keys()
+                        else:  # pragma: no cover
+                            fields = ['-']
+                    elif pane_.plot_kind == 'image':  # pragma: no cover
+                        fields = list(pane_.models.values())[0].images.keys()
+                else:
+                    fields = ['-']
+                all_fields.extend(fields)
 
-            fields = list(unique_everseen(fields))
+                for ax in selectors.keys():
+                    current_fields[ax].append(pane_.fields[ax])
+
+            fields = list(unique_everseen(all_fields))
             for selector in selectors.values():
+                fields = [self._format_field_name(f) for f in fields]
                 selector.addItems(fields)
 
             for ax, selector in selectors.items():
-                index = selector.findText(pane_.fields[ax])
+                try:
+                    current_field = list(set(current_fields[ax]))[0]
+                except IndexError:  # pragma: no cover
+                    index = 0
+                else:
+                    index = selector.findText(self._format_field_name(
+                        current_field))
                 if index > 0:
                     selector.setCurrentIndex(index)
 
-    def setup_unit_selectors(self, pane_: Optional[PaneType] = None,
+    @staticmethod
+    def _format_field_name(field):
+        """Modify the input field name."""
+        field = str(field).split('_order')[0]
+        field = field.replace('wavepos', 'wavelength')
+        field = field.replace('_', ' ').title()
+        return field
+
+    @staticmethod
+    def _parse_field_name(field):
+        """Parse the input field name."""
+        field = field.lower().replace(' ', '_')
+        field = field.replace('wavelength', 'wavepos')
+        return field
+
+    def setup_unit_selectors(self,
+                             panes: Optional[Union[List[PT], PT]] = None,
                              target: Optional[Dict] = None) -> None:
         """
         Set up plot unit selectors based on loaded data.
 
         Parameters
         ----------
-        pane_ : pane.Pane, optional
-            The pane containing loaded data. If not
+        panes : pane.Pane or list of pane.Pane, optional
+            The panes containing loaded data. If not
             provided, apply to the current pane.
+        target : Dict, optional
+            Keys are `axis`, `pane` and values can be str, int or list
         """
-        log.debug(f'Updating unit selectors for {pane_}.')
+        log.debug(f'Updating unit selectors for {panes}.')
         y_label = 'y'
         try:
             if target['axis'] == 'alt':
@@ -658,71 +742,118 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
             pass
         unit_selectors = {'x': self.x_unit_selector,
                           y_label: self.y_unit_selector}
-        if pane_ is None:
-            pane_ = self.figure.get_current_pane()
-        if pane_ is None:
+        if panes is None:
+            panes = self.figure.get_current_pane()
+        elif not isinstance(panes, list):
+            panes = [panes]
+        if panes is None:
             log.debug('No panes currently exist')
         else:
-            units = pane_.possible_units()
-            current_selection = pane_.current_units()
             for axis, selector in unit_selectors.items():
                 selector.clear()
-                string_units = [str(i) for i in units[axis]]
+                string_units = list()
+                current_selections = list()
+                for pane_ in panes:
+                    current_selections.append(pane_.current_units()[axis])
+                    units = pane_.possible_units()
+                    string_units.extend([str(i) for i in units[axis]])
                 string_units = list(unique_everseen(string_units))
                 selector.addItems(string_units)
-                if current_selection[axis] in string_units:
-                    idx = string_units.index(current_selection[axis])
+                current_selections = list(set(current_selections))
+
+                if len(current_selections) == 0:
+                    idx = 0
+                elif current_selections[0] in string_units:
+                    idx = string_units.index(current_selections[0])
                 else:
                     idx = 0
                 selector.setCurrentIndex(idx)
                 log.debug(f'Set unit selectors to {string_units}, '
                           f'selected {idx}')
 
-    def setup_axis_limits(self, pane_: Optional[PaneType] = None,
+    @staticmethod
+    def merge_dicts(dol1, dol2):
+        """
+        Merge two dictionaries.
+
+        Parameters
+        ----------
+        dol1 : dict
+            First dictionary.
+        dol2 : dict
+            Second dictionary.
+
+        Returns
+        -------
+        dict
+            Merged dictionary.
+        """
+        keys = set(dol1).union(dol2)
+        no = list()
+        return dict((k, dol1.get(k, no) + dol2.get(k, no)) for k in keys)
+
+    def setup_axis_limits(self,
+                          panes: Optional[Union[List[PT], PT]] = None,
                           target: Optional[Dict] = None) -> None:
         """
         Set up axis limit text boxes based on loaded data.
 
         Parameters
         ----------
-        pane_ : pane.Pane, optional
-            The pane containing loaded data. If not provided
+        panes : pane.Pane or list of pane.Pane, optional
+            The panes containing loaded data. If not provided
             apply to the current pane.
+        target : Dict, optional
+            Keys are `axis`, `pane` and values can be str, int or list
         """
-        log.debug(f'Updating axis limits for {pane_}.')
+        log.debug(f'Updating axis limits for {panes}.')
         y_label = 'y'
         try:
             if target['axis'] == 'alt':
                 y_label = 'y_alt'
         except (KeyError, AttributeError, TypeError):
             pass
-        if pane_ is None:
-            pane_ = self.figure.get_current_pane()
-        if pane_ is None:
+        if panes is None:
+            panes = self.figure.get_current_pane()
+        elif not isinstance(panes, list):
+            panes = [panes]
+        if panes is None:
             log.debug('No pane currently present')
         else:
-            limits = pane_.get_axis_limits()
-            log.debug(f'New limits: {limits}.')
             limit_displays = {'x': [self.x_limit_min, self.x_limit_max],
                               y_label: [self.y_limit_min, self.y_limit_max]}
+            full_limits = {k: list() for k in limit_displays.keys()}
+            for pane_ in panes:
+                limits = pane_.get_axis_limits()
+                for ax in limit_displays.keys():
+                    full_limits[ax].append(limits[ax])
+                log.debug(f'New limits: {limits}.')
+
             for ax, limit_display in limit_displays.items():
-                if limits[ax]:
-                    lim = [f'{val:.4g}' for val in limits[ax]]
+                try:
+                    limits = full_limits[ax][0]
+                except IndexError:  # pragma: no cover
+                    limits = None
+                if limits:
+                    lim = [f'{val:0.3f}' for val in limits]
                 else:
                     lim = ['', '']
                 for display, value in zip(limit_display, lim):
                     display.setText(value)
 
-    def setup_initial_scales(self, pane_: Optional[PaneType] = None,
+    def setup_initial_scales(self,
+                             panes: Optional[Union[List[PT], PT]] = None,
                              target: Optional[Dict] = None) -> None:
         """
         Set up plot scale selectors based on loaded data.
 
         Parameters
         ----------
-        pane_ : pane.Pane, optional
+        panes : pane.Pane or list of pane.Pane, optional
             The pane containing loaded data. If not provided,
             apply to the current pane.
+        target : Dict, optional
+            Keys are `axis`, `pane` and values can be str, int or list
         """
         y_label = 'y'
         try:
@@ -731,9 +862,11 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         except (KeyError, AttributeError, TypeError):
             pass
 
-        if pane_ is None:
-            pane_ = self.figure.get_current_pane()
-        if pane_ is None:
+        if panes is None:
+            panes = self.figure.get_current_pane()
+        elif not isinstance(panes, list):
+            panes = [panes]
+        if panes is None:
             log.debug('No pane currently present')
         else:
             self.buttonGroup.setExclusive(False)
@@ -743,30 +876,52 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
                                     self.x_scale_log_button],
                               y_label: [self.y_scale_linear_button,
                                         self.y_scale_log_button]}
-            scale = pane_.get_axis_scale()
+            scales = list()
+            for pane_ in panes:
+                scales.append(pane_.get_axis_scale())
             for axis, displays in scale_displays.items():
-                if scale[axis] == 'linear' or scale[axis] is None:
-                    displays[0].setChecked(True)
-                    displays[1].setChecked(False)
-                elif scale[axis] == 'log':
+                if len(set([s[axis] for s in scales])) == 1:
+                    scale = scales[0]
+                    if scale[axis] == 'linear' or scale[axis] is None:
+                        displays[0].setChecked(True)
+                        displays[1].setChecked(False)
+                    elif scale[axis] == 'log':
+                        displays[0].setChecked(False)
+                        displays[1].setChecked(True)
+                else:
                     displays[0].setChecked(False)
-                    displays[1].setChecked(True)
-
+                    displays[1].setChecked(False)
             self.buttonGroup.setExclusive(True)
             self.buttonGroup_2.setExclusive(True)
             self._block_scale_signals(False)
 
-    def setup_overplot_flag(self, pane_: Optional[PaneType] = None,
-                            target: Optional[Dict] = None) -> None:
-        if pane_ is None:
-            pane_ = self.figure.get_current_pane()
-        if pane_ is None:
+    def setup_overplot_flag(
+            self, panes: Optional[Union[List[PT], PT]] = None) -> None:
+        """
+        Set up overplot display flags.
+
+        Parameters
+        ----------
+        panes : pane.Pane or list of pane.Pane, optional
+            The panes containing loaded data. If not provided,
+            apply to the current pane.
+        """
+        if panes is None:
+            panes = self.figure.get_current_pane()
+        elif not isinstance(panes, list):
+            panes = [panes]
+        if panes is None:
             log.debug('No pane currently present')
         else:
-            state = pane_.overplot_state()
-            self.enable_overplot_checkbox.setChecked(state)
+            self.enable_overplot_checkbox.blockSignals(True)
+            states = list(set([p.overplot_state() for p in panes]))
+            if len(states) == 1:
+                self.enable_overplot_checkbox.setChecked(states[0])
+            else:
+                self.enable_overplot_checkbox.setChecked(False)
+            self.enable_overplot_checkbox.blockSignals(False)
 
-    def display_filenames(self, filename: str) -> None:
+    def add_filename(self, model_id: IDT, filename: str) -> None:
         """
         Add a file that has been read in to the model collection.
 
@@ -774,27 +929,29 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
 
         Parameters
         ----------
+        model_id: str, uuid.UUID
+            Unique ID for model.
         filename : str
             Name of the file that was added to models.
         """
-        if filename not in self.model_collection:
-            self.model_collection.append(filename)
+        if model_id not in self.model_collection:
+            self.model_collection[model_id] = filename
         else:
-            log.warning(f'Filename {filename} is already in '
+            log.warning(f'Model {model_id} ({filename}) is already in '
                         f'display model list.')
 
-    def remove_filename(self, filename: str) -> None:
+    def remove_model_id(self, model_id: str) -> None:
         """
         Remove a file from the list.
 
         Parameters
         ----------
-        filename : str
-            Name of the model that is no longer being stored.
+        model_id : str
+            ID of the model to remove.
         """
         try:
-            self.model_collection.remove(filename)
-        except ValueError:
+            del self.model_collection[model_id]
+        except KeyError:
             # could happen in race conditions
             pass
 
@@ -804,10 +961,12 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
 
         Parameters
         ----------
-        text : ['spectral', 'tableau', 'accessible']
+        text : {'spectral', 'tableau', 'accessible'}
             Color cycle to set.
         """
-        self.figure.set_color_cycle(text)
+        updates = self.figure.set_color_cycle(text)
+        if self.fit_results:
+            self.fit_results.update_colors(updates)
 
     def select_plot_type(self, text: str) -> None:
         """
@@ -815,7 +974,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
 
         Parameters
         ----------
-        text : ['line', 'step', 'scatter']
+        text : {'line', 'step', 'scatter'}
             The plot type to set.
         """
         self.figure.set_plot_type(text)
@@ -892,22 +1051,23 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         """Refresh the file list from currently loaded data."""
         self._clear_file_table()
         col_index = 0
-        self.file_table_widget.setRowCount(len(self.model_collection))
-        for row_index, filename in enumerate(self.model_collection):
+        self.loaded_files_table.setRowCount(len(self.model_collection))
+        for row_index, (model_id, filename) in enumerate(
+                self.model_collection.items()):
             # display base name
             item = QtWidgets.QTableWidgetItem(os.path.basename(filename))
-            # store full name in data and set as tooltip
-            item.setData(QtCore.Qt.UserRole, filename)
+            # store model_id in data and set full file path as tooltip
+            item.setData(QtCore.Qt.UserRole, model_id)
             item.setToolTip(filename)
-            self.file_table_widget.setItem(row_index, col_index, item)
-        self.file_table_widget.resizeRowsToContents()
-        self.file_table_widget.resizeColumnsToContents()
-        self.file_table_widget.show()
+            self.loaded_files_table.setItem(row_index, col_index, item)
+        self.loaded_files_table.resizeRowsToContents()
+        self.loaded_files_table.resizeColumnsToContents()
+        self.loaded_files_table.show()
 
     def _clear_file_table(self) -> None:
         """Clear the file table widget."""
-        self.file_table_widget.setRowCount(0)
-        self.file_table_widget.setColumnCount(1)
+        self.loaded_files_table.setRowCount(0)
+        self.loaded_files_table.setColumnCount(1)
 
     def current_files_selected(self) -> Union[List[str], None]:
         """
@@ -915,14 +1075,15 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
 
         Returns
         -------
-        filenames : list of str
-            The selected filenames.
+        filenames : list of str or None
+            The selected filenames. If no files are selected, None is
+            returned.
         """
-        items = self.file_table_widget.selectedItems()
+        items = self.loaded_files_table.selectedItems()
         if not items:
             return
-        filenames = [item.data(QtCore.Qt.UserRole) for item in items]
-        return filenames
+        model_ids = [item.data(QtCore.Qt.UserRole) for item in items]
+        return model_ids
 
     ####
     # Panes
@@ -930,8 +1091,6 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
     def add_pane(self) -> None:
         """Add a new pane."""
         self.figure.add_panes(n_dims=0, n_panes=1)
-        self.signals.atrophy.emit()
-        self.update_pane_tree()
         self.signals.current_pane_changed.emit()
 
     def add_panes(self, n_panes: int, kind: List[str],
@@ -943,13 +1102,14 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         ----------
         n_panes : int
             The number of panes to add.
-        kind : ['spectrum', 'onedim']
+        kind : {'spectrum', 'onedim', 'image', 'twodim'}
             The kind of pane to add.
-        layout : ['grid', 'rows', 'columns']
+        layout : {'grid', 'rows', 'columns'}, optional
             The layout method for the new panes.
         """
         n_dims = list()
-        # TODO: What if kind is a one element list meant to be a blanket?
+        if len(kind) == 1:
+            kind = kind * n_panes
         for k in kind:
             if k in ['spectrum', 'onedim']:
                 n_dims.append(1)
@@ -962,13 +1122,10 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         self.figure.add_panes(n_panes=n_panes, n_dims=n_dims)
 
     def remove_pane(self) -> None:
-        """Remove a selected pane."""
-        items = self.pane_tree_display.selectedItems()
-        if not items:
-            return
-        pane_number = [item.data(0, QtCore.Qt.UserRole) for item in items]
-        self.figure.remove_pane(pane_number)
-        self.signals.atrophy.emit()
+        """Remove current selected pane."""
+        self.figure.remove_pane()
+        self.signals.atrophy_bg_partial.emit()
+        # self.signals.atrophy.emit()
 
     def remove_panes(self, panes: Union[str, List[int]]) -> None:
         """
@@ -984,6 +1141,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
             self.figure.remove_all_panes()
         else:
             self.figure.remove_pane(panes)
+        self.signals.atrophy_bg_partial.emit()
 
     def pane_count(self) -> int:
         """
@@ -1008,117 +1166,22 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         """
         return self.figure.pane_layout()
 
-    def update_pane_tree(self) -> None:
-        """Update the list of panes and contained models."""
-        # get current expansion state and show/hide buttons to restore
-        expanded = {}
-        buttons = {}
-        root = self.pane_tree_display.invisibleRootItem()
-        n_panes = root.childCount()
-        for i in range(n_panes):
-            pane_item = root.child(i)
-            expanded[i] = {'pane': pane_item.isExpanded()}
-            n_models = pane_item.childCount()
-            for j in range(n_models):
-                model_item = pane_item.child(j)
-                button = self.pane_tree_display.itemWidget(model_item, 0)
-                if button is not None:
-                    # button row: store current hide/show state
-                    row_data = button.property('id')
-                    buttons[i] = row_data[1]
-                else:
-                    try:
-                        pane_id, model_id = \
-                            model_item.child(1).data(0, QtCore.Qt.UserRole)
-                    except (AttributeError, TypeError, IndexError,
-                            ValueError):  # pragma: no cover
-                        pass
-                    else:
-                        # model row
-                        expanded[i][model_id] = model_item.isExpanded()
-
-        details = self.figure.pane_details()
-        self.pane_tree_display.clear()
-        root = self.pane_tree_display.invisibleRootItem()
-        for label, model_list in details.items():
-            # pane number
-            pane_id = int(label.split('_')[-1])
-            pane_label = f"Pane {pane_id + 1}"
-            pane_item = QtWidgets.QTreeWidgetItem([pane_label])
-            pane_item.setData(0, QtCore.Qt.UserRole, pane_id)
-            root.addChild(pane_item)
-            if pane_id in expanded:
-                pane_item.setExpanded(expanded[pane_id]['pane'])
-
-            if pane_id == self.figure.current_pane:
-                pane_item.setSelected(True)
-
-            for detail in model_list.values():
-                # filename
-                model_id = detail['model_id']
-                model_item = QtWidgets.QTreeWidgetItem([detail['filename']])
-                pane_item.addChild(model_item)
-                if pane_id in expanded \
-                        and model_id in expanded[pane_id]:
-                    model_item.setExpanded(expanded[pane_id][model_id])
-
-                # extension name
-                item = QtWidgets.QTreeWidgetItem([detail['extension']])
-                model_item.addChild(item)
-
-                # enabled check box
-                item = QtWidgets.QTreeWidgetItem(['Enabled'])
-                if detail['enabled']:
-                    item.setCheckState(0, QtCore.Qt.Checked)
-                else:
-                    item.setCheckState(0, QtCore.Qt.Unchecked)
-                # store pane and model ids as user data, for retrieval
-                # when box is checked/unchecked
-                item.setData(0, QtCore.Qt.UserRole, (pane_id, model_id))
-                model_item.addChild(item)
-
-                # color, marker for plot
-                item = QtWidgets.QTreeWidgetItem(
-                    [f"Color, Marker: {detail['marker']}"])
-                color = QtGui.QColor(detail['color'])
-                pix = QtGui.QPixmap(50, 50)
-                pix.fill(color)
-                icon = QtGui.QIcon(pix)
-                item.setIcon(0, icon)
-                model_item.addChild(item)
-
-            # add a button at the end to dis/enable all models
-            item = QtWidgets.QTreeWidgetItem()
-            pane_item.addChild(item)
-            button = QtWidgets.QPushButton()
-            if pane_id in buttons:
-                state = bool(buttons[pane_id])
-            else:
-                state = False
-            if state:  # pragma: no cover
-                button.setText('Show all')
-            else:
-                button.setText('Hide all')
-            button.clicked.connect(self.enable_all_models)
-            button.setProperty('id', (pane_id, state))
-            self.pane_tree_display.setItemWidget(item, 0, button)
-
-    def remove_data_from_all_panes(self, filename: str) -> None:
+    def remove_data_from_all_panes(self, model_id: str) -> None:
         """
         Remove loaded data from the view.
 
         Parameters
         ----------
-        filename : str
-            The file to remove.
+        model_id : str
+            The Unique id for the file to remove.
         """
-        self.figure.remove_model_from_pane(filename)
-        self.remove_filename(filename)
+        self.figure.remove_model_from_pane(model_id=model_id)
+        self.remove_model_id(model_id)
         # clear any active selection states
         self.clear_selection()
 
     def display_model(self, model: MT,
-                      pane_: Optional[PaneType] = None) -> None:
+                      pane_: Optional[PT] = None) -> None:
         """
         Display a model in a plot pane.
 
@@ -1126,7 +1189,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         ----------
         model : high_model.HighModel
             The model to display.
-        pane_ : pane.Pane
+        pane_ : pane.Pane, optional
             The pane to display to.  If not provided, the current
             pane will be used.
         """
@@ -1134,6 +1197,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         # clear any active selection states
         self.clear_selection()
         self.signals.atrophy_bg_full.emit()
+        self.populate_order_selectors()
         self.update_controls()
 
     def assign_models(self, mode: str, models: Dict[str, MT],
@@ -1143,7 +1207,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
 
         Parameters
         ----------
-        mode : ['split', 'first', 'last', assigned']
+        mode : {'split', 'first', 'last', assigned'}
             Specifies how to arrange the models on the panes.
             'Split' divides the models as evenly as possible
             across all present panes. 'First' assigns all the
@@ -1153,7 +1217,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         models : dict
             Dictionary of models to add. Keys are the model ID,
             with the values being the models themselves.
-        indices : list of int, optional
+        indices : list of int
             A list of integers with the same length of `models`.
             Only used for `assigned` mode. Specifies the index
             of the desired pane for the model.
@@ -1177,19 +1241,21 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         """
         return self.figure.models_per_pane()
 
-    def set_current_pane(self, pane_index: int) -> None:
+    def set_current_pane(self, pane_index: Union[List[int], int]) -> None:
         """
         Set the current pane.
 
         Parameters
         ----------
-        pane_index : int
-            The pane to activate.
+        pane_index : int or list of int
+            The panes to activate.
         """
+        if not isinstance(pane_index, list):
+            pane_index = [pane_index]
         pane_change = self.figure.change_current_pane(pane_index)
         if pane_change:
             log.debug(f'Setting current pane to {pane_index}')
-            self.signals.atrophy.emit()
+            self.signals.current_pane_changed.emit()
 
     def select_pane(self, item: QTreeWidgetItem) -> None:
         """
@@ -1237,17 +1303,16 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
 
     def selected_target_axis(self) -> Dict[str, str]:
         """
-        Parses the state of the axis selection widget
+        Parse the state of the axis selection widget.
 
         Returns
         -------
         target : dict
-
+            Keys are 'axis' or 'pane'; values can be str, int or list.
         """
         text = str(self.axes_selector.currentText()).lower()
         target = dict()
         if text == 'all':
-            target['pane'] = 'all'
             target['axis'] = 'all'
         else:
             if 'primary' in text:
@@ -1258,34 +1323,527 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
                 target['axis'] = 'all'
             else:
                 raise EyeError(f'Unknown target axis selected: {text}')
-            if 'current' in text:
-                target['pane'] = 'current'
-            elif 'all' in text:
-                target['pane'] = 'all'
-            else:
-                raise EyeError(f'Unknown target axis selected: {text}')
+        _, pane_index = self._parse_filename_table_selection()
+        target['pane'] = pane_index
         return target
 
     ####
     # Orders
     ####
-    def refresh_order_list(self) -> None:
-        """Refresh the order list from loaded models."""
-        self.order_list_widget.clear()
-        if self.figure.pane_count() > 0:
-            pane_ = self.figure.get_current_pane()
-            orders = pane_.get_orders()
-            field = pane_.get_field('y')
-            for order in orders:
-                details = order.describe()
-                item = QtWidgets.QListWidgetItem(details['name'])
-                if field not in details['fields']:
+    @QtCore.pyqtSlot()
+    def on_orders_changed(self):
+        """Handle a change in order selection."""
+        on_orders = self.decode_orders(self.on_orders_selector.text())
+        self._update_orders_from_gui(on_orders, True)
+
+    @QtCore.pyqtSlot()
+    def enable_all_orders(self):
+        """Enable all orders."""
+        log.info('\nEnabling all orders')
+        self.on_orders_selector.blockSignals(True)
+        self.off_orders_selector.blockSignals(True)
+
+        self.on_orders_selector.setText('*')
+        self.off_orders_selector.setText('-')
+
+        self.on_orders_selector.blockSignals(False)
+        self.off_orders_selector.blockSignals(False)
+
+        self.on_orders_changed()
+
+    @QtCore.pyqtSlot()
+    def disable_all_orders(self):
+        """Disable all orders."""
+        self.on_orders_selector.blockSignals(True)
+        self.off_orders_selector.blockSignals(True)
+
+        self.on_orders_selector.setText('-')
+        self.off_orders_selector.setText('*')
+
+        self.on_orders_selector.blockSignals(False)
+        self.off_orders_selector.blockSignals(False)
+
+        self.off_orders_changed()
+
+    @QtCore.pyqtSlot()
+    def off_orders_changed(self):
+        """Disable selected orders."""
+        off_orders = self.decode_orders(self.off_orders_selector.text())
+        self._update_orders_from_gui(off_orders, False)
+
+    @QtCore.pyqtSlot()
+    def filename_order_selector_changed(self):
+        """Handle a change in the filename order selector."""
+        self.all_filenames_checkbox.blockSignals(True)
+        self.all_filenames_checkbox.setChecked(False)
+        self.all_filenames_checkbox.blockSignals(False)
+        self._update_pane_selector()
+        self._update_order_selector()
+
+    @QtCore.pyqtSlot()
+    def all_filenames_checking(self):
+        """Update the order selector."""
+        self._update_order_selector()
+
+    @QtCore.pyqtSlot()
+    def pane_order_selector_changed(self):
+        """Handle a change to the pane selector."""
+        self.all_panes_checkbox.blockSignals(True)
+        self.all_panes_checkbox.setChecked(False)
+        self.all_panes_checkbox.blockSignals(False)
+        try:
+            selection = [int(self.pane_selector.currentText()) - 1]
+        except ValueError:
+            return
+        self.set_current_pane(selection)
+        self._update_filename_table()
+        self._update_order_selector()
+
+    @QtCore.pyqtSlot()
+    def all_panes_checking(self):
+        """Handle a change to the all panes check box."""
+        if self.all_panes_checkbox.isChecked():
+            self.set_current_pane(list(range(self.figure.pane_count())))
+        else:
+            if self.figure.pane_count() > 0:
+                self.set_current_pane([0])
+            else:
+                self.set_current_pane(list())
+        self.signals.current_pane_changed.emit()
+
+    @QtCore.pyqtSlot()
+    def remove_file_from_pane(self):
+        """Handle a file removal request."""
+        model_id, pane_index = self._parse_filename_table_selection()
+        self.figure.remove_model_from_pane(model_id=model_id, panes=pane_index)
+
+    def _update_orders_from_gui(self, orders, enable):
+        pane_text = self.pane_selector.currentText()
+        all_checked = self.all_panes_checkbox.isChecked()
+        if all_checked:
+            update = dict().fromkeys(range(self.figure.pane_count()),
+                                     orders)
+        else:
+            try:
+                update = {int(pane_text) - 1: orders}
+            except ValueError:
+                # Panes not populated yet
+                return
+
+        # TODO: This needs reworking for if aperture and orders are
+        #  available on multiple panes
+        apertures = 'aperture' in self.enabled_orders_label.text().lower()
+        self.figure.set_orders(update, enable, aperture=apertures)
+
+        self.signals.atrophy.emit()
+
+    def populate_order_selectors(self,
+                                 set_current_pane: Optional[bool] = False):
+        """
+        Populate order selectors for currently loaded data.
+
+        Parameters
+        ----------
+        set_current_pane : bool, optional
+           If set, the current index of the selector will be set to
+            current pane after populating.
+        """
+        self._update_pane_selector(set_current_pane)
+        self._update_filename_table()
+        self._update_order_selector()
+
+    def _update_pane_selector(self, set_current_pane: Optional[bool] = False):
+        """
+        Populate pane selector with current panes.
+
+        Parameters
+        ----------
+        set_current_pane : bool, optional
+            If set, the current index of the selector will be set to
+            current pane after populating.
+        """
+        self.pane_selector.blockSignals(True)
+        initial_pane = self.pane_selector.currentText()
+        self.pane_selector.clear()
+        for i in range(self.figure.pane_count()):
+            self.pane_selector.addItem(f'{i + 1}')
+        if set_current_pane:
+            try:
+                pane_number = f'{self.figure.current_pane[0] + 1}'
+            except IndexError:  # pragma: no cover
+                pane_number = '0'
+        else:
+            pane_number = initial_pane
+        index = max(self.pane_selector.findText(pane_number), 0)
+        self.pane_selector.setCurrentIndex(index)
+
+        self.pane_selector.blockSignals(False)
+
+    def _update_filename_table(self):
+        """Update filename table from current data."""
+
+        table_labels = ['marker', 'color', 'orders', 'filename']
+        fn_index = table_labels.index('filename')
+        current_row = self.filename_table.currentRow()
+        current_ids = list()
+        if current_row >= 0:
+            if not isinstance(current_row, list):  # pragma: no cover
+                current_row = [current_row]
+            for row in current_row:
+                mid = self.filename_table.item(row, fn_index).data(
+                    QtCore.Qt.UserRole)
+                current_ids.append(mid)
+
+        self.filename_table.blockSignals(True)
+        self.filename_table.setUpdatesEnabled(False)
+        self.filename_table.clearContents()
+
+        alignments = [QtCore.Qt.AlignCenter, QtCore.Qt.AlignCenter,
+                      QtCore.Qt.AlignCenter, QtCore.Qt.AlignLeft]
+        size_policies = [QtWidgets.QHeaderView.ResizeToContents,
+                         QtWidgets.QHeaderView.ResizeToContents,
+                         QtWidgets.QHeaderView.ResizeToContents,
+                         QtWidgets.QHeaderView.ResizeToContents]
+
+        self.filename_table.setColumnCount(len(table_labels))
+        self.filename_table.setHorizontalHeaderLabels(
+            [label.capitalize() for label in table_labels])
+        self.filename_table.verticalHeader().setSectionResizeMode(
+            QtWidgets.QHeaderView.ResizeToContents)
+        self.filename_table.setSelectionBehavior(
+            QtWidgets.QAbstractItemView.SelectRows)
+        self.filename_table.setSelectionMode(
+            QtWidgets.QAbstractItemView.ExtendedSelection)
+        self.filename_table.setHorizontalScrollMode(
+            QtWidgets.QAbstractItemView.ScrollPerPixel)
+
+        if self.all_panes_checkbox.isChecked():
+            panes = self.figure.panes
+        else:
+            try:
+                pane_index = int(self.pane_selector.currentText()) - 1
+                panes = [self.figure.panes[pane_index]]
+            except (ValueError, IndexError):  # pragma: no cover
+                panes = list()
+        cells = dict()
+        for pane_ in panes:
+            for model_id, model in pane_.models.items():
+                if model_id in cells:  # pragma: no cover
                     continue
-                if details['fields'][field]:
-                    item.setCheckState(QtCore.Qt.Checked)
+                marker = pane_.markers[model_id]
+                marker_item = QtWidgets.QTableWidgetItem(f'{marker}')
+
+                colors = pane_.colors[model_id]
+                color_item = ApertureColors(colors=colors)
+
+                name_item = QtWidgets.QTableWidgetItem(
+                    f'{os.path.basename(model.filename)}')
+                name_item.setData(QtCore.Qt.UserRole, model_id)
+                name_item.setToolTip(model.filename)
+
+                orders = model.num_orders
+                orders_item = QtWidgets.QTableWidgetItem(f'{orders:d}')
+
+                cells[model_id] = {'marker': marker_item,
+                                   'color': color_item,
+                                   'orders': orders_item,
+                                   'filename': name_item}
+        self.filename_table.setRowCount(len(cells))
+        for row, cell in enumerate(cells.values()):
+            for col, label in enumerate(table_labels):
+                item = cell[label.lower()]
+                if label == 'color':
+                    self.filename_table.setCellWidget(row, col, item)
                 else:
-                    item.setCheckState(QtCore.Qt.Unchecked)
-                self.order_list_widget.addItem(item)
+                    item.setTextAlignment(alignments[col])
+                    self.filename_table.setItem(row, col, item)
+
+        header = self.filename_table.horizontalHeader()
+        for i, policy in enumerate(size_policies):
+            header.setSectionResizeMode(i, policy)
+
+        for row in range(self.filename_table.rowCount()):
+            item = self.filename_table.item(row, fn_index)
+            if item.data(QtCore.Qt.UserRole) in current_ids:
+                self.filename_table.selectRow(row)
+
+        self.filename_table.setUpdatesEnabled(True)
+        self.filename_table.blockSignals(False)
+
+    def _parse_filename_table_selection(self) -> Tuple[List[IDT], List[int]]:
+        """
+        Obtain lists of models and pane indices from the filename table.
+
+        Returns
+        -------
+        models_ids, pane_index : list, list
+            List of selected Unique model ids; List of selected pane
+            indexes.
+        """
+        all_panes = self.all_panes_checkbox.isChecked()
+        all_filenames = self.all_filenames_checkbox.isChecked()
+        headers = [self.filename_table.horizontalHeaderItem(i).text().lower()
+                   for i in range(self.filename_table.columnCount())]
+        try:
+            fn_index = headers.index('filename')
+        except ValueError:
+            return list(), list()
+
+        if all_panes:
+            pane_index = list(range(self.figure.pane_count()))
+        else:
+            pane_choice = self.pane_selector.currentText()
+            try:
+                pane_index = [int(pane_choice) - 1]
+            except ValueError:
+                pane_index = [-1]
+
+        if self.filename_table.rowCount() == 0:
+            model_ids = list()
+        elif all_filenames:
+            model_ids = list()
+            for index in pane_index:
+                try:
+                    pane_ids = list(self.figure.panes[index].models.keys())
+                except IndexError:  # pragma: no cover
+                    continue
+                else:
+                    model_ids.extend(pane_ids)
+        else:
+            items = list()
+            selected_items = self.filename_table.selectedItems()
+            if len(selected_items) == 0:
+                items.append(self.filename_table.item(0, fn_index))
+            else:
+                for item in self.filename_table.selectedItems():
+                    items.append(
+                        self.filename_table.item(item.row(), fn_index))
+            model_ids = [item.data(QtCore.Qt.UserRole) for item in items]
+        model_ids = list(set(model_ids))
+
+        return model_ids, pane_index
+
+    def _update_filename_table_selection(self, all_: Optional[bool] = False,
+                                         rows: Optional[List[int]] = None):
+        self.filename_table.blockSignals(True)
+        self.filename_table.clearSelection()
+        if rows:
+            for row in rows:
+                self.filename_table.selectRow(row)
+        elif all_:
+            self.filename_table.selectAll()
+        self.filename_table.blockSignals(False)
+
+    def _update_order_selector(self):
+        """Update the order selection."""
+        model_ids, pane_index = self._parse_filename_table_selection()
+        self.on_orders_selector.blockSignals(True)
+        self.off_orders_selector.blockSignals(True)
+        self.on_orders_selector.clear()
+        self.off_orders_selector.clear()
+
+        if len(model_ids) > 0 and pane_index != -1:
+            ap_order_state = self._determine_ap_order_state(pane_index,
+                                                            model_ids)
+            self._populate_enabled_disabled_orders(pane_index, model_ids,
+                                                   ap_order_state)
+
+        self.on_orders_selector.blockSignals(False)
+        self.off_orders_selector.blockSignals(False)
+
+    def _determine_ap_order_state(self, pane_index, model_ids):
+        state = dict()
+
+        for model_id in model_ids:
+            n_ap, n_or = self.figure.ap_order_state(pane_index, model_id)
+            state[model_id] = {'aper': self._maximum(n_ap, model_id),
+                               'order': self._maximum(n_or, model_id)}
+        return state
+
+    @staticmethod
+    def _maximum(count: Dict, model_id: IDT) -> int:
+        maximum = max([p[model_id] if p[model_id] is not None else 0
+                       for p in count.values()])
+        return maximum
+
+    def _populate_enabled_disabled_orders(self, panes, model_ids,
+                                          ap_order_state):
+        """
+        Display enabled and disabled order values.
+
+        Parameters
+        ----------
+        panes : list of int
+            Index of panes for which orders are being considered.
+        model_ids : list of uuid.UUID
+            Unique IDs for the models being considered.
+        """
+        enabled = list()
+        disabled = list()
+
+        self.multi_order = any([ap_order_state[m]['order'] > 1
+                                for m in model_ids])
+        self.multi_aper = any([ap_order_state[m]['aper'] > 1
+                               for m in model_ids])
+        self._configure_order_selector_labels()
+        for p in panes:
+            for model_id in model_ids:
+                e, d = self._enabled_disabled_orders(p, model_id)
+                enabled.append(set(e))
+                disabled.append(set(d))
+        if len(enabled) == 0 and len(disabled) == 0:
+            return
+        enabled = [e for e in enabled if len(e) > 0]
+        if len(enabled) > 0:
+            enabled = sorted(list(set.intersection(*enabled)))
+        d_len = [len(d) for d in disabled if len(d) > 0]
+        if all([length == d_len[0] for length in d_len]):
+            disabled = [d for d in disabled if len(d) > 0]
+            if len(disabled) > 0:
+                disabled = sorted(list(set.intersection(*disabled)))
+        else:
+            disabled = list()
+        enabled_string = self.format_orders_pairs(enabled)
+        disabled_string = self.format_orders_pairs(disabled)
+        self.on_orders_selector.setText(enabled_string)
+        self.off_orders_selector.setText(disabled_string)
+
+    def _configure_order_selector_labels(self):
+        if self.multi_aper and not self.multi_order:
+            self.enabled_orders_label.setText('Enabled Apertures')
+            self.hidden_orders_label.setText('Hidden Apertures')
+        else:
+            self.enabled_orders_label.setText('Enabled Orders')
+            self.hidden_orders_label.setText('Hidden Orders')
+
+    def _enabled_disabled_orders(self, pane_index, model_id):
+        """
+        Obtain enabled and disabled orders.
+
+        Parameters
+        ----------
+        pane_index : int
+            Index of pane for which orders are being considered.
+        model_id : uuid.UUID
+            Unique id of the model being considered.
+
+        Returns
+        -------
+        enabled_orders : list
+            List of enabled orders.
+        disabled_orders : list
+            List of disabled orders.
+        """
+        if pane_index == -1:
+            return list(), list()
+        if self.multi_order:
+            kind = 'order'
+        elif self.multi_aper:
+            kind = 'aperture'
+        else:
+            kind = 'order'
+        if self.multi_aper:
+            if self.multi_order:
+                kind = 'order'
+                # kind = 'all'
+            else:
+                kind = 'aperture'
+        else:
+            kind = 'order'
+        args = {'target': pane_index, 'model_id': model_id,
+                'group_by_model': False, 'kind': kind}
+        enabled_orders = self.figure.get_orders(enabled_only=True, **args)
+        enabled_orders = enabled_orders[pane_index]
+        all_orders = self.figure.get_orders(enabled_only=False, **args)
+        all_orders = all_orders[pane_index]
+        disabled_orders = sorted(list(set(all_orders) - set(enabled_orders)))
+        return enabled_orders, disabled_orders
+
+    @staticmethod
+    def format_orders_pairs(orders):
+        """
+        Format a list of orders selection display.
+
+        Parameters
+        ----------
+        orders : list of int
+            Order list to format
+
+        Returns
+        -------
+        str
+            String representation summarizing the list of orders.
+        """
+        s = list()
+        # Change from zero-based indexing used by models to
+        # one-based indexing used by people
+        orders = [o + 1 for o in orders]
+        for groups in consecutive_groups(orders):
+            groups = list(groups)
+            if len(groups) == 1:
+                s.append(f'{groups[0]}')
+            else:
+                s.append(f'{groups[0]}-{groups[-1]}')
+        if s:
+            return ','.join(s)
+        else:
+            return '-'
+
+    def decode_orders(self, orders: str) -> Dict:
+        """
+        Parse the text from an order selector.
+
+        Parameters
+        ----------
+        orders : str
+            Comma-separated list of order ranges.  A '*' indicates all
+            orders; a '-' indicates none.
+
+        Returns
+        -------
+        dict
+            Keys are model_ids and values are lists of index numbers.
+        """
+        ind = dict()
+        model_ids, pane_index = self._parse_filename_table_selection()
+        if orders == '-':
+            return ind
+        elif orders == '*':
+            if pane_index is None:
+                return ind
+            for model_id in model_ids:
+                all_orders = self.figure.get_orders(pane_index,
+                                                    enabled_only=False,
+                                                    model_id=model_id,
+                                                    group_by_model=False,
+                                                    kind='all')
+                index = set()
+                for i in pane_index:
+                    index.update(all_orders[i])
+                index = sorted(list(index))
+                ind[model_id] = index
+            return ind
+        else:
+            index = list()
+            for section in orders.split(','):
+                if section.startswith('-') or '--' in section:
+                    log.info(f'Invalid order notation: {section}')
+                    continue
+                try:
+                    limits = [int(i) for i in section.split('-')]
+                except ValueError:
+                    log.info(f'Invalid order number: {section}')
+                    continue
+                if len(limits) == 2:
+                    index.extend(list(range(limits[0], limits[1] + 1)))
+                else:
+                    index.append(limits[0])
+            index.sort()
+            # Convert one-based indexing used by people to
+            # zero-based indexing used by models
+            index = [i - 1 for i in index]
+            ind = dict().fromkeys(model_ids, index)
+            return ind
 
     def add_order(self) -> None:
         """Add a new order."""
@@ -1298,20 +1856,27 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
     ####
     # Axis Controls
     ####
-
     def model_backup(self, models):
+        """
+        Obtain the backup model.
+
+        Parameters
+        ----------
+        models : high_model.HighModel
+            The model for which we want to obtain its backup copy.
+        """
         targets = self.selected_target_axis()
         self.figure.model_backup(models, target=targets)
 
     def update_controls(self) -> None:
-        """Update control widgets from loaded data."""
-        pane_ = self.figure.get_current_pane()
+        """Update control widgets in the Axis section from loaded data."""
+        panes = self.figure.get_current_pane()
         target = self.selected_target_axis()
-        self.setup_unit_selectors(pane_=pane_, target=target)
-        self.setup_property_selectors(pane_=pane_, target=target)
-        self.setup_axis_limits(pane_=pane_, target=target)
-        self.setup_initial_scales(pane_=pane_, target=target)
-        self.setup_overplot_flag(pane_=pane_, target=target)
+        self.setup_unit_selectors(panes=panes, target=target)
+        self.setup_property_selectors(panes=panes, target=target)
+        self.setup_axis_limits(panes=panes, target=target)
+        self.setup_initial_scales(panes=panes, target=target)
+        self.setup_overplot_flag(panes=panes)
 
     def set_field(self) -> None:
         """Set a new axis field from the control widget."""
@@ -1429,7 +1994,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         self.signals.axis_scale_changed.emit()
 
     def set_limits(self) -> None:
-        """Set axis limits from the widget contols."""
+        """Set axis limits from the widget controls."""
         self.signals.axis_limits_changed.emit()
 
     def set_scales(self, scales: Dict[str, str], panes: PaneID) -> None:
@@ -1445,6 +2010,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
             to apply only to the current pane, or a list of
         """
         self.figure.set_scales(scales, panes)
+        self.signals.atrophy_bg_partial.emit()
 
     def get_scales(self, panes: PaneID) -> List:
         """
@@ -1484,18 +2050,16 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
     # Mouse events
     ####
     def clear_guides(self) -> None:
-        """Clear all guide gallery."""
+        """Clear all guide artists."""
         targets = self.selected_target_axis()
-        self.figure.clear_lines(flags='a',
-                                all_panes=targets)
+        self.figure.clear_lines(flags='a', all_panes=targets)
         self.signals.atrophy.emit()
 
     def reset_zoom(self) -> None:
         """Reset axis limits to full range."""
         self.clear_selection()
-        # all_panes = self.all_axes_button.isChecked()
         targets = self.selected_target_axis()
-        self.figure.reset_zoom(targets)
+        self.figure.reset_zoom(targets=targets)
         self.signals.atrophy_bg_partial.emit()
         log.info('Zoom reset')
 
@@ -1505,7 +2069,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
 
         Parameters
         ----------
-        mode : ['x_zoom', 'y_zoom', 'b_zoom', 'fit']
+        mode : {'x_zoom', 'y_zoom', 'b_zoom', 'fit'}
             The mode to start.
         """
         self.clear_selection()
@@ -1531,10 +2095,9 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         self.clear_selection()
 
     def clear_fit(self) -> None:
-        """Clear fit overlay gallery."""
+        """Clear fit overlay artists."""
         targets = self.selected_target_axis()
-        self.figure.clear_lines(flags=['fit'],
-                                all_panes=targets)
+        self.figure.clear_lines(flags=['fit'], all_panes=targets)
         # update fit results table, so all fit 'show' boxes
         # are unchecked
         if self.fit_results:
@@ -1542,6 +2105,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         self.signals.atrophy.emit()
 
     def open_fits_results(self) -> None:
+        """View the fitting results."""
         if self.fit_results:
             if not self.fit_results.isVisible():
                 self.fit_results.show()
@@ -1576,6 +2140,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
             del self.cid[cid]
 
     def open_ref_data(self) -> None:
+        """View reference line data"""
         if self.reference_window is None:
             self.reference_window = reference_window.ReferenceWindow(self)
             self.reference_window.show()
@@ -1585,9 +2150,11 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         self.reference_window.raise_()
 
     def update_reference_lines(self) -> None:
+        """Update the reference data model."""
         self.figure.update_reference_lines(self.reference_models)
 
     def unload_reference_model(self) -> None:
+        """Unload the reference data model."""
         self.reference_models.unload_data()
         self.figure.unload_reference_model(self.reference_models)
 
@@ -1628,25 +2195,16 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
             self.collapse_file_choice_button.setToolTip(
                 'Hide file choice panel')
 
-    def toggle_pane_panel(self) -> None:
-        """Toggle pane panel visibility."""
-        if self.pane_panel.isVisible():
-            self.pane_panel.hide()
-            self.collapse_pane_button.setArrowType(QtCore.Qt.RightArrow)
-            self.collapse_pane_button.setToolTip('Show pane panel')
-        else:
-            self.pane_panel.show()
-            self.collapse_pane_button.setArrowType(QtCore.Qt.DownArrow)
-            self.collapse_pane_button.setToolTip('Hide pane panel')
-
     def toggle_order_panel(self) -> None:
         """Toggle order panel visibility."""
         if self.order_panel.isVisible():
             self.order_panel.hide()
+            self.pane_panel.hide()
             self.collapse_order_button.setArrowType(QtCore.Qt.RightArrow)
             self.collapse_order_button.setToolTip('Show order panel')
         else:
             self.order_panel.show()
+            self.pane_panel.show()
             self.collapse_order_button.setArrowType(QtCore.Qt.DownArrow)
             self.collapse_order_button.setToolTip('Hide order panel')
 
@@ -1684,11 +2242,50 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
             self.collapse_analysis_button.setToolTip('Hide analysis panel')
 
     def print_current_artists(self) -> None:
+        """Print current artists."""
         pass
 
     def _parse_fit_mode(self) -> str:
+        """
+        Obtain the fitting mode.
+
+        Returns
+        -------
+        str
+            The feature name and baseline.
+        """
         feature = str(self.feature_model_selection.currentText()).lower()
         baseline = str(self.background_model_selection.currentText()).lower()
         if feature == 'gaussian':
             feature = 'gauss'
         return f'fit_{feature}_{baseline}'
+
+
+class ApertureColors(QtWidgets.QWidget):
+    """Display aperture colors."""
+    def __init__(self, colors: List[str], parent=None):
+        super().__init__(parent)
+
+        layout = QtWidgets.QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        seen = list()
+        for color in colors:
+            if color in seen:
+                continue
+            else:
+                seen.append(color)
+
+            color_item = QtWidgets.QLabel()
+            color_item.setText('')
+            color_item.setStyleSheet(f"background-color: {color}")
+
+            layout.addWidget(color_item)
+
+        self.setLayout(layout)
+        # self.setVisible(False)
+
+    def setTextAlignment(self, *args, **kwargs):  # pragma: no cover
+        """Set text alignment."""
+        pass

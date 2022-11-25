@@ -177,6 +177,45 @@ class TestReduction(object):
         assert len(pset.keys()) == 1
         assert pset.get_value('test_key') == 'test_value'
 
+    def test_update_parameters(self):
+        reduction = Reduction()
+        ffile = 'test data'
+        reduction.load(ffile)
+        reduction.param_file = {'log_input': {'config_key': 'test_config'}}
+
+        # make a parameter class with an override method for log_input
+        # parameters
+        class TestParameters(Parameters):
+            def log_input(self, idx):
+                self.current[idx].set_value('test_key', 'test_value')
+        reduction.parameters = TestParameters()
+
+        # nothing happens if parameters not loaded
+        reduction.update_parameters()
+        pset = reduction.get_parameter_set()
+        assert len(pset.keys()) == 0
+
+        # load parameters
+        reduction.load_parameters()
+        pset = reduction.get_parameter_set()
+        assert isinstance(pset, ParameterSet)
+        assert len(pset.keys()) == 2
+        assert pset.get_value('test_key') == 'test_value'
+        assert pset.get_value('config_key') == 'test_config'
+
+        # edit parameters
+        pset.set_value('test_key', 'test_value_1')
+        pset.set_value('manual_key', 'test_value_2')
+        pset.set_value('config_key', 'test_value_3')
+
+        # if updated, manually set values are not overwritten,
+        # unless directly handled by method or config
+        reduction.update_parameters()
+        pset = reduction.get_parameter_set()
+        assert pset.get_value('test_key') == 'test_value'
+        assert pset.get_value('manual_key') == 'test_value_2'
+        assert pset.get_value('config_key') == 'test_config'
+
     def test_parameter_set(self):
         reduction = Reduction()
         reduction.load_parameters()

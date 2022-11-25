@@ -29,6 +29,8 @@ from sofia_redux.instruments.hawc import steps
 from sofia_redux.instruments.hawc.steps import basehawc
 assert basehawc
 
+__all__ = ['HAWCReduction']
+
 
 class HAWCReduction(Reduction):
     """

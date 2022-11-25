@@ -36,6 +36,8 @@ except ImportError:
 else:
     HAS_PYQT5 = True
 
+__all__ = ['ReduxMainWindow']
+
 
 class ReduxMainWindow(QtWidgets.QMainWindow, ui_main.Ui_MainWindow):
     """
@@ -1068,11 +1070,23 @@ class ReduxMainWindow(QtWidgets.QMainWindow, ui_main.Ui_MainWindow):
 
     def onResetConfiguration(self):
         """Reset configuration to default values."""
+        # confirm before destroying existing config
+        response = QtWidgets.QMessageBox.question(
+            self, 'Reset Configuration', 'Reset configuration settings?')
+        if response != QtWidgets.QMessageBox.Yes:
+            return
+
         self.onLoadConfiguration(default=True)
 
     def onResetParameters(self):
         """Reset all parameters to default values."""
         if self.interface.reduction is None:
+            return
+
+        # confirm before destroying existing parameters
+        response = QtWidgets.QMessageBox.question(
+            self, 'Reset Parameters', 'Reset all parameters?')
+        if response != QtWidgets.QMessageBox.Yes:
             return
 
         self.interface.load_parameters()

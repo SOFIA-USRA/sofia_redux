@@ -93,3 +93,10 @@ if not _ASTROPY_SETUP_:
             import FLITECAMSlitcorrParameters
     except ImportError:
         pass
+
+    try:
+        from sofia_redux.pipeline.sofia.exes_reduction import EXESReduction
+        from sofia_redux.pipeline.sofia.parameters.exes_parameters \
+            import EXESParameters
+    except ImportError:
+        pass

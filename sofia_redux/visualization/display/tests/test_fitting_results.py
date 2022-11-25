@@ -8,6 +8,7 @@ from astropy.units import Quantity
 from matplotlib import axes as mpa
 import numpy as np
 
+from sofia_redux.visualization.display import drawing
 from sofia_redux.visualization.display.fitting_results import FittingResults
 from sofia_redux.visualization.utils.model_fit import ModelFit
 
@@ -107,11 +108,12 @@ class TestFittingResults(object):
         fr.add_results(gauss_model_fit)
         assert fr.model_fits[0] == gauss_model_fit
         assert fr.table_widget.rowCount() == 1
-        assert fr.table_widget.columnCount() == 10
+        assert fr.table_widget.columnCount() == 12
 
         # check cell contents
-        columns = ['Show', 'Order', 'X Field', 'Y Field', 'Mid Point',
-                   'FWHM', 'Amplitude', 'Baseline', 'Slope', 'Type']
+        columns = ['Show', 'Order', 'Aperture', 'X Field', 'Y Field',
+                   'Mid Point', 'Mid Point Column', 'FWHM', 'Amplitude',
+                   'Baseline', 'Slope', 'Type']
         table_cols = [fr.table_widget.horizontalHeaderItem(j).text()
                       for j in range(fr.table_widget.columnCount())]
         assert set(table_cols) == set(columns)
@@ -136,13 +138,14 @@ class TestFittingResults(object):
                       f'[{gauss_model_fit.get_units("x")}]',
                       f'{gauss_model_fit.get_fields("y")} '
                       f'[{gauss_model_fit.get_units("y")}]',
-                      f'{fit.mean_0.value:.5g}',
-                      f'{fit.amplitude_0.value:.5g}',
-                      f'{gauss_model_fit.get_baseline():.5g}',
-                      f'{gauss_model_fit.get_fwhm():.5g}',
-                      f'{gauss_model_fit.get_mid_point():.5g}',
+                      f'{fit.mean_0.value:.10g}',
+                      f'{fit.amplitude_0.value:.10g}',
+                      f'{gauss_model_fit.get_baseline():.10g}',
+                      f'{gauss_model_fit.get_fwhm():.10g}',
+                      f'{gauss_model_fit.get_mid_point():.10g}',
+                      f'{gauss_model_fit.get_mid_point_column():.10g}',
                       'gauss, linear',
-                      f'{fit.slope_1.value:.5g}',
+                      f'{fit.slope_1.value:.10g}',
                       ]
             table_values = row_values(i)
             assert set(table_values) == set(values)
@@ -197,7 +200,7 @@ class TestFittingResults(object):
         fr = FittingResults(empty_view)
         fr.add_results(gauss_model_fit)
         fr.add_results(moffat_model_fit)
-        num_columns = 15
+        num_columns = 17
 
         # test canceled dialog - no error
         mocker.patch.object(PyQt5.QtWidgets.QFileDialog,
@@ -333,8 +336,19 @@ class TestFittingResults(object):
         # failed fits are reported, data is plotted
         gauss_model_fit.status = 'bad'
         fr._update_figure([gauss_model_fit])
-        assert 'Bad' in fr.last_fit_values.toPlainText()
+        last_text = fr.last_fit_values.toPlainText()
+        assert 'Bad' in last_text
         assert len(fr.ax.lines) == 1
+
+        # None or 0 fits are ignored - no change to last status
+        gauss_model_fit.status = 'good'
+        fr._update_figure(None)
+        assert fr.last_fit_values.toPlainText() == last_text
+        assert len(fr.ax.lines) == 0
+
+        fr._update_figure([])
+        assert fr.last_fit_values.toPlainText() == last_text
+        assert len(fr.ax.lines) == 0
 
     def test_gather_models(self, empty_view, gauss_model_fit):
         fr = FittingResults(empty_view)
@@ -345,3 +359,31 @@ class TestFittingResults(object):
         # add a model
         fr.add_results([gauss_model_fit])
         assert fr.gather_models() == [gauss_model_fit]
+
+    def test_update_colors(self, empty_view, gauss_model_fit):
+        fr = FittingResults(empty_view)
+        fr.add_results([gauss_model_fit])
+        fr.model_fits[0].color = 'red'
+
+        # no update
+        updates = {}
+        fr.update_colors(updates)
+        assert fr.model_fits[0].color == 'red'
+
+        # matching update
+        args = {'high_model': gauss_model_fit.filename, 'mid_model': '1.0',
+                'model_id': gauss_model_fit.model_id}
+        line = drawing.Drawing(kind='line', axes='primary',
+                               updates={'color': 'black'}, **args)
+        updates = {0: [line]}
+        fr.update_colors(updates)
+        assert fr.model_fits[0].color == 'black'
+
+        # no matching update
+        args = {'high_model': gauss_model_fit.filename, 'mid_model': '2.1',
+                'model_id': gauss_model_fit.model_id}
+        line = drawing.Drawing(kind='line', axes='primary',
+                               updates={'color': 'blue'}, **args)
+        updates = {0: [line]}
+        fr.update_colors(updates)
+        assert fr.model_fits[0].color == 'black'

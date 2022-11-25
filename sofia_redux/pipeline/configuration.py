@@ -8,6 +8,8 @@ from configobj import ConfigObj, ParseError
 
 from sofia_redux.pipeline.chooser import Chooser
 
+__all__ = ['Configuration']
+
 
 class Configuration(object):
     """

@@ -5,6 +5,8 @@ from sofia_redux.pipeline.sofia.parameters.flitecam_parameters import DEFAULT
 from sofia_redux.pipeline.sofia.parameters.flitecam_spectroscopy_parameters \
     import FLITECAMSpectroscopyParameters, SPECTRAL_DEFAULT
 
+__all__ = ['FLITECAMWavecalParameters']
+
 
 WAVECAL_DEFAULT = {
     'make_profiles': [

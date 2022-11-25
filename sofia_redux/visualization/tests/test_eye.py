@@ -1,6 +1,8 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 import logging
+
+from astropy import log
 import pytest
 import numpy.testing as npt
 import matplotlib.backend_bases as bb
@@ -8,6 +10,8 @@ import matplotlib.backend_bases as bb
 from sofia_redux.visualization import eye
 from sofia_redux.visualization.display import (view, pane, fitting_results,
                                                cursor_location)
+from sofia_redux.visualization.models import model
+
 PyQt5 = pytest.importorskip('PyQt5')
 
 
@@ -15,10 +19,16 @@ class TestEye(object):
 
     def test_init(self, empty_view, mocker, capsys, log_args):
         mocker.patch.object(view, 'View', return_value=empty_view)
-        eye.Eye(log_args)
+        eye_app = eye.Eye(log_args)
         log_ = capsys.readouterr().out
         assert 'Applying command line' in log_
         assert 'Setup Eye' in log_
+
+        # try to setup with bad log level - nothing should happen
+        assert log.handlers[0].level == 0
+        eye_app.log_level = 'BAD'
+        eye_app._setup_log_terminal()
+        assert log.handlers[0].level == 0
 
     def test_open_eye(self, mocker, qapp, log_args, capsys):
         opening = mocker.patch.object(view.View, 'open_eye',
@@ -51,54 +61,90 @@ class TestEye(object):
 
         app = eye.Eye()
 
-        assert app.view.file_table_widget.rowCount() == 0
+        assert app.view.loaded_files_table.rowCount() == 0
+
         qtbot.mouseClick(app.view.add_file_button, PyQt5.QtCore.Qt.LeftButton)
         app.view.refresh_controls()
         assert window.called_once()
 
-        assert app.view.file_table_widget.rowCount() == len(spectral_filenames)
+        assert (app.view.loaded_files_table.rowCount()
+                == len(spectral_filenames))
 
-        assert app.view.pane_tree_display.topLevelItemCount() == 0
         assert not app.view.figure.populated()
-        app.view.file_table_widget.selectRow(0)
-        mocker.patch.object(app.view.file_table_widget, 'hasFocus',
+        app.view.loaded_files_table.selectRow(0)
+        mocker.patch.object(app.view.loaded_files_table, 'hasFocus',
                             return_value=True)
-        qtbot.keyClick(app.view.file_table_widget,
+        qtbot.keyClick(app.view.loaded_files_table,
                        PyQt5.QtCore.Qt.Key_Return)
 
         app.view.refresh_controls()
         assert app.view.figure.populated()
-        assert app.view.pane_tree_display.topLevelItemCount() == 1
-        assert app.view.order_list_widget.count() == 1
+
+        # assert app.view.order_list_widget.count() == 1
 
         # Add pane
         with qtbot.wait_signal(app.signals.current_pane_changed):
             qtbot.mouseClick(app.view.add_pane_button,
                              PyQt5.QtCore.Qt.LeftButton)
 
-        count = app.view.pane_tree_display.topLevelItemCount()
+        app.view.refresh_controls()
+        qtbot.wait(1000)
+        count = app.view.pane_selector.count()
         assert app.view.figure.pane_count() == 2
         assert count == 2
+
         assert all([isinstance(p, pane.OneDimPane)
                     for p in app.view.figure.panes])
         assert len(app.view.figure.panes[0].models) == 1
         assert len(app.view.figure.panes[-1].models) == 0
 
         # Remove pane
-        root = app.view.pane_tree_display.invisibleRootItem()
-        item = root.child(count - 1)
-        app.view.pane_tree_display.setCurrentItem(item)
+        # root = app.view.pane_tree_display.invisibleRootItem()
+        # item = root.child(count - 1)
+        # app.view.pane_tree_display.setCurrentItem(item)
+        app.view.pane_selector.setCurrentIndex(count - 1)
 
-        with qtbot.wait_signal(app.signals.atrophy_bg_full):
+        with qtbot.wait_signal(app.signals.atrophy_bg_partial):
             qtbot.mouseClick(app.view.remove_pane_button,
                              PyQt5.QtCore.Qt.LeftButton)
         app.view.refresh_controls()
-        count = app.view.pane_tree_display.topLevelItemCount()
+        count = app.view.pane_selector.count()
         assert app.view.figure.pane_count() == 1
         assert count == 1
         assert len(app.view.figure.panes[0].models) == 1
 
+    def test_add_model_missing(self, mocker, qtbot, qapp,
+                               spectral_filenames, caplog):
+        mocker.patch.object(PyQt5.QtWidgets.QMainWindow, 'show',
+                            return_value=None)
+        mocker.patch.object(PyQt5.QtWidgets, 'QApplication',
+                            return_value=qapp)
+
+        app = eye.Eye()
+        assert app.view.loaded_files_table.rowCount() == 0
+
+        result = app._add_model(filename='bad')
+        assert caplog.text.count('No such file') == 1
+        assert result is None
+
+        result = app._add_model(filename='bad', return_filename=True)
+        assert caplog.text.count('No such file') == 2
+        assert result == (None, '')
+
+        # pass a file that exists but raises a not found error later
+        mocker.patch.object(model.Model, 'add_model',
+                            side_effect=FileNotFoundError('bad'))
+        result = app._add_model(filename=spectral_filenames[0],
+                                return_filename=True)
+        assert caplog.text.count('No such file') == 3
+        assert result == (None, spectral_filenames[0])
+
+        assert app.view.loaded_files_table.rowCount() == 0
+
     def test_change_scales(self, loaded_eye, qtbot):
+        loaded_eye.view.x_limit_min.setText('1')
+        # loaded_eye.view.set_limits()
+
         assert not loaded_eye.view.x_scale_log_button.isChecked()
         assert loaded_eye.view.x_scale_linear_button.isChecked()
         with qtbot.wait_signals([loaded_eye.signals.atrophy_bg_partial,
@@ -133,7 +179,8 @@ class TestEye(object):
         with qtbot.wait_signal(loaded_eye.view.signals.atrophy_bg_partial):
             qtbot.mouseClick(loaded_eye.view.enable_overplot_checkbox,
                              PyQt5.QtCore.Qt.LeftButton)
-        loaded_eye.view.axes_selector.setCurrentText('Current Overplot')
+        loaded_eye.view.axes_selector.setCurrentText('Overplot')
+        assert not loaded_eye.view.y_scale_log_button.isChecked()
         with qtbot.wait_signals([loaded_eye.signals.atrophy_bg_partial,
                                  loaded_eye.signals.axis_scale_changed],
                                 order='none'):
@@ -145,9 +192,10 @@ class TestEye(object):
                     for p in loaded_eye.view.figure.panes])
 
     def test_change_fields(self, loaded_eye, qtbot):
-        selectors = {'x': [loaded_eye.view.x_property_selector, 'wavepos'],
+        selectors = {'x': [loaded_eye.view.x_property_selector,
+                           'Wavelength'],
                      'y': [loaded_eye.view.y_property_selector,
-                           'spectral_flux']}
+                           'Spectral Flux']}
         for axis, prop_selector in selectors.items():
             selector = prop_selector[0]
             assert selector.currentText() == prop_selector[1]
@@ -156,18 +204,20 @@ class TestEye(object):
             selector.setCurrentIndex(last_index)
             loaded_eye.signals.axis_field_changed.emit()
             qtbot.wait(1000)
-            assert all([p.get_field(axis) == last_field
-                        for p in loaded_eye.view.figure.panes])
+            current_fields = [p.get_field(axis).replace('_', ' ').title()
+                              for p in loaded_eye.view.figure.panes]
+            assert all([f == last_field for f in current_fields])
 
     def test_change_fields_with_alt(self, loaded_eye, qtbot):
         with qtbot.wait_signal(loaded_eye.view.signals.atrophy_bg_partial):
             qtbot.mouseClick(loaded_eye.view.enable_overplot_checkbox,
                              PyQt5.QtCore.Qt.LeftButton)
-        loaded_eye.view.axes_selector.setCurrentText('Current Overplot')
+        loaded_eye.view.axes_selector.setCurrentText('Overplot')
 
-        selectors = {'x': [loaded_eye.view.x_property_selector, 'wavepos'],
+        selectors = {'x': [loaded_eye.view.x_property_selector,
+                           'Wavelength'],
                      'y_alt': [loaded_eye.view.y_property_selector,
-                               'transmission']}
+                               'Transmission']}
         for axis, prop_selector in selectors.items():
             selector = prop_selector[0]
             assert selector.currentText() == prop_selector[1]
@@ -176,8 +226,9 @@ class TestEye(object):
             selector.setCurrentIndex(last_index)
             loaded_eye.signals.axis_field_changed.emit()
             qtbot.wait(1000)
-            assert all([p.get_field(axis) == last_field
-                        for p in loaded_eye.view.figure.panes])
+            current_fields = [p.get_field(axis).replace('_', ' ').title()
+                              for p in loaded_eye.view.figure.panes]
+            assert all([f == last_field for f in current_fields])
 
     def test_change_units(self, mocker, qtbot, qapp, spectral_filenames,
                           caplog):
@@ -192,10 +243,10 @@ class TestEye(object):
         app = eye.Eye()
         qtbot.mouseClick(app.view.add_file_button, PyQt5.QtCore.Qt.LeftButton)
         app.view.refresh_controls()
-        app.view.file_table_widget.selectRow(0)
-        mocker.patch.object(app.view.file_table_widget, 'hasFocus',
+        app.view.loaded_files_table.selectRow(0)
+        mocker.patch.object(app.view.loaded_files_table, 'hasFocus',
                             return_value=True)
-        qtbot.keyClick(app.view.file_table_widget,
+        qtbot.keyClick(app.view.loaded_files_table,
                        PyQt5.QtCore.Qt.Key_Return)
         app.view.refresh_controls()
 
@@ -223,7 +274,6 @@ class TestEye(object):
             selector.setCurrentIndex(last_index)
             loaded_eye.signals.axis_unit_changed.emit()
             qtbot.wait(1000)
-            print(last_field)
             assert all([p.get_unit(axis) == last_field
                         for p in loaded_eye.view.figure.panes])
 
@@ -463,6 +513,7 @@ class TestEye(object):
         qtbot.mouseClick(loaded_eye.view.cursor_checkbox,
                          PyQt5.QtCore.Qt.LeftButton)
         qtbot.wait(1000)
+        assert loaded_eye.view.cursor_checkbox.isChecked()
         cids = ['cursor_loc', 'cursor_axis_leave']
         for cid in cids:
             assert cid in loaded_eye.view.cid.keys()
@@ -667,3 +718,26 @@ class TestEye(object):
         assert loaded_eye.view.fit_results is not None
         assert show_mock.call_count == 2
         assert vis_mock.call_count == 1
+
+    def test_display_selected_model(self, loaded_eye, qtbot, mocker):
+        m1 = mocker.patch.object(loaded_eye.view, 'display_model')
+
+        # no ids selected - just returns
+        loaded_eye.display_selected_model()
+        assert m1.call_count == 0
+
+        # display all loaded
+        ids = list(loaded_eye.models.keys())
+        mocker.patch.object(loaded_eye.view, 'current_files_selected',
+                            return_value=ids)
+        with qtbot.wait_signal(loaded_eye.view.signals.atrophy):
+            loaded_eye.display_selected_model()
+        assert m1.call_count == len(ids)
+
+        # bad selection
+        mocker.patch.object(loaded_eye.view, 'current_files_selected',
+                            return_value=['bad'])
+        with pytest.raises(RuntimeError) as err:
+            loaded_eye.display_selected_model()
+        assert 'Cannot locate model' in str(err)
+        assert m1.call_count == len(ids)

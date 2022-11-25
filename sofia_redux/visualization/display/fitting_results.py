@@ -13,7 +13,7 @@ import numpy as np
 from sofia_redux.visualization.utils import unit_conversion as uc
 from sofia_redux.visualization.utils import model_fit
 from sofia_redux.visualization import log
-from sofia_redux.visualization.display import pane
+from sofia_redux.visualization.display import pane, drawing
 
 try:
     matplotlib.use('QT5Agg')
@@ -41,6 +41,7 @@ __all__ = ['FittingResults']
 Axes = TypeVar('Axes', ma.Axes, None)
 PT = TypeVar('PT', bound=pane.Pane)
 UT = TypeVar('UT', u.Quantity, u.Unit)
+DT = TypeVar('DT', bound=drawing.Drawing)
 
 
 class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
@@ -66,12 +67,14 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
         Custom signals to pass events to the controller, as needed.
     table_header : list
         Column titles for table.
-    canvas :
-        Matplotlib canvas for the plot of the most recent fit.
+    canvas : matplotlib.matplotlib.backends.backend_agg.FigureCanvasAgg
+        Matplotlib canvas for the most recent fit.
     fig : matplotlib.figure.Figure
-        Figure to plot the most recent fit
+        Matplotlib figure for the most recent fit.
     ax : matplotlib.axes.Axes
-        Axes for the most recent fit
+        Matplotlib axes for the most recent fit.
+    fit_color : str
+        Color for the most recent fit plot.
 
     """
 
@@ -111,11 +114,8 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
 
         Parameters
         ----------
-        fit_params : dict
-            Primary keys are model IDs, values are dictionaries
-            with order keys.  Values for each order are also dictionaries,
-            with keys 'fit', 'x_field', 'y_field', 'x_unit',
-            'y_unit', 'lower_limit', 'upper_limit', and 'baseline'.
+        fit_params : list of ModelFit
+            Updated fit parameters.
 ]        """
         if not isinstance(fit_params, list):
             fit_params = [fit_params]
@@ -126,7 +126,7 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
         self._update_figure(fit_params)
 
     def _update_table(self):
-        """Reset the contents of the table to reflect all loaded fits"""
+        """Reset the contents of the table to reflect all loaded fits."""
         self.table_widget.clearContents()
         self._define_table()
         for row_index, model in enumerate(self.model_fits):
@@ -136,10 +136,10 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
             self.table_widget.setCellWidget(row_index, 0, checkbox)
 
             details = model.parameters_as_string()
-            model_id = details['model_id']
-            vhead = QTableWidgetItem(os.path.basename(model_id))
+            filename = details['filename']
+            vhead = QTableWidgetItem(os.path.basename(filename))
             vhead.setTextAlignment(QtCore.Qt.AlignLeft)
-            vhead.setToolTip(model_id)
+            vhead.setToolTip(filename)
             self.table_widget.setVerticalHeaderItem(row_index, vhead)
 
             for col_index, col_name in enumerate(self.table_header[1:]):
@@ -166,10 +166,14 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
         # don't redefine column count, set row count to number
         # of parameter items (filenames/orders within the
         # self.parameters list of dicts)
-        columns = {'generic': ['show', 'order', 'x_field', 'y_field', 'type'],
-                   'gauss': ['mid_point', 'fwhm', 'amplitude'],
-                   'moffat': ['mid_point', 'fwhm', 'amplitude'],
-                   'linear': ['mid_point', 'baseline', 'slope'],
+        columns = {'generic': ['show', 'order', 'aperture',
+                               'x_field', 'y_field', 'type'],
+                   'gauss': ['mid_point', 'mid_point_column',
+                             'fwhm', 'amplitude'],
+                   'moffat': ['mid_point', 'mid_point_column',
+                              'fwhm', 'amplitude'],
+                   'linear': ['mid_point', 'mid_point_column',
+                              'baseline', 'slope'],
                    'constant': ['baseline']}
         fit_types = set()
         for fit in self.model_fits:
@@ -186,7 +190,19 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
 
     @staticmethod
     def _labelize(value: str) -> str:
-        """Format a keyword to appropriate style for display."""
+        """
+        Format a keyword to appropriate style for display.
+
+        Parameters
+        ----------
+        value : str
+            String to be formatted.
+
+        Returns
+        ----------
+        value : str
+            Formatted string.
+        """
         if value == 'fwhm':
             value = 'FWHM'
         else:
@@ -194,25 +210,29 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
         return value
 
     def _clear_figure(self):
-        """Remove all information from the last fit"""
+        """Clear the last fit plot and description."""
         self.ax.clear()
         self.canvas.draw_idle()
         self.last_fit_values.setText('')
 
-    def _update_figure(self, fits: List[model_fit.ModelFit]):
+    def _update_figure(self, fits: Optional[List[model_fit.ModelFit]] = None):
         """
-        Plot a model fit on the last fit plot
+        Plot the last model fit.
 
         Parameters
         ----------
-        fit : list of model_fit.ModelFit
-            The fits to plot
-
+        fits : list of model_fit.ModelFit, optional
+            The fits to plot. If not provided, the plot is updated from
+            the current model fits.
         """
         # clear old lines
         self.ax.clear()
 
-        html = []
+        html = list()
+        if fits is None:
+            fits = self.model_fits
+        if len(fits) == 0:
+            return
         for fit in fits:
             status = fit.get_status()
 
@@ -224,7 +244,7 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
             dataset = fit.get_dataset()
             if all([v is not None for v in dataset.values()]):
                 self.ax.step(dataset['x'], dataset['y'], where='mid',
-                             color=self.fit_color, alpha=0.9)
+                             color=fit.get_color(), alpha=0.9)
 
             # If the fit was successful, plot the fit
             if status == 'pass':
@@ -244,8 +264,8 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
         self.last_fit_values.setHtml('<br>'.join(html))
 
         # Configure the plot
-        self.ax.set_xlabel(fit.get_fields('x'))
-        self.ax.set_ylabel(fit.get_fields('y'))
+        self.ax.set_xlabel(fits[0].get_fields('x'))
+        self.ax.set_ylabel(fits[0].get_fields('y'))
         self.ax.set_title('Last Fit Feature')
         self.canvas.draw_idle()
 
@@ -280,7 +300,14 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
             return flat_params
 
     def gather_models(self) -> List[model_fit.ModelFit]:
-        """Return all loaded models with updated visibility"""
+        """
+        Return all loaded models with updated visibility.
+
+        Returns
+        -------
+        model_fits : list
+            Feature fit parameters to display in the widget.
+        """
         for row_index in range(self.table_widget.rowCount()):
             checkbox = self.table_widget.cellWidget(row_index, 0)
             try:
@@ -319,7 +346,7 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
             Output file path.
         """
         header = list(parameters[0].keys())
-        to_remove = ['axis', 'visible']
+        to_remove = ['axis', 'visible', 'model_id']
         for key in to_remove:
             try:
                 header.remove(key)
@@ -346,7 +373,7 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
 
         Parameters
         ----------
-        kind : 'string', 'dict', 'list', 'html'
+        kind : {'string', 'dict', 'list', 'html'}
             Specify the desired structure for the parameters
             to be returned as. String formats all values for
             proper display in the table. Dict compiles
@@ -387,7 +414,7 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
         The 'axes' parameter of each model fit loaded in model_fits is
         compared to the 'axes' of each Pane in `panes` to verify the
         model should be updated. The fit along with the current and
-        desired units are passed to ``uc.convert_model_fit`` to perform
+        desired units are passed to `uc.convert_model_fit` to perform
         the actual conversion. If the conversion fails (more common with
         changing flux units) then the model fit is left unchanged, but is
         hidden so it will not affect the autoscaling of the new Pane.
@@ -457,7 +484,7 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
 
     @staticmethod
     def hide_fit(fit: model_fit.ModelFit) -> None:
-        """Set the fit's visibility to False"""
+        """Set the fit visibility to False."""
         fit.set_visibility(False)
 
     def hide_all_fits(self) -> None:
@@ -465,3 +492,26 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
         for fit in self.model_fits:
             fit.set_visibility(False)
         self._update_table()
+
+    def update_colors(self, updates):
+        """
+        Update plot colors.
+
+        Parameters
+        ----------
+        updates : dict
+           Color updates to apply. Must include 'line' kind,
+           matching model ID and mid-model id, for the 'color'
+           update to be applied.
+
+        """
+        for pane_, update in updates.items():
+            for up in update:
+                if up.kind == 'line':
+                    for fit in self.model_fits:
+                        mid_model = f'{fit.order}.{fit.aperture}'
+                        checks = [fit.model_id == up.model_id,
+                                  mid_model == up.mid_model]
+                        if all(checks):
+                            fit.color = up.updates['color']
+        self._update_figure()

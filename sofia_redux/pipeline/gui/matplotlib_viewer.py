@@ -6,6 +6,7 @@ import warnings
 from astropy import log
 from matplotlib.cm import get_cmap
 from matplotlib.figure import Figure
+import matplotlib.style as mplstyle
 import numpy as np
 
 from sofia_redux.pipeline.viewer import Viewer
@@ -26,6 +27,8 @@ except ImportError:
             pass
 else:
     HAS_PYQT5 = True
+
+__all__ = ['MatplotlibPlot', 'MatplotlibViewer']
 
 
 class MatplotlibPlot(QtWidgets.QDialog):
@@ -56,6 +59,9 @@ class MatplotlibPlot(QtWidgets.QDialog):
         self.setLayout(layout)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+
+        # set fast style
+        mplstyle.use('fast')
 
         # Matplotlib figure
         self.figure = Figure((self.min_width, self.min_height),
@@ -175,6 +181,10 @@ class MatplotlibPlot(QtWidgets.QDialog):
                     n = 20
                 color = cmap(np.linspace(0, 1, n))
                 ax.set_prop_cycle('color', color)
+            if 'title' in kwargs and 'titlesize' in kwargs:
+                title = kwargs.pop('title')
+                titlesize = kwargs.pop('titlesize')
+                ax.set_title(title, fontsize=titlesize)
 
             # plot data as specified
             ax.plot(*dataset['args'], **dataset['plot_kwargs'])
@@ -275,6 +285,7 @@ class MatplotlibViewer(Viewer):
 
         self.plotter.plot(self.display_data)
         self.plotter.show()
+        self.plotter.raise_()
 
     def close(self):
         """Close the viewer."""

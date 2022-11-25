@@ -84,11 +84,120 @@ Usage
 Reference/API
 =============
 
-.. automodapi:: sofia_redux.pipeline
-   :headings: -~^
-.. automodapi:: sofia_redux.pipeline.gui
-   :headings: -~^
-.. automodapi:: sofia_redux.pipeline.gui.qad
-   :headings: -~^
-.. automodapi:: sofia_redux.pipeline.sofia
-   :headings: -~^
+Redux Core
+----------
+.. automodapi:: sofia_redux.pipeline.application
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.chooser
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.configuration
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.interface
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.parameters
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.pipe
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.reduction
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.viewer
+   :headings: ~^
+
+Redux GUI
+---------
+.. automodapi:: sofia_redux.pipeline.gui.main
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.gui.matplotlib_viewer
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.gui.qad_viewer
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.gui.textview
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.gui.widgets
+   :headings: ~^
+
+QAD Viewer
+----------
+.. automodapi:: sofia_redux.pipeline.gui.qad.qad_app
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.gui.qad.qad_dialogs
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.gui.qad.qad_headview
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.gui.qad.qad_imview
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.gui.qad.qad_main_panel
+   :headings: ~^
+
+SOFIA Redux
+-----------
+.. automodapi:: sofia_redux.pipeline.sofia.sofia_app
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.sofia_chooser
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.sofia_configuration
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.sofia_pipe
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.sofia_utilities
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.exes_reduction
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.fifils_reduction
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.flitecam_imaging_reduction
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.flitecam_reduction
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.flitecam_slitcorr_reduction
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.flitecam_spatcal_reduction
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.flitecam_spectroscopy_reduction
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.flitecam_wavecal_reduction
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.forcast_imaging_reduction
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.forcast_reduction
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.forcast_slitcorr_reduction
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.forcast_spatcal_reduction
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.forcast_spectroscopy_reduction
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.forcast_wavecal_reduction
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.hawc_reduction
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.parameters.exes_parameters
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.parameters.fifils_parameters
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.parameters.flitecam_imaging_parameters
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.parameters.flitecam_parameters
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.parameters.flitecam_slitcorr_parameters
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.parameters.flitecam_spatcal_parameters
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.parameters.flitecam_spectroscopy_parameters
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.parameters.flitecam_wavecal_parameters
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.parameters.forcast_parameters
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.parameters.forcast_slitcorr_parameters
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.parameters.forcast_spatcal_parameters
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.parameters.forcast_spectroscopy_parameters
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.parameters.forcast_wavecal_parameters
+   :headings: ~^
+.. automodapi:: sofia_redux.pipeline.sofia.parameters.hawc_parameters
+   :headings: ~^

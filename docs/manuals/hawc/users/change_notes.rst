@@ -9,8 +9,8 @@ for more information.
 For previously processed data, check the PIPEVERS keyword in the FITS
 header to determine the pipeline version used.
 
-HAWC DRP v3.1.0
-~~~~~~~~~~~~~~~
+HAWC DRP v3.1.0 (2022-09-12)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. K*
 
 - Added a 'grid' parameter for the scan map steps to allow easy spatial

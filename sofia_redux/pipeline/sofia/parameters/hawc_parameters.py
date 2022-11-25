@@ -4,6 +4,8 @@
 from sofia_redux.instruments.hawc.datafits import DataFits
 from sofia_redux.pipeline.parameters import Parameters
 
+__all__ = ['HAWCParameters']
+
 
 # these step lists override the config in the hawc pipeline config,
 # in order to call special redux-defined super steps

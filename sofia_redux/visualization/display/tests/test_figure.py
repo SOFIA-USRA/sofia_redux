@@ -29,8 +29,9 @@ class TestFigure(object):
                          '_cursor_pane': None}
         correct_types = {'fig': mpf.Figure, 'gallery': gallery.Gallery,
                          'blitter': blitting.BlitManager, 'panes': list,
-                         '_cursor_locations': list, '_fit_params': list}
-        correct_values = {'_current_pane': 0, 'layout': 'grid',
+                         '_cursor_locations': list, '_fit_params': list,
+                         '_current_pane': list}
+        correct_values = {'layout': 'grid',
                           'color_cycle': 'Accessible', 'plot_type': 'Step'}
 
         obj = figure.Figure(figure_widget=fig_widget, signals=sigs)
@@ -81,12 +82,16 @@ class TestFigure(object):
         value = blank_figure.populated()
         assert value
 
-    def test_current_pane_setting(self, blank_figure, qtbot):
+    def test_current_pane_setting(self, blank_figure, qtbot, mocker):
         value = 5
         with qtbot.wait_signal(blank_figure.signals.current_pane_changed):
             blank_figure.current_pane = value
+        assert blank_figure.current_pane == list()
 
-        assert blank_figure.current_pane == value
+        mocker.patch.object(blank_figure, 'valid_pane', return_value=True)
+        with qtbot.wait_signal(blank_figure.signals.current_pane_changed):
+            blank_figure.current_pane = value
+        assert blank_figure.current_pane == [value]
 
     def test_pane_count(self, blank_figure):
         length = 4
@@ -154,13 +159,13 @@ class TestFigure(object):
 
         blank_figure.reset_artists()
 
-        assert 'Error encountered while creating gallery' in caplog.text
+        assert 'Error encountered while creating artists' in caplog.text
 
     def test_add_pane_artists(self, blank_figure, mocker):
         sigs = signals.Signals()
         add_mock = mocker.patch.object(gallery.Gallery, 'add_patches')
         blank_figure.panes = [pane.OneDimPane(sigs)]
-        blank_figure._current_pane = None
+        blank_figure._current_pane = list()
         expected = {'pane_0': {'kind': 'border',
                                'artist': None,
                                'visible': True}}
@@ -170,27 +175,70 @@ class TestFigure(object):
         blank_figure._add_pane_artists()
         assert add_mock.called_with(expected)
 
+        # test show, None current: visible
+        blank_figure._current_pane = None
+        blank_figure._add_pane_artists()
+        assert add_mock.called_with(expected)
+
         # test show, current matches: visible
-        blank_figure._current_pane = 0
+        blank_figure._current_pane = [0]
         blank_figure._add_pane_artists()
         assert add_mock.called_with(expected)
 
         # test show, current does not match: not visible
         expected['pane_0']['visible'] = False
-        blank_figure._current_pane = 1
+        blank_figure._current_pane = [1]
         blank_figure._add_pane_artists()
         assert add_mock.called_with(expected)
 
         # test no show, current does match: not visible
         blank_figure.highlight_pane = False
-        blank_figure._current_pane = 0
+        blank_figure._current_pane = [0]
         blank_figure._add_pane_artists()
         assert add_mock.called_with(expected)
 
         # test no show, current does not match: not visible
-        blank_figure._current_pane = 1
+        blank_figure._current_pane = [1]
         blank_figure._add_pane_artists()
         assert add_mock.called_with(expected)
+
+    def test_add_crosshair(self, blank_figure, mocker):
+
+        m1 = mocker.patch.object(blank_figure.gallery, 'add_crosshairs')
+
+        # no lines added for no panes
+        expected = list()
+        blank_figure._add_crosshair()
+        m1.assert_called_with(expected)
+
+        # 1 pane => 2 lines added
+        blank_figure.add_panes(n_dims=0, n_panes=1)
+        blank_figure._add_crosshair()
+        assert len(m1.call_args[0][0]) == 2
+
+    def test_pane_details(self, blank_figure):
+        expected = dict()
+        assert blank_figure.pane_details() == expected
+
+        blank_figure.add_panes(1, 2)
+        expected = {'pane_0': {}, 'pane_1': {}}
+        assert blank_figure.pane_details() == expected
+
+    def test_change_current_pane(self, blank_figure):
+        blank_figure.panes = [0, 1, 2, 3, 4, 5]
+        blank_figure.current_pane = [0]
+        assert not blank_figure.change_current_pane([0])
+        assert blank_figure.current_pane == [0]
+
+        assert blank_figure.change_current_pane(list())
+        assert blank_figure.current_pane == list()
+
+        blank_figure.current_pane = [0, 1, 2, 3]
+        assert blank_figure.change_current_pane([1, 2])
+        assert blank_figure.current_pane == [1, 2]
+
+        assert not blank_figure.change_current_pane([6])
+        assert blank_figure.current_pane == [1, 2]
 
     def test_determine_selected_pane(self, blank_figure):
         n_panes = 3
@@ -201,11 +249,14 @@ class TestFigure(object):
 
         for i, ax in enumerate(axes):
             found = blank_figure.determine_selected_pane(ax)
-            assert found == i
+            assert found == [i]
+
+        found = blank_figure.determine_selected_pane(all_ax=True)
+        assert found == [0, 1, 2]
 
         ax = fig.add_subplot()
         found = blank_figure.determine_selected_pane(ax)
-        assert found is None
+        assert isinstance(found, list) and len(found) == 0
 
     def test_determine_pane_from_model(self, blank_figure, mocker):
         sigs = signals.Signals()
@@ -217,7 +268,18 @@ class TestFigure(object):
                             return_value=True)
         matching = blank_figure.determine_pane_from_model('test')
         assert len(matching) == count
-        assert isinstance(matching[0], pane.OneDimPane)
+        assert isinstance(matching[0][1], pane.OneDimPane)
+
+    def test_get_current_pane(self, blank_figure):
+        assert blank_figure.get_current_pane() is None
+
+        blank_figure.panes = ['a', 'b', 'c', 'd', 'e']
+        blank_figure.current_pane = [2, 3]
+        assert blank_figure.get_current_pane() == ['c', 'd']
+
+        blank_figure.panes = ['a', 'b', 'c', 'd', 'e']
+        blank_figure.current_pane = None
+        assert blank_figure.get_current_pane() == list()
 
     def test_assign_models_bad(self, blank_figure):
         models = dict()
@@ -226,11 +288,16 @@ class TestFigure(object):
 
         assert 'Invalid mode' in str(msg)
 
+    @pytest.mark.parametrize('layout,shape', [('rows', (3, 1)),
+                                              ('columns', (1, 3)),
+                                              ('grid', (2, 2))])
     def test_add_model_to_pane_different(self, blank_figure, mocker,
-                                         caplog, grism_hdul):
+                                         caplog, grism_hdul, layout, shape):
         caplog.set_level(logging.INFO)
         mocker.patch.object(figure.Figure, 'model_matches_pane',
                             return_value=False)
+
+        blank_figure.set_layout_style(layout)
 
         model = high_model.Grism(grism_hdul)
         blank_figure.add_panes(n_dims=1, n_panes=1)
@@ -240,6 +307,16 @@ class TestFigure(object):
         assert blank_figure.pane_count() == 2
 
         assert 'Added model to panes' in caplog.text
+
+        blank_figure.add_panes(n_dims=0, n_panes=1)
+        assert blank_figure.pane_count() == 3
+        assert blank_figure.pane_layout() == shape
+
+        # setting overplot state should reassign axes
+        blank_figure.set_overplot_state(True, 'all')
+        assert blank_figure.pane_count() == 3
+        for pane_ in blank_figure.panes:
+            assert pane_.show_overplot
 
     def test_remove_model_from_pane(self, blank_figure, mocker):
 
@@ -255,8 +332,39 @@ class TestFigure(object):
 
         blank_figure.remove_model_from_pane(filename='test',
                                             panes=panes[0])
-
         assert remove.call_count == 1
+
+        # good call with int
+        blank_figure.remove_model_from_pane(model_id='test',
+                                            panes=0)
+        assert remove.call_count == 2
+
+        # good call with None
+        blank_figure.remove_model_from_pane(model_id='test',
+                                            panes=None)
+        assert remove.call_count == 6
+
+        # bad call with int
+        blank_figure.remove_model_from_pane(filename='test',
+                                            panes=42)
+        assert remove.call_count == 6
+
+        # bad call with non-int
+        blank_figure.remove_model_from_pane(filename='test',
+                                            panes='bad')
+        assert remove.call_count == 6
+
+    def test_remove_all_panes(self, blank_figure):
+        count = 4
+        sigs = signals.Signals()
+        panes = [pane.OneDimPane(sigs) for i in range(count)]
+        blank_figure.panes = panes
+
+        blank_figure.remove_all_panes()
+        assert blank_figure.pane_count() == 0
+
+        blank_figure.add_panes(0, 1)
+        assert blank_figure.pane_count() == 1
 
     @pytest.mark.parametrize('flags, pane_count, ax_val',
                              [(None, 1, ''),
@@ -270,12 +378,22 @@ class TestFigure(object):
         # set a list of 4 panes
         sigs = signals.Signals()
         blank_figure.panes = [pane.OneDimPane(sigs) for _ in range(4)]
+        blank_figure.current_pane = [0]
 
         panes, axis = blank_figure.parse_pane_flag(flags)
         assert len(panes) == pane_count
         assert axis == ax_val
 
-    def test_parse_pane_flag_fail(self, blank_figure):
+        panes, axis = blank_figure.parse_pane_flag([blank_figure.panes[0]])
+        assert len(panes) == 1
+        assert panes[0] is blank_figure.panes[0]
+
+        panes, axis = blank_figure.parse_pane_flag(
+            {'pane': [blank_figure.panes[1]]})
+        assert len(panes) == 1
+        assert panes[0] is blank_figure.panes[1]
+
+    def test_parse_pane_flag_fail(self, blank_figure, capsys):
         panes = [2.5, 'bad']
         with pytest.raises(TypeError) as msg:
             blank_figure.parse_pane_flag(panes)
@@ -290,6 +408,16 @@ class TestFigure(object):
         with pytest.raises(eye_error.EyeError) as msg:
             blank_figure.parse_pane_flag(panes)
         assert 'Unable to parse pane flag' in str(msg)
+        capsys.readouterr()
+
+        blank_figure.parse_pane_flag(4)
+        assert 'Invalid index' in capsys.readouterr().out
+
+        blank_figure.parse_pane_flag({'pane': [4]})
+        assert 'Invalid pane flag: 4' in capsys.readouterr().out
+
+        blank_figure.parse_pane_flag({'pane': ['a']})
+        assert 'Invalid pane flag: a' in capsys.readouterr().out
 
     def test_set_enabled(self, blank_figure, mocker, qtbot):
         model_mock = mocker.patch.object(pane.OneDimPane,
@@ -330,10 +458,31 @@ class TestFigure(object):
         assert art_mock.called_with({'pane': pid})
         assert vis_mock.called_once()
 
-    def test_crosshair(self, blank_figure, mocker, qtbot):
+    def test_get_markers(self, blank_figure, grism_hdul):
+        model = high_model.Grism(grism_hdul)
+        blank_figure.add_model_to_pane(model)
+
+        assert blank_figure.get_markers(model.id, 0) == ['x']
+
+    def test_get_colors(self, blank_figure, grism_hdul):
+        model = high_model.Grism(grism_hdul)
+        blank_figure.add_model_to_pane(model)
+
+        colors = blank_figure.get_colors(model.id, 0)
+        assert len(colors) == 1
+        assert isinstance(colors[0], list)
+        assert len(colors[0]) == 1
+        assert isinstance(colors[0][0], str)
+
+    @pytest.mark.parametrize('list_panes', [True, False])
+    def test_crosshair(self, blank_figure, mocker, qtbot, list_panes):
         direction = 'v'
-        mocker.patch.object(figure.Figure, 'determine_selected_pane',
-                            return_value=0)
+        if list_panes:
+            mocker.patch.object(figure.Figure, 'determine_selected_pane',
+                                return_value=0)
+        else:
+            mocker.patch.object(figure.Figure, 'determine_selected_pane',
+                                return_value=[0, 1, 2])
         art_mock = mocker.patch.object(gallery.Gallery, 'update_crosshair')
         cross_mock = mocker.patch.object(figure.Figure,
                                          '_parse_cursor_direction',
@@ -341,6 +490,7 @@ class TestFigure(object):
         sigs = signals.Signals()
 
         blank_figure.panes = [pane.OneDimPane(sigs)]
+        blank_figure.current_pane = [0]
         event = mpb.MouseEvent(x=2, y=3, canvas=blank_figure.widget.canvas,
                                name='motion_notify_event')
         event.xdata = 2
@@ -368,6 +518,7 @@ class TestFigure(object):
 
         n_panes = 4
         blank_figure.panes = [pane.OneDimPane(sigs) for i in range(n_panes)]
+        blank_figure.current_pane = [0]
         zoom_mock = mocker.patch.object(pane.OneDimPane, 'reset_zoom')
         with qtbot.wait_signal(blank_figure.signals.atrophy_bg_partial):
             blank_figure.reset_zoom(all_panes=True)
@@ -404,11 +555,25 @@ class TestFigure(object):
         assert reset_mock.call_count == 2
 
     def test_add_remove_pane(self, blank_figure, qtbot):
-        blank_figure.add_panes(1)
+        blank_figure.add_panes(1, 3)
         assert blank_figure.current_pane is not None
-        with qtbot.wait_signal(blank_figure.signals.atrophy_bg_full):
-            blank_figure.remove_pane([0])
-        assert blank_figure.current_pane is None
+        assert len(blank_figure.current_pane) == 1
+
+        # remove first
+        blank_figure.remove_pane([0])
+        assert len(blank_figure.current_pane) == 1
+
+        # remove last
+        blank_figure.remove_pane([2])
+        assert len(blank_figure.current_pane) == 1
+
+        # remove none
+        blank_figure.remove_pane(None)
+        assert len(blank_figure.current_pane) == 1
+
+        # remove final
+        blank_figure.remove_pane([0])
+        assert len(blank_figure.current_pane) == 0
 
     def test_change_axis_field(self, blank_figure, mocker):
         set_mock = mocker.patch.object(pane.OneDimPane, 'set_fields')
@@ -516,7 +681,7 @@ class TestFigure(object):
         sigs = signals.Signals()
         blank_figure.panes = [pane.OneDimPane(sigs)]
         fit_mock = mocker.patch.object(pane.OneDimPane, 'perform_fit',
-                                       return_value=({}, []))
+                                       return_value=({}, list()))
 
         # one location - does nothing
         blank_figure._cursor_locations = [[0, 1]]
@@ -536,7 +701,7 @@ class TestFigure(object):
     def test_toggle_fits_visibility(self, blank_figure, gauss_model_fit,
                                     moffat_model_fit, grism_hdul):
         # no fits, nothing happens
-        fits = []
+        fits = list()
         blank_figure.toggle_fits_visibility(fits)
         assert len(blank_figure.gallery.arts['fit']) == 0
 
@@ -570,7 +735,7 @@ class TestFigure(object):
         assert art2 == art1
 
         # remake when original artist has been lost: replaces with new artist
-        blank_figure.gallery.arts['fit'] = []
+        blank_figure.gallery.arts['fit'] = list()
         blank_figure.toggle_fits_visibility(fits)
         assert len(blank_figure.gallery.arts['fit']) == 2
         art3 = blank_figure.gallery.arts['fit'][0].get_artist()
@@ -600,7 +765,7 @@ class TestFigure(object):
         ref = reference_model.ReferenceData()
         with qtbot.wait_signal(blank_figure.signals.atrophy_bg_partial):
             blank_figure.update_reference_lines(ref)
-        assert 'Resetting reference gallery' in caplog.text
+        assert 'Resetting reference artists' in caplog.text
         assert 'Updated reference' not in caplog.text
 
         # add data and lines
@@ -613,8 +778,17 @@ class TestFigure(object):
         # reference lines added
         with qtbot.wait_signal(blank_figure.signals.atrophy_bg_partial):
             blank_figure.update_reference_lines(ref)
-        assert 'Resetting reference gallery' in caplog.text
+        assert 'Resetting reference artists' in caplog.text
         assert 'Updated reference' in caplog.text
+
+    def test_model_extensions(self, mocker, blank_figure, grism_hdul):
+        model = high_model.Grism(grism_hdul)
+        blank_figure.add_model_to_pane(model)
+
+        ext = blank_figure.model_extensions(model.id)
+        assert ext == list()
+        ext = blank_figure.model_extensions(model.id, pane_index=0)
+        assert 'SPECTRAL_FLUX' in ext
 
     def test_unload_reference_model(self, mocker, blank_figure, grism_hdul):
         ref = reference_model.ReferenceData()

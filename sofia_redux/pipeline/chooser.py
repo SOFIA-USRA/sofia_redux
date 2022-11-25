@@ -3,6 +3,8 @@
 
 from sofia_redux.pipeline.reduction import Reduction
 
+__all__ = ['Chooser']
+
 
 class Chooser(object):
     """

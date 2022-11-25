@@ -9,6 +9,8 @@ import re
 import configobj
 from astropy import log
 
+__all__ = ['ParameterSet', 'Parameters']
+
 # Falsy string values, used for type fixing and comparison
 FALSY = ['false', '0', '0.0', '', 'None']
 
@@ -131,7 +133,6 @@ class ParameterSet(OrderedDict):
         option_index : int, optional
             New selected index for the value options.
         """
-        # todo -- think about fixing type before setting
         if key not in self:
             self.set_param(key, value,
                            options=options,

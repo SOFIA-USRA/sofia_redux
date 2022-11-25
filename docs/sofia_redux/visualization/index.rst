@@ -35,7 +35,7 @@ Reference/API
 
 Core Interface
 --------------
-.. automodapi:: sofia_redux.visualization
+.. automodapi:: sofia_redux.visualization.eye
    :headings: ~^
 .. automodapi:: sofia_redux.visualization.controller
    :headings: ~^
@@ -65,6 +65,10 @@ Display Module
    :headings: ^"
 .. automodapi:: sofia_redux.visualization.display.view
    :headings: ^"
+.. automodapi:: sofia_redux.visualization.display.reference_window
+   :headings: ^"
+.. automodapi:: sofia_redux.visualization.display.text_view
+   :headings: ^"
 
 Models Module
 ~~~~~~~~~~~~~
@@ -76,12 +80,16 @@ Models Module
    :headings: ^"
 .. automodapi:: sofia_redux.visualization.models.low_model
    :headings: ^"
+.. automodapi:: sofia_redux.visualization.models.reference_model
+   :headings: ^"
 
 Utils Module
 ~~~~~~~~~~~~
 .. automodapi:: sofia_redux.visualization.utils.eye_error
    :headings: ^"
 .. automodapi:: sofia_redux.visualization.utils.logger
+   :headings: ^"
+.. automodapi:: sofia_redux.visualization.utils.model_fit
    :headings: ^"
 .. automodapi:: sofia_redux.visualization.utils.unit_conversion
    :headings: ^"
@@ -93,4 +101,3 @@ Auxiliary Tools and Interfaces
    :headings: ~^
 .. automodapi:: sofia_redux.visualization.redux_viewer
    :headings: ~^
-

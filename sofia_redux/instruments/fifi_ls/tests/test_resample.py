@@ -15,6 +15,7 @@ from sofia_redux.instruments.fifi_ls.resample \
             generate_exposure_map, make_hdul, rbf_mean_combine,
             analyze_input_files, normalize_spherical_coordinates,
             cleanup_scan_reduction)
+from sofia_redux.toolkit.utilities.fits import gethdul
 
 
 class TestResample(FIFITestCase):
@@ -322,7 +323,7 @@ class TestResample(FIFITestCase):
         hdul = fits.open(files[0])
         combined = combine_files([hdul])
         combined['PRIMEHEAD']['SKY_ANGL'] = 10.0
-        combined['PRIMEHEAD']['DET_ANGL'] = 5.0
+
         # check target RA/DEC/WAVE
         target_ra = np.min([x.min() for x in combined['RA']])  # hourangle
         target_dec = np.min([x.min() for x in combined['DEC']])  # degree
@@ -337,7 +338,6 @@ class TestResample(FIFITestCase):
         assert np.isclose(wcs['CRVAL3'], target_wave * 1e-6)
         assert wcs['CDELT1'] < 0  # east to west
         assert grid_info['delta'][2] < 0
-        assert grid_info['det_angle'] == 0
 
         # Check detector coordinates rotation propagation
         combined['PRIMEHEAD']['SKY_ANGL'] = 0
@@ -348,7 +348,6 @@ class TestResample(FIFITestCase):
         wcs = grid_info['wcs'].to_header()
         assert wcs['CDELT1'] > 0
         assert grid_info['delta'][2] > 0
-        assert grid_info['det_angle'].value == -5
 
     def test_exposure_map(self):
         files = [get_wsh_files()[0]]
@@ -515,6 +514,23 @@ class TestResample(FIFITestCase):
         result = resample(files, write=False)
         assert isinstance(result, fits.HDUList)
         assert result[1].header['BUNIT'] == 'Jy/pixel'
+        assert 'UNCORRECTED_FLUX' in result
+        assert 'UNCORRECTED_ERROR' in result
+        assert 'UNCORRECTED_WAVE' not in result
+
+        # check that mix of files with and without uncor
+        # extension do not include uncor flux; resampling
+        # otherwise succeeds
+        files = get_wsh_files()
+        hdul = gethdul(files[0])
+        del hdul['UNCORRECTED_LAMBDA']
+        files[0] = hdul
+        result = resample(files, write=False)
+        assert isinstance(result, fits.HDUList)
+        assert result[1].header['BUNIT'] == 'Jy/pixel'
+        assert 'UNCORRECTED_FLUX' in result
+        assert 'UNCORRECTED_ERROR' in result
+        assert 'UNCORRECTED_WAVE' not in result
 
     def test_resample_failure(self, capsys, mocker):
         # bad files

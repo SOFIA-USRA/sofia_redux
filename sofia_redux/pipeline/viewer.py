@@ -3,6 +3,8 @@
 
 from astropy import log
 
+__all__ = ['Viewer']
+
 
 class Viewer(object):
     """

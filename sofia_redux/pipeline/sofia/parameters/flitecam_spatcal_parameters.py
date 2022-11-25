@@ -7,6 +7,8 @@ from sofia_redux.pipeline.sofia.parameters.flitecam_spectroscopy_parameters \
 from sofia_redux.pipeline.sofia.parameters.flitecam_wavecal_parameters \
     import FLITECAMWavecalParameters, WAVECAL_DEFAULT
 
+__all__ = ['FLITECAMSpatcalParameters']
+
 
 SPATCAL_DEFAULT = {
     'trace_continuum': [

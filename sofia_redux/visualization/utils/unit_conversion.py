@@ -107,8 +107,7 @@ def convert_flux(in_flux, start_unit, end_unit, wavelength,
         log.debug(f'Units not convertible: {start_unit} -> {end_unit}')
         raise ValueError('Inconvertible units') from None
 
-    out_flux = out_flux.value
-    return out_flux
+    return out_flux.value
 
 
 def convert_wave(wavelength: np.array, start_unit: str,
@@ -156,6 +155,36 @@ def convert_wave(wavelength: np.array, start_unit: str,
 
 def convert_model_fit(fit: am.Model, start_units: Dict[str, Any],
                       end_units: Dict[str, Any], wave: np.ndarray):
+    """
+    Converts units of a fitted model.
+
+    Parameters
+    ----------
+    fit : astropy.modeling.Model
+        Fitted model.
+    start_units : dict
+        Dictionary of starting units containing a key (axis) and a
+        corresponding value (unit/number).
+    end_units : dict
+        Dictionary of ending units containing a key (axis) and a
+        corresponding value (unit/number).
+    wave : np.ndarray
+        A wavelength array from the initial fit, to be used for unit
+        conversion.
+
+    Returns
+    -------
+    fit : astropy.modeling.Model
+        Updated actual fit to the data after unit conversion.
+    changed : bool
+        Boolean to denotes if a unit change in the fit is done or not.
+
+    Raises:
+    -------
+    ValueError
+        If no input unit has been assigned.
+
+    """
     input_units = _confirm_quantity(start_units)
     output_units = _confirm_quantity(end_units)
     old_fit = fit.with_units_from_data(**input_units)
@@ -191,6 +220,21 @@ def convert_model_fit(fit: am.Model, start_units: Dict[str, Any],
 
 
 def _confirm_quantity(units):
+    """
+    A method to determine quantity for each key in the units dictionary.
+
+    Parameters
+    -----------
+    units: dict
+        A dictionary containing key and a corresponding value.
+
+    Returns
+    -------
+    quantities: dict
+        A dictionary containing keys (axis) and their corresponding values
+        which are obtained by determining if its a unit or a number.
+
+    """
     quantities = dict()
     for key, value in units.items():
         if isinstance(value, str):
@@ -207,6 +251,30 @@ def _confirm_quantity(units):
 
 
 def _convert_slope(old_param, new_param, equivs, input_units, output_units):
+    """
+    Converts units of a slope.
+
+    Parameters
+    ----------
+    old_param : astropy.modelling.Model.name
+        Old fitting parameters of a model.
+    new_param : astropy.modelling.name
+         New fitting parameters of a model.
+    equivs : astropy.units.spectral_density
+        Equivalence pairs that handle spectral density with reagrd to
+        wavelength.
+    input_units : dict
+         A dictionary containing keys (axis) and their corresponding input
+         units.
+    output_units : dict
+         A dictionary containing keys (axis) and their corresponding output
+         units.
+
+    Returns
+    -------
+    quantity : float
+    """
+
     # remove denominator to get just flux
     old_top = old_param * input_units['x']
     new_top = new_param * input_units['x']

@@ -28,35 +28,35 @@ __all__ = ['ReferenceWindow']
 
 class ReferenceWindow(QtWidgets.QDialog, rd.Ui_Dialog):
     """
-    GUI framework for displaying the spectral lines
+    GUI framework for displaying spectral reference lines.
 
-    It pops up a `Reference Data` window from the dropdown option of
-    `Analysis`, where a user can interact directly. It includes following
-    buttons:
-    -- Load List - allows to load in reference data files, only one at a time.
-    However more files can be loaded in by clicking on this button again.
-    -- Clear Lists - it removes all the loaded files as well lines and
-    labels from plots.
+    Creates a `Reference Data` window for user interaction. It includes
+    the following buttons:
 
-    Each loaded file can be opened by double clicking on a selection.
+        - Load List: allows loading reference data files, one at a time.
+        - Clear Lists: removes all loaded files as well lines and
+          labels from plots.
 
-    Two check boxes include:
-    - unload labels -- This removes the labels from the plot
-    - unload lines -- This removed labels and lines from the plot
+    Each loaded file can be examined by double-clicking on its listing
+    in the display window.
 
-    Parameters
-    ---------
-    connections: reference_window.Reference_window
-        Method to establish connection with the buttons and checkboxes
+    There are also two check boxes to control display preferences:
+
+        - Show labels: shows or hides text labels for the lines
+        - Show lines: shows or hides lines and any associated labels
+
+    Attributes
+    ----------
     signals: sofia_redux.visualization.signals.Signals
         Custom signals recognized by the Eye interface, used
         to trigger callbacks from user events.
     ref_models: reference_model.ReferenceData
-        The line list data
-    visibility: Dict
-         keys are `ref_line` and `ref_label`
-    textview: sofia_redux.visualization.display.text_view.TextView()
-        Text viewer widget
+        The line list data.
+    visibility: dict
+        Keys are `ref_line` and `ref_label`. Values are boolean flags
+        matching the current  visibility of lines and labels, respectively.
+    textview: sofia_redux.visualization.display.text_view.TextView
+        Text viewer widget.
     """
 
     def __init__(self, parent: Any) -> None:
@@ -75,9 +75,11 @@ class ReferenceWindow(QtWidgets.QDialog, rd.Ui_Dialog):
 
     def connections(self):
         """
-        Establish connection with the buttons: load_lines and clear_lists
-        and
-        checkboxes: `Show line` and `Show label`.
+        Establish connections to callbacks.
+
+        The buttons connect to `load_lines` and `clear_lists`.
+        The checkboxes connect to `toggle_visibility`. Items
+        in the file list connect to `show_text`.
         """
         self.load_file_button.clicked.connect(self.load_lines)
         self.show_lines_box.toggled.connect(
@@ -88,6 +90,14 @@ class ReferenceWindow(QtWidgets.QDialog, rd.Ui_Dialog):
         self.loaded_files_list.itemDoubleClicked.connect(self.show_text)
 
     def load_lines(self) -> bool:
+        """
+        Load reference lines from a file.
+
+        Returns
+        -------
+        result : bool
+            True if the file is successfully read in; otherwise False.
+        """
         try:
             filename = QtWidgets.QFileDialog.getOpenFileName(
                 self, caption="Select Line List")[0]
@@ -124,6 +134,16 @@ class ReferenceWindow(QtWidgets.QDialog, rd.Ui_Dialog):
         return result
 
     def toggle_visibility(self, target):
+        """
+        Toggle the visibility for lines or labels.
+
+        Parameters
+        ----------
+        target : {'ref_line', 'ref_label'}
+            The specific target for which the visibility should be toggled.
+            Use 'ref_line' for the reference data lines and 'ref_label'
+            for the reference data labels.
+        """
         if target == 'ref_line':
             state = self.show_lines_box.checkState()
             self.ref_models.set_visibility(target, state)
@@ -143,6 +163,14 @@ class ReferenceWindow(QtWidgets.QDialog, rd.Ui_Dialog):
                       f'{self.visibility[target]}')
 
     def show_text(self, item):
+        """
+        Show the text of the loaded reference data file.
+
+        Parameters
+        ----------
+        item : QtWidgets.QListWidgetItem
+            The selected file in the list.
+        """
         if self.textview is None or not self.textview.isVisible():
             self.textview = TextView(self)
             self.textview.tableButton.hide()
@@ -156,9 +184,18 @@ class ReferenceWindow(QtWidgets.QDialog, rd.Ui_Dialog):
         self.textview.setTitle(os.path.basename(filename))
 
     def set_status(self, message):
+        """
+        Set a status message.
+
+        Parameters
+        ----------
+        message : str
+            The message to display.
+        """
         self.status.setText(message)
 
     def clear_status(self):
+        """Reset the status bar."""
         self.status.setText('')
 
     def clear_lists(self):

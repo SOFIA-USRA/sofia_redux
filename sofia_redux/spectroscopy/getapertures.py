@@ -127,13 +127,17 @@ def get_apertures(profiles, apertures, refit_fwhm=True, get_bg=True,
                     y = profile[window]
 
                     # params are x0, amplitude, fwhm, y0
-                    param, _ = curve_fit(
-                        gaussian_model, x, y,
-                        p0=[pos, sign * np.max(np.abs(y)),
-                            fwhm, bg_est],
-                        bounds=([pos - ds, -np.inf, 1.0, -np.inf],
-                                [pos + ds, np.inf, limit, np.inf]))
-                    fit_fwhm = param[2]
+                    try:
+                        param, _ = curve_fit(
+                            gaussian_model, x, y,
+                            p0=[pos, sign * np.max(np.abs(y)),
+                                fwhm, bg_est],
+                            bounds=([pos - ds, -np.inf, 1.0, -np.inf],
+                                    [pos + ds, np.inf, limit, np.inf]))
+                        fit_fwhm = param[2]
+                    except ValueError:
+                        log.warning('Refit failed; using input FWHM')
+                        fit_fwhm = fwhm
                 else:
                     fit_fwhm = fwhm
 

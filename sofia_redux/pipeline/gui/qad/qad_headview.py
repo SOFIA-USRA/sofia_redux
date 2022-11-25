@@ -4,6 +4,8 @@
 import os
 from sofia_redux.pipeline.gui.textview import TextView
 
+__all__ = ['HeaderViewer']
+
 
 class HeaderViewer(TextView):
     """View, find, and filter text from FITS headers."""

@@ -17,9 +17,6 @@ class EyeViewer(Viewer):
     """
     Redux Viewer interface to the Eye of SOFIA.
 
-    Currently, only FORCAST and EXES spectra are supported for
-    display in the Eye viewer.
-
     Attributes
     ----------
     eye : `eye.Eye`
@@ -98,28 +95,33 @@ class EyeViewer(Viewer):
 
         log.debug(f'Updating with: {type(self.display_data)}, '
                   f'{len(self.display_data)}')
-        self.eye.reset()
-        self.eye.add_panes(kind='spectrum', n_panes=1, layout='rows')
+
         try:
-            self.eye.load(self.display_data)
-        except (TypeError, KeyError):
-            log.warning('Invalid data; not displaying')
-            self.display_data = None
             self.eye.reset()
-            return
+            self.eye.add_panes(kind='spectrum', n_panes=1, layout='rows')
+            try:
+                self.eye.load(self.display_data)
+            except (TypeError, KeyError):
+                log.warning('Invalid data; not displaying')
+                self.display_data = None
+                self.eye.reset()
+                return
 
-        self.eye.assign_data(mode='first')
-        self.eye.open_eye()
+            self.eye.assign_data(mode='first')
+            self.eye.open_eye()
 
-        if self.first_display:
-            # set preferred control defaults - must be done after eye is open
-            self.eye.toggle_file_panel()
-            self.eye.toggle_pane_panel()
-            self.eye.toggle_axis_panel()
-            self.eye.toggle_controls()
-            self.eye.toggle_cursor()
+            if self.first_display:
+                # set preferred control defaults -
+                # must be done after eye is open
+                self.eye.toggle_file_panel()
+                self.eye.toggle_order_panel()
+                self.eye.toggle_axis_panel()
+                self.eye.toggle_controls()
+                self.eye.toggle_cursor()
 
-        self.first_display = False
+            self.first_display = False
 
-        # trigger refresh
-        self.eye.generate()
+            # trigger refresh
+            self.eye.generate()
+        except Exception as err:
+            log.error(f'Error encountered in Eye display: {err}')

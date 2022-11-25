@@ -298,7 +298,7 @@ class Model(object):
         """
         Iterates to refine the polynomial fit
 
-        1. Idenitify outliers in the residuals of data - fit
+        1. Identify outliers in the residuals of data - fit
         2. Re-fit the polynomial excluding all outliers
         3. Goto 1.
 

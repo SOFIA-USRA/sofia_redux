@@ -30,6 +30,8 @@ from sofia_redux.pipeline.reduction import Reduction
 from sofia_redux.pipeline.sofia.forcast_reduction import FORCASTReduction
 from sofia_redux.pipeline.sofia.parameters.forcast_spectroscopy_parameters \
     import FORCASTSpectroscopyParameters
+from sofia_redux.pipeline.sofia.sofia_utilities import \
+    parse_bg, parse_apertures
 from sofia_redux.toolkit.utilities.fits \
     import hdinsert, getheader, gethdul, set_log_level
 from sofia_redux.visualization.redux_viewer import EyeViewer
@@ -42,6 +44,8 @@ from sofia_redux.toolkit.resampling import tree
 assert interpolate
 assert combine_images
 assert tree
+
+__all__ = ['FORCASTSpectroscopyReduction']
 
 
 class FORCASTSpectroscopyReduction(FORCASTReduction):
@@ -80,7 +84,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
         marked as a flux standard (OBSTYPE=STANDARD_TELLURIC).
         Instrumental response spectra are generated instead of a final
         calibrated, combined spectrum.
-    basehead : `astropy.io.fits.header.Header`
+    basehead : `astropy.io.fits.Header`
         Header for the first raw input file loaded, used for calibration
         configuration.
     calres : dict-like
@@ -344,15 +348,15 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
 
                     overplots = []
                     if 'APPOSO01' in hdul[0].header:
-                        aps = self._parse_apertures(
+                        aps = parse_apertures(
                             hdul[0].header['APPOSO01'], 1)[0]
                         if 'APRADO01' in hdul[0].header:
-                            rads = self._parse_apertures(
+                            rads = parse_apertures(
                                 hdul[0].header['APRADO01'], 1)[0]
                         else:
                             rads = [None] * len(aps)
                         if 'PSFRAD01' in hdul[0].header:
-                            psfs = self._parse_apertures(
+                            psfs = parse_apertures(
                                 hdul[0].header['PSFRAD01'], 1)[0]
                         else:
                             psfs = [None] * len(aps)
@@ -385,7 +389,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
                                      'kwargs': {'color': '#1f77b4',
                                                 'linestyle': '-.'}})
                         if 'BGR' in hdul[0].header:
-                            bgrs = self._parse_bg(hdul[0].header['BGR'], 1)[0]
+                            bgrs = parse_bg(hdul[0].header['BGR'], 1)[0]
                             for reg in bgrs:
                                 if len(reg) == 2:
                                     idx = (slitpos >= reg[0]) \
@@ -412,7 +416,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
 
                     overplots = []
                     if 'DISPWAV' in hdul[0].header:
-                        lps = self._parse_apertures(
+                        lps = parse_apertures(
                             hdul[0].header['DISPWAV'], 1)[0]
                         overplots = []
                         for lp in lps:
@@ -422,7 +426,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
                                  'kwargs': {'color': 'lightgray',
                                             'linestyle': ':'}})
                     if 'LINEWAV' in hdul[0].header:
-                        lps = self._parse_apertures(
+                        lps = parse_apertures(
                             hdul[0].header['LINEWAV'], 1)[0]
                         for lp in lps:
                             overplots.append(
@@ -814,102 +818,6 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
         self.input = results
         self.set_display_data()
 
-    def _parse_apertures(self, input_position, nfiles):
-        """
-        Parse aperture parameters from input string.
-
-        Parameters
-        ----------
-        input_position : str
-            Input parameter string.
-        nfiles : int
-            Number of input files expected.
-
-        Returns
-        -------
-        list
-            List of length `nfiles`, containing lists of floating point
-            aperture values.
-        """
-        bad_msg = ['Could not read input_position '
-                   f"parameter: '{input_position}'",
-                   'Aperture positions should be comma-separated '
-                   'values, in arcsec up the slit. ',
-                   'To specify different values for different '
-                   'input files, provide a semi-colon separated '
-                   'list matching the number of input files.']
-
-        apertures = []
-        filepos = list(str(input_position).split(';'))
-        if len(filepos) == 1:
-            filepos = filepos * nfiles
-        elif len(filepos) != nfiles:
-            for msg in bad_msg:
-                log.error(msg)
-            raise ValueError('Invalid position parameter.')
-        for fp in filepos:
-            pos = list(fp.split(','))
-            try:
-                pos = [float(ap) for ap in pos]
-            except (ValueError, TypeError):
-                for msg in bad_msg:
-                    log.error(msg)
-                raise ValueError('Invalid position parameter.') from None
-            apertures.append(pos)
-        return apertures
-
-    def _parse_bg(self, bg_string, nfiles):
-        """
-        Parse background parameters from input string.
-
-        Parameters
-        ----------
-        bg_string : str
-            Input parameter string.
-        nfiles : int
-            Number of input files expected.
-
-        Returns
-        -------
-        list
-            List of length `nfiles`, containing lists of floating point
-            background start, stop values.
-        """
-        bad_msg = ['Could not read background region '
-                   f"parameter: '{bg_string}'",
-                   'Background regions should be comma-separated '
-                   'values, in arcsec up the slit, as start-stop. ',
-                   'To specify different values for different '
-                   'input files, provide a semi-colon separated '
-                   'list matching the number of input files.']
-        bgr = []
-        filepos = list(str(bg_string).split(';'))
-        if len(filepos) == 1:
-            filepos = filepos * nfiles
-        elif len(filepos) != nfiles:
-            for msg in bad_msg:
-                log.error(msg)
-            raise ValueError('Invalid background region parameter.')
-        for fp in filepos:
-            bg_set = list(fp.split(','))
-            bg_list = []
-            for bg_reg in bg_set:
-                bg_range = bg_reg.split('-')
-                if len(bg_range) == 1 and str(bg_range[0]).strip() == '':
-                    # allow empty set for background regions
-                    bg_list.append([])
-                else:
-                    try:
-                        start, stop = bg_range
-                        bg_list.append((float(start), float(stop)))
-                    except (ValueError, TypeError):
-                        for msg in bad_msg:
-                            log.error(msg)
-                        raise ValueError('Invalid background '
-                                         'region parameter.') from None
-            bgr.append(bg_list)
-        return bgr
-
     def locate_apertures(self):
         """Automatically find aperture centers."""
         from sofia_redux.spectroscopy.findapertures import find_apertures
@@ -929,7 +837,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
             num_aps = 1
         elif str(method).strip().lower() == 'fix to input':
             log.info('Fixing aperture to input positions.')
-            positions = self._parse_apertures(
+            positions = parse_apertures(
                 input_position, len(self.input))
             fix_ap = True
         elif str(method).strip().lower() == 'step up slit':
@@ -941,7 +849,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
             if str(input_position).strip() == '':
                 positions = None
             else:
-                positions = self._parse_apertures(
+                positions = parse_apertures(
                     input_position, len(self.input))
             fix_ap = False
 
@@ -1117,8 +1025,8 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
             # retrieve data from input
             wave = hdul['WAVEPOS'].data
             space = hdul['SLITPOS'].data
-            appos = self._parse_apertures(hdul[0].header['APPOSO01'], 1)[0]
-            apfwhm = self._parse_apertures(hdul[0].header['APFWHM01'], 1)[0]
+            appos = parse_apertures(hdul[0].header['APPOSO01'], 1)[0]
+            apfwhm = parse_apertures(hdul[0].header['APFWHM01'], 1)[0]
 
             if fix:
                 trace_fit = []
@@ -1216,19 +1124,19 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
             False, False, False, False
         if not full_slit:
             if str(apsign_list).strip().lower() != '':
-                apsign_list = self._parse_apertures(apsign_list,
-                                                    len(self.input))
+                apsign_list = parse_apertures(apsign_list,
+                                              len(self.input))
                 fix_apsign = True
             if str(aprad_list).strip().lower() != '':
-                aprad_list = self._parse_apertures(aprad_list,
-                                                   len(self.input))
+                aprad_list = parse_apertures(aprad_list,
+                                             len(self.input))
                 fix_aprad = True
             if str(psfrad_list).strip().lower() != '':
-                psfrad_list = self._parse_apertures(psfrad_list,
-                                                    len(self.input))
+                psfrad_list = parse_apertures(psfrad_list,
+                                              len(self.input))
                 fix_psfrad = True
             if str(bgr_list).strip().lower() != '':
-                bgr_list = self._parse_bg(bgr_list, len(self.input))
+                bgr_list = parse_bg(bgr_list, len(self.input))
                 fix_bgr = True
 
         results = []
@@ -1241,8 +1149,8 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
             wave = hdul['WAVEPOS'].data
             profile = hdul['SPATIAL_PROFILE'].data
             aptrace = hdul['APERTURE_TRACE'].data
-            appos = self._parse_apertures(hdul[0].header['APPOSO01'], 1)[0]
-            apfwhm = self._parse_apertures(hdul[0].header['APFWHM01'], 1)[0]
+            appos = parse_apertures(hdul[0].header['APPOSO01'], 1)[0]
+            apfwhm = parse_apertures(hdul[0].header['APFWHM01'], 1)[0]
 
             if full_slit:
                 half_slit = max([(space.max() - space.min()) / 2,
@@ -1260,7 +1168,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
                 if fix_apsign:
                     apsign = apsign_list[i]
                 else:
-                    apsign = self._parse_apertures(
+                    apsign = parse_apertures(
                         hdul[0].header['APSGNO01'], 1)[0]
 
                 aplist = []
@@ -1440,7 +1348,7 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
             spatmap = hdul['SPATIAL_MAP'].data
             apmask = hdul['APERTURE_MASK'].data
 
-            apsign = self._parse_apertures(header['APSGNO01'], 1)[0]
+            apsign = parse_apertures(header['APSGNO01'], 1)[0]
             rectimg = {1: {'image': image, 'variance': var, 'mask': mask,
                            'wave': wave, 'spatial': space, 'header': header,
                            'apmask': apmask, 'apsign': apsign}}
@@ -1667,10 +1575,13 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
         skipcal = param.get_value('skip_cal')
         respfile = param.get_value('respfile')
         resolution = param.get_value('resolution')
+
         optimize = param.get_value('optimize_atran')
         atrandir = param.get_value('atrandir')
-        snthresh = param.get_value('sn_threshold')
         atranfile = param.get_value('atranfile')
+        use_wv = param.get_value('use_wv')
+        snthresh = param.get_value('sn_threshold')
+
         auto_shift = param.get_value('auto_shift')
         shift_limit = param.get_value('auto_shift_limit')
         waveshift = param.get_value('waveshift')
@@ -1796,7 +1707,8 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
 
             # get atran data, trying the specified directory first
             base_atran = get_atran(header, resolution, filename=atranfile,
-                                   atran_dir=atrandir, use_wv=test_opt)
+                                   atran_dir=atrandir,
+                                   use_wv=(test_opt or use_wv))
             if base_atran is None:
                 if atrandir is None:
                     msg = 'No matching ATRAN files.'
@@ -1805,7 +1717,8 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
                     # if not found, try the default directory
                     base_atran = get_atran(header, resolution,
                                            filename=atranfile,
-                                           atran_dir=None, use_wv=test_opt)
+                                           atran_dir=None,
+                                           use_wv=(test_opt or use_wv))
                     if base_atran is None:
                         msg = 'No matching ATRAN files.'
                         raise ValueError(msg)
@@ -2032,6 +1945,32 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
         except KeyError:  # pragma: no cover
             pass
 
+        if 'TRANSMISSION' in hdul:
+            trans = hdul['TRANSMISSION'].data
+            if trans.ndim > 1:
+                trans = trans[0]
+        elif wavecal:
+            # if transmission isn't present, attach an approximate one
+            from sofia_redux.instruments.forcast.getatran import get_atran
+            atran_dir = os.path.join(self.calres['pathcal'],
+                                     'grism', 'atran')
+            atran = get_atran(spechdr, self.calres['resolution'],
+                              atran_dir=atran_dir,
+                              wmin=self.calres['wmin'],
+                              wmax=self.calres['wmax'])
+            adata = np.interp(hdul['WAVEPOS'].data, atran[0], atran[1],
+                              left=np.nan, right=np.nan)
+            trans = adata
+        else:
+            trans = None
+
+        if 'RESPONSE' in hdul:
+            resp = hdul['RESPONSE'].data
+            if resp.ndim > 1:
+                resp = resp[0]
+        else:
+            resp = None
+
         specset = []
         for n in range(naps):
             if naps > 1:
@@ -2042,22 +1981,11 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
                 speclist = [hdul['WAVEPOS'].data,
                             hdul['SPECTRAL_FLUX'].data,
                             hdul['SPECTRAL_ERROR'].data]
-            if 'TRANSMISSION' in hdul:
-                speclist.append(hdul['TRANSMISSION'].data)
-            elif wavecal:
-                # if transmission isn't present, attach an approximate one
-                from sofia_redux.instruments.forcast.getatran import get_atran
-                atran_dir = os.path.join(self.calres['pathcal'],
-                                         'grism', 'atran')
-                atran = get_atran(spechdr, self.calres['resolution'],
-                                  atran_dir=atran_dir,
-                                  wmin=self.calres['wmin'],
-                                  wmax=self.calres['wmax'])
-                adata = np.interp(hdul['WAVEPOS'].data, atran[0], atran[1],
-                                  left=np.nan, right=np.nan)
-                speclist.append(adata)
-            if 'RESPONSE' in hdul:
-                speclist.append(hdul['RESPONSE'].data)
+
+            if trans is not None:
+                speclist.append(trans)
+            if resp is not None:
+                speclist.append(resp)
             specdata = np.vstack(speclist)
             if naps == 1:
                 specset = specdata
@@ -2072,15 +2000,15 @@ class FORCASTSpectroscopyReduction(FORCASTReduction):
         """
         Combine spectra.
 
-        Calls `sofia_redux.instruments.forcast.coadd.coadd` and
+        Calls `sofia_redux.toolkit.image.coadd.coadd` and
         `sofia_redux.toolkit.image.combine.combine_images`
         for coaddition. The combination method may be configured in
         parameters.
         """
         from sofia_redux.instruments.forcast.hdmerge import hdmerge
-        from sofia_redux.instruments.forcast.coadd import coadd
         from sofia_redux.instruments.forcast.register_datasets \
             import get_shifts
+        from sofia_redux.toolkit.image.coadd import coadd
         from sofia_redux.toolkit.image.combine import combine_images
 
         # get parameters

@@ -5,6 +5,8 @@ import configobj
 from sofia_redux.pipeline.configuration import Configuration
 from sofia_redux.pipeline.sofia.sofia_chooser import SOFIAChooser
 
+__all__ = ['SOFIAConfiguration']
+
 
 class SOFIAConfiguration(Configuration):
     """

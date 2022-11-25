@@ -172,6 +172,9 @@ def forcast_data():
 
     header['PROCSTAT'] = 'LEVEL_3'
     header['PRODTYPE'] = 'STDPHOTCAL'
+    header['NAXIS1'] = hdul[0].data.shape[0]
+    header['NAXIS2'] = hdul[0].data.shape[1]
+
     # add an exposure map
     exp = hdul[1].copy()
     exp.header['EXTNAME'] = 'EXPOSURE'
@@ -328,6 +331,64 @@ def exes_data():
     header['INSTCFG'] = 'HIGH_MED'
     header['SPECTEL1'] = 'EXE_ELON'
     header['SPECTEL2'] = 'EXE_ECHL'
+
+    return hdul
+
+
+def exes_spec_data(n_orders=5, n_apertures=1):
+    min_waves = np.linspace(1480, 1500, n_orders)
+    flux_levels = np.linspace(0.5, 2, n_apertures)
+    full_data = np.zeros((n_orders * n_apertures, 100, 5))
+    index = 0
+    for i in range(n_orders):
+        for j in range(n_apertures):
+            hdul = exes_merged_data(min_wave=min_waves[i],
+                                    max_wave=min_waves[i] + 2,
+                                    mean_flux=flux_levels[j],
+                                    emission=j % 2 == 0)
+            full_data[index] = hdul[0].data
+            index += 1
+
+    hdul[0].data = full_data
+
+    hdul[0].header['INSTRUME'] = 'EXES'
+    hdul[0].header['INSTMODE'] = 'HIGH_MED'
+    hdul[0].header['PRODTYPE'] = 'spectra_1d'
+    hdul[0].header['NORDERS'] = n_orders
+    hdul[0].header['NAPS'] = n_apertures
+    return hdul
+
+
+def exes_merged_data(min_wave=1, max_wave=10, mean_flux=1,
+                     emission=True):
+    hdul = exes_data().copy()
+    hdul.pop(1)
+    n_pix = 100
+    amplitude = 0.4
+    sigma = 0.1
+    peak = 1484
+    mean_flux = 0.6
+
+    gp = {'amplitude': amplitude, 'stddev': sigma, 'mean': peak}
+    g = Gaussian1D(**gp)
+    wavelength = np.linspace(min_wave, max_wave, n_pix)
+    if emission:
+        flux = np.ones_like(n_pix) * mean_flux + g(wavelength)
+    else:
+        flux = np.ones_like(n_pix) * mean_flux - g(wavelength)
+    error = np.random.normal(0, 1, n_pix)
+    transmission = np.ones_like(wavelength)
+    response = np.ones_like(wavelength)
+
+    data = np.zeros((5, n_pix))
+    data[0] = wavelength
+    data[1] = flux
+    data[2] = error
+    data[3] = transmission
+    data[4] = response
+
+    hdul[0].data = data.T
+    hdul[0].header['norders'] = 1
 
     return hdul
 
@@ -614,37 +675,378 @@ def raw_specdata():
     return hdul
 
 
-def atran_data(params=None):
-    if params:
-        min_wave = params['min_wave']
-        max_wave = params['max_wave']
-    else:
-        min_wave = 40
-        max_wave = 300
-    num_features = 50
-    num_pix = 1000
+def exes_image_data():
+    nx = 100
+    ny = 100
+    data = np.random.normal(10, 0.3, (nx, ny))
+    return data
 
-    header = pf.header.Header()
-    header['SIMPLE'] = 'T'
-    header['BITPIX'] = -64
-    header['NAXIS'] = 2
-    header['NAXIS1'] = num_pix
-    header['NAXIS2'] = 2
-    header['EXTEND'] = 'T'
-    header['DATE'] = '2019-11-15'
 
-    wavelengths = np.linspace(min_wave, max_wave, num_pix)
-    transmission = np.ones_like(wavelengths)
-    centroids = np.random.randint(low=min_wave, high=max_wave,
-                                  size=num_features)
-    amplitudes = np.random.uniform(0, 1, num_features)
-    sigmas = np.random.normal(0, 1, num_features)
-    for centroid, amp, sigma in zip(centroids, amplitudes, sigmas):
-        g = Gaussian1D(amplitude=amp, mean=centroid, stddev=sigma)
-        transmission -= g(wavelengths)
-    data = np.vstack([wavelengths, transmission])
+def exes_flux_data():
+    return exes_image_data()
 
-    primary = pf.PrimaryHDU(data=data,
-                            header=header)
-    hdul = pf.HDUList([primary])
+
+def exes_error_data():
+    return exes_image_data() / 10
+
+
+def exes_mask_data():
+    mask = (exes_image_data() > 9).astype(int)
+    return mask
+
+
+def exes_flat_data():
+    return exes_image_data()
+
+
+def exes_wavecal_data():
+    return exes_image_data()
+
+
+def exes_spatcal_data():
+    return exes_image_data()
+
+
+def exes_order_mask_data():
+    mask = (exes_image_data() > 9).astype(int)
+    return mask
+
+
+def exes_flux_order_data():
+    data = np.random.normal(10, 0.3, (10, 100))
+    return data
+
+
+def exes_error_order_data():
+    return exes_flux_order_data() / 10
+
+
+def exes_flat_order_data():
+    return exes_flux_order_data()
+
+
+def exes_badmask_order_data():
+    return (exes_flux_order_data() < 0.9).astype(int)
+
+
+def exes_wavepos_order_data():
+    return np.linspace(5, 10, 100)
+
+
+def exes_slitpos_order_data():
+    return np.arange(10)
+
+
+def exes_spatial_map_order_data():
+    return exes_flux_order_data()
+
+
+def exes_spatial_profile_order_data():
+    g = Gaussian1D(amplitude=0.05, mean=2, stddev=0.2)
+    x = np.linspace(0, 10, 10)
+    return g(x)
+
+
+def exes_aperture_mask_order_data():
+    return exes_flux_order_data()
+
+
+def exes_intermediate_pre_orders(prodtype='calibration_corrected',
+                                 file_code='CCR', file_num=1,
+                                 n_orders=5, include_cal=True,
+                                 bunit='erg s-1 cm-2 sr-1 (cm-1)-1'):
+    hdul = exes_data()
+    header = hdul[0].header.copy()
+
+    header['PRODTYPE'] = prodtype
+    header['NORDERS'] = n_orders
+    filename = f'F0158_EX_SPE_86000114_EXEELONEXEECHL_' \
+               f'{file_code}_{file_num}.fits'
+    header['FILENAME'] = filename
+    header['EXTNAME'] = 'FLUX'
+    header['BUNIT'] = bunit
+
+    hdus = list()
+    hdus.append(pf.PrimaryHDU(exes_flux_data(), header))
+    hdus.append(pf.ImageHDU(exes_error_data(), name='ERROR'))
+    hdus.append(pf.ImageHDU(exes_mask_data(), name='MASK'))
+    hdus.append(pf.ImageHDU(exes_flat_data(), name='FLAT'))
+    hdus.append(pf.ImageHDU(exes_error_data(), name='FLAT_ERROR'))
+    hdus.append(pf.ImageHDU(exes_flat_data(),
+                            name='FLAT_ILLUMINATION'))
+    if include_cal:
+        hdus.append(pf.ImageHDU(exes_wavecal_data(), name='WAVECAL'))
+        hdus.append(pf.ImageHDU(exes_spatcal_data(), name='SPATCAL'))
+        hdus.append(pf.ImageHDU(exes_order_mask_data(),
+                                name='ORDER_MASK'))
+
+    hdul = pf.HDUList(hdus)
     return hdul
+
+
+def exes_intermediate_with_orders(prodtype='apertures_set',
+                                  file_code='APS', file_num=1,
+                                  n_orders=5, n_aps=1,
+                                  bunit='Jy/pixel'):
+    hdul = exes_data()
+    header = hdul[0].header.copy()
+
+    header['PRODTYPE'] = prodtype
+    header['NORDERS'] = n_orders
+    header['NAPS'] = n_aps
+    filename = f'F0158_EX_SPE_86000114_EXEELONEXEECHL_' \
+               f'{file_code}_{file_num}.fits'
+    header['FILENAME'] = filename
+    header['EXTNAME'] = 'FLUX'
+    header['BUNIT'] = bunit
+
+    hdus = list()
+    hdus.append(pf.PrimaryHDU(exes_flux_data(), header))
+    hdus.append(pf.ImageHDU(exes_error_data(), name='ERROR'))
+    hdus.append(pf.ImageHDU(exes_mask_data(), name='MASK'))
+    hdus.append(pf.ImageHDU(exes_flat_data(), name='FLAT'))
+    hdus.append(pf.ImageHDU(exes_wavecal_data(), name='WAVECAL'))
+    hdus.append(pf.ImageHDU(exes_spatcal_data(), name='SPATCAL'))
+    hdus.append(pf.ImageHDU(exes_order_mask_data(),
+                            name='ORDER_MASK'))
+
+    for x in range(n_orders):
+        i = x + 1
+        hdus.append(pf.ImageHDU(exes_flux_order_data(),
+                                name=f'FLUX_ORDER_{i:02d}'))
+        hdus.append(pf.ImageHDU(exes_error_order_data(),
+                                name=f'ERROR_ORDER_{i:02d}'))
+        hdus.append(pf.ImageHDU(exes_flat_order_data(),
+                                name=f'FLAT_ORDER_{i:02d}'))
+        hdus.append(pf.ImageHDU(exes_badmask_order_data(),
+                                name=f'BADMASK_ORDER_{i:02d}'))
+        hdus.append(pf.ImageHDU(exes_wavepos_order_data(),
+                                name=f'WAVEPOS_ORDER_{i:02d}'))
+        hdus.append(pf.ImageHDU(exes_slitpos_order_data(),
+                                name=f'SLITPOS_ORDER_{i:02d}'))
+        hdus.append(pf.ImageHDU(exes_spatial_map_order_data(),
+                                name=f'SPATIAL_MAP_ORDER_{i:02d}'))
+        hdus.append(pf.ImageHDU(exes_spatial_profile_order_data(),
+                                name=f'SPATIAL_PROFILE_ORDER_{i:02d}'))
+        hdus.append(pf.ImageHDU(exes_aperture_mask_order_data(),
+                                name=f'APERTURE_MASK_ORDER_{i:02d}'))
+
+    hdul = pf.HDUList(hdus)
+
+    return hdul
+
+
+def exes_intermediate_with_spectra(prodtype='spectra',
+                                   file_code='SPM', file_num=1,
+                                   n_orders=5, n_aps=1, merge=False,
+                                   bunit='Jy/pixel'):
+    hdul = exes_data()
+    header = hdul[0].header.copy()
+
+    header['PRODTYPE'] = prodtype
+    header['NORDERS'] = n_orders
+    header['NAPS'] = n_aps
+    filename = f'F0158_EX_SPE_86000114_EXEELONEXEECHL_' \
+               f'{file_code}_{file_num}.fits'
+    header['FILENAME'] = filename
+    header['EXTNAME'] = 'FLUX'
+    header['BUNIT'] = bunit
+
+    spec_data = exes_spec_data(n_orders=n_orders, n_apertures=n_aps)
+    spec_flux = spec_data[0].data[..., 1]
+    spec_err = spec_data[0].data[..., 2]
+    spec_trans = spec_data[0].data[..., 3]
+    spec_resp = spec_data[0].data[..., 4]
+    # modify transmission to look like multi-species array
+    shape = (11, spec_trans[0].size)
+    spec_trans = np.tile(spec_trans[0], 11).reshape(shape)
+
+    hdus = list()
+    hdus.append(pf.PrimaryHDU(exes_flux_data(), header))
+    hdus.append(pf.ImageHDU(exes_error_data(), name='ERROR'))
+    if not merge:
+        # these extensions are dropped after combining spectra
+        hdus.append(pf.ImageHDU(exes_mask_data(), name='MASK'))
+        hdus.append(pf.ImageHDU(exes_flat_data(), name='FLAT'))
+        hdus.append(pf.ImageHDU(exes_wavecal_data(), name='WAVECAL'))
+        hdus.append(pf.ImageHDU(exes_spatcal_data(), name='SPATCAL'))
+        hdus.append(pf.ImageHDU(exes_order_mask_data(), name='ORDER_MASK'))
+    hdus.append(pf.ImageHDU(spec_trans, name='TRANSMISSION'))
+
+    for x in range(n_orders):
+        i = x + 1
+        if n_orders > 1:
+            if n_aps > 1:
+                j = np.arange(x * n_aps, x * n_aps + n_aps)
+            else:
+                j = x
+        else:
+            j = None
+
+        hdus.append(pf.ImageHDU(exes_flux_order_data(),
+                                name=f'FLUX_ORDER_{i:02d}'))
+        hdus.append(pf.ImageHDU(exes_error_order_data(),
+                                name=f'ERROR_ORDER_{i:02d}'))
+        if not merge:
+            # attach flat, mask information
+            hdus.append(pf.ImageHDU(exes_flat_order_data(),
+                                    name=f'FLAT_ORDER_{i:02d}'))
+            hdus.append(pf.ImageHDU(exes_badmask_order_data(),
+                                    name=f'BADMASK_ORDER_{i:02d}'))
+
+        hdus.append(pf.ImageHDU(exes_wavepos_order_data(),
+                                name=f'WAVEPOS_ORDER_{i:02d}'))
+        if not merge:
+            # attach extraction information
+            hdus.append(pf.ImageHDU(exes_slitpos_order_data(),
+                                    name=f'SLITPOS_ORDER_{i:02d}'))
+            hdus.append(pf.ImageHDU(exes_spatial_map_order_data(),
+                                    name=f'SPATIAL_MAP_ORDER_{i:02d}'))
+            hdus.append(pf.ImageHDU(exes_spatial_profile_order_data(),
+                                    name=f'SPATIAL_PROFILE_ORDER_{i:02d}'))
+            hdus.append(pf.ImageHDU(exes_aperture_mask_order_data(),
+                                    name=f'APERTURE_MASK_ORDER_{i:02d}'))
+
+            # preserve the empty first dimension
+            hdus.append(pf.ImageHDU(spec_flux[j].reshape(n_aps, shape[1]),
+                                    name=f'SPECTRAL_FLUX_ORDER_{i:02d}'))
+            hdus.append(pf.ImageHDU(spec_err[j].reshape(n_aps, shape[1]),
+                                    name=f'SPECTRAL_ERROR_ORDER_{i:02d}'))
+            hdus.append(pf.ImageHDU(spec_trans,
+                                    name=f'TRANSMISSION_ORDER_{i:02d}'))
+            hdus.append(pf.ImageHDU(spec_resp[j].reshape(n_aps, shape[1]),
+                                    name=f'RESPONSE_ORDER_{i:02d}'))
+        else:
+            # extraction-related extensions are dropped,
+            # no extra dimension in merged/combined spectra
+            hdus.append(pf.ImageHDU(np.squeeze(spec_flux[j]),
+                                    name=f'SPECTRAL_FLUX_ORDER_{i:02d}'))
+            hdus.append(pf.ImageHDU(np.squeeze(spec_err[j]),
+                                    name=f'SPECTRAL_ERROR_ORDER_{i:02d}'))
+            hdus.append(pf.ImageHDU(np.squeeze(spec_trans),
+                                    name=f'TRANSMISSION_ORDER_{i:02d}'))
+            hdus.append(pf.ImageHDU(np.squeeze(spec_resp[j]),
+                                    name=f'RESPONSE_ORDER_{i:02d}'))
+
+    hdul = pf.HDUList(hdus)
+
+    return hdul
+
+
+def exes_final(prodtype='orders_merged', file_code='MRM',
+               file_num=1, n_aps=1, bunit='Jy/pixel'):
+    hdul = exes_intermediate_with_spectra(
+        prodtype=prodtype, file_code=file_code, file_num=file_num,
+        n_orders=1, n_aps=n_aps, merge=True, bunit=bunit)
+    header = hdul[0].header
+
+    new_hdul = pf.HDUList()
+    for hdu in hdul:
+        extname = hdu.header['EXTNAME']
+        if 'ORDER' in extname:
+            if not new_hdul:
+                hdu = pf.PrimaryHDU(hdu.data, header)
+            hdu.header['EXTNAME'] = extname.replace('_ORDER_01', '')
+            new_hdul.append(hdu)
+
+    return new_hdul
+
+
+def make_1d_exes(hdul):
+    """
+    Make 1d spectrum file.
+
+    Borrowed and modified from the EXES Redux method.
+
+    Parameters
+    ----------
+    hdul : astropy.io.fits.HDUList
+        File containing 2D and 1D spectral extensions.
+
+    Returns
+    -------
+    spectrum : astropy.io.fits.HDUList
+        New HDU list in Spextool style, containing 1D spectra.
+    """
+    header = hdul[0].header
+    spechdr = header.copy()
+
+    # add some spextool-required header keywords
+    bunit = hdul[0].header.get('BUNIT', 'UNKNOWN').replace('/pixel', '')
+    spechdr['XUNITS'] = ('cm-1', 'Spectral wavelength units')
+    spechdr['YUNITS'] = (bunit, 'Spectral flux units')
+
+    try:
+        del spechdr['BUNIT']
+    except KeyError:  # pragma: no cover
+        pass
+
+    # loop over orders
+    specset = []
+    first = True
+    max_length = 0
+    orders = []
+    for j in range(header['NORDERS']):
+        ordnum = f'{j + 1:02d}'
+
+        # keep actually used orders
+        orders.append(j + 1)
+
+        suffix = f'_ORDER_{ordnum}'
+        if (header['NORDERS'] == 1
+                and f'SPECTRAL_FLUX{suffix}' not in hdul):
+            suffix = ''
+
+        if hdul[f'SPECTRAL_FLUX{suffix}'].data.ndim > 1:
+            naps = hdul[f'SPECTRAL_FLUX{suffix}'].data.shape[0]
+        else:
+            naps = 1
+        if first:
+            spechdr['NAPS'] = (naps, 'Number of apertures')
+            first = False
+
+        wave = hdul[f'WAVEPOS{suffix}'].data
+        disp = np.nanmean(wave[1:] - wave[:-1])
+        spechdr[f'DISPO{ordnum}'] = (disp, 'Dispersion [cm-1 pixel-1]')
+        if len(wave) > max_length:
+            max_length = len(wave)
+
+        # transmission rows include additional data for various
+        # molecular species -- use the first only,
+        # which contains total transmission.
+        trans = hdul[f'TRANSMISSION{suffix}'].data
+        if trans.ndim > 1:
+            trans = trans[0]
+
+        for n in range(naps):
+            if naps > 1:
+                speclist = [hdul[f'WAVEPOS{suffix}'].data,
+                            hdul[f'SPECTRAL_FLUX{suffix}'].data[n],
+                            hdul[f'SPECTRAL_ERROR{suffix}'].data[n],
+                            trans,
+                            hdul[f'RESPONSE{suffix}'].data[n]]
+            else:
+                speclist = [hdul[f'WAVEPOS{suffix}'].data,
+                            hdul[f'SPECTRAL_FLUX{suffix}'].data,
+                            hdul[f'SPECTRAL_ERROR{suffix}'].data,
+                            trans,
+                            hdul[f'RESPONSE{suffix}'].data]
+
+            specdata = np.vstack(speclist)
+            specset.append(specdata)
+
+    # update ORDERS and NORDERS in header to actually used values
+    spechdr['ORDERS'] = ','.join([str(n) for n in orders])
+    spechdr['NORDERS'] = len(orders)
+
+    nspec = len(specset)
+    spec_array = np.full((nspec, 5, max_length), np.nan)
+    for i, data in enumerate(specset):
+        spec_array[i, :, :data.shape[1]] = data
+
+    # remove any empty dimensions
+    spec_array = np.squeeze(spec_array)
+
+    spec = pf.HDUList(pf.PrimaryHDU(data=spec_array,
+                                    header=spechdr))
+    return spec

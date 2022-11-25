@@ -87,11 +87,9 @@ class CursorLocation(QtWidgets.QDialog, cl.Ui_Dialog):
                            col_count=len(new_points[0]) - 1)
 
         for row_index, new_point in enumerate(new_points):
-
             for col_index, value in enumerate(new_point[1:]):
-
                 if isinstance(value, float):
-                    item = QTableWidgetItem(f'{value:.3g}')
+                    item = QTableWidgetItem(f'{value:.3f}')
                 elif isinstance(value, int):
                     item = QTableWidgetItem(f'{value:d}')
 
@@ -143,8 +141,10 @@ class CursorLocation(QtWidgets.QDialog, cl.Ui_Dialog):
             for values in model_data_coords:
                 if not values['visible']:
                     continue
-                point = [model_id, values['order'],
-                         values['color'],
+                # Add 1 to order to change from 0-based indexing
+                # used by models to 1-based indexing used by humans
+                point = [values['filename'], values['order'] + 1,
+                         values['aperture'] + 1, values['color'],
                          values['x_field'], values['y_field'],
                          cursor_coords[0], cursor_coords[1],
                          values['bin_x'], values['bin_y'],
@@ -152,7 +152,7 @@ class CursorLocation(QtWidgets.QDialog, cl.Ui_Dialog):
                 points.append(point)
             if point is None:
                 # no points found, append a blank entry for the model
-                point = [model_id] + ['-'] * 9
+                point = [model_data_coords[0]['filename']] + ['-'] * 10
                 points.append(point)
         return points
 

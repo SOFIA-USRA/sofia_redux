@@ -17,6 +17,8 @@ from sofia_redux.pipeline.sofia.parameters.flitecam_wavecal_parameters \
 from sofia_redux.pipeline.sofia.forcast_wavecal_reduction \
     import FORCASTWavecalReduction
 
+__all__ = ['FLITECAMWavecalReduction']
+
 
 class FLITECAMWavecalReduction(FLITECAMSpectroscopyReduction,
                                FORCASTWavecalReduction):

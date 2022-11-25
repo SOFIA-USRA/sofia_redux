@@ -169,7 +169,7 @@ def get_coeff_limits(header, camcap, update=False):
 
 def imgnonlin(data, header, siglev=None, variance=None):
     """
-    Corrects for non-linearity in detector response do to general background
+    Corrects for non-linearity in detector response due to general background.
 
     The header must contain the information to determine the camera.  If
     siglev is not passed, the header must also contain a keyword

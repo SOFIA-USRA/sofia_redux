@@ -10,24 +10,28 @@ PyQt5 = pytest.importorskip('PyQt5')
 @pytest.fixture(scope='function')
 def cursor_data():
     data_coords = {'file1.fits':
-                   [{'order': 0, 'bin': 85,
+                   [{'order': 0, 'bin': 85, 'aperture': 0,
                      'bin_x': 31.78, 'bin_y': 152.14,
                      'x_field': 'wavepos', 'y_field': 'spectral_flux',
-                     'color': '#2848ad', 'visible': True},
-                    {'order': 1, 'bin': 90,
+                     'color': '#2848ad', 'visible': True,
+                     'filename': 'file1.fits'},
+                    {'order': 1, 'bin': 90, 'aperture': 0,
                      'bin_x': 31.78, 'bin_y': 152.14,
                      'x_field': 'wavepos', 'y_field': 'spectral_flux',
-                     'color': '#7b85d4', 'visible': True}],
+                     'color': '#7b85d4', 'visible': True,
+                     'filename': 'file1.fits'}],
                    'file2.fits':
-                   [{'order': 0, 'bin': 85,
+                   [{'order': 0, 'bin': 85, 'aperture': 0,
                      'bin_x': 31.78, 'bin_y': 162.10,
                      'x_field': 'wavepos', 'y_field': 'spectral_flux',
-                     'color': '#59d4db', 'visible': True}],
+                     'color': '#59d4db', 'visible': True,
+                     'filename': 'file2.fits'}],
                    'file3.fits':
-                   [{'order': 0, 'bin': 85,
+                   [{'order': 0, 'bin': 85, 'aperture': 1,
                      'bin_x': 31.78, 'bin_y': 159.08,
                      'x_field': 'wavepos', 'y_field': 'spectral_flux',
-                     'color': '#f37738', 'visible': True}]}
+                     'color': '#f37738', 'visible': True,
+                     'filename': 'file3.fits'}]}
     cursor_coords = [31.781183, 77.476260]
     return data_coords, cursor_coords
 
@@ -55,17 +59,20 @@ class TestCursorLocation(object):
         # fill table with four rows, nine columns
         cl.update_points(data_coords, cursor_coords)
         assert cl.table_widget.rowCount() == 4
-        assert cl.table_widget.columnCount() == 9
+        assert cl.table_widget.columnCount() == 10
 
         # check cell contents
-        columns = ['order', 'color', 'x_field', 'y_field',
+        columns = ['order', 'aperture', 'color', 'x_field', 'y_field',
                    'cursor_x', 'cursor_y', 'bin_x', 'bin_y', 'bin']
-        check_order = 0
+        check_orders = [0, 1, 0, 0]
+        filenames = ['file1.fits', 'file1.fits', 'file2.fits', 'file3.fits']
         for i in range(cl.table_widget.rowCount()):
-            if check_order < 2:
-                filename = f'file{i + 1 - check_order}.fits'
-            else:
-                filename = f'file{i}.fits'
+            # if check_order[i] < 2:
+            #     filename = f'file{i + 1 - check_order[i]}.fits'
+            # else:
+            #     filename = f'file{i}.fits'
+            filename = filenames[i]
+            check_order = check_orders[i]
             assert cl.table_widget.verticalHeaderItem(i).text() == filename
             for j in range(cl.table_widget.columnCount()):
                 item_text = cl.table_widget.item(i, j).text()
@@ -75,20 +82,31 @@ class TestCursorLocation(object):
                                       PyQt5.QtGui.QIcon)
                 elif columns[j] == 'cursor_x':
                     value = cursor_coords[0]
-                    assert item_text == f'{value:.3g}'
+                    assert item_text == f'{value:.3f}'
                 elif columns[j] == 'cursor_y':
                     value = cursor_coords[1]
-                    assert item_text == f'{value:.3g}'
+                    assert item_text == f'{value:.3f}'
+                elif columns[j] == 'order':
+                    value = data_coords[filename][check_order][columns[j]]
+                    assert item_text == f'{value+1:d}'
+                elif columns[j] == 'aperture':
+                    value = data_coords[filename][check_order][columns[j]]
+                    assert item_text == f'{value+1:d}'
                 else:
                     if check_order < 2:
                         value = data_coords[filename][check_order][columns[j]]
                     else:
                         value = data_coords[filename][0][columns[j]]
-                    if isinstance(value, str):
+                    if columns[j] == 'order':
+                        assert item_text == f'{value + 1:.3g}'
+                    elif isinstance(value, str):
                         assert item_text == value
+                    elif isinstance(value, int):
+                        assert item_text == f'{value:d}'
                     else:
-                        assert item_text == f'{value:.3g}'
-            check_order += 1
+                        assert item_text == f'{value:.3f}'
+
+            # check_order += 1
 
     def test_update_points_visibility(self, empty_view, cursor_data):
         cl = CursorLocation(empty_view)
@@ -160,4 +178,4 @@ class TestCursorLocation(object):
         data_coords['file1.fits'][0]['x_field'] = None
         cl.update_points(data_coords, cursor_coords)
 
-        assert cl.table_widget.item(0, 2).text() == '######'
+        assert cl.table_widget.item(0, 3).text() == '######'

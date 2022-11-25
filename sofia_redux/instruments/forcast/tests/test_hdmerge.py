@@ -27,41 +27,6 @@ class TestHdmerge(object):
             hdrl.append(hdul[0].header)
         return hdrl
 
-    def test_order_single(self):
-        h = fits.Header()
-        h['TESTKEY'] = 'foo'
-        headers = [h]
-        result = u.order_headers(headers)
-        assert len(result) == 2
-        assert isinstance(result[0], fits.Header)
-        assert len(result[1]) == 1
-        assert result[0]['TESTKEY'] == 'foo'
-
-    def test_order_multiple(self):
-        headers = [fits.Header() for _ in range(5)]
-        for idx, h in enumerate(headers):
-            h['DATE-OBS'] = '2018-01-01T00:00:%02i' % (59 - idx)
-            h['IDX'] = idx
-        basehead, oheaders = u.order_headers(headers)
-        assert basehead['IDX'] == (len(headers) - 1)
-        assert oheaders[0]['IDX'] == (len(headers) - 1)
-        assert oheaders[len(headers) - 1]['IDX'] == 0
-
-    def test_order_nods(self):
-        headers = [fits.Header() for _ in range(5)]
-        for idx, h in enumerate(headers):
-            h['DATE-OBS'] = '2018-01-01T00:00:%02i' % (59 - idx)
-            h['IDX'] = idx
-            h['NODBEAM'] = 'B' if (idx % 2) == 0 else 'A'
-        basehead, oheaders = u.order_headers(headers)
-
-        # basehead is earliest A nod
-        assert basehead['IDX'] == 3
-
-        # sorted headers are by date-obs
-        assert oheaders[0]['IDX'] == 4
-        assert oheaders[4]['IDX'] == 0
-
     def test_success(self):
         hdrl = self.make_headers()
 

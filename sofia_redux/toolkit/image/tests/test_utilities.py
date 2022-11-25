@@ -76,3 +76,43 @@ def test_map_coordinates():
     assert np.allclose(new[2], [0, 1, 0, 0])
     assert np.allclose(new[3], 0)
     assert np.allclose(new[4], -1)
+
+
+def test_map_coordinates_nan():
+    image = np.zeros((5, 4), dtype=float)
+    image[1, 2] = 1.0
+    image[2, 3] = np.nan
+
+    coordinates = np.indices(image.shape)
+    ct = coordinates[::-1]  # transpose
+    mapped = map_coordinates(image, ct, mode='edge', cval=0.0)
+
+    mask = np.full(image.shape, False)
+    mask[2, 1] = True
+    assert np.allclose(mapped[mask], 1)
+    assert np.allclose(mapped[~mask], 0)
+
+    nanmask = np.full(image.shape, False)
+    nanmask[3, 2] = True
+    assert np.allclose(mapped[nanmask], 0)
+
+    outputs = [None, image.copy()]
+    for output in outputs:
+        m = mask.copy()
+        n = nanmask.copy()
+        mapped = map_coordinates(image, ct, mode='constant', cval=np.nan,
+                                 output=output)
+        assert np.allclose(mapped[m], 1)
+        assert np.isnan(mapped[4]).all()
+        m[4] = True
+        assert np.allclose(mapped[~(m | n)], 0)
+        assert np.isnan(mapped[n])
+
+    output = mapped.astype(int)
+    new = map_coordinates(image, ct, mode='constant', cval=-1,
+                          output=output, clip=False)
+    assert new.dtype == int
+    assert np.allclose(new[:2], 0)
+    assert np.allclose(new[2], [0, 1, 0, 0])
+    assert np.allclose(new[3], [0, 0, -1, 0])
+    assert np.allclose(new[4], -1)

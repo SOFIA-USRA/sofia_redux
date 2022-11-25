@@ -1,8 +1,10 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+from astropy.io import fits
 import numpy as np
-from sofia_redux.spectroscopy.rectify import rectify
 import pytest
+
+from sofia_redux.spectroscopy.rectify import rectify
 
 
 @pytest.fixture
@@ -33,3 +35,14 @@ def test_success(data):
     result = rectify(image, ordermask, wavecal, spatcal, orders=1)
     keys = list(result.keys())
     assert len(keys) == 1 and keys[0] == 1
+
+
+def test_header(data):
+    image, ordermask, wavecal, spatcal = data
+    header = fits.Header({'TEST': 'VALUE'})
+    result = rectify(image, ordermask, wavecal, spatcal, header=header)
+
+    # input header is copied for each order
+    for order in result:
+        assert result[order]['header'] is not header
+        assert result[order]['header']['TEST'] == 'VALUE'

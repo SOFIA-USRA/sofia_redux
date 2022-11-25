@@ -68,7 +68,7 @@ rst_epilog += """
 
 # NASA document number and revision
 docnumber = 'SCI-US-ICD-SE15-2003'
-docrev = 'L'
+docrev = 'M'
 
 # This does not *have* to match the package name, but typically does
 project = setup_cfg['name']
@@ -104,7 +104,7 @@ latex_elements = {
     'classoptions': ',openany,oneside',
     'babel': r'\usepackage[english]{babel}',
     'maxlistdepth': 20,
-    'printindex': r'\footnotesize\raggedright\printindex',
+    'printindex': r'\def\twocolumn[#1]{#1}\printindex',
     'preamble': r'''
 \pagestyle{plain}
 \setcounter{tocdepth}{2}

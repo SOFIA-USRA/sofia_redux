@@ -30,6 +30,9 @@ except ImportError:
 else:
     HAS_PYQT5 = True
 
+__all__ = ['DispSettingsDialog', 'PhotSettingsDialog',
+           'PlotSettingsDialog']
+
 
 class DispSettingsDialog(QtWidgets.QDialog,
                          ui_qad_disp_settings.Ui_DisplayDialog):

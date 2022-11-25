@@ -1,9 +1,14 @@
 #  Licensed under a 3-clause BSD style license - see LICENSE.rst
+import copy
+
+import matplotlib.axes
 import matplotlib.collections
 import pytest
 import logging
 import astropy.units as u
+import astropy.modeling as am
 import numpy as np
+import numpy.testing as npt
 from scipy import optimize as sco
 from matplotlib import figure as mpf
 from matplotlib import axes as mpa
@@ -11,10 +16,13 @@ from matplotlib import lines as ml
 from matplotlib import collections as mc
 from matplotlib import backend_bases as mpb
 from matplotlib import artist as mart
+from matplotlib import patches as mpp
+from matplotlib import pyplot as plt
 
 from sofia_redux.visualization.display import pane, drawing
-from sofia_redux.visualization.models import high_model, reference_model
-from sofia_redux.visualization.utils import eye_error
+from sofia_redux.visualization.models import (high_model, reference_model,
+                                              low_model)
+from sofia_redux.visualization.utils import eye_error, model_fit
 from sofia_redux.visualization import signals
 
 PyQt5 = pytest.importorskip('PyQt5')
@@ -41,35 +49,21 @@ class TestPane(object):
         blank_pane.set_border_visibility(False)
         assert not blank_pane.border.get_visible()
 
-    def test_update_model(self, multiorder_hdul_merged,
-                          blank_onedim, grism_hdul):
-        grism_filename = grism_hdul.filename()
-        grism_model = high_model.Grism(grism_hdul)
-        blank_onedim.models[grism_filename] = grism_model
-
-        multi_model = dict()
-        multi_model[grism_filename] = high_model.MultiOrder(
-            multiorder_hdul_merged)
-
-        blank_onedim.update_model(multi_model)
-        assert id(blank_onedim.models[grism_filename]) != \
-               id(high_model.MultiOrder(multiorder_hdul_merged))
-
     def test_remove_model(self, blank_onedim, mocker,
                           grism_hdul, multiorder_hdul_merged):
-        multi_filename = multiorder_hdul_merged.filename()
         multi_model = high_model.MultiOrder(multiorder_hdul_merged)
-        blank_onedim.models[multi_filename] = multi_model
+        blank_onedim.models[multi_model.id] = multi_model
 
         grism_filename = grism_hdul.filename()
         grism_model = high_model.Grism(grism_hdul)
-        blank_onedim.models[grism_filename] = grism_model
+        blank_onedim.models[grism_model.id] = grism_model
 
         assert len(blank_onedim.models) == 2
         blank_onedim.remove_model(filename=grism_filename)
         assert len(blank_onedim.models) == 1
 
         blank_onedim.models[grism_filename] = grism_model
+        assert len(blank_onedim.models) == 2
         blank_onedim.remove_model(model=multi_model)
         assert len(blank_onedim.models) == 1
 
@@ -133,7 +127,7 @@ class TestPane(object):
 
         blank_onedim.orders = {multiorder_hdul_spec.filename(): [1, 2, 3]}
 
-        assert not blank_onedim.data_changed
+        blank_onedim.data_changed = False
         blank_onedim.set_orders(orders)
         assert blank_onedim.data_changed
         assert 'Enabling ' in caplog.text
@@ -179,6 +173,18 @@ class TestPane(object):
         assert 'Ending limits' in caplog.text
         assert len(lines) == 0
 
+    def test_plot_model_skip(self, blank_onedim, grism_hdul):
+        model = high_model.Grism(grism_hdul)
+        ax = mpf.Figure().subplots(1, 1)
+        blank_onedim.ax = ax
+        blank_onedim.models[model.id] = model
+        blank_onedim.orders[model.id] = [0]
+        blank_onedim.colors[model.id] = 'blue'
+        blank_onedim.fields['y'] = 'response_error'
+        lines = blank_onedim._plot_model(model)
+        assert all([isinstance(line, drawing.Drawing) for line in lines])
+        assert all([line.kind != 'error_range' for line in lines])
+
     def test_plot_model_same_fields(self, blank_onedim, mocker, grism_hdul):
 
         marker = '^'
@@ -187,25 +193,25 @@ class TestPane(object):
 
         model = high_model.Grism(grism_hdul)
         model.enabled = False
-        blank_onedim.models[model.filename] = model
-        blank_onedim.orders[model.filename] = [0]
-        blank_onedim.markers[model.filename] = marker
-        blank_onedim.colors[model.filename] = 'blue'
+        blank_onedim.models[model.id] = model
+        blank_onedim.orders[model.id] = [0]
+        blank_onedim.markers[model.id] = marker
+        blank_onedim.colors[model.id] = 'blue'
+        blank_onedim.plot_type = 'scatter'
 
         # Same fields
         blank_onedim.fields['y'] = blank_onedim.fields['x']
         blank_onedim.units = {'x': u.um, 'y': u.nm}
 
-        blank_onedim.plot_type = 'scatter'
         lines = blank_onedim._plot_model(model)
         line, cursor = tuple(lines)
         # Being tested for fields
-        assert line.get_artist()._label.split(',')[-1].strip() == \
-               blank_onedim.fields['x']
+        assert (line.get_artist()._label.split(',')[-1].strip()
+                == blank_onedim.fields['x'])
         assert isinstance(line.get_artist(), ml.Line2D)
         assert line.get_artist().get_marker() == marker
         assert line.get_artist().get_linestyle() == 'None'
-        assert isinstance(cursor.get_artist(), mc.PathCollection)
+        assert isinstance(cursor.get_artist(), ml.Line2D)
         # assert isinstance(error.get_artist(), mc.PolyCollection)
         assert all([not ln.get_artist().get_visible()
                     for ln in lines])
@@ -219,8 +225,8 @@ class TestPane(object):
 
         flux = model.orders[0].data['spectral_flux'].data.copy()
         model.orders[0].data['spectral_flux'].data = flux[:-1]
-        blank_onedim.models[model.filename] = model
-        blank_onedim.orders[model.filename] = [0]
+        blank_onedim.models[model.id] = model
+        blank_onedim.orders[model.id] = [0]
 
         lines = blank_onedim._plot_model(model)
 
@@ -236,8 +242,8 @@ class TestPane(object):
         caplog.set_level(logging.DEBUG)
         model = high_model.Grism(grism_hdul)
 
-        blank_onedim.models[model.filename] = model
-        blank_onedim.orders[model.filename] = [0]
+        blank_onedim.models[model.id] = model
+        blank_onedim.orders[model.id] = [0]
         mocker.patch.object(blank_onedim, '_plot_cursor')
         mocker.patch.object(blank_onedim, '_convert_low_model_units')
         mocker.patch.object(blank_onedim, '_plot_single_line',
@@ -270,10 +276,10 @@ class TestPane(object):
 
         model = high_model.Grism(grism_hdul)
 
-        blank_onedim.models[model.filename] = model
-        blank_onedim.orders[model.filename] = [0]
-        blank_onedim.markers[model.filename] = marker
-        blank_onedim.colors[model.filename] = 'blue'
+        blank_onedim.models[model.id] = model
+        blank_onedim.orders[model.id] = [0]
+        blank_onedim.markers[model.id] = marker
+        blank_onedim.colors[model.id] = 'blue'
         blank_onedim.limits['y_alt'] = [0, 1]
         blank_onedim.show_overplot = True
 
@@ -302,10 +308,10 @@ class TestPane(object):
         caplog.set_level(logging.DEBUG)
         model = high_model.Grism(grism_hdul)
         model.enabled = False
-        blank_onedim.models[model.filename] = model
-        blank_onedim.orders[model.filename] = [0]
-        blank_onedim.markers[model.filename] = marker
-        blank_onedim.colors[model.filename] = 'blue'
+        blank_onedim.models[model.id] = model
+        blank_onedim.orders[model.id] = [0]
+        blank_onedim.markers[model.id] = marker
+        blank_onedim.colors[model.id] = 'blue'
 
         blank_onedim.plot_type = 'scatter'
         lines = blank_onedim._plot_model(model)
@@ -314,10 +320,38 @@ class TestPane(object):
         assert isinstance(line.get_artist(), ml.Line2D)
         assert line.get_artist().get_marker() == marker
         assert line.get_artist().get_linestyle() == 'None'
-        assert isinstance(cursor.get_artist(), mc.PathCollection)
+        assert isinstance(cursor.get_artist(), ml.Line2D)
         assert isinstance(error.get_artist(), mc.PolyCollection)
         assert all([not ln.get_artist().get_visible()
                     for ln in lines])
+
+    @pytest.mark.parametrize(
+        'axis,plot_type,show_marker,visible,style,marker,width,alpha',
+        [('primary', 'line', False, True, '-', 'None', 1.5, 1),
+         ('primary', 'line', True, True, '-', 'x', 1.5, 1),
+         ('primary', 'line', False, False, '-', 'None', 1.5, 1),
+         ('primary', 'scatter', False, True, 'None', 'x', 1.5, 1),
+         ('alt', 'line', False, True, ':', 'None', 1, 0.5)])
+    def test_plot_single_line(self, one_dim_pane, grism_hdul, axis,
+                              plot_type, show_marker, visible, style,
+                              marker, width, alpha):
+        model = high_model.Grism(grism_hdul)
+        one_dim_pane.add_model(model)
+        one_dim_pane.plot_type = plot_type
+        one_dim_pane.show_markers = show_marker
+        one_dim_pane.set_overplot(True)
+        x = np.linspace(2, 10, 100)
+        y = np.log10(x)
+        label = 'test'
+
+        line = one_dim_pane._plot_single_line(x, y, label, model.id,
+                                              visible, axis)
+        assert isinstance(line, ml.Line2D)
+        assert line.get_alpha() == alpha
+        assert line.get_linestyle() == style
+        assert line.get_marker() == marker
+        assert line.get_linewidth() == width
+        assert line.get_visible() is visible
 
     @pytest.mark.parametrize('name,unit,label',
                              [('flux', u.Jy, 'Flux [Jy]'),
@@ -357,14 +391,41 @@ class TestPane(object):
             unit = blank_onedim.get_unit_string(axis)
             assert unit == correct
 
-    def test_get_orders(self, blank_onedim, grism_hdul):
-        model = high_model.Grism(grism_hdul)
+    def test_get_orders(self, one_dim_pane, multiorder_multiap_hdul,
+                        grism_hdul):
+        model = high_model.MultiOrder(multiorder_multiap_hdul)
+        grism_model = high_model.Grism(grism_hdul)
+        model.orders[0].enabled = False
 
-        blank_onedim.models[model.filename] = model
+        one_dim_pane.add_model(model)
+        one_dim_pane.add_model(grism_model)
 
-        result = blank_onedim.get_orders(enabled_only=True, by_model=True)
+        result = one_dim_pane.get_orders()
+        assert isinstance(result, list)
+        assert len(result) == 5
 
-        assert result[model.filename] == [0]
+        result = one_dim_pane.get_orders(kind='aperture')
+        assert len(result) == 3
+
+        result = one_dim_pane.get_orders(kind='all')
+        assert len(result) == 5
+
+        result = one_dim_pane.get_orders(enabled_only=True)
+        assert isinstance(result, list)
+        assert len(result) == 5
+
+        result = one_dim_pane.get_orders(kind='aperture', enabled_only=True)
+        assert len(result) == 3
+
+        result = one_dim_pane.get_orders(kind='all', enabled_only=True)
+        assert len(result) == 5
+
+        result = one_dim_pane.get_orders(filename=grism_model.filename)
+        assert len(result) == 1
+
+        result = one_dim_pane.get_orders(enabled_only=True, by_model=True)
+        assert isinstance(result, dict)
+        assert result[model.id] == [0, 1, 2, 3, 4]
 
     def test_get_unit_empty(self, blank_onedim):
         result = blank_onedim.get_unit()
@@ -403,77 +464,80 @@ class TestPane(object):
         blank_onedim.fields['x'] = 'wavepos'
         blank_onedim.fields['y'] = 'wavepos'
         blank_onedim.units = {'x': u.um, 'y': u.nm}
-        x, y = blank_onedim.get_xy_data(model, order=0)
+        x, y = blank_onedim.get_xy_data(model, order=0, aperture=0)
 
         assert id(x) != id(model)
         assert id(y) != id(model)
         assert id(x) != id(y)
 
-        spectrum_x = x.retrieve(order=0,
+        spectrum_x = x.retrieve(order=0, aperture=0,
                                 level='low', field='wavepos')
-        spectrum_y = y.retrieve(order=0,
+        spectrum_y = y.retrieve(order=0, aperture=0,
                                 level='low', field='wavepos')
         assert spectrum_x.unit_key == 'um'
         assert spectrum_y.unit_key == 'nm'
 
     @pytest.mark.parametrize('target, current',
-                             [({'x': u.nm, 'y': 'Jy'}, {'x': 'pixel',
-                                                        'y': u.Jy}),
-                              ({'x': 'pixel', 'y': u.mol}, {'x': 'pixel',
-                                                            'y': u.Jy})])
+                             [({'x': u.nm, 'y': 'Jy'},
+                               {'x': 'pixel', 'y': u.Jy}),
+                              ({'x': 'pixel', 'y': u.mol},
+                               {'x': 'pixel', 'y': u.Jy})])
     def test_set_units_pixels(self, qtbot, mocker, blank_onedim, grism_hdul,
                               target, current):
         mocker.patch.object(pane.OneDimPane, '_convert_low_model_units',
                             side_effect=ValueError)
         model = high_model.Grism(grism_hdul)
-        blank_onedim.models[model.filename] = model
-        blank_onedim.orders[model.filename] = [0]
+        blank_onedim.models[model.id] = model
+        blank_onedim.orders[model.id] = ['0.0']
         blank_onedim.units = current
         units = target
         with qtbot.wait_signal(blank_onedim.signals.obtain_raw_model):
             blank_onedim.set_units(units, 'primary')
+
+    def test_set_units_alt(self, one_dim_pane, grism_hdul):
+        model = high_model.Grism(grism_hdul)
+        one_dim_pane.add_model(model)
+
+        one_dim_pane.set_overplot(True)
+        one_dim_pane.set_fields({'y_alt': 'spectral_flux'})
+        one_dim_pane.data_changed = False
+        units = {'x': 'nm', 'y': 'W / m2'}
+        one_dim_pane.set_units(units, axes='alt')
+        assert one_dim_pane.data_changed
 
     def test_set_units_err_none(self, qtbot, mocker, blank_onedim, grism_hdul):
         mocker.patch.object(pane.OneDimPane, '_convert_low_model_units',
                             side_effect=ValueError)
         model = high_model.Grism(grism_hdul)
 
-        spectrum = model.retrieve(order=0,
-                                  level='low', field='flux')
-        wave_spectrum = model.retrieve(order=0,
-                                       level='low', field='wavepos')
-        blank_onedim.models[model.filename] = model
+        blank_onedim.models[model.id] = model
 
         mocker.patch.object(model, 'retrieve',
-                            side_effect=[spectrum, wave_spectrum, None])
+                            return_value=None)
 
         # mock retrieve multiple times
-        blank_onedim.orders[model.filename] = [0]
+        blank_onedim.orders[model.id] = ['0.0']
         blank_onedim.fields['y'] = 'flux'
         blank_onedim.fields['x'] = 'wavepos'
         blank_onedim.units = {'x': u.nm, 'y': u.Jy}
         units = {'x': u.m, 'y': u.mol}
-        model = blank_onedim.models[model.filename]
+        model = blank_onedim.models[model.id]
         blank_onedim.set_units(units, 'primary')
         error_spectrum = model.retrieve(order=0, level='low',
                                         field='spectral_error')
 
         assert error_spectrum is None
 
-    def test_update_visibility(self, mocker, blank_onedim,
-                               grism_hdul):
+    def test_update_visibility(self, mocker, blank_onedim, grism_hdul):
 
         model = high_model.Grism(grism_hdul)
 
-        spectrum = model.retrieve(order=0,
-                                  level='low', field='flux')
-        # wave_spectrum = model.retrieve(order=0,
-        #                                level='low', field='wavepos')
-        blank_onedim.models[model.filename] = model
+        spectrum = model.retrieve(order=0, aperture=0,
+                                  level='low', field='spectral_flux')
+        blank_onedim.models[model.id] = model
 
-        mocker.patch.object(model, 'retrieve',
-                            side_effect=spectrum)
-        blank_onedim.orders[model.filename] = [0]
+        mocker.patch.object(model, 'retrieve', return_value=spectrum)
+        blank_onedim.orders[model.id] = ['0.0']
 
         updates = blank_onedim.update_visibility(error=None)
         assert updates[0]._kind == 'line'
@@ -484,13 +548,13 @@ class TestPane(object):
                             side_effect=ValueError)
         model = high_model.Grism(grism_hdul)
 
-        blank_onedim.models[model.filename] = model
-        blank_onedim.orders[model.filename] = [0]
+        blank_onedim.models[model.id] = model
+        blank_onedim.orders[model.id] = ['0.0']
         blank_onedim.fields['y'] = 'response'
         blank_onedim.units = {'x': u.um, 'y': u.Jy}
         units = {'x': u.nm, 'y': u.mol}
 
-        assert not blank_onedim.data_changed
+        blank_onedim.data_changed = False
 
         updates = blank_onedim.set_units(units, 'primary')
 
@@ -514,14 +578,13 @@ class TestPane(object):
                                       grism_hdul, blank_figure,
                                       xdata, isnan):
 
-        mocker.patch.object(np, 'nanargmin',
-                            return_value=4)
+        mocker.patch.object(np, 'nanargmin', return_value=4)
         mocker.patch.object(np, 'isnan', return_value=np.array([isnan]))
         model = high_model.Grism(grism_hdul)
 
-        blank_onedim.models[model.filename] = model
-        blank_onedim.orders[model.filename] = [0]
-        blank_onedim.colors[model.filename] = 'blue'
+        blank_onedim.models[model.id] = model
+        blank_onedim.orders[model.id] = ['0.0']
+        blank_onedim.colors[model.id] = 'blue'
 
         # add an alt axis to test too
         blank_onedim.show_overplot = True
@@ -532,8 +595,8 @@ class TestPane(object):
         event.xdata = xdata
 
         data = blank_onedim.data_at_cursor(event)
-        assert data[model.filename][0]['visible'] is False
-        assert data[model.filename][1]['visible'] is False
+        assert data[model.id][0]['visible'] is False
+        assert data[model.id][1]['visible'] is False
 
     @pytest.mark.parametrize('xdata,isnan', [(2000, False)])
     def test_data_at_cursor_same_fields(self, blank_onedim, mocker,
@@ -543,9 +606,9 @@ class TestPane(object):
         mocker.patch.object(np, 'isnan', return_value=np.array([isnan]))
         model = high_model.Grism(grism_hdul)
 
-        blank_onedim.models[model.filename] = model
-        blank_onedim.orders[model.filename] = [0]
-        blank_onedim.colors[model.filename] = 'blue'
+        blank_onedim.models[model.id] = model
+        blank_onedim.orders[model.id] = ['0.0']
+        blank_onedim.colors[model.id] = 'blue'
 
         # add an alt axis to test too
         blank_onedim.show_overplot = False
@@ -558,9 +621,8 @@ class TestPane(object):
 
         data = blank_onedim.data_at_cursor(event)
 
-        assert data[model.filename][0]['visible'] is False
-        assert data[model.filename][0]['y_field'] == data[model.filename][
-            0]['x_field']
+        assert data[model.id][0]['visible'] is False
+        assert data[model.id][0]['y_field'] == data[model.id][0]['x_field']
 
     def test_perform_fit_bad(self, blank_onedim):
         arts, params = blank_onedim.perform_fit('trapezoid', [0, 10])
@@ -587,9 +649,9 @@ class TestPane(object):
 
         model.enabled = model_en
         model.orders[0].data['spectral_flux'].enabled = order_en
-        blank_onedim.models[model.filename] = model
-        blank_onedim.orders[model.filename] = [0]
-        blank_onedim.colors[model.filename] = 'blue'
+        blank_onedim.models[model.id] = model
+        blank_onedim.orders[model.id] = [0]
+        blank_onedim.colors[model.id] = 'blue'
         ax = mpf.Figure().subplots(1, 1)
         blank_onedim.ax = ax
 
@@ -606,23 +668,22 @@ class TestPane(object):
         arts, params = blank_onedim.perform_fit('fit_gauss_constant', limits)
         assert len(arts) == 0
         if mock_fit_1 or mock_fit_2 or xlow > 10:
-            # empty/failed fit still returns parameters but not gallery
+            # empty/failed fit still returns parameters but not artists
             assert len(params) == 1
         else:
             assert len(params) == 0
         assert '; skipping' in caplog.text
 
     def test_contains_model(self, blank_onedim, grism_hdul):
-        grism_filename = grism_hdul.filename()
         grism_model = high_model.Grism(grism_hdul)
-        blank_onedim.models[grism_filename] = grism_model
-        blank_onedim.orders[grism_filename] = [0]
+        blank_onedim.models[grism_model.id] = grism_model
+        blank_onedim.orders[grism_model.id] = [0]
 
-        assert blank_onedim.contains_model(grism_filename)
-        assert blank_onedim.contains_model(grism_filename, order=0)
+        assert blank_onedim.contains_model(grism_model.id)
+        assert blank_onedim.contains_model(grism_model.id, order=0)
 
         assert not blank_onedim.contains_model('test.fits')
-        assert not blank_onedim.contains_model(grism_filename, order=1)
+        assert not blank_onedim.contains_model(grism_model.id, order=1)
 
     def test_get_field(self, blank_onedim):
         expected = {'x': 'wavepos', 'y': 'spectral_flux', 'y_alt': None}
@@ -697,12 +758,11 @@ class TestPane(object):
         assert 'Unable to retrieve scale' in str(err)
 
     def test_update_error_artists(self, blank_onedim, grism_hdul):
-        fn = grism_hdul.filename()
         grism_model = high_model.Grism(grism_hdul)
-        blank_onedim.models[fn] = grism_model
-        blank_onedim.orders[fn] = [0]
-        blank_onedim.markers[fn] = 'x'
-        blank_onedim.colors[fn] = 'blue'
+        blank_onedim.models[grism_model.id] = grism_model
+        blank_onedim.orders[grism_model.id] = ['0.0']
+        blank_onedim.markers[grism_model.id] = 'x'
+        blank_onedim.colors[grism_model.id] = 'blue'
         ax = mpf.Figure().subplots(1, 1)
         blank_onedim.ax = ax
 
@@ -783,7 +843,7 @@ class TestPane(object):
         assert len(updates) == 0
 
         # plot true/false calls different functions
-        m1 = mocker.patch.object(blank_onedim, '_plot_reference')
+        m1 = mocker.patch.object(blank_onedim, '_plot_reference_lines')
         m2 = mocker.patch.object(blank_onedim, '_current_reference_options')
         blank_onedim.update_reference_data(plot=True)
         blank_onedim.update_reference_data(plot=False)
@@ -807,12 +867,11 @@ class TestPane(object):
         assert blank_onedim._plot_reference_lines() == list()
 
         # load some data
-        fn = grism_hdul.filename()
         grism_model = high_model.Grism(grism_hdul)
-        blank_onedim.models[fn] = grism_model
-        blank_onedim.orders[fn] = [0]
-        blank_onedim.markers[fn] = 'x'
-        blank_onedim.colors[fn] = 'blue'
+        blank_onedim.models[grism_model.id] = grism_model
+        blank_onedim.orders[grism_model.id] = [0]
+        blank_onedim.markers[grism_model.id] = 'x'
+        blank_onedim.colors[grism_model.id] = 'blue'
         ax = mpf.Figure().subplots(1, 1)
         blank_onedim.ax = ax
         blank_onedim._plot_model(grism_model)
@@ -921,10 +980,10 @@ class TestPane(object):
     def test_set_units_reference(self, blank_onedim, grism_hdul):
         # load some data
         model = high_model.Grism(grism_hdul)
-        blank_onedim.models[model.filename] = model
-        blank_onedim.orders[model.filename] = [0]
-        blank_onedim.markers[model.filename] = 'x'
-        blank_onedim.colors[model.filename] = 'blue'
+        blank_onedim.models[model.id] = model
+        blank_onedim.orders[model.id] = ['0.0']
+        blank_onedim.markers[model.id] = 'x'
+        blank_onedim.colors[model.id] = 'blue'
         ax = mpf.Figure().subplots(1, 1)
         blank_onedim.ax = ax
 
@@ -952,3 +1011,500 @@ class TestPane(object):
                 assert np.allclose(ln.artist.get_data()[0],
                                    ref.line_list[str(label)][0] * 1000)
                 label += 1
+
+    def test_axes(self, one_dim_pane):
+        assert not one_dim_pane.show_overplot
+        axes = one_dim_pane.axes()
+        assert isinstance(axes, list)
+        assert len(axes) == 2
+        assert isinstance(axes[0], mpa.Axes)
+        assert axes[1] is None
+
+        one_dim_pane.set_overplot(True)
+        axes = one_dim_pane.axes()
+        assert isinstance(axes[0], mpa.Axes)
+        assert isinstance(axes[1], mpa.Axes)
+        assert axes[0].bbox.bounds == axes[1].bbox.bounds
+
+    def test_set_axis(self, blank_onedim):
+        fig, ax = plt.subplots(1, 1)
+        assert blank_onedim.ax is None
+        assert blank_onedim.ax_alt is None
+        assert blank_onedim.border is None
+
+        blank_onedim.set_axis(ax, kind='alt')
+        assert blank_onedim.ax is None
+        assert blank_onedim.ax_alt == ax
+        assert blank_onedim.border is None
+
+        blank_onedim.set_axis(ax)
+        assert blank_onedim.ax == ax
+        assert blank_onedim.ax_alt == ax
+        assert isinstance(blank_onedim.border, mpp.Rectangle)
+
+    def test_overplot_state(self, one_dim_pane):
+        assert not one_dim_pane.overplot_state()
+        one_dim_pane.set_overplot(True)
+        assert one_dim_pane.overplot_state()
+
+    @pytest.mark.parametrize('method, nargs',
+                             [('get_scale', 1), ('get_orders', 1),
+                              ('set_limits', 1), ('set_scales', 1),
+                              ('set_units', 2), ('set_fields', 1),
+                              ('get_unit', 1), ('get_field', 1),
+                              ('get_axis_scale', 0), ('get_unit_string', 1),
+                              ('get_axis_limits', 0), ('current_units', 0),
+                              ('possible_units', 0), ('set_orders', 1),
+                              ('remove_model', 0), ('add_model', 1),
+                              ('update_colors', 0), ('perform_zoom', 2),
+                              ('set_plot_type', 1), ('set_markers', 1),
+                              ('set_grid', 1), ('set_error', 1),
+                              ('create_artists_from_current_models', 0)])
+    def test_root_notimplemented(self, method, nargs):
+        sigs = signals.Signals()
+        p = pane.Pane(sigs)
+        args = list(range(nargs))
+        with pytest.raises(NotImplementedError):
+            getattr(p, method)(*args)
+
+    def test_ap_order_state(self, one_dim_pane, mocker):
+        model_mock = mocker.Mock(spec=high_model.HighModel)
+        n_ap = 2
+        n_or = 10
+        args = {'ap_order_count.return_value': (n_ap, n_or)}
+        model_mock.configure_mock(**args)
+
+        model_id = 1
+        one_dim_pane.models[model_id] = model_mock
+
+        apertures, orders = one_dim_pane.ap_order_state(model_id)
+        assert isinstance(apertures, dict)
+        assert isinstance(orders, dict)
+        assert len(apertures) == len(orders)
+        assert apertures[model_id] == n_ap
+        assert orders[model_id] == n_or
+
+        apertures, orders = one_dim_pane.ap_order_state(2)
+        assert apertures[2] == 0
+        assert orders[2] == 0
+
+    def test_model_extensions(self, one_dim_pane, multiorder_hdul_merged):
+        model = high_model.MultiOrder(multiorder_hdul_merged)
+        one_dim_pane.add_model(model)
+
+        output = one_dim_pane.model_extensions(model.id)
+        assert output == model.extensions()
+
+        output = one_dim_pane.model_extensions('id')
+        assert isinstance(output, list)
+        assert len(output) == 0
+
+    def test_add_border_highlight(self, one_dim_pane):
+        rect = one_dim_pane._add_border_highlight()
+
+        assert isinstance(rect, mpp.Rectangle)
+        assert not rect.get_visible()
+
+    def test_get_border(self, one_dim_pane):
+        output = one_dim_pane.get_border()
+        assert output is None
+
+        rect = one_dim_pane._add_border_highlight()
+        one_dim_pane.border = rect
+
+        output = one_dim_pane.get_border()
+        assert output == rect
+
+    @pytest.mark.parametrize('cycle,result', [('SPECTRAL', 'brewer_cycle'),
+                                              ('tableau', 'tab10_cycle'),
+                                              ('other', 'accessible_cycle')])
+    def test_set_color_cycle_by_name(self, one_dim_pane, mocker, cycle,
+                                     result):
+        mock = mocker.patch.object(one_dim_pane, 'set_aperture_cycle')
+        one_dim_pane.set_color_cycle_by_name(cycle)
+        assert mock.called_once
+        assert one_dim_pane.default_colors == getattr(one_dim_pane, result)
+
+    @pytest.mark.parametrize('color, scheme, result',
+                             [('#343434', 'yiq', 0.203921568),
+                              (['#343434', '#454545'], 'yiq', 0.203921568),
+                              ('#343434', 'hex', '#343434'),
+                              ('#343434', 'rgb', (0.203922, 0.203922,
+                                                  0.203922)),
+                              ('#343434', 'other', None)])
+    def test_grayscale(self, one_dim_pane, color, scheme, result):
+        if result is None:
+            with pytest.raises(eye_error.EyeError):
+                one_dim_pane.grayscale(color, scheme)
+        else:
+            output = one_dim_pane.grayscale(color, scheme)
+            if isinstance(result, float):
+                npt.assert_allclose(float(output), result)
+            elif isinstance(result, tuple):
+                output = tuple([float(i) for i in output])
+                npt.assert_allclose(output, result, atol=1e-4)
+            else:
+                assert output == result
+
+    def test_set_aperture_cycle(self, one_dim_pane, mocker):
+        mock = mocker.patch.object(one_dim_pane, 'analogous', return_value=5)
+
+        one_dim_pane.set_aperture_cycle()
+
+        assert mock.call_count == len(one_dim_pane.default_colors)
+        assert all([v == 5 for v in one_dim_pane.aperture_cycle.values()])
+        assert (list(one_dim_pane.aperture_cycle.keys())
+                == one_dim_pane.default_colors)
+
+    @pytest.mark.parametrize('color,result',
+                             [('#343434', ['#343434', '#343434']),
+                              ('#0000ff', ['#ff7f00', '#80ff00']),
+                              ('#ffffff', ['#ffffff', '#ffffff']),
+                              ('#123456', ['#561212', '#565612'])
+                              ])
+    def test_split_complementary(self, color, result):
+        output = pane.Pane.split_complementary(color)
+        assert output == result
+
+    @pytest.mark.parametrize('color,degree,result',
+                             [('#343434', 130, ['#343434', '#343434']),
+                              ('#123456', 130, ['#3f5612', '#561229']),
+                              ('#123456', 30, ['#125656', '#121256']),
+                              ('#123456', 0, ['#123456', '#123456']),
+                              ('#123456', 180, ['#563412', '#563412'])])
+    def test_analogous(self, color, degree, result):
+        output = pane.Pane.analogous(color, degree)
+        assert output == result
+
+
+class TestOneDimPane(object):
+
+    def test_model_summaries(self, one_dim_pane, grism_hdul):
+        model = high_model.Grism(grism_hdul)
+        one_dim_pane.add_model(model)
+
+        details = one_dim_pane.model_summaries()
+        assert isinstance(details, dict)
+        assert len(details) == 1
+        assert len(details[model.id]) == 7
+        assert details[model.id]['model_id'] == model.id
+
+    def test_add_model(self, one_dim_pane, multiorder_multiap_hdul):
+        mo_model = high_model.MultiOrder(multiorder_multiap_hdul)
+        one_dim_pane.add_model(mo_model)
+        assert mo_model.id in one_dim_pane.models.keys()
+
+    def test_update_model(self, one_dim_pane, grism_hdul):
+        model_1 = high_model.Grism(grism_hdul)
+        model_2 = copy.deepcopy(model_1)
+        assert model_1.id == model_2.id
+
+        one_dim_pane.add_model(model_1)
+        one_dim_pane.set_model_enabled(model_1.id, False)
+        assert not one_dim_pane.models[model_1.id].enabled
+        assert model_2.enabled
+
+        one_dim_pane.update_model({model_1.id: model_2})
+        assert not one_dim_pane.models[model_1.id].enabled
+
+    def test_remove_model(self, one_dim_pane, grism_hdul, caplog):
+        caplog.set_level(logging.DEBUG)
+        model = high_model.Grism(grism_hdul)
+
+        one_dim_pane.add_model(model)
+        assert model.id in one_dim_pane.models
+        one_dim_pane.remove_model(model_id=model.id)
+        assert model.id not in one_dim_pane.models
+
+        one_dim_pane.add_model(model)
+        assert model.id in one_dim_pane.models
+        one_dim_pane.remove_model(model=model)
+        assert model.id not in one_dim_pane.models
+
+        one_dim_pane.add_model(model)
+        assert model.id in one_dim_pane.models
+        one_dim_pane.remove_model(filename=model.filename)
+        assert model.id not in one_dim_pane.models
+
+        one_dim_pane.remove_model(filename=model.filename)
+        assert 'Unable to remove' in caplog.text
+
+    def test_create_artists_from_current_models(self, one_dim_pane, mocker,
+                                                grism_hdul, qtbot):
+        mocker.patch.object(pane.OneDimPane, '_plot_model',
+                            return_value=[None])
+
+        model = high_model.Grism(grism_hdul)
+        one_dim_pane.add_model(model)
+
+        result = one_dim_pane.create_artists_from_current_models()
+
+        assert isinstance(result, list)
+        assert len(result) == len(one_dim_pane.models)
+
+        one_dim_pane.fields['x'] = 'wavepos'
+        one_dim_pane.fields['y'] = 'wavepos'
+
+        with qtbot.wait_signal(one_dim_pane.signals.obtain_raw_model):
+            one_dim_pane.create_artists_from_current_models()
+
+    def test_update_colors(self, one_dim_pane, multiorder_multiap_hdul):
+        model = high_model.MultiOrder(multiorder_multiap_hdul)
+        one_dim_pane.add_model(model)
+
+        updates = one_dim_pane.update_colors()
+
+        assert len(updates) == 76
+        assert all([isinstance(u, drawing.Drawing) for u in updates])
+
+    def test_get_axis_scale(self, one_dim_pane):
+        output = one_dim_pane.get_axis_scale()
+        assert len(output) == 3
+        assert output == {'x': 'linear', 'y': 'linear', 'y_alt': None}
+
+    def test_get_orders(self, one_dim_pane, multiorder_hdul_spec, grism_hdul):
+        model = high_model.MultiOrder(multiorder_hdul_spec)
+        one_dim_pane.add_model(model)
+        one_dim_pane.add_model(high_model.Grism(grism_hdul))
+
+        orders = one_dim_pane.get_orders(model_id=model.id)
+        assert isinstance(orders, list)
+        assert orders == list(range(10))
+
+        orders = one_dim_pane.get_orders(filename=model.filename,
+                                         enabled_only=True)
+        assert orders == list(range(10))
+
+        orders = one_dim_pane.get_orders(filename='bad')
+        assert len(orders) == 0
+
+        orders = one_dim_pane.get_orders(filename=model.filename,
+                                         kind='aperture')
+        assert orders == list(range(1))
+
+        orders = one_dim_pane.get_orders(filename=model.filename,
+                                         kind='aperture', enabled_only=False)
+        assert orders == list(range(1))
+
+    def test_set_legend(self, one_dim_pane):
+        with pytest.raises(NotImplementedError):
+            one_dim_pane.set_legend()
+
+    def test_convert_low_model_units(self, one_dim_pane, grism_hdul, mocker):
+        model = high_model.Grism(grism_hdul)
+        one_dim_pane.add_model(model)
+
+        with pytest.raises(eye_error.EyeError):
+            one_dim_pane._convert_low_model_units(model, 2, 'x', '', 9)
+
+        one_dim_pane.fields['y'] = 'transmission'
+        mock = mocker.patch.object(low_model.Spectrum, 'convert')
+        one_dim_pane._convert_low_model_units(model, 0, 'y', '', 0)
+        assert mock.called_with('', None, None)
+
+        mock.reset_mock()
+        one_dim_pane.fields['y'] = 'spectral_flux'
+        one_dim_pane._convert_low_model_units(model, 0, 'y', 'W / m2', 0)
+        assert mock.call_count == 2
+
+    def test_set_fields(self, one_dim_pane, grism_hdul):
+        model = high_model.Grism(grism_hdul)
+        one_dim_pane.add_model(model)
+
+        fields = {'x': 'transmission', 'y': 'response', 'z': 'wavepos'}
+        one_dim_pane.set_fields(fields)
+
+        assert one_dim_pane.fields['x'] == 'transmission'
+        assert one_dim_pane.fields['y'] == 'response'
+        assert one_dim_pane.fields['y_alt'] is None
+        assert 'z' not in one_dim_pane.fields.keys()
+
+    def test_set_default_units_for_fields(self, one_dim_pane, grism_hdul):
+        model = high_model.Grism(grism_hdul)
+        one_dim_pane.add_model(model)
+
+        one_dim_pane.units = {'x': 'nm', 'y': 'W / m2'}
+        one_dim_pane.set_default_units_for_fields()
+        assert one_dim_pane.units['x'] == 'um'
+        assert one_dim_pane.units['y'] == 'Jy'
+
+    def test_set_plot_type(self, one_dim_pane, grism_hdul):
+        model = high_model.Grism(grism_hdul)
+        one_dim_pane.add_model(model)
+
+        assert one_dim_pane.plot_type == 'step'
+        results = one_dim_pane.set_plot_type('scatter')
+        assert one_dim_pane.plot_type == 'scatter'
+        assert isinstance(results, list)
+        assert isinstance(results[0], drawing.Drawing)
+        assert all([result.axes == 'primary' for result in results])
+
+    def test_set_markers(self, one_dim_pane, grism_hdul):
+        model = high_model.Grism(grism_hdul)
+        one_dim_pane.add_model(model)
+
+        assert not one_dim_pane.show_markers
+        assert not one_dim_pane.show_overplot
+        results = one_dim_pane.set_markers(True)
+        assert one_dim_pane.show_markers
+        assert isinstance(results, list)
+        assert len(results) == 1
+        assert isinstance(results[0], drawing.Drawing)
+
+        one_dim_pane.show_overplot = True
+        results = one_dim_pane.set_markers(False)
+        assert not one_dim_pane.show_markers
+        assert len(results) == 1
+        assert all([result.axes == 'primary' for result in results])
+
+        one_dim_pane.plot_type = 'scatter'
+        results = one_dim_pane.set_markers(True)
+        assert one_dim_pane.show_markers
+        assert len(results) == 0
+
+    def test_get_marker(self, one_dim_pane, grism_hdul):
+        model = high_model.Grism(grism_hdul)
+        one_dim_pane.add_model(model)
+
+        result = one_dim_pane.get_marker(model.id)
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result == ['x']
+
+    def test_get_color(self, one_dim_pane, grism_hdul):
+        model = high_model.Grism(grism_hdul)
+        one_dim_pane.add_model(model)
+
+        result = one_dim_pane.get_color(model.id)
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result == [['#2848ad']]
+
+    def test_set_grid(self, one_dim_pane, grism_hdul):
+        model = high_model.Grism(grism_hdul)
+        one_dim_pane.add_model(model)
+
+        assert not one_dim_pane.show_grid
+        one_dim_pane.set_grid(True)
+        assert one_dim_pane.show_grid
+
+    def test_set_error(self, one_dim_pane):
+        assert one_dim_pane.show_error
+        one_dim_pane.set_error(False)
+        assert not one_dim_pane.show_error
+
+    def test_set_overplot(self, one_dim_pane):
+        assert not one_dim_pane.show_overplot
+        assert one_dim_pane.ax_alt is None
+
+        one_dim_pane.set_overplot(True)
+        assert one_dim_pane.show_overplot
+        assert isinstance(one_dim_pane.ax_alt, mpa.Axes)
+        assert one_dim_pane.fields['y_alt'] == 'transmission'
+        assert one_dim_pane.scale['y_alt'] == 'linear'
+        assert one_dim_pane.limits['y_alt'] == [0, 1]
+
+        one_dim_pane.set_overplot(False)
+        assert not one_dim_pane.show_overplot
+        assert isinstance(one_dim_pane.ax_alt, mpa.Axes)
+        assert one_dim_pane.fields['y_alt'] == ''
+        assert one_dim_pane.scale['y_alt'] == ''
+        assert one_dim_pane.limits['y_alt'] == []
+
+    def test_reset_alt_axes(self, one_dim_pane, caplog):
+        caplog.set_level(logging.DEBUG)
+        one_dim_pane.reset_alt_axes(True)
+        assert 'Failed to remove alt ax' in caplog.text
+
+        one_dim_pane.set_overplot(True)
+        assert isinstance(one_dim_pane.ax_alt, mpa.Axes)
+        one_dim_pane.reset_alt_axes(True)
+        assert 'Successfully removed alt ax' in caplog.text
+        assert one_dim_pane.ax_alt is None
+
+    def test_plot_crosshair(self, one_dim_pane):
+        results = one_dim_pane.plot_crosshair()
+        for result in results:
+            assert isinstance(result, drawing.Drawing)
+            assert result.kind == 'crosshair'
+        assert results[0].mid_model == 'vertical'
+        assert results[1].mid_model == 'horizontal'
+
+    @pytest.mark.parametrize('kind,v_num,h_num',
+                             [('vertical', 1, 0), ('horizontal', 0, 1),
+                              ('cross', 1, 1), ('x', 1, 0), ('y', 0, 1),
+                              ('b', 1, 1,), ('other', 0, 0)])
+    def test_plot_guides(self, one_dim_pane, kind, v_num, h_num):
+        points = [10, 15]
+        guides = one_dim_pane.plot_guides(points, kind)
+        assert all([isinstance(g, drawing.Drawing) for g in guides])
+        assert len(guides) == v_num + h_num
+        assert sum([g.mid_model == 'vertical' for g in guides]) == v_num
+        assert sum([g.mid_model == 'horizontal' for g in guides]) == h_num
+        assert all([g.kind == 'guide' for g in guides])
+
+    @pytest.mark.parametrize('direction', ['x', 'y', 'b', 'a'])
+    def test_perform_zoom(self, one_dim_pane, direction, caplog, mocker):
+        caplog.set_level(logging.DEBUG)
+        mock = mocker.patch.object(one_dim_pane, 'set_limits')
+        one_dim_pane.set_overplot(True)
+        points = [[1, 2], [3, 4]]
+
+        limits = one_dim_pane.perform_zoom(points, direction)
+        assert 'Changing axis limits' in caplog.text
+        assert mock.called_with(limits)
+        if direction in ['x', 'b']:
+            assert 'Updating x limits' in caplog.text
+        if direction in ['y', 'b']:
+            assert 'Updating y limits' in caplog.text
+
+    def test_calculate_fit(self, one_dim_pane, mocker):
+        mock = mocker.patch.object(sco, 'curve_fit',
+                                   side_effect=ValueError('bound'))
+        fit = am.models.Gaussian1D(1.2, 0.9, 0.5)
+        result = one_dim_pane.calculate_fit([], [], fit, None)
+        assert result == fit
+
+        mock.side_effect = ValueError('other')
+        with pytest.raises(eye_error.EyeError):
+            one_dim_pane.calculate_fit([], [], fit, None)
+
+        mock.side_effect = RuntimeError
+        with pytest.raises(eye_error.EyeError):
+            one_dim_pane.calculate_fit([], [], fit, None)
+
+        param = (1, 1, 1)
+        x = np.arange(10)
+        y = np.arange(10)
+        bound = [2, 6]
+        mock.reset_mock()
+        mock = mocker.patch.object(sco, 'curve_fit',
+                                   return_value=(param, None))
+        result = one_dim_pane.calculate_fit(x, y, fit, bound)
+        assert isinstance(result, am.Model)
+        npt.assert_allclose(result.parameters, param)
+
+    def test_plot_fit(self, one_dim_pane, grism_hdul):
+        model = high_model.HighModel(grism_hdul)
+        fit_obj = model_fit.ModelFit()
+        fit_obj.model_id = model.id
+        fit_obj.order = 0
+        fit_obj.aperture = 0
+        fit_obj.feature = 'gaussian'
+        fit_obj.fit = am.models.Gaussian1D(1.2, 0.9, 0.5)
+
+        one_dim_pane.colors = {model.id: '#340011'}
+
+        x = np.arange(5)
+        style = 'solid'
+        line, vline = one_dim_pane.plot_fit(x, style, fit_obj=fit_obj)
+
+        assert isinstance(line, ml.Line2D)
+        assert isinstance(vline, ml.Line2D)
+
+
+class TestTwoDimPane(object):
+
+    def test_init(self):
+        p = pane.TwoDimPane()
+        assert isinstance(p, pane.TwoDimPane)

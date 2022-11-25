@@ -1,8 +1,10 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 import numpy as np
-from sofia_redux.spectroscopy.mergespec import mergespec
 import pytest
+
+from sofia_redux.spectroscopy.mergespec import mergespec
+from sofia_redux.toolkit.utilities.fits import set_log_level
 
 
 @pytest.fixture
@@ -104,3 +106,59 @@ def test_nans(spectra):
     result = mergespec(spec1, spec2, sum_flux=True)
     assert np.allclose(result[:, 7], [7, np.nan, 5.74, 3],
                        equal_nan=True, atol=0.01)
+
+
+@pytest.mark.parametrize('statistic,local',
+                         [('mean', True), ('mean', False),
+                          ('median', True), ('median', False),
+                          ('max', True), ('max', False)])
+def test_s2n_threshold(spectra, capsys, statistic, local):
+    ospec1, ospec2 = spectra
+    spec1, spec2 = ospec1.copy(), ospec2.copy()
+
+    # good threshold passed, all data okay, result as expected
+    result = mergespec(spec1, spec2, s2n_threshold=1.0,
+                       s2n_statistic=statistic, local_noise=True)
+    assert np.allclose(result[:, :4], spec1[:, :4])
+    assert np.allclose(result[:, -4:], spec2[:, -4:])
+    assert np.allclose(result[:, 6], [6, 1.27, 2.56, 2], atol=0.01)
+    assert np.allclose(result[:, 7], [7, 1.27, 2.56, 3], atol=0.01)
+    assert result.shape == (4, 15)
+    assert np.sum(np.isnan(result)) == 0
+    assert 'Bad S/N' not in capsys.readouterr().err
+
+    # high error, low signal for one point in
+    # spec2 in overlap => use spec1 value
+    spec1, spec2 = ospec1.copy(), ospec2.copy()
+    spec2[1, 1] /= 1000
+    spec2[2, 1] *= 1000
+
+    with set_log_level('DEBUG'):
+        result2 = mergespec(spec1, spec2, s2n_threshold=1.0,
+                            s2n_statistic=statistic, local_noise=local)
+    assert result2.shape == (4, 15)
+    assert np.sum(np.isnan(result2)) == 0
+    assert np.allclose(result2[:, 7], [7, 1, 3, 3], atol=0.01)
+    capt = capsys.readouterr()
+    assert 'Bad S/N' not in capt.err
+    assert statistic in capt.out
+    if local:
+        assert 'sliding standard dev' in capt.out
+    else:
+        assert 'input error' in capt.out
+
+    # same result if testing on noise only
+    result3 = mergespec(spec1, spec2, s2n_threshold=1.0, noise_test=True,
+                        s2n_statistic=statistic, local_noise=local)
+    assert result3.shape == (4, 15)
+    assert np.sum(np.isnan(result3)) == 0
+    assert np.allclose(result2[:, 7], [7, 1, 3, 3], atol=0.01)
+    assert 'Bad S/N' not in capsys.readouterr().err
+
+    # bad data - threshold ignored
+    spec1, spec2 = ospec1.copy(), ospec2.copy()
+    spec1[1] *= -1
+    result = mergespec(spec1, spec2, s2n_threshold=1.0,
+                       s2n_statistic=statistic, local_noise=local)
+    assert np.sum(np.isnan(result)) == 0
+    assert 'Bad S/N; ignoring threshold' in capsys.readouterr().err

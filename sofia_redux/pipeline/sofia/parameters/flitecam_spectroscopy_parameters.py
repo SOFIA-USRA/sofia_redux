@@ -4,6 +4,9 @@
 from sofia_redux.pipeline.sofia.parameters.flitecam_parameters import \
     FLITECAMParameters, DEFAULT
 
+__all__ = ['FLITECAMSpectroscopyParameters']
+
+
 SPECTRAL_DEFAULT = {
     'make_image': [
         {'key': 'save',

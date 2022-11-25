@@ -4,6 +4,9 @@
 from sofia_redux.pipeline.sofia.parameters.forcast_parameters import \
     FORCASTParameters, DEFAULT
 
+__all__ = ['FORCASTSpectroscopyParameters']
+
+
 SPECTRAL_DEFAULT = {
     'stack_dithers': [
         {'key': 'save',
@@ -402,6 +405,13 @@ SPECTRAL_DEFAULT = {
                         'if not optimizing.',
          'dtype': 'str',
          'wtype': 'pick_file'},
+        {'key': 'use_wv',
+         'name': 'Use WV values',
+         'value': False,
+         'description': 'If set, water vapor values from the header will '
+                        'be used to choose the correct ATRAN file.',
+         'dtype': 'bool',
+         'wtype': 'check_box'},
         {'key': 'sn_threshold',
          'name': 'S/N threshold for optimization',
          'value': 10.0,
@@ -873,7 +883,7 @@ class FORCASTSpectroscopyParameters(FORCASTParameters):
             Reduction recipe index for the step.
         """
         if self.drip_cal_config is not None:
-            # set to full slit for extended or slitscan
+            # set to standard for extended or slitscan
             unfittable = \
                 ('extended' in str(self.drip_cal_config['srctype']).lower()) \
                 or ('scan' in str(self.drip_cal_config['cnmode']).lower())

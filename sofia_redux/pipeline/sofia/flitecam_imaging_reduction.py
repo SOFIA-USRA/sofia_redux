@@ -25,6 +25,8 @@ from sofia_redux.pipeline.sofia.forcast_imaging_reduction \
     import FORCASTImagingReduction
 from sofia_redux.toolkit.utilities.fits import hdinsert, gethdul
 
+__all__ = ['FLITECAMImagingReduction']
+
 
 class FLITECAMImagingReduction(FLITECAMReduction, FORCASTImagingReduction):
     """

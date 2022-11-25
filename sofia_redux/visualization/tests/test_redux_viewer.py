@@ -136,3 +136,26 @@ class TestReduxViewer(object):
         # display again
         ev.display()
         assert open_mock.called_twice()
+
+    def test_unexpected_error(self, caplog, mocker, open_mock, grism_hdul):
+        ev = rv.EyeViewer()
+        ev.display_data = [grism_hdul]
+
+        # start, then display data
+        ev.start()
+        assert ev.first_display
+        ev.display()
+        assert open_mock.call_count == 1
+        assert 'Added model to panes' in caplog.text
+        assert not ev.first_display
+
+        assign_mock = mocker.patch.object(
+            ev.eye, 'assign_data', side_effect=RuntimeError('Bad assign'))
+
+        # display again with unexpected error - should issue message
+        # but not crash
+        ev.display()
+        assert open_mock.call_count == 1
+        assert assign_mock.call_count == 1
+        assert 'Error encountered in Eye' in caplog.text
+        assert 'Bad assign' in caplog.text

@@ -28,7 +28,7 @@ We recommend Anaconda for managing your Python environment.  A conda
 environment specification is included with this package, as
 `environment.yml <https://raw.githubusercontent.com/SOFIA-USRA/sofia_redux/main/environment.yml>`__.
 
-To install a ``sofia_redux`` environment with Anaconda::
+To install a ``sofia_redux`` environment with Anaconda from the package directory::
 
 
    conda env create -f environment.yml
@@ -39,9 +39,9 @@ Activate the environment::
    conda activate sofia_redux
 
 
-Install the `sofia_redux` package::
+Install an editable copy of the `sofia_redux` package::
 
-   pip install .
+   pip install -e .
 
 
 Deactivate the environment when done::
@@ -63,7 +63,7 @@ Alternately, prerequisites for the package can be installed with::
 
 and the package can then be installed as usual::
 
-   pip install .
+   pip install -e .
 
 Optional Requirements
 ---------------------
@@ -212,3 +212,30 @@ For FLITECAM, the data provided in this manner includes nonlinearity
 correction coefficients, spectroscopic order masks, and wavelength
 calibration files.  For EXES, the large data files are bad pixel masks,
 reset dark files, and nonlinearity correction coefficients.
+
+
+Troubleshooting
+---------------
+
+Please note that direct support for this project will end in September 2023.
+
+Prior to this time, please submit a ticket on the GitHub issues page for
+installation assistance.
+
+After this time, the source distribution of this package will remain available,
+but it will not be maintained for the latest versions of all dependencies. It
+is recommended that users fork their own copies of this package for continued
+maintenance and development.
+
+The last working set of installed versions of all dependencies is recorded in the
+`freeze_requirements.txt <https://raw.githubusercontent.com/SOFIA-USRA/sofia_redux/main/freeze_requirements.txt>`__
+file in this package. If errors are encountered in the other listed installation
+methods, it may be useful to install the frozen versions directly. For example, to install
+from source using conda to create a new Python environment from the sofia_redux package
+directory::
+
+   conda create --name sofia_redux python=3.10
+   pip install -r freeze_requirements.txt
+   pip install -e .
+
+

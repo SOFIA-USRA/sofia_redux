@@ -5,6 +5,9 @@
   water vapor values in calibration routines.
 - Updated FIFI-LS pipeline to v2.7.1, including a bug fix to spectral
   maps rotated to align detector orientation.
+- Updated HAWC pipeline to v3.2.0, including improved identification and
+  cleaning for discrepant artifacts in scan maps, caused by detector
+  level jumps.
 - Updated the spectral viewer interface to better control spectra in
   multiple files, apertures, and orders.
 

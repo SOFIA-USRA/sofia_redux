@@ -49,4 +49,3 @@ def test_parse_projection():
     h = fits.Header()
     g = FlatGrid2D1()
     g.parse_projection(h)  # does nothing
-

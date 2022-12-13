@@ -75,6 +75,3 @@ def test_get_crossing_time(fifi_simulated_integration):
     integration.scan.source_model = None
     t = integration.get_crossing_time()
     assert isinstance(t, units.Quantity) and t > 0 and np.isfinite(t)
-
-
-

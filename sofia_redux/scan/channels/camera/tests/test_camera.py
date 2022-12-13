@@ -194,7 +194,8 @@ class TestCamera(object):
         rcp = populated_camera.print_pixel_rcp(header='# test')
         assert rcp.startswith('# SOFSCAN')
         assert '# test\n' in rcp
-        assert rcp.strip().endswith('120\t1.000\t1.000\t-1.000e+01\t-1.000e+01')
+        assert rcp.strip().endswith('120\t1.000\t1.000'
+                                    '\t-1.000e+01\t-1.000e+01')
         assert len(rcp.split('\n')) == 127
 
     def test_rotate(self, capsys, populated_camera):

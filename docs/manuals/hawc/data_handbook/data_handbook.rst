@@ -16,7 +16,7 @@ are described in the SOFIA Observer's Handbook, available from the
 `Proposing and Observing <https://www.sofia.usra.edu/science/proposing-and-observing>`__
 page on the SOFIA website.
 
-This handbook applies to HAWC DRP version 3.1.0.
+This handbook applies to HAWC DRP version 3.2.0.
 
 
 .. include:: ../users/data_description.rst

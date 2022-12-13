@@ -124,7 +124,7 @@ def test_eq():
     g = BasicGrid()
     g2 = g.copy()
     assert g == g2
-    assert g != None
+    assert g != 1
     g2.z.resolution = 2
     assert g != g2
 

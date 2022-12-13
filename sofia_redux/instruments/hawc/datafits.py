@@ -1645,7 +1645,7 @@ class DataFits(DataParent):
         elif isinstance(key, str):
             header = self.getheader(dataname=dataname)
             if key in header:
-                del(header[key])
+                del header[key]
         else:
             msg = 'Invalid key (%s). Must be a str, ' \
                   'list, or tuple' % repr(key)

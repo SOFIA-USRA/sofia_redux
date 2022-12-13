@@ -123,8 +123,8 @@ class Channels(ABC):
                     and self.overlap_point_size > 0):
                 new.overlap_point_size = np.nan
                 new.calculate_overlaps(self.overlap_point_size)
-        elif (self.overlap_point_size.is_finite() and
-              not self.overlap_point_size.is_null()):  # pragma: no cover
+        elif (self.overlap_point_size.is_finite()
+              and not self.overlap_point_size.is_null()):  # pragma: no cover
             # For later development
             new.overlap_point_size = self.overlap_point_size.__class__()
             new.calculate_overlaps(self.overlap_point_size)

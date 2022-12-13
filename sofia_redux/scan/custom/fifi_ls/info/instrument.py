@@ -187,8 +187,8 @@ class FifiLsInstrumentInfo(SofiaInstrumentInfo):
         wavelength = self.options.get_float(
             f'G_WAVE_{self.channel[0].upper()}', default=np.nan)
         if np.isnan(wavelength):
-            log.warning(f'Could not determine wavelength mean: '
-                        f'Will set default resolution')
+            log.warning('Could not determine wavelength mean: '
+                        'Will set default resolution')
             return
 
         offset = (rows.wavelength - wavelength).abs()

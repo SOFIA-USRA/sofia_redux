@@ -18,7 +18,7 @@ class DataParent(object):
     This object stores a config file, header, and data.
     """
     # Pipeline version
-    pipever = '3.1.0'
+    pipever = '3.2.0'
     """str : Pipeline version."""
 
     def __init__(self, config=None):
@@ -690,4 +690,4 @@ class DataParent(object):
         # Else if it's a string delete the key - ignore any KeyError
         else:
             if key in self.header:
-                del(self.header[key])
+                del self.header[key]

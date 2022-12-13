@@ -295,3 +295,29 @@ def test_check_jumps():
                               has_jumps, channel_indices)
     assert n_jumps == 2
     assert np.allclose(has_jumps, [0, 0, 1, 1, 0])
+
+
+def test_detect_jumps():
+    shape = n_frames, n_channels = 100, 5
+    jumps = np.zeros(shape, dtype=int)
+    rand = np.random.RandomState(2)
+    data = rand.randn(*shape) * 0.1
+    data[:2, 0] += 1000
+    data[:20, 1] += 1000
+    data[:25, 2] += 1000
+    data[-25:, 2] -= 1000
+    data[:20, 3] += 1000
+    data[:98, 4] = np.nan
+    has_jumps = np.full(n_channels, False)
+    has_jumps[3] = True
+    found = hnf.detect_jumps(
+        data=data,
+        has_jumps=has_jumps,
+        jumps=jumps,
+        threshold=10,
+        start_pad=0,
+        end_pad=0
+    )
+    jf, jc = np.nonzero(found)
+    assert np.allclose(jf, [1, 19, 24, 74])
+    assert np.allclose(jc, [0, 1, 2, 2])

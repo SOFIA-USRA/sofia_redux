@@ -487,6 +487,7 @@ def test_zero(c2d):
     assert np.allclose(c.coordinates,
                        [[0, 1, 0, 0, 4], [5, 6, 0, 0, 9]])
 
+
 def test_apply_coordinate_mask_function():
     c = Coordinate()
     x = np.zeros((2, 3, 4))

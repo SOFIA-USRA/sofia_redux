@@ -242,6 +242,9 @@ def fix_jumps(frame_valid, frame_data, frame_weights,
         jump_start = -1
         from_frame = -1
         first_frame = -1
+        skip_start = 0
+        skip_end = flag_before
+        n1_frame = frame_data.shape[0] - 1
         for frame in range(start_frame, end_frame):
             if not frame_valid[frame]:
                 continue
@@ -252,6 +255,9 @@ def fix_jumps(frame_valid, frame_data, frame_weights,
             jump = jump_counter[frame, channel]
             if jump == jump_start:
                 continue
+
+            if frame == n1_frame:
+                skip_end = 0
 
             fix_block(from_frame=from_frame,
                       to_frame=frame,
@@ -265,7 +271,9 @@ def fix_jumps(frame_valid, frame_data, frame_weights,
                       channel=channel,
                       channel_parms=channel_parms,
                       min_jump_level_frames=min_jump_level_frames,
-                      jump_flag=jump_flag)
+                      jump_flag=jump_flag,
+                      skip_start=skip_start,
+                      skip_end=skip_end)
 
             if flag_before != 0:
                 flag_start = max(0, frame - flag_before)
@@ -282,6 +290,7 @@ def fix_jumps(frame_valid, frame_data, frame_weights,
             blocks_fixed += 1
             from_frame = frame
             jump_start = jump
+            skip_start = flag_after
 
         if first_frame != from_frame:  # Fix the end
             fix_block(from_frame=from_frame,
@@ -296,7 +305,10 @@ def fix_jumps(frame_valid, frame_data, frame_weights,
                       channel=channel,
                       channel_parms=channel_parms,
                       min_jump_level_frames=min_jump_level_frames,
-                      jump_flag=jump_flag)
+                      jump_flag=jump_flag,
+                      skip_start=skip_start,
+                      skip_end=0)
+
             blocks_fixed += 1
 
         no_jumps[i] = blocks_fixed == 0
@@ -306,8 +318,8 @@ def fix_jumps(frame_valid, frame_data, frame_weights,
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
 def fix_block(from_frame, to_frame, frame_valid, frame_data, frame_weights,
               modeling_frames, frame_parms, sample_flags, exclude_sample_flag,
-              channel, channel_parms, min_jump_level_frames, jump_flag
-              ):  # pragma: no cover
+              channel, channel_parms, min_jump_level_frames, jump_flag,
+              skip_start=0, skip_end=0):  # pragma: no cover
     """
     Jump correct a block of frames for a given channel.
 
@@ -356,12 +368,19 @@ def fix_block(from_frame, to_frame, frame_valid, frame_data, frame_weights,
         The integer flag identifier with which to flag samples if the jump
         block length to which they belong is less than `min_jump_level_frames`
         and cannot be levelled.
+    skip_start : int, optional
+        The number of frames before the jump to not include in levelling
+        determinations.
+    skip_end : int, optional
+        The number of frames at the end of the block jump to not include in
+        levelling determinations.
 
     Returns
     -------
     None
     """
-    if (to_frame - from_frame) < min_jump_level_frames:
+    n_level = (to_frame - from_frame) - (skip_start + skip_end)
+    if n_level < min_jump_level_frames:
         flag_block(from_frame=from_frame,
                    to_frame=to_frame,
                    frame_valid=frame_valid,
@@ -379,7 +398,9 @@ def fix_block(from_frame, to_frame, frame_valid, frame_data, frame_weights,
                     sample_flags=sample_flags,
                     exclude_sample_flag=exclude_sample_flag,
                     channel=channel,
-                    channel_parms=channel_parms)
+                    channel_parms=channel_parms,
+                    skip_start=skip_start,
+                    skip_end=skip_end)
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
@@ -422,7 +443,8 @@ def flag_block(from_frame, to_frame, frame_valid, sample_flags, jump_flag,
 def level_block(from_frame, to_frame, frame_valid, frame_data, frame_weights,
                 modeling_frames, frame_parms, sample_flags,
                 exclude_sample_flag, channel,
-                channel_parms):  # pragma: no cover
+                channel_parms, skip_start=0, skip_end=0
+                ):  # pragma: no cover
     """
     Level a frame block for a given channel.
 
@@ -476,6 +498,12 @@ def level_block(from_frame, to_frame, frame_valid, frame_data, frame_weights,
     channel_parms : numpy.ndarray (float)
         The channel dependents of shape (all_channels,).  Will be updated
         in-place.
+    skip_start : int, optional
+        The number of frames to flag in the sample flags prior to a jump
+        detection with `jump_flag`.
+    skip_end : int, optional
+        The number of frames to flag in the sample flags following a jump
+        detection with `jump_flag`.
 
     Returns
     -------
@@ -483,7 +511,13 @@ def level_block(from_frame, to_frame, frame_valid, frame_data, frame_weights,
     """
     d_sum = 0.0
     w_sum = 0.0
-    for frame in range(from_frame, to_frame):
+
+    average_start = from_frame + skip_start
+    average_end = to_frame - skip_end
+    if average_end <= average_start:
+        return
+
+    for frame in range(average_start, average_end):
         if not frame_valid[frame] or modeling_frames[frame]:
             continue
         if (sample_flags[frame, channel] & exclude_sample_flag) != 0:
@@ -673,5 +707,125 @@ def check_jumps(start_counter, jump_counter, frame_valid, has_jumps,
                 break
         else:
             has_jumps[i] = False
+
+    return jumps_found
+
+
+@nb.jit(cache=True, nogil=False, parallel=False, fastmath=False)
+def detect_jumps(data, has_jumps, jumps, threshold, start_pad=0, end_pad=0
+                 ):  # pragma: no cover
+    """
+    Detect and mark unreported jumps in the frame data.
+
+    Parameters
+    ----------
+    data : numpy.ndarray (float)
+        The frame data of shape (n_frames, n_channels).
+    has_jumps : numpy.ndarray (bool)
+        A boolean array of shape (n_channels,) where `True` indicates a channel
+        has previously detected jumps.
+    jumps : numpy.ndarray (int)
+        The jump counter of shape (n_frames, n_channels).  A jump occurs at
+        frame i if jumps[i - 1, channel] != jumps[i, channel].  Updated
+        in-place whenever a jump is found.
+    threshold : float
+        The threshold determining possible jump locations and sustained
+        difference between frame data before and after a jump for validation
+        purposes.
+    start_pad : int, optional
+        The number of frames prior to a jump to exclude from any calculations.
+        Note that if provided, the jump will be marked at frame i + start_pad
+        where i is actual start of the detected jump.  The fixjumps algorithm
+        should also use the same padding for consistency.
+    end_pad : int, optional
+        The number of frames after a jump to exclude from any calculations.
+
+    Returns
+    -------
+    jumps_found : numpy.ndarray (bool)
+        A boolean mask of shape (n_frames, n_channels) where `True` marks the
+        location of a newly found jump.
+    """
+    n_frames, n_channels = data.shape
+    temp_data = np.zeros(n_frames, dtype=nb.float64)
+    median_array = np.empty(n_frames, dtype=nb.float64)
+    jumps_found = np.full((n_frames, n_channels), False)
+    n1 = n_frames - 1
+
+    for channel in range(n_channels):
+        if has_jumps[channel]:
+            continue  # only want to find unreported jumps
+        channel_data = data[:, channel]
+        channel_jumps = jumps[:, channel]
+        last = channel_data[0]
+        valid = 0
+        for frame in range(1, n_frames):
+            current = channel_data[frame]
+            if np.isnan(current):
+                temp_data[frame] = 0.0
+                continue
+            if np.isnan(last):
+                last = current
+            diff = np.abs(current - last)
+            temp_data[frame] = diff
+            median_array[valid] = diff
+            last = current
+            valid += 1
+
+        if valid < 5:
+            continue
+
+        median_value = np.median(median_array[:valid])
+        limit = threshold * median_value
+
+        last_start = -1
+        last_end = -1
+        median = np.nan
+        last_median = np.nan
+        current_start = -1
+        count = 0
+
+        for frame in range(n_frames):
+            if frame <= last_end:
+                continue
+            if current_start == -1:
+                if temp_data[frame] < limit:
+                    # append to median
+                    value = channel_data[frame]
+                    if np.isfinite(value):
+                        median_array[count] = value
+                        count += 1
+                else:  # new jump
+                    current_start = frame
+                    if count > 0:
+                        median = np.median(median_array[:count])
+                    else:
+                        median = last_median
+                    # Check if old jump can be added in
+                    if np.abs(median - last_median) >= limit:
+                        mark_jump = last_start + start_pad - 1
+                        mark_jump = max(min(mark_jump, n1), 0)
+                        for i in range(mark_jump, n_frames):
+                            channel_jumps[i] += 1
+                        jumps_found[mark_jump, channel] = True
+                        has_jumps[channel] = True
+
+            elif temp_data[frame] < limit:  # jump ended
+                last_start = current_start
+                last_median = median
+                last_end = frame + end_pad
+                current_start = -1
+                count = 0
+
+        # Check the end
+        if last_start != -1 and count > 0:
+            median = np.median(median_array[:count])
+            if np.abs(median - last_median) >= limit:
+                mark_jump = last_start + start_pad - 1
+                mark_jump = max(min(mark_jump, n1), 0)
+                for i in range(mark_jump, n_frames):
+                    channel_jumps[i] += 1
+                jumps_found[mark_jump, channel] = True
+                has_jumps[channel] = True
 
     return jumps_found

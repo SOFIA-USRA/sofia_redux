@@ -63,7 +63,8 @@ class TestSingleColorChannelData(object):
     def test_get_rcp_string(self, populated_data):
         rcp = populated_data.get_rcp_string()
         assert rcp.startswith('ch\t[Gpnt]\t[Gsky]ch\tdX\tdY')
-        assert rcp.strip().endswith('120\t1.000\t1.000\t-1.000e+01\t-1.000e+01')
+        assert rcp.strip().endswith('120\t1.000\t1.000'
+                                    '\t-1.000e+01\t-1.000e+01')
         assert len(rcp.split('\n')) == 123
 
     def test_get_overlap_indices(self, mocker, populated_data):

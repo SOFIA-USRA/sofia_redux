@@ -3,7 +3,6 @@ from astropy import units
 from astropy.coordinates import Angle
 from astropy.io import fits
 from astropy.io.fits.verify import VerifyWarning
-from astropy.time import Time
 import getpass
 import numpy as np
 import warnings
@@ -202,7 +201,8 @@ class FifiLsSimulation(ABC):
         'DTHYOFF': -9999.0,
         'FILENUM': '00353-00354',
         'FILEREV': 'UNKNOWN',
-        'FLATFILE': 'flat_files/spatialFlatB2.txt[20210401],flat_files/spectralFlatsB2D130.fits',
+        'FLATFILE': 'flat_files/spatialFlatB2.txt[20210401],'
+                    'flat_files/spectralFlatsB2D130.fits',
         'IMAGEID': -9999,
         'MAPCRSYS': 'UNKNOWN',
         'MAPINTX': -9999.0,
@@ -945,8 +945,8 @@ class FifiLsSimulation(ABC):
                                      'point_source')
         source_type = self.primary_header['SRCTYPE'].strip().lower()
 
-        if ('SRCSIZE' not in self.primary_header or
-                'SRCZSIZE' not in self.primary_header):
+        if ('SRCSIZE' not in self.primary_header
+                or 'SRCZSIZE' not in self.primary_header):
             self.info.configuration.read_fits(self.primary_header)
             self.info.instrument.apply_configuration()
 

@@ -7,7 +7,6 @@ from sofia_redux.scan.source_models.maps.map_2d import Map2D
 from sofia_redux.scan.source_models.maps.image_2d import Image2D
 from sofia_redux.scan.flags.flagged_array import FlaggedArray
 from sofia_redux.scan.utilities import numba_functions
-from sofia_redux.scan.source_models.beams.gaussian_2d import Gaussian2D
 from sofia_redux.scan.source_models.maps.weight_map import WeightMap
 from sofia_redux.scan.source_models.maps.exposure_map import ExposureMap
 from sofia_redux.scan.source_models.maps.noise_map import NoiseMap

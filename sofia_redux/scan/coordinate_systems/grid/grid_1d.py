@@ -17,7 +17,7 @@ class Grid1D(CartesianGrid):
         Cartesian coordinates on a regular grid.
         """
         super().__init__(first_axis=first_axis, dimensions=1)
-        name = self.coordinate_system.dimension_name(first_axis-1)
+        name = self.coordinate_system.dimension_name(first_axis - 1)
         self.axis.label = name
         self.axis.short_label = name
 
@@ -323,8 +323,8 @@ class Grid1D(CartesianGrid):
         name = f'Axis-{index}'
         header[f'CTYPE{axis_id}'] = axis.short_label, f'{name} name'
         u = axis.unit
-        if (u is None or u == units.dimensionless_unscaled and
-                self.resolution.unit is not None):
+        if (u is None or u == units.dimensionless_unscaled
+                and self.resolution.unit is not None):
             u = self.resolution.unit
         if u is not None:
             header[f'CUNIT{axis_id}'] = str(u), f'{name} unit'

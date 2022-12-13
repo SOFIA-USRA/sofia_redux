@@ -220,9 +220,3 @@ class TestPipeline(object):
         integration.gain = -1
         Pipeline.do_process(args, 0)
         assert '-' in integration.comments
-
-
-
-
-
-

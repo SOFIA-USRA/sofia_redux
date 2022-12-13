@@ -474,6 +474,8 @@ class HawcPlusIntegration(SofiaIntegration):
         jump_flag = self.flagspace.convert_flag('SAMPLE_PHI0_JUMP').value
         blank_frames = self.get_jump_blank_range()
 
+        self.detect_jumps()
+
         inconsistencies = \
             hawc_integration_numba_functions.find_inconsistencies(
                 frame_valid=self.frames.valid,
@@ -497,6 +499,53 @@ class HawcPlusIntegration(SofiaIntegration):
                 flag_after=blank_frames[1])
 
         channels.inconsistencies += inconsistencies
+
+    def detect_jumps(self):
+        """
+        Attempt to detect jumps in the frame data when not reported.
+
+        If fixjumps.detect is set to a positive value and fixjumps is also
+        enabled, attempts to detect unreported jumps in the SQ1Feedback data.
+        Jumps are only searched for in channels that do not currently contain
+        any known jumps, and the frame jump counter is incremented to mark
+        a jump for subsequent processing by the standard fixjumps algorithm.
+
+        The fixjumps.detect threshold (x) is used in the following way::
+
+            dd = frame_data[1:] - frame_data[:-1]
+            mad = medabsdev(dd)
+            threshold = x * mad
+            possible_jumps = dd >= threshold
+
+        For each possible jump, if the median of the data before differs to
+        the median of the data after by more than threshold, then the jump
+        is considered valid.  Note that each before/after chunk only extends
+        to the previous/next possible jump.
+
+        Returns
+        -------
+        None
+        """
+        if not self.fix_jumps:
+            return
+        detect_threshold = self.configuration.get_float(
+            'fixjumps.detect', default=0.0)
+        if detect_threshold <= 0:
+            return
+        blank_frames = self.get_jump_blank_range()
+        jumps_found = hawc_integration_numba_functions.detect_jumps(
+            data=self.frames.data,
+            has_jumps=self.channels.data.has_jumps,
+            jumps=self.frames.jump_counter,
+            threshold=detect_threshold,
+            start_pad=blank_frames[0],
+            end_pad=blank_frames[1])
+        n_jumps = np.sum(jumps_found)
+        if n_jumps > 0:
+            channel_indices = self.channels.data.fixed_index[
+                np.unique(np.nonzero(jumps_found)[1])]
+            log.debug(f'Detected {n_jumps} unreported jumps in channels '
+                      f'{channel_indices}')
 
     def get_first_frame(self, reference=0):
         """

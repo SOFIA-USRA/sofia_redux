@@ -541,7 +541,7 @@ def test_edit_header(populated_source):
     assert header['SCANS'] == 1
     assert header['INTEGRTN'] == 0
     assert 'INSTRUME' in header
-    #assert 'COUNTRY' in header
+    # assert 'COUNTRY' in header
     assert 'HISTORY' in header
 
 

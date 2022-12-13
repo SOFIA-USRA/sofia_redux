@@ -1,8 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from astropy import units
-import numpy as np
-
 from sofia_redux.scan.coordinate_systems.index import Index
 from sofia_redux.scan.coordinate_systems.coordinate_1d import Coordinate1D
 from sofia_redux.scan.utilities.utils import round_values

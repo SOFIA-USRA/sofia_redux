@@ -311,9 +311,9 @@ class SpectralCube(AstroIntensityMap):
                              f"{x_size} x {y_size} x {z_size}")
 
         if not self.configuration.get_bool('large'):
-            if (x_size >= self.MAX_X_OR_Y_SIZE or
-                    y_size >= self.MAX_X_OR_Y_SIZE or
-                    z_size >= self.MAX_Z_SIZE):
+            if (x_size >= self.MAX_X_OR_Y_SIZE
+                    or y_size >= self.MAX_X_OR_Y_SIZE
+                    or z_size >= self.MAX_Z_SIZE):
                 raise ValueError("Map too large.  Use 'large' option.")
 
         self.set_data_shape((z_size, y_size, x_size))

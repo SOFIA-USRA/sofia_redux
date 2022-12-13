@@ -216,7 +216,7 @@ def test_level_jumps(small_integration):
     integration.fix_jumps = True
     integration.fix_subarray = np.full(4, True)
     channels.has_jumps = np.full(5, True)
-
+    integration.configuration.parse_key_value('fixjumps.blank', '0,0.015')
     no_jumps = integration.level_jumps(channels, frame_dependents)
     assert not no_jumps.any()
     assert np.allclose(frame_dependents, (np.arange(10) < 5).astype(int))
@@ -235,6 +235,34 @@ def test_update_inconsistencies(small_integration):
     channels.inconsistencies = np.zeros(5, dtype=int)
     integration.update_inconsistencies(channels, frame_dependents, 2)
     assert np.allclose(channels.inconsistencies, 1)
+
+
+def test_detect_jumps(small_integration):
+    integration = small_integration.copy()
+    n_frames, n_channels = integration.frames.data.shape
+
+    d = np.zeros((100, n_channels))
+    integration.frames.data = d
+    integration.frames.jump_counter = d.astype(int)
+    integration.channels.data.has_jumps = np.full(n_channels, False)
+
+    rand = np.random.RandomState(1)
+    integration.frames.data[:, 1] = rand.randn(100) * 0.1
+    integration.frames.data[50:, 1] += 1000
+
+    integration.configuration.parse_key_value('fixjumps.detect', '-10.0')
+    integration.configuration.parse_key_value('fixjumps.blank', '0,0')
+    integration.fix_jumps = False
+    integration.detect_jumps()
+    assert not np.any(integration.frames.jump_counter)
+    integration.fix_jumps = True
+    integration.detect_jumps()
+    assert not np.any(integration.frames.jump_counter)
+    integration.configuration.parse_key_value('fixjumps.detect', '10.0')
+    integration.detect_jumps()
+    jf, jc = np.nonzero(integration.frames.jump_counter)
+    assert np.allclose(jc, 1)
+    assert np.allclose(jf, np.arange(49, 100))
 
 
 def test_get_first_frame(small_integration):

@@ -851,7 +851,6 @@ class Coordinate3D(Coordinate):
         if self.coordinates is None:
             return
         import matplotlib.pyplot as plt
-        from mpl_toolkits import mplot3d
         plt.ion()
         ax = plt.axes(projection='3d')
 

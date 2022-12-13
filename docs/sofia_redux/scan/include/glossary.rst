@@ -990,6 +990,17 @@ Configuration Glossary
        the same can be applied on a per-subarray basis as well as via the
        `fixjumps.<sub>`_ option.
 
+   * - .. _fixjumps.detect:
+
+       | **fixjumps.detect**
+       | Instrument: HAWC+
+     - | [fixjumps]
+       | detect = <X>
+     - If `fixjumps`_ is set to True, attempt to locate and correct any
+       unreported jumps in the data.  <X> is a threshold value used to locate
+       possible jumps such that diff = d - shift(d, 1), mad = medabsdev(diff),
+       and possible jumps occur at abs(diff) >= <X> * mad.
+
    * - .. _fixjumps.<sub>:
 
        | **fixjumps.<sub>**

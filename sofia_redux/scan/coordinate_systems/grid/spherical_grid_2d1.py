@@ -6,8 +6,6 @@ from sofia_redux.scan.coordinate_systems.grid.grid_2d1 import Grid2D1
 from sofia_redux.scan.coordinate_systems.coordinate_2d1 import Coordinate2D1
 from sofia_redux.scan.coordinate_systems.grid.spherical_grid import \
     SphericalGrid
-from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
-    SphericalCoordinates
 
 __all__ = ['SphericalGrid2D1']
 

@@ -325,8 +325,8 @@ class FifiLsChannelData(SingleColorChannelData, SofiaChannelData):
         wave_center = self.central_wavelength
         coordinates = [px, py]
         if not np.isnan(wave_fwhm):
-            pz = ((self.wavelength - wave_center) /
-                  wave_fwhm).decompose().value
+            pz = ((self.wavelength - wave_center)
+                  / wave_fwhm).decompose().value
             n_fwhms = self.configuration.get_float(
                 'overlaps.radius.spectral', default=maximum_radius)
             pz /= n_fwhms

@@ -10,10 +10,6 @@ from sofia_redux.scan.custom.fifi_ls.flags.frame_flags import (
 from sofia_redux.scan.custom.fifi_ls.frames import \
     fifi_ls_frame_numba_functions as fnf
 from sofia_redux.scan.custom.sofia.frames.frames import SofiaFrames
-
-from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
-from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
-    EquatorialCoordinates
 from sofia_redux.scan.coordinate_systems.geodetic_coordinates import \
     GeodeticCoordinates
 from sofia_redux.scan.utilities.utils import safe_sidereal_time

@@ -401,7 +401,7 @@ def taylor(order, n):
         The next polynomial exponent
     """
     if n == 0:
-        yield()
+        yield ()
         return
     for i in range(order + 1):
         for result in taylor(order - i, n - 1):

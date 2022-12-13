@@ -694,8 +694,8 @@ class Coordinate(ABC):
         if self.size == 0:
             return
 
-        if (isinstance(value, units.Quantity) and
-                value.unit == units.dimensionless_unscaled):
+        if (isinstance(value, units.Quantity)
+                and value.unit == units.dimensionless_unscaled):
             value = value.value
 
         if not isinstance(value, units.Quantity):
@@ -704,8 +704,8 @@ class Coordinate(ABC):
         elif self.unit is None:
             self.change_unit(value.unit)
 
-        if (not isinstance(self.coordinates, np.ndarray) or
-                self.coordinates.shape == ()):
+        if (not isinstance(self.coordinates, np.ndarray)
+                or self.coordinates.shape == ()):
             if isinstance(value, units.Quantity):
                 value = value.to(self.unit)
             self.coordinates = value
@@ -734,8 +734,8 @@ class Coordinate(ABC):
         if self.coordinates is None:
             return
 
-        if (not isinstance(self.coordinates, np.ndarray) or
-                self.coordinates.shape == ()):
+        if (not isinstance(self.coordinates, np.ndarray)
+                or self.coordinates.shape == ()):
             if self.unit is not None:
                 self.coordinates = np.nan * self.unit
             else:
@@ -765,8 +765,8 @@ class Coordinate(ABC):
         if self.coordinates is None:
             return
 
-        if (not isinstance(self.coordinates, np.ndarray) or
-                self.coordinates.shape == ()):
+        if (not isinstance(self.coordinates, np.ndarray)
+                or self.coordinates.shape == ()):
             if self.unit is not None:
                 self.coordinates = 0.0 * self.unit
             else:

@@ -48,13 +48,13 @@ def test_copy():
     assert g2 == g and g2 is not g
 
 
-def test_eq(affine_offset):
+def test_eq_1(affine_offset):
     g = affine_offset.copy()
     g1 = affine_offset.copy()
     g2 = affine_offset.copy()
     assert g == g
     assert g1 == g2
-    assert g1 != None
+    assert g1 != 1
     g2.projection.reference.zero()
     assert g1 != g2
     g2 = g.copy()
@@ -139,7 +139,7 @@ def test_fits_y_unit():
     assert FlatGrid2D().fits_y_unit == units.dimensionless_unscaled
 
 
-def test_eq():
+def test_eq_2():
     g = FlatGrid2D()
     assert g == g
     assert g is not None

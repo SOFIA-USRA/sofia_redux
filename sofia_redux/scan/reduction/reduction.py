@@ -2,6 +2,7 @@
 
 from astropy import units
 from astropy.io import fits
+from configobj import ConfigObj
 from copy import deepcopy
 import gc
 import json
@@ -1508,15 +1509,17 @@ class Reduction(ReductionVersion):
         options_string = ', '.join([f'{k}={v}' for (k, v) in kwargs.items()])
         log.info(f"Applying user configuration settings: {options_string}")
 
-        new_kwargs = {}
+        new_kwargs = ConfigObj()
         for key, value in kwargs.items():
             if key != 'options':
-                new_kwargs.update({key: value})
+                new_kwargs.merge({key: value})
             elif isinstance(value, dict):
                 for options_key, options_value in value.items():
                     options = self.configuration.aliases.unalias_branch(
                         {options_key: options_value})
-                    new_kwargs.update(options)
+                    new_kwargs.merge(options)
+
+        new_kwargs = dict(new_kwargs)
 
         self.configuration.read_configuration(new_kwargs, validate=False)
 

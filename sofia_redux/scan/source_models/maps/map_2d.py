@@ -904,8 +904,9 @@ class Map2D(Overlay):
                 size_value, size_unit = size_unit.value, size_unit.unit
             px, py = (pxy.to(size_unit) / size_value).value
             unit_str = f' {size_unit}'
-        elif (isinstance(pxy, units.Quantity) and
-              pxy.unit != units.dimensionless_unscaled):  # pragma: no cover
+        elif (isinstance(pxy, units.Quantity)
+              and pxy.unit
+              != units.dimensionless_unscaled):  # pragma: no cover
             unit_str = f' {pxy.unit}'
             px, py = pxy.value
         else:  # pragma: no cover

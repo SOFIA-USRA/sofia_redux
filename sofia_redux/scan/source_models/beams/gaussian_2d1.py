@@ -564,9 +564,9 @@ class Gaussian2D1(Gaussian2D):
         v = Coordinate3D(coordinates=[dx, dy, dz])
         if self.position_angle != 0:
             v.rotate(-self.position_angle)
-        cube = np.exp((ax * (v.x ** 2)) +
-                      (ay * (v.y ** 2)) +
-                      (az * (v.z ** 2)))
+        cube = np.exp((ax * (v.x ** 2))
+                      + (ay * (v.y ** 2))
+                      + (az * (v.z ** 2)))
         return cube
 
     @staticmethod
@@ -610,7 +610,7 @@ class Gaussian2D1(Gaussian2D):
         -------
         None
         """
-        px, py, pz = pixel_size.x, pixel_size.y, pixel_size.z
+        px, py = pixel_size.x, pixel_size.y
         nz, ny, nx = beam_map.shape
         nxy = nx * ny
 

@@ -334,8 +334,8 @@ class Map2D1(Map2D):
         -------
         None
         """
-        if (isinstance(self.smoothing_beam, Gaussian2D1) and
-                self.grid is not None and redo):
+        if (isinstance(self.smoothing_beam, Gaussian2D1)
+                and self.grid is not None and redo):
             self.smoothing_beam.deconvolve_with(self.get_pixel_smoothing())
 
         self.grid.set_resolution(resolution)
@@ -512,7 +512,7 @@ class Map2D1(Map2D):
             return 0.0 * units.Unit('degree') ** 2
 
         return Gaussian2D1.AREA_FACTOR * (
-                self.filter_fwhm.x * self.filter_fwhm.y)
+            self.filter_fwhm.x * self.filter_fwhm.y)
 
     def get_filter_volume(self):
         """
@@ -1029,8 +1029,8 @@ class Map2D1(Map2D):
         xy_pixel_smoothing = np.sqrt(self.grid.get_pixel_area()
                                      / Gaussian2D1.AREA_FACTOR)
         if not isinstance(xy_pixel_smoothing, units.Quantity):
-            xy_pixel_smoothing = (xy_pixel_smoothing *
-                                  self.smoothing_beam.x_fwhm.unit)
+            xy_pixel_smoothing = (xy_pixel_smoothing
+                                  * self.smoothing_beam.x_fwhm.unit)
 
         pix_z_size = self.grid.get_pixel_size_z()
         if isinstance(pix_z_size, Coordinate1D):
@@ -1589,9 +1589,9 @@ class Map2D1(Map2D):
             dz2 = dz2.decompose().value
 
         a = -0.5 * np.asarray([dx2, dy2, dz2])
-        g = np.exp(a[0] * x ** 2 +
-                   a[1] * y ** 2 +
-                   a[2] * z ** 2)
+        g = np.exp(a[0] * x ** 2
+                   + a[1] * y ** 2
+                   + a[2] * z ** 2)
 
         c = fftconvolve(transformer, g / g.sum(), mode='same')
         c = c[:self.shape[0], :self.shape[1], :self.shape[2]]

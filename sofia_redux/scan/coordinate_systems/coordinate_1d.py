@@ -508,7 +508,7 @@ class Coordinate1D(Coordinate):
 
     def parse_header(self, header, key_stem, alt='', default=None,
                      dimension=1):
-        f"""
+        """
         Parse a header and return a Coordinate2D for the desired stem.
 
         Parameters

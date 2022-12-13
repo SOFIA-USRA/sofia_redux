@@ -87,7 +87,7 @@ def test_eq():
     g2 = g.copy()
     assert g == g
     assert g == g2
-    assert g != None
+    assert g != 1
     g2.fwhm *= 1.5
     assert g != g2
     g2 = g.copy()
@@ -223,7 +223,7 @@ def test_edit_header():
     assert h['BNAM'] == 'FOO'
     assert h['B1D'] == 1 and h.comments['B1D'] == 'Beam 1D axis (arcsec).'
     g.edit_header(h, beam_name='FOO', size_unit='arcmin')
-    assert np.isclose(h['B1D'], 1/60)
+    assert np.isclose(h['B1D'], 1 / 60)
     assert h.comments['B1D'] == 'Beam 1D axis (arcmin).'
 
     g = Gaussian1D()

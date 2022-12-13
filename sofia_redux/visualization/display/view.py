@@ -32,9 +32,6 @@ except ImportError:
 
         class QMainWindow:
             pass
-        
-        class QWidget:
-            pass
 
         class QWidget:
             pass

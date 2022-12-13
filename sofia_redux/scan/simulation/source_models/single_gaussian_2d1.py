@@ -6,7 +6,6 @@ from copy import deepcopy
 
 from sofia_redux.scan.simulation.source_models.single_gaussian import (
     SingleGaussian)
-from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 
 __all__ = ['SingleGaussian2d1']
 

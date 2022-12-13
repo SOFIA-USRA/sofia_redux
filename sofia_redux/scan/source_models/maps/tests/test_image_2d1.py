@@ -75,8 +75,8 @@ def test_get_asymmetry():
     radial_range = Range(0, 5)
     asymmetry, rms = image.get_asymmetry(grid, center_index, angle,
                                          radial_range)
-    assert np.allclose(asymmetry, [1/3, 1/9, 1/3])
-    assert np.allclose(rms, [5/3, 5/9, 5/3])
+    assert np.allclose(asymmetry, [1 / 3, 1 / 9, 1 / 3])
+    assert np.allclose(rms, [5 / 3, 5 / 9, 5 / 3])
 
 
 def test_get_asymmetry_2d():
@@ -89,5 +89,5 @@ def test_get_asymmetry_2d():
     angle = 0 * units.Unit('degree')
     radial_range = Range(0, 5)
     asymmetry = image.get_asymmetry_2d(grid, center_index, angle, radial_range)
-    assert np.allclose(asymmetry.x, [1/3, 1/3, 0])
+    assert np.allclose(asymmetry.x, [1 / 3, 1 / 3, 0])
     assert np.allclose(asymmetry.y, 0)

@@ -1,10 +1,8 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from abc import ABC
-from astropy import units
 import numpy as np
 
-from sofia_redux.scan.coordinate_systems.coordinate import Coordinate
 from sofia_redux.scan.coordinate_systems.coordinate_1d import Coordinate1D
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.coordinate_systems.coordinate_3d import Coordinate3D

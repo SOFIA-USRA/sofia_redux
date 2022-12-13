@@ -124,6 +124,3 @@ def test_get_point_size(fifi_simulated_scan):
     assert c.x == 10 * units.Unit('arcsec')
     assert c.y == 11 * units.Unit('arcsec')
     assert c.z == 12 * units.Unit('um')
-
-
-

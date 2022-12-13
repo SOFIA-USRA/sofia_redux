@@ -891,7 +891,7 @@ class FIFILSReduction(Reduction):
                 jobs = int(max_cores)
                 jobs = max_avail if jobs > max_avail else jobs
                 jobs = 1 if jobs < 1 else jobs
-            except(ValueError, TypeError):
+            except (ValueError, TypeError):
                 jobs = max_avail
         else:
             jobs = None

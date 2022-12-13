@@ -473,5 +473,3 @@ def test_create_simulated_data():
     for extname in ['FLUX', 'STDDEV', 'UNCORRECTED_FLUX',
                     'UNCORRECTED_STDDEV']:
         assert extname in sim.hdul
-
-

@@ -3,7 +3,6 @@
 from abc import ABC
 from astropy import log
 import gc
-from multiprocessing import Process
 import numpy as np
 import os
 import cloudpickle
@@ -218,8 +217,8 @@ class Pipeline(ABC):
         gc.collect()
 
         if self.configuration.get_bool('parallel.source'):
-            if ('source' in self.ordering and
-                    self.configuration.get_bool('source')):
+            if ('source' in self.ordering
+                    and self.configuration.get_bool('source')):
                 self.update_source_parallel_scans()
         else:
             self.update_source_serial_scans()
@@ -233,8 +232,8 @@ class Pipeline(ABC):
         None
         """
         for i, scan in enumerate(self.scans):
-            if ('source' in self.ordering and
-                    scan.configuration.get_bool('source')):
+            if ('source' in self.ordering
+                    and scan.configuration.get_bool('source')):
                 self.update_source(scan)
 
     def update_source_parallel_scans(self):

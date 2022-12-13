@@ -225,9 +225,9 @@ class FifiLsDetectorArrayInfo(SofiaDetectorArrayInfo):
         # Otherwise the prime array is not the channel and we need two sets
         # of coefficients
 
-        rows = df[(df['dt'] >= self.int_date) &
-                  (df['ch'] == self.ch) &
-                  (df['dch'] == dichroic)].sort_values('dt').reset_index()
+        rows = df[(df['dt'] >= self.int_date)
+                  & (df['ch'] == self.ch)
+                  & (df['dch'] == dichroic)].sort_values('dt').reset_index()
         c = rows.iloc[0]
         self.coefficients_2 = np.zeros((2, 3))
         self.coefficients_2[0] = c['ax'] * scale, c['bx'] * scale, c['rx']

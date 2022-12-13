@@ -852,7 +852,7 @@ class FORCASTImagingReduction(FORCASTReduction):
         sigma = param.get_value('threshold')
         maxiters = param.get_value('maxiters')
         smoothing = param.get_value('smoothing')
-        rotation = not(param.get_value('skip_rotation'))
+        rotation = not param.get_value('skip_rotation')
 
         if 'target' in str(reference).lower():
             log.info('Correcting for target motion, if necessary.')

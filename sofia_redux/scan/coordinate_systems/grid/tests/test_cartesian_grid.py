@@ -19,7 +19,7 @@ def test_init():
 def test_eq():
     g = CartesianGrid()
     assert g == g
-    assert g != None
+    assert g != 1
     g2 = g.copy()
     assert g2 == g
     g2.axis_resolution.x = 2.0

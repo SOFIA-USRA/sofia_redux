@@ -10,4 +10,4 @@ class TestChooser(object):
         """Test run method."""
         chooser = Chooser()
         ro = chooser.choose_reduction()
-        assert(type(ro) == Reduction)
+        assert type(ro) == Reduction

@@ -707,6 +707,39 @@
        in applying the configuration settings found in 'faint.cfg'.  See bright_
        and deep_.
 
+   * - .. _fifi_ls.insert_source:
+
+       **fifi_ls.insert_source**
+     - | [fifi_ls]
+       | insert_source={True, False}
+     - Used in conjunction with `fifi_ls.resample`_.  If True, the source
+       model is injected back into the irregular frame data.  If False, the
+       detected correlations and drifts are removed from the original frame
+       data.  If using a filter, it is advisable to set this parameter to
+       True, as the filtered signals cannot be removed from the original data.
+
+   * - .. _fifi_ls.resample:
+
+       **fifi_ls.resample**
+     - | [fifi_ls]
+       | resample={True, False}
+     - If set to True, and reducing FIFI-LS data, instructs the reduction to
+       perform a few additional steps post-reduction.  This is to set the
+       irregular frame data to a state where it can then be manually passed
+       into a more robust resampler to generate a final output map, rather
+       than using the default nearest neighbor method.  Please see
+       `fifi_ls.insert_source`_ for more details.
+
+   * - .. _fifi_ls.uncorrected:
+
+       **fifi_ls.uncorrected**
+     - | [fifi_ls]
+       | uncorrected={True, False}
+     - If set to True, and reducing FIFI-LS data, instructs the reduction to
+       use the uncorrected wavelength, data, and error values present in the
+       UNCORRECTED_LAMBDA, UNCORRECTED_FLUX, and UNCORRECTED_STDDEV HDUs rather
+       than the LAMBDA, FLUX, and STDDEV HDUs.
+
    * - .. _fillgaps:
 
        **fillgaps**
@@ -953,6 +986,17 @@
        the same can be applied on a per-subarray basis as well as via the
        `fixjumps.<sub>`_ option.
 
+   * - .. _fixjumps.detect:
+
+       | **fixjumps.detect**
+       | Instrument: HAWC+
+     - | [fixjumps]
+       | detect = <X>
+     - If `fixjumps`_ is set to True, attempt to locate and correct any
+       unreported jumps in the data.  <X> is a threshold value used to locate
+       possible jumps such that diff = d - shift(d, 1), mad = medabsdev(diff),
+       and possible jumps occur at abs(diff) >= <X> * mad.
+
    * - .. _fixjumps.<sub>:
 
        | **fixjumps.<sub>**
@@ -1187,6 +1231,16 @@
        disabled for very large reductions.  Alternatively, one may control the
        amount of memory such indexing may use via the `indexing.saturation`_
        option.  See grid_.
+
+   * - .. _indexing.check_memory:
+
+       **indexing.check_memory**
+     - | [indexing]
+       | check_memory=<True,False>
+     - If True (default), performs a memory check to see if enough space
+       exists in memory to index scans.  This should only really be turned
+       off when running unit tests on a Windows virtual maching.  See
+       indexing_.
 
    * - .. _indexing.saturation:
 
@@ -1630,10 +1684,27 @@
 
          - *scans*: process scans in parallel.
          - *ops*: process each scan with parallel threads where possible.
-         - *hybrid*: process as many scans in parallel as possible, each with an
-           optimal number of threads.
+         - *hybrid*: process as many scans in parallel as possible, each with
+           an optimal number of threads.
 
        The default mode is 'hybrid'.
+
+   * - .. _parallel.scans:
+
+       **parallel.scans**
+     - | [parallel]
+       | scans=<True,False>
+     - Perform the reduction tasks for all scans in parallel.  This is not
+       recommended when dealing with large data sets due to memory pressure.
+
+   * - .. _parallel.source:
+
+       **parallel.source**
+     - | [parallel]
+       | source=<True,False>
+     - Update the scan source models in parallel if True.  This is recommended
+       when dealing with large sets of data due to better memory management
+       procedures.
 
    * - .. _pcenter:
 
@@ -2435,7 +2506,7 @@
        modeling steps until these flags are cleared again in the reduction.
        See `correlated.<modality>.gainrange`_.
 
-   * - .. _source.couplingg.s2n:
+   * - .. _source.coupling.s2n:
 
        **source.coupling.s2n**
      - | [source]
@@ -2444,6 +2515,16 @@
      - Set the acceptable range of S/N required in the map for using the
        position for estimating detector coupling gains when the
        `source.coupling`_ option is enabled.
+
+   * - .. _source.delete_scan:
+
+       **source.delete_scan**
+     - | [source]
+       | delete_scan=<True,False>
+     - If True, and updating the source in parallel is also True (see
+       `parallel.source`_, delete the individual scan source model once all
+       required processing has been performed.  This is recommended when
+       dealing with large sets of data to reduce memory pressure.
 
    * - .. _source.despike:
 
@@ -2641,6 +2722,7 @@
        (<type>) are supported for all instruments:
 
        - *map*: Make a map of the source (default)
+       - *cube*: Make a spectral cube
        - *skydip*: Reduce skydips and determine opacities by fitting a model.
        - *pixelmap*: Create individual maps for every pixel, and use it to
          determine their location in the field of view.

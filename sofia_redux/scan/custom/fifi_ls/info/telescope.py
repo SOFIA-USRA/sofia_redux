@@ -5,6 +5,8 @@ from astropy import units
 from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
 from sofia_redux.scan.custom.sofia.info.telescope import SofiaTelescopeInfo
 
+__all__ = ['FifiLsTelescopeInfo']
+
 
 arcsec = units.Unit('arcsec')
 
@@ -33,8 +35,8 @@ class FifiLsTelescopeInfo(SofiaTelescopeInfo):
         if self.configuration is None or self.options is None:
             return
 
-        if (self.requested_equatorial is None or
-                self.requested_equatorial.is_nan()):
+        if (self.requested_equatorial is None
+                or self.requested_equatorial.is_nan()):
             raise ValueError("No valid OBSRA/OBDEC in header.")
 
         map_lambda = self.options.get_float('DLAM_MAP', default=0) * arcsec

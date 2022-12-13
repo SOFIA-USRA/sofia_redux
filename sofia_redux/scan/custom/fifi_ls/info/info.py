@@ -22,7 +22,7 @@ from sofia_redux.scan.signal.correlated_signal import CorrelatedSignal
 from sofia_redux.scan.signal import signal_numba_functions as snf
 
 
-__all__ = ['FifiLsInfo', 'normalize_scan_coordinates']
+__all__ = ['FifiLsInfo', 'normalize_scan_coordinates', 'correct_for_gain']
 
 
 @nb.njit(cache=True, fastmath=False)

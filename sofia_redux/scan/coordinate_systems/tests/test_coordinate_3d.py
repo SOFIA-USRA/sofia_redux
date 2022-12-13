@@ -325,4 +325,3 @@ def test_edit_header():
     assert h.comments['Y1'] == 'The reference x coordinate (arcsec).'
     assert h.comments['Y2'] == 'The reference y coordinate (arcsec).'
     assert h.comments['Y3'] == 'The reference z coordinate (arcsec).'
-

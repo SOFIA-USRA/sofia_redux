@@ -28,7 +28,7 @@ def test_init():
 def test_eq(c2d):
     c1 = c2d
     assert c1 == c1
-    assert c1 != None
+    assert c1 != 1
     c2 = CoordinateSystem(name='3D coordinates', dimensions=3)
     assert c1 != c2
     c0 = CoordinateSystem()

@@ -422,7 +422,7 @@ class MultiFilter(VariedFilter):
                 continue
 
             sub_response = sub_filter.response_at(fch)
-            sub_singular = (not(isinstance(sub_response, np.ndarray))
+            sub_singular = (not (isinstance(sub_response, np.ndarray))
                             or sub_response.shape == ())
             if sub_singular or singular or (
                     sub_response.ndim == full_response.ndim):

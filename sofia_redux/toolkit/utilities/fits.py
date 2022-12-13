@@ -167,7 +167,7 @@ def robust_read(filename, data_hdu=0, header_hdu=0, extension=None,
                 headout = header
             except (Exception, ValueError):
                 pass
-    except(Exception, AttributeError):
+    except (Exception, AttributeError):
         pass
     finally:
         try:

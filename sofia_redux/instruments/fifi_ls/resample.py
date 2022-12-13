@@ -197,7 +197,7 @@ def analyze_input_files(filenames, naif_id_key='NAIF_ID'):
             # don't need to continue
             break
 
-    if not(len(filenames) > 1 or otf_mode):
+    if not (len(filenames) > 1 or otf_mode):
         interpolate = True
 
     file_info = {'otf': otf_mode,

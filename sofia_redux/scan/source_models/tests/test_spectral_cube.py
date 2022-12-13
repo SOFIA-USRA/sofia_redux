@@ -1,7 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from astropy import units
-from astropy.io import fits
 import numpy as np
 import pytest
 
@@ -262,7 +261,7 @@ def test_get_smoothing(fifi_cube):
     assert smooth == expected
     smooth = m.get_smoothing('2/3beam')
     expected = fwhm.copy()
-    expected.scale(2/3)
+    expected.scale(2 / 3)
     assert smooth == expected
     smooth = m.get_smoothing('halfbeam')
     expected = fwhm.copy()

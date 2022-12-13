@@ -5,7 +5,6 @@ import numpy as np
 from sofia_redux.scan.source_models.maps.map_2d1 import Map2D1
 from sofia_redux.scan.source_models.maps.observation_2d import Observation2D
 from sofia_redux.scan.source_models.maps.image_2d1 import Image2D1
-from sofia_redux.scan.flags.flagged_array import FlaggedArray
 
 __all__ = ['Observation2D1']
 

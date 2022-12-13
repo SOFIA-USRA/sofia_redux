@@ -9,6 +9,13 @@ for more information.
 For previously processed data, check the PIPEVERS keyword in the FITS
 header to determine the pipeline version used.
 
+HAWC DRP v3.2.0
+~~~~~~~~~~~~~~~
+*User manual: Rev. L*
+
+- Improved the 'fixjumps' algorithm for correcting discrepant artifacts
+  in scan maps caused by detector flux jumps.
+
 HAWC DRP v3.1.0 (2022-09-12)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. K*

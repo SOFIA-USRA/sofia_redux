@@ -89,4 +89,3 @@ class ExampleDetectorArrayInfo(InfoBase):
         detector_coordinates : Coordinate2D
         """
         return Coordinate2D(equatorial)
-

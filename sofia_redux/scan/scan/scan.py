@@ -1255,8 +1255,8 @@ class Scan(ABC):
         -------
         None
         """
-        if (self.configuration.get_bool('source.pickle_scanmaps') and
-                isinstance(self.source_model_pickle_file, str)):
+        if (self.configuration.get_bool('source.pickle_scanmaps')
+                and isinstance(self.source_model_pickle_file, str)):
             with open(self.source_model_pickle_file, 'wb') as f:
                 cloudpickle.dump(source_model, f)
             self.source_model = None

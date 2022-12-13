@@ -64,4 +64,3 @@ def test_get_relative_frame_weights():
     wt = get_relative_frame_weights(variance)
     assert wt.shape == (20,)
     assert np.isclose(np.median(wt), 1.0, atol=0.1)
-

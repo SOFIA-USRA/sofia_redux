@@ -2104,7 +2104,7 @@ class Integration(ABC):
                     signal_gains = signal.mode.get_gains()
                     try:
                         gains[mode.channel_group.indices] = signal_gains
-                    except(TypeError, IndexError, ValueError):
+                    except (TypeError, IndexError, ValueError):
                         pass
 
             filename = os.path.join(
@@ -3774,6 +3774,8 @@ class Integration(ABC):
         parms.clear(channel_group, start=0, end=self.size)
         modeling_frames = self.frames.is_flagged('MODELING_FLAGS')
 
+        self.update_inconsistencies(channel_group, parms.for_frame, drift_n)
+
         average_drifts, average_drift_weights = int_nf.remove_channel_drifts(
             frame_data=self.frames.data,
             frame_weights=self.frames.relative_weight,
@@ -3787,7 +3789,7 @@ class Integration(ABC):
             channel_indices=channel_group.indices,
             robust=robust)
 
-        self.update_inconsistencies(channel_group, parms.for_frame, drift_n)
+        # self.update_inconsistencies(channel_group, parms.for_frame, drift_n)
 
         # Base data allows us to update the data in-place
         time_unit = channel_group.filter_time_scale.unit

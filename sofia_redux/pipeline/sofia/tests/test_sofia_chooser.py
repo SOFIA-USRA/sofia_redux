@@ -2,7 +2,7 @@
 """Tests for the SOFIA Chooser class."""
 
 from astropy.io import fits
-from astropy.io.fits.tests import FitsTestCase
+import numpy as np
 
 from sofia_redux.pipeline.reduction import Reduction
 from sofia_redux.pipeline.sofia.sofia_chooser import SOFIAChooser
@@ -70,41 +70,34 @@ except ImportError:
 
 
 class TestSOFIAChooser(object):
-    def make_file(self):
+    def make_file(self, tmpdir, fname='test0.fits'):
         """Retrieve a test FITS file."""
-        fitstest = FitsTestCase()
-        fitstest.setup()
-        ffile = fitstest.data('test0.fits')
+        hdul = fits.HDUList(fits.PrimaryHDU(
+            np.zeros((10, 10), dtype=float)))
+        ffile = str(tmpdir.join(fname))
+        hdul.writeto(ffile, overwrite=True)
+        hdul.close()
         return ffile
 
-    def make_hawc_file(self):
+    def make_hawc_file(self, tmpdir):
         """Retrieve a test FITS file for HAWC mode."""
-        fitstest = FitsTestCase()
-        fitstest.setup()
-        fitstest.copy_file('test0.fits')
-        ffile = fitstest.temp('test0.fits')
+        ffile = self.make_file(tmpdir, fname='test_hawc.fits')
         fits.setval(ffile, 'INSTRUME', value='HAWC_PLUS')
         return ffile
 
-    def make_forcast_file(self):
+    def make_forcast_file(self, tmpdir, fname='test_forcast.fits'):
         """Retrieve a test FITS file for FORCAST mode."""
-        fitstest = FitsTestCase()
-        fitstest.setup()
-        fitstest.copy_file('test0.fits')
-        ffile = fitstest.temp('test0.fits')
+        ffile = self.make_file(tmpdir, fname=fname)
         fits.setval(ffile, 'INSTRUME', value='FORCAST')
         return ffile
 
-    def make_fifi_file(self):
+    def make_fifi_file(self, tmpdir):
         """Retrieve a test FITS file for FIFI-LS mode."""
-        fitstest = FitsTestCase()
-        fitstest.setup()
-        fitstest.copy_file('test0.fits')
-        ffile = fitstest.temp('test0.fits')
+        ffile = self.make_file(tmpdir, 'test_fifi.fits')
         fits.setval(ffile, 'INSTRUME', value='FIFI-LS')
         return ffile
 
-    def test_choose_reduction(self, capsys):
+    def test_choose_reduction(self, capsys, tmpdir):
         chz = SOFIAChooser()
 
         # null data
@@ -112,13 +105,13 @@ class TestSOFIAChooser(object):
         assert type(ro) == Reduction
 
         # generic data
-        ffile1 = self.make_file()
+        ffile1 = self.make_file(tmpdir)
         ro = chz.choose_reduction(ffile1)
         assert type(ro) == Reduction
 
         # hawc data
         if HAS_DRP:
-            ffile2 = self.make_hawc_file()
+            ffile2 = self.make_hawc_file(tmpdir)
             ro = chz.choose_reduction(ffile2)
             assert type(ro) == HAWCReduction
             assert ro.override_mode is None
@@ -132,7 +125,7 @@ class TestSOFIAChooser(object):
         # forcast data
         if HAS_DRIP:
             # forcast img data
-            ffile3 = self.make_forcast_file()
+            ffile3 = self.make_forcast_file(tmpdir)
             ro = chz.choose_reduction(ffile3)
             assert type(ro) == FORCASTImagingReduction
 
@@ -165,13 +158,13 @@ class TestSOFIAChooser(object):
 
         # fifi data
         if HAS_FIFI:
-            ffile4 = self.make_fifi_file()
+            ffile4 = self.make_fifi_file(tmpdir)
             ro = chz.choose_reduction(ffile4)
             assert type(ro) == FIFILSReduction
 
         # flitecam data
         if HAS_FLITECAM:
-            ffile5 = self.make_forcast_file()
+            ffile5 = self.make_forcast_file(tmpdir)
 
             # flitecam spec data
             fits.setval(ffile5, 'INSTRUME', value='FLITECAM')
@@ -202,9 +195,9 @@ class TestSOFIAChooser(object):
 
         if HAS_EXES:
             # exes data
-            ffile6 = self.make_forcast_file()
+            ffile6 = self.make_forcast_file(tmpdir, fname='test_exes_1.fits')
             fits.setval(ffile6, 'INSTRUME', value='EXES')
-            ffile7 = self.make_forcast_file()
+            ffile7 = self.make_forcast_file(tmpdir, fname='test_exes_2.fits')
             fits.setval(ffile7, 'INSTRUME', value='EXES')
             fits.setval(ffile7, 'PRODTYPE', value='FLAT')
 

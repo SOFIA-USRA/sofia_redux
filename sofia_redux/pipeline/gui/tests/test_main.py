@@ -4,7 +4,8 @@
 import os
 import pickle
 
-from astropy.io.fits.tests import FitsTestCase
+from astropy.io import fits
+import numpy as np
 import pytest
 
 from sofia_redux.pipeline.gui.main import ReduxMainWindow
@@ -119,11 +120,13 @@ class TestMainWindow(object):
 
         return mw
 
-    def make_file(self, fname='test0.fits'):
+    def make_file(self, tmpdir, fname='test0.fits'):
         """Retrieve a test FITS file."""
-        fitstest = FitsTestCase()
-        fitstest.setup()
-        ffile = fitstest.data(fname)
+        hdul = fits.HDUList(fits.PrimaryHDU(
+            np.zeros((10, 10), dtype=float)))
+        ffile = str(tmpdir.join(fname))
+        hdul.writeto(ffile, overwrite=True)
+        hdul.close()
         return ffile
 
     def test_no_op(self, qtbot, mocker):
@@ -183,7 +186,7 @@ class TestMainWindow(object):
         assert 'test_error' in capt.err
         assert not mw.reduceButton.isEnabled()
 
-    def test_open_file(self, qtbot, mocker, capsys):
+    def test_open_file(self, qtbot, mocker, capsys, tmpdir):
         mw = self.make_window_simple(qtbot, mocker)
 
         # test if no file selected
@@ -193,7 +196,7 @@ class TestMainWindow(object):
         assert mw.interface.reduction is None
 
         # test if file selected
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         mocker.patch.object(QtWidgets.QFileDialog, 'getOpenFileNames',
                             return_value=[[ffile]])
         mw.onOpenReduction()
@@ -219,7 +222,7 @@ class TestMainWindow(object):
         assert mw.interface.reduction is None
 
         # test if file selected; no existing reduction
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         mocker.patch.object(QtWidgets.QFileDialog, 'getOpenFileNames',
                             return_value=[[ffile]])
         mw.onAddFiles()
@@ -252,7 +255,7 @@ class TestMainWindow(object):
         mw.interface.configuration.chooser = Chooser()
         mw.interface.chooser = Chooser()
 
-        ffile = self.make_file(fname='blank.fits')
+        ffile = self.make_file(tmpdir, fname='blank.fits')
         mocker.patch.object(QtWidgets.QFileDialog, 'getOpenFileNames',
                             return_value=[[ffile]])
 
@@ -262,11 +265,11 @@ class TestMainWindow(object):
         assert type(mw.interface.reduction) == type(old_red)
         assert mw.loaded_files == old_files
 
-    def test_remove_file(self, qtbot, mocker, capsys):
+    def test_remove_file(self, qtbot, mocker, capsys, tmpdir):
         mw = self.make_window_simple(qtbot, mocker)
 
-        ffile1 = self.make_file()
-        ffile2 = self.make_file(fname='blank.fits')
+        ffile1 = self.make_file(tmpdir)
+        ffile2 = self.make_file(tmpdir, fname='blank.fits')
         mocker.patch.object(QtWidgets.QFileDialog, 'getOpenFileNames',
                             return_value=[[ffile1, ffile2]])
         mw.onOpenReduction()
@@ -323,25 +326,6 @@ class TestMainWindow(object):
             assert mw.loaded_files == []
             assert mw.interface.reduction is None
         qtbot.waitUntil(test)
-
-    def test_quit(self, qtbot, mocker):
-        mw = self.make_window(qtbot, mocker, show=True)
-
-        # mock the message box to cancel the exit
-        mocker.patch.object(QtWidgets.QMessageBox, 'question',
-                            return_value=QtWidgets.QMessageBox.No)
-
-        mw.close()
-        assert mw.isVisible()
-
-        mw.closeEvent('test')
-        assert mw.isVisible()
-
-        # mock the message box to confirm the exit
-        mocker.patch.object(QtWidgets.QMessageBox, 'question',
-                            return_value=QtWidgets.QMessageBox.Yes)
-        mw.close()
-        assert not mw.isVisible()
 
     def test_log(self, qtbot, mocker):
         mw = self.make_window(qtbot, mocker)
@@ -447,9 +431,9 @@ class TestMainWindow(object):
         mw.undo()
         assert mw.last_step == 0
 
-    def test_one_step_undo(self, qtbot, mocker, capsys):
+    def test_one_step_undo(self, qtbot, mocker, capsys, tmpdir):
         mw = self.make_window_simple(qtbot, mocker)
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         mocker.patch.object(QtWidgets.QFileDialog, 'getOpenFileNames',
                             return_value=[[ffile]])
         mw.onOpenReduction()
@@ -528,11 +512,11 @@ class TestMainWindow(object):
             else:
                 assert f not in sumtext
 
-    def test_display_parameters(self, qtbot, mocker, capsys):
+    def test_display_parameters(self, qtbot, mocker, capsys, tmpdir):
         mw = self.make_window_simple(qtbot, mocker)
         mw.interface.configuration.chooser = ChooserClassForTest()
 
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         mocker.patch.object(QtWidgets.QFileDialog, 'getOpenFileNames',
                             return_value=[[ffile]])
         mw.onOpenReduction()
@@ -656,7 +640,7 @@ class TestMainWindow(object):
 
     def test_load_parameters(self, qtbot, mocker, capsys, tmpdir):
         mw = self.make_window_simple(qtbot, mocker)
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         mocker.patch.object(QtWidgets.QFileDialog, 'getOpenFileNames',
                             return_value=[[ffile]])
         mw.onOpenReduction()
@@ -738,7 +722,7 @@ class TestMainWindow(object):
 
     def test_save(self, qtbot, mocker, tmpdir, capsys):
         mw = self.make_window_simple(qtbot, mocker)
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         mocker.patch.object(QtWidgets.QFileDialog, 'getOpenFileNames',
                             return_value=[[ffile]])
         mw.onOpenReduction()
@@ -882,13 +866,13 @@ class TestMainWindow(object):
         assert mw.actionUpdateDisplays.isChecked()
         assert mw.actionDisplayIntermediate.isChecked()
 
-    def test_toggle_display(self, qtbot, mocker, capsys):
+    def test_toggle_display(self, qtbot, mocker, capsys, tmpdir):
         # add a reduction that has an embedded viewer
         # display is on by default
         mw = self.make_window_simple(qtbot, mocker)
         mw.interface.configuration.chooser = ChooserClassForTest()
 
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         mocker.patch.object(QtWidgets.QFileDialog, 'getOpenFileNames',
                             return_value=[[ffile]])
         mw.onOpenReduction()

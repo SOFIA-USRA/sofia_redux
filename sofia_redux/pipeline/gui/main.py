@@ -192,7 +192,7 @@ class ReduxMainWindow(QtWidgets.QMainWindow, ui_main.Ui_MainWindow):
             self, 'Quit', 'Quit Redux?')
         if response == QtWidgets.QMessageBox.Yes:
             self.cleanup()
-        else:
+        else:  # pragma: no cover
             try:
                 event.ignore()
             except AttributeError:

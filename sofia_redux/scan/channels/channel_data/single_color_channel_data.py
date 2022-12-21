@@ -365,7 +365,8 @@ class SingleColorChannelData(ColorArrangementData):
             channel `i` overlaps with the channel `j`.
         """
         invalid = np.any(position < 0, axis=1)
-
+        if np.isnan(radius):
+            radius = None
         overlap_indices = radius_neighbors_graph(position, radius,
                                                  include_self=False,
                                                  mode='connectivity')

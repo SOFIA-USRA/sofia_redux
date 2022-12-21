@@ -3,7 +3,7 @@
 
 from astropy import log
 from astropy.io import fits
-from astropy.io.fits.tests import FitsTestCase
+import numpy as np
 import pytest
 
 from sofia_redux.pipeline.gui.qad.qad_headview import HeaderViewer
@@ -25,14 +25,18 @@ class TestHeaderViewer(object):
         mocker.patch.object(QtWidgets, 'QApplication',
                             return_value=qapp)
 
-    def make_file(self, fname='test0.fits'):
-        """Retrieve a test FITS file."""
-        fitstest = FitsTestCase()
-        fitstest.setup()
-        ffile = fitstest.data(fname)
+    def make_file(self, tmpdir, fname='test0.fits'):
+        hdul = fits.HDUList(
+            [fits.PrimaryHDU(),
+             fits.ImageHDU(np.zeros((10, 10), dtype=float), name='TEST1'),
+             fits.ImageHDU(np.zeros((10, 10), dtype=float))])
+        ffile = str(tmpdir.join(fname))
+        hdul[0].header['FILENAME'] = ffile
+        hdul.writeto(ffile, overwrite=True)
+        hdul.close()
         return ffile
 
-    def test_headview(self, qtbot):
+    def test_headview(self, qtbot, tmpdir):
         try:
             import pandas
             log.debug('Pandas version: {}'.format(pandas.__version__))
@@ -43,8 +47,8 @@ class TestHeaderViewer(object):
         hv = HeaderViewer()
         qtbot.addWidget(hv)
 
-        ffile1 = self.make_file()
-        ffile2 = self.make_file('blank.fits')
+        ffile1 = self.make_file(tmpdir)
+        ffile2 = self.make_file(tmpdir, 'blank.fits')
 
         headers = {}
         nrow = 0

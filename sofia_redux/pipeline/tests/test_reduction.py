@@ -6,7 +6,7 @@ from collections import OrderedDict
 
 from astropy import log
 from astropy.io import fits
-from astropy.io.fits.tests import FitsTestCase
+import numpy as np
 import pytest
 
 from sofia_redux.pipeline.reduction import Reduction
@@ -14,13 +14,13 @@ from sofia_redux.pipeline.parameters import Parameters, ParameterSet
 
 
 class TestReduction(object):
-    def make_file(self, fname=None):
+    def make_file(self, tmpdir, fname='test0.fits'):
         """Retrieve a test FITS file."""
-        if fname is None:
-            fname = 'test0.fits'
-        fitstest = FitsTestCase()
-        fitstest.setup()
-        ffile = fitstest.data(fname)
+        hdul = fits.HDUList(fits.PrimaryHDU(
+            np.zeros((10, 10), dtype=float)))
+        ffile = str(tmpdir.join(fname))
+        hdul.writeto(ffile, overwrite=True)
+        hdul.close()
         return ffile
 
     def test_description(self):
@@ -56,7 +56,7 @@ class TestReduction(object):
 
     def test_load_fits(self, tmpdir):
         reduction = Reduction()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
 
         badfile = tmpdir.join('bad.fits')
         badfile.write('test data\n')
@@ -72,9 +72,9 @@ class TestReduction(object):
         assert len(reduction.input) == 1
         assert isinstance(reduction.input[0], fits.HDUList)
 
-    def test_load_data_id(self):
+    def test_load_data_id(self, tmpdir):
         reduction = Reduction()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
 
         # add a new data_key
         reduction.data_keys.append('NAXIS')
@@ -110,8 +110,8 @@ class TestReduction(object):
         assert data_id['File Size'][2] == 'UNKNOWN'
 
         # NAXIS key only for FITS data
-        assert data_id['NAXIS'][0] == '0'
-        assert data_id['NAXIS'][1] == '0'
+        assert data_id['NAXIS'][0] == '2'
+        assert data_id['NAXIS'][1] == '2'
         assert data_id['NAXIS'][2] == 'UNKNOWN'
 
     def test_parameters(self, capsys):

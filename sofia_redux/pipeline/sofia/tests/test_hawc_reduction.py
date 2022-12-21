@@ -2,10 +2,10 @@
 """Tests for the HAWC Reduction class."""
 
 import os
+import numpy as np
 import pytest
 
 from astropy.io import fits
-from astropy.io.fits.tests import FitsTestCase
 
 from sofia_redux.pipeline.parameters import ParameterSet
 from sofia_redux.pipeline.gui.qad_viewer import QADViewer
@@ -98,13 +98,14 @@ class MockStep(object):
 
 @pytest.mark.skipif('not HAS_DRP')
 class TestHAWCReduction(object):
-    def make_file(self):
-        """Retrieve a test FITS file for HAWC mode."""
-        fitstest = FitsTestCase()
-        fitstest.setup()
-        fitstest.copy_file('test0.fits')
-        ffile = fitstest.temp('test0.fits')
-        fits.setval(ffile, 'INSTRUME', value='HAWC_PLUS')
+    def make_file(self, tmpdir):
+        """Make a test FITS file for HAWC mode."""
+        hdul = fits.HDUList(fits.PrimaryHDU(
+            np.zeros((10, 10), dtype=float)))
+        hdul[0].header['INSTRUME'] = 'HAWC_PLUS'
+        ffile = str(tmpdir.join('test0.fits'))
+        hdul.writeto(ffile, overwrite=True)
+        hdul.close()
         return ffile
 
     def mock_drp(self, mocker):
@@ -132,11 +133,11 @@ class TestHAWCReduction(object):
         assert len(vz) == 1
         assert isinstance(vz[0], QADViewer)
 
-    def test_load(self, mocker):
+    def test_load(self, mocker, tmpdir):
         self.mock_drp(mocker)
 
         red = HAWCReduction()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
 
         red.load([ffile])
 
@@ -156,10 +157,10 @@ class TestHAWCReduction(object):
         red.load([ffile])
         assert len(red.recipe) == len(red.override_steplist['skycal'])
 
-    def test_load_intermediate(self, mocker):
+    def test_load_intermediate(self, mocker, tmpdir):
         self.mock_drp(mocker)
         red = HAWCReduction()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
 
         # set a different override recipe
         red.override_steplist = {'nodpol': ['unknown']}
@@ -191,10 +192,10 @@ class TestHAWCReduction(object):
         with pytest.raises(ValueError):
             red.load([ffile])
 
-    def test_load_mode(self, mocker):
+    def test_load_mode(self, mocker, tmpdir):
         self.mock_drp(mocker)
         red = HAWCReduction()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
 
         # set mode to intcal
         MockDataFits.mode = 'intcal'
@@ -222,7 +223,7 @@ class TestHAWCReduction(object):
             red.load([ffile])
         assert 'override mode bad_mode not found' in str(err)
 
-    def test_step(self, mocker, capsys):
+    def test_step(self, mocker, capsys, tmpdir):
         self.mock_drp(mocker)
 
         # also mock the run_drp_step so actual steps aren't called
@@ -230,7 +231,7 @@ class TestHAWCReduction(object):
                             return_value=None)
 
         red = HAWCReduction()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
 
         red.load([ffile])
 
@@ -310,10 +311,10 @@ class TestHAWCReduction(object):
             else:
                 assert item == init_aux[i - len(red.input) - len(addl)]
 
-    def test_drp_step_load(self, mocker, capsys):
+    def test_drp_step_load(self, mocker, capsys, tmpdir):
         self.mock_drp(mocker)
         red = HAWCReduction()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
 
         # set mode to intcal for simple recipe
         MockDataFits.mode = 'intcal'
@@ -375,10 +376,10 @@ class TestHAWCReduction(object):
             red.run_drp_step()
         assert 'Could not load' in str(err.value)
 
-    def test_drp_step_iomode(self, mocker, capsys):
+    def test_drp_step_iomode(self, mocker, capsys, tmpdir):
         self.mock_drp(mocker)
         red = HAWCReduction()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
 
         # set mode to intcal for simple recipe
         MockDataFits.mode = 'intcal'
@@ -423,10 +424,10 @@ class TestHAWCReduction(object):
         assert 'skipping file' in capt.err
         MockStep.raise_error = False
 
-    def test_make_flats(self, mocker, capsys):
+    def test_make_flats(self, mocker, capsys, tmpdir):
         self.mock_drp(mocker)
         red = HAWCReduction()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
 
         # mock run_drp_step
         mocker.patch.object(HAWCReduction, 'run_drp_step',
@@ -481,10 +482,10 @@ class TestHAWCReduction(object):
         with pytest.raises(ValueError):
             red.make_flats()
 
-    def test_process_intcal(self, mocker, capsys):
+    def test_process_intcal(self, mocker, capsys, tmpdir):
         self.mock_drp(mocker)
         red = HAWCReduction()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
 
         # mock run_drp_step
         mocker.patch.object(HAWCReduction, 'run_drp_step',
@@ -508,10 +509,10 @@ class TestHAWCReduction(object):
         assert capt.out.count('Sub-step') == 3
         assert len(red.input) == 0
 
-    def test_demodulate(self, mocker, capsys):
+    def test_demodulate(self, mocker, capsys, tmpdir):
         self.mock_drp(mocker)
         red = HAWCReduction()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
 
         # mock run_drp_step
         mocker.patch.object(HAWCReduction, 'run_drp_step',

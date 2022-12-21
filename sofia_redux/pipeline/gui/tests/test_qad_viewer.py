@@ -8,7 +8,6 @@ import types
 import numpy as np
 from astropy import log
 from astropy.io import fits
-from astropy.io.fits.tests import FitsTestCase
 import pytest
 
 from sofia_redux.pipeline.gui.qad_viewer import QADViewer
@@ -135,11 +134,21 @@ class TestQADViewer(object):
         view.start(parent=qtbot)
         return view
 
-    def make_file(self, fname='test0.fits'):
-        """Retrieve a test FITS file."""
-        fitstest = FitsTestCase()
-        fitstest.setup()
-        ffile = fitstest.data(fname)
+    def make_file(self, tmpdir, fname='test0.fits'):
+        if 'spec' in fname:
+            hdul = fits.HDUList(
+                [fits.PrimaryHDU(np.zeros((5, 10), dtype=float))])
+            hdul[0].header['NEXTEND'] = 0
+        else:
+            hdul = fits.HDUList(
+                [fits.PrimaryHDU(np.zeros((10, 10), dtype=float)),
+                 fits.ImageHDU(np.zeros((10, 10), dtype=float)),
+                 fits.ImageHDU(np.zeros((10, 10), dtype=float))])
+            hdul[0].header['NEXTEND'] = 2
+        ffile = str(tmpdir.join(fname))
+        hdul[0].header['FILENAME'] = ffile
+        hdul.writeto(ffile, overwrite=True)
+        hdul.close()
         return ffile
 
     def mock_ds9(self, mocker):
@@ -182,12 +191,12 @@ class TestQADViewer(object):
         assert view.update('test data') is None
         assert view.reset() is None
 
-    def test_reset(self, qtbot, mocker):
+    def test_reset(self, qtbot, mocker, tmpdir):
         self.mock_ds9(mocker)
         view = self.make_window(qtbot)
 
         # display a file
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         view.update(ffile)
 
         # reset
@@ -207,7 +216,7 @@ class TestQADViewer(object):
             view.imviewer.default_parameters('display')
 
         # get a test fits file
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
 
         # update viewer
         view.update(ffile)
@@ -237,12 +246,12 @@ class TestQADViewer(object):
         txtfile = tmpdir.join('test.txt')
         txtfile.write('test')
 
-    def test_display_data(self, qtbot, mocker, capsys):
+    def test_display_data(self, qtbot, mocker, capsys, tmpdir):
         self.mock_ds9(mocker)
         view = self.make_window(qtbot)
 
         # get a test fits file
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         hdul = fits.open(ffile)
 
         # update viewer
@@ -264,6 +273,8 @@ class TestQADViewer(object):
         assert 'test error' in capt.err
 
     def test_settings_getvalue(self, qtbot, mocker, capsys, tmpdir):
+        ffile = self.make_file(tmpdir)
+
         # ignore any user override parameters
         mocker.patch.object(os.path, 'expanduser', return_value=str(tmpdir))
 
@@ -374,7 +385,6 @@ class TestQADViewer(object):
 
         # trigger error in reload at end of getDispValue;
         # verify it is logged
-        ffile = self.make_file()
         view.imviewer.files = [ffile]
 
         def err_cmd(*args, **kwargs):
@@ -467,7 +477,7 @@ class TestQADViewer(object):
         assert 'no headers' in view.settings.status.text().lower()
 
         # update viewer
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         view.update(ffile)
 
         def test():
@@ -516,10 +526,10 @@ class TestQADViewer(object):
         assert ptext.count('Extension') == \
             (1 + fits.getval(ffile, 'NEXTEND')) * 2
 
-    def test_imexam(self, qtbot, mocker, capsys):
+    def test_imexam(self, qtbot, mocker, capsys, tmpdir):
         self.mock_ds9(mocker)
         view = self.make_window(qtbot)
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         view.update(ffile)
         view.imviewer.HAS_DS9 = True
 

@@ -5,7 +5,8 @@ import logging
 import os
 
 from astropy import log
-from astropy.io.fits.tests import FitsTestCase
+from astropy.io import fits
+import numpy as np
 
 from sofia_redux import pipeline
 from sofia_redux.pipeline.interface import Interface
@@ -16,11 +17,13 @@ from sofia_redux.pipeline.viewer import Viewer
 
 
 class TestInterface(object):
-    def make_file(self):
+    def make_file(self, tmpdir, fname='test0.fits'):
         """Retrieve a test FITS file."""
-        fitstest = FitsTestCase()
-        fitstest.setup()
-        ffile = fitstest.data('test0.fits')
+        hdul = fits.HDUList(fits.PrimaryHDU(
+            np.zeros((10, 10), dtype=float)))
+        ffile = str(tmpdir.join(fname))
+        hdul.writeto(ffile, overwrite=True)
+        hdul.close()
         return ffile
 
     def test_no_op(self):
@@ -73,7 +76,7 @@ class TestInterface(object):
 
     def test_manifest(self, tmpdir):
         interface = Interface()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         manifest = tmpdir.join('infiles.txt')
         manifest.write("{}\n".format(ffile))
         fname = str(manifest)
@@ -86,10 +89,10 @@ class TestInterface(object):
         interface.start(fname)
         assert interface.reduction.raw_files[0] == ffile
 
-    def test_clear_reduction(self):
+    def test_clear_reduction(self, tmpdir):
         # load data
         interface = Interface()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         interface.start(ffile)
         assert interface.reduction is not None
 
@@ -97,7 +100,7 @@ class TestInterface(object):
         interface.clear_reduction()
         assert interface.reduction is None
 
-    def test_viewer(self, mocker):
+    def test_viewer(self, mocker, tmpdir):
         interface = Interface()
 
         # mock an embedded viewer for a reduction
@@ -107,7 +110,7 @@ class TestInterface(object):
                             return_value=[viewer])
 
         # load data
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         interface.start(ffile)
         interface.register_viewers()
 
@@ -123,9 +126,9 @@ class TestInterface(object):
         interface.reset_viewers()
         assert viewer.display_data == []
 
-    def test_reset_reduction(self):
+    def test_reset_reduction(self, tmpdir):
         interface = Interface()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         interface.start(ffile)
 
         # step once
@@ -139,7 +142,7 @@ class TestInterface(object):
     def test_save_input_manifest(self, tmpdir):
         # start a reduction
         interface = Interface()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         interface.start(ffile)
 
         # temp directory
@@ -182,7 +185,7 @@ class TestInterface(object):
     def test_save_parameters(self, tmpdir):
         # start a reduction
         interface = Interface()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         interface.start(ffile)
 
         # test string output
@@ -214,7 +217,7 @@ class TestInterface(object):
     def test_save_output_manifest(self, tmpdir):
         # start a reduction
         interface = Interface()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         interface.start(ffile)
 
         # temp directory
@@ -264,7 +267,7 @@ class TestInterface(object):
         # start a reduction with temporary output directory
         tmpdir_name = str(tmpdir)
         interface = Interface(Configuration({'output_directory': tmpdir_name}))
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         interface.start(ffile)
 
         # test that the directory was set from config
@@ -308,7 +311,7 @@ class TestInterface(object):
                            'log_file': 'test_log.txt',
                            'log_level': 'WARNING',
                            'log_format': 'test - %(message)s'}))
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         interface.start(ffile)
 
         # test that the log file was set from config

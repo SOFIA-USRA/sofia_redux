@@ -2,12 +2,11 @@
 """Tests for the QAD Main Panel class."""
 
 import os
-import shutil
 import types
 
 from astropy import log
 from astropy.io import fits
-from astropy.io.fits.tests import FitsTestCase
+import numpy as np
 import pytest
 
 from sofia_redux.pipeline.gui.qad.qad_main_panel import QADMainWindow
@@ -52,12 +51,8 @@ class TestQADMain(object):
         # set a root path with two fits file in it
         mw.rootpath = str(tmpdir)
 
-        ffile = self.make_file()
-        self.newfile1 = str(tmpdir.join('file1.fits'))
-        shutil.copyfile(ffile, self.newfile1)
-
-        self.newfile2 = str(tmpdir.join('file2.fits'))
-        shutil.copyfile(self.newfile1, self.newfile2)
+        self.newfile1 = self.make_file(tmpdir, fname='file1.fits')
+        self.newfile2 = self.make_file(tmpdir, fname='file2.fits')
         fits.setval(self.newfile2, 'EXTNAME', 1, value='TEST')
 
         mw.setRoot()
@@ -69,11 +64,16 @@ class TestQADMain(object):
         qtbot.addWidget(mw)
         return mw
 
-    def make_file(self, fname='test0.fits'):
-        """Retrieve a test FITS file."""
-        fitstest = FitsTestCase()
-        fitstest.setup()
-        ffile = fitstest.data(fname)
+    def make_file(self, tmpdir, fname='test0.fits'):
+        hdul = fits.HDUList(
+            [fits.PrimaryHDU(np.zeros((10, 10), dtype=float)),
+             fits.ImageHDU(np.zeros((10, 10), dtype=float)),
+             fits.ImageHDU(np.zeros((10, 10), dtype=float))])
+        ffile = str(tmpdir.join(fname))
+        hdul[0].header['FILENAME'] = ffile
+        hdul[0].header['NEXTEND'] = 2
+        hdul.writeto(ffile, overwrite=True)
+        hdul.close()
         return ffile
 
     def mock_ds9(self, mocker):

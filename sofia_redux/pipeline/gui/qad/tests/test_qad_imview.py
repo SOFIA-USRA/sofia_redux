@@ -5,7 +5,6 @@ import types
 
 from astropy import log
 from astropy.io import fits
-from astropy.io.fits.tests import FitsTestCase
 from astropy.table import Table
 from astropy.wcs import WCS
 
@@ -133,11 +132,19 @@ class TestQADImView(object):
         mocker.patch('sofia_redux.pipeline.gui.qad.qad_imview.MatplotlibPlot',
                      QADPlotForTest)
 
-    def make_file(self, fname='test0.fits'):
-        """Retrieve a test FITS file."""
-        fitstest = FitsTestCase()
-        fitstest.setup()
-        ffile = fitstest.data(fname)
+    def make_file(self, tmpdir, fname='test0.fits'):
+        if 'spec' in fname:
+            hdul = fits.HDUList(
+                [fits.PrimaryHDU(np.zeros((5, 10), dtype=float))])
+        else:
+            hdul = fits.HDUList(
+                [fits.PrimaryHDU(),
+                 fits.ImageHDU(np.zeros((10, 10), dtype=float)),
+                 fits.ImageHDU(np.zeros((10, 10), dtype=float))])
+        ffile = str(tmpdir.join(fname))
+        hdul[0].header['FILENAME'] = ffile
+        hdul.writeto(ffile, overwrite=True)
+        hdul.close()
         return ffile
 
     def make_imview(self):
@@ -499,11 +506,11 @@ class TestQADImView(object):
         assert round(result['xctr']) == 4
         assert round(result['yctr']) == 4
 
-    def test_retrieve_array_error(self, mocker, capsys):
+    def test_retrieve_array_error(self, mocker, capsys, tmpdir):
         """Test retrieving data stamp/wcs from DS9."""
         self.mock_ds9(mocker)
         imviewer = self.make_imview()
-        imgfile = self.make_file()
+        imgfile = self.make_file(tmpdir)
         imviewer.load([imgfile])
         mocker.patch.object(imviewer.ds9, 'get_arr2np',
                             side_effect=ValueError())
@@ -584,7 +591,7 @@ class TestQADImView(object):
         imviewer = self.make_imview()
 
         # set files so that they are loaded on startup
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         imviewer.files = ffile
 
         # no errors raised
@@ -1021,7 +1028,7 @@ class TestQADImView(object):
         self.mock_ds9(mocker)
         imviewer = self.make_imview()
 
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         hdul = fits.open(ffile)
         fname = hdul[0].header['FILENAME']
 
@@ -1146,7 +1153,7 @@ class TestQADImView(object):
 
         hdul.close()
 
-    def test_load_alternates(self, mocker, capsys):
+    def test_load_alternates(self, mocker, capsys, tmpdir):
         """Test error cases in internal load methods."""
         self.mock_ds9(mocker)
         imviewer = self.make_imview()
@@ -1154,7 +1161,7 @@ class TestQADImView(object):
         # raise error from set
         MockDS9.raise_error_set = True
 
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
         data = fits.open(ffile)
 
         # load from memory raises error
@@ -1170,11 +1177,11 @@ class TestQADImView(object):
         assert 'Cannot load image' in capt.err
         assert status == 0
 
-    def test_load_spec(self, mocker, capsys):
+    def test_load_spec(self, mocker, capsys, tmpdir):
         """Test that spec data are passed to spec viewer."""
         self.mock_ds9(mocker)
         imviewer = self.make_imview()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
 
         class SpecTestClass(object):
             def start(self):
@@ -1205,11 +1212,11 @@ class TestQADImView(object):
         assert 'loaded spec' in capt.out
         assert len(imviewer.files) == 1
 
-    def test_load_errors(self, mocker, capsys):
+    def test_load_errors(self, mocker, capsys, tmpdir):
         """Test various error conditions on load."""
         self.mock_ds9(mocker)
         imviewer = self.make_imview()
-        ffile = self.make_file()
+        ffile = self.make_file(tmpdir)
 
         log.setLevel('DEBUG')
 
@@ -1258,13 +1265,13 @@ class TestQADImView(object):
         capt = capsys.readouterr()
         assert 'Cannot load' in capt.err
 
-    def test_load_spec_imgs(self, mocker, capsys):
+    def test_load_spec_imgs(self, mocker, capsys, tmpdir):
         """Test loading spectral data with image data."""
         self.mock_ds9(mocker)
         imviewer = self.make_imview()
 
-        img_file = self.make_file()
-        spec_file = self.make_file('blank.fits')
+        img_file = self.make_file(tmpdir)
+        spec_file = self.make_file(tmpdir, 'spec.fits')
 
         class SpecTestClass(object):
             def start(self):
@@ -1283,6 +1290,7 @@ class TestQADImView(object):
 
         imviewer.load([img_file, img_file, spec_file])
         capt = capsys.readouterr()
+        print(capt)
         assert 'loaded {}'.format(spec_file) in capt.out
         assert 'loaded {}'.format(img_file) not in capt.out
         assert len(imviewer.files) == 3
@@ -1298,7 +1306,7 @@ class TestQADImView(object):
     def test_load_mult_reg(self, mocker, capsys, tmpdir):
         self.mock_ds9(mocker)
         MockDS9.verbose = True
-        imgfile = self.make_file()
+        imgfile = self.make_file(tmpdir)
         regfile = tmpdir.join('test.reg')
         regfile.write('test')
         regfile2 = tmpdir.join('test2.reg')

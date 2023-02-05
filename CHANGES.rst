@@ -1,5 +1,12 @@
-1.3.0
+1.3.1
 =====
+- Minor fixes for the spectral viewer, relating to plotting multiple
+  spectra with potentially mismatched units.
+
+
+1.3.0 (2022-12-21)
+==================
+
 - Added EXES support (EXES Redux v3.0.0).
 - Updated FORCAST pipeline to v2.7.0 to allow the use of measured
   water vapor values in calibration routines.
@@ -10,6 +17,7 @@
   level jumps.
 - Updated the spectral viewer interface to better control spectra in
   multiple files, apertures, and orders.
+
 
 1.2.8 (2022-10-25)
 ==================
@@ -36,16 +44,19 @@
 - Added support for more general spectral formats, e.g. text files and simple
   FITS files, to the spectral viewer.
 
+
 1.2.6 (2022-07-25)
 ==================
 
 - Calibration data updates for HAWC flight series OC9Q-R.
+
 
 1.2.5 (2022-06-10)
 ==================
 
 - Calibration data updates for FORCAST flight series OC9P.
 - Add pixel unit display to spectral viewer tool.
+
 
 1.2.4 (2022-05-25)
 ==================
@@ -54,6 +65,7 @@
 - Updated FIFI-LS pipeline to v2.6.1, including performance improvements
   and additional memory management for large data sets.
 - Calibration data updates for FORCAST and FIFI-LS.
+
 
 1.2.3 (2022-04-06)
 ==================
@@ -83,6 +95,7 @@
 
 - Added HAWC+ support (HAWC DRP v3.0.0).
 - Updated FIFI-LS bad pixel and flat files.
+
 
 1.1.1 (2021-12-13)
 ==================

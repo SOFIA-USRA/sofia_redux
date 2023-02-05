@@ -1,3 +1,10 @@
+1.3.2
+=====
+- Minor bug fixes for EXES edge cases (raster flats with non-standard
+  overlaps; occasional spurious zero-length orders).
+- Environment update for astropy management.
+
+
 1.3.1 (2023-02-11)
 ==================
 - Minor fixes for the spectral viewer, relating to plotting multiple

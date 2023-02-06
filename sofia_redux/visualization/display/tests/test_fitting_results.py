@@ -387,3 +387,24 @@ class TestFittingResults(object):
         updates = {0: [line]}
         fr.update_colors(updates)
         assert fr.model_fits[0].color == 'black'
+
+    def test_update_colors_failed_current(self, empty_view, gauss_model_fit,
+                                          moffat_model_fit, mocker):
+        fr = FittingResults(empty_view)
+        moffat_model_fit.status = 'fail'
+        x = np.linspace(0, 5, 10)
+        y = 2 * x
+        gauss_model_fit.set_dataset(x=x, y=y)
+        moffat_model_fit.set_dataset(x=x, y=y)
+        fr.add_results([gauss_model_fit])
+        fr.add_results([moffat_model_fit])
+        fr.currently_plotted = [moffat_model_fit]
+
+        args = {'high_model': moffat_model_fit.filename, 'mid_model': '1.0',
+                'model_id': moffat_model_fit.model_id}
+        line = drawing.Drawing(kind='line', axes='primary',
+                               updates={'color': 'black'}, **args)
+        updates = {0: [line]}
+        fr.update_colors(updates)
+
+        assert fr.ax.get_lines()[0].get_color() == 'black'

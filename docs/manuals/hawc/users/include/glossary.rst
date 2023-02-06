@@ -2323,6 +2323,15 @@
      - Shift the data by X seconds to the frame headers.  It can be used to
        diagnose or correct for timing problems.
 
+   * - .. _sigmaclip:
+
+       **sigmaclip**
+     - sigmaclip={n, True,False}
+     - Removes frames that are outside of the permissible scanning speed range
+       by iteratively remove speeds that are `n` times the
+       standard deviation away from the median speed value. If `simgaclip` is 
+       set to True `n` defaults to 5. 
+
    * - .. _signal-response:
 
        **signal-response**

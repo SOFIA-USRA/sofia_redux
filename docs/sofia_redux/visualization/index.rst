@@ -18,6 +18,7 @@ Model Classes
 
   models.rst
   fitting.rst
+  reference.rst
 
 Display Classes
 ===============
@@ -25,8 +26,7 @@ Display Classes
 .. toctree::
   :maxdepth: 2
 
-  gallery.rst
-  drawings.rst
+  drawing.rst
   plotting.rst
   signals.rst
 

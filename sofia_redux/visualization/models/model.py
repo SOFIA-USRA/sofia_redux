@@ -84,7 +84,6 @@ class Model(object):
         if filename and hdul is not None:
             raise RuntimeError('Model.add_model can only accept `filename` '
                                'or `hdul`, not both')
-
         if hdul is None:
             if filename:
                 if 'fits' not in filename:
@@ -124,7 +123,6 @@ class Model(object):
             model.filename = filename
 
         log.debug(f'Created model with id: {model.id}')
-
         hdul.close()
         return model
 
@@ -160,6 +158,7 @@ def parse_general(filename: str) -> pf.HDUList:
     header['XUNITS'] = 'um'
     header['YUNITS'] = 'Jy'
     header['INSTRUME'] = 'General'
+    header['PRODTYPE'] = 'General'
     header['FILENAME'] = os.path.basename(filename)
 
     # determining the delimiter in the file
@@ -254,6 +253,8 @@ def parse_general(filename: str) -> pf.HDUList:
 
     header['NAXIS1'] = data.shape[0]
     header['NAXIS2'] = data.shape[1]
+    header['NAPS'] = 1
+    header['NORDERS'] = 1
 
     hdu_read = pf.PrimaryHDU(data.T, header)
 

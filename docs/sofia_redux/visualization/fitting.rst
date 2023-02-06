@@ -118,8 +118,8 @@ the parameters of all fits are displayed in a separate window.
 
 Plotting the curve for a 1D fit involves plotting two distinct lines. The
 first is the fitted curve itself. The second is a vertical line located at
-the fit's centroid. Both of these artists are added to the ``Artists`` class
-as described in :ref:`artists`. An example is shown in
+the fit's centroid. Both of these artists are added to the ``Gallery`` class
+as described in :ref:`gallery`. An example is shown in
 :ref:`Spectrum with Fit <spectrum-with-fit>`.
 
 The separate window is controlled by the

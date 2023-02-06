@@ -1088,6 +1088,9 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
     def add_pane(self) -> None:
         """Add a new pane."""
         self.figure.add_panes(n_dims=0, n_panes=1)
+        self.all_panes_checkbox.blockSignals(True)
+        self.all_panes_checkbox.setChecked(False)
+        self.all_panes_checkbox.blockSignals(False)
         self.signals.current_pane_changed.emit()
 
     def add_panes(self, n_panes: int, kind: List[str],
@@ -1224,8 +1227,11 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         RuntimeError :
             If an invalid mode is provided.
         """
-        self.figure.assign_models(mode=mode, models=models,
-                                  indices=indices)
+        errors = self.figure.assign_models(mode=mode, models=models,
+                                           indices=indices)
+        if errors > 0:
+            log.warning(f'Failed to add {errors} model'
+                        f'{"s" if errors > 1 else ""}.')
 
     def models_per_pane(self) -> List[int]:
         """
@@ -1336,7 +1342,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
     @QtCore.pyqtSlot()
     def enable_all_orders(self):
         """Enable all orders."""
-        log.info('\nEnabling all orders')
+        log.info('Enabling all orders')
         self.on_orders_selector.blockSignals(True)
         self.off_orders_selector.blockSignals(True)
 
@@ -1853,7 +1859,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
     ####
     # Axis Controls
     ####
-    def model_backup(self, models):
+    def model_backup(self, models: Dict[IDT, MT]):
         """
         Obtain the backup model.
 
@@ -2058,7 +2064,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         targets = self.selected_target_axis()
         self.figure.reset_zoom(targets=targets)
         self.signals.atrophy_bg_partial.emit()
-        log.info('Zoom reset')
+        log.debug('Zoom reset')
 
     def start_selection(self, mode: str) -> None:
         """
@@ -2117,7 +2123,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
         self.clear_cids('zoom')
         self.clear_cids('fit')
         self.figure.set_cursor_mode('')
-        log.info('Zoom selection cleared')
+        log.debug('Zoom selection cleared')
 
     def clear_cids(self, target: Optional[str] = None) -> None:
         """
@@ -2260,6 +2266,7 @@ class View(QtWidgets.QMainWindow, ssv.Ui_MainWindow):
 
 class ApertureColors(QtWidgets.QWidget):
     """Display aperture colors."""
+
     def __init__(self, colors: List[str], parent=None):
         super().__init__(parent)
 

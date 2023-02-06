@@ -15,11 +15,10 @@ data in the "Models" in the desired manner.
 In the Eye of SOFIA, the role of "Controller" is taken by the
 :class:`Eye <sofia_redux.visualization.eye.Eye>` class. It accepts commands
 from a user and passes them on to the relevant modules. Commands can come
-from multiple
-places. The standard is through the GUI interface, which is managed by the
-"View" classes. It can also be controlled programmatically by through the
-Eye API. The redux package for reducing SOFIA data also utilizes the Eye
-through the
+from multiple places. The standard is through the GUI interface, which is
+managed by the "View" classes. It can also be controlled programmatically by
+through the Eye API. The redux package for reducing SOFIA data also utilizes
+the Eye through the
 :class:`EyeViewer <sofia_redux.visualization.redux_viewer>` wrapper. To help
 process command and events, particularly from the GUI, the Eye relies
 heavily on PyQt5 signals and events, which are described in detail in
@@ -45,9 +44,8 @@ The plotting details are described in depth in :ref:`plotting`.
 
 The "Model" is managed by the
 :class:`Model <sofia_redux.visualization.models.model.Model>` class and is
-supported by
-other classes in the :mod:`models` module. Models are created by reading in a
-FITS file and parsing the data into a
+supported by other classes in the :mod:`models` module. Models are created by
+reading in a FITS file and parsing the data into a
 :class:`HighModel <sofia_redux.visualization.models.high_model.HighModel>`
 instance. Once the data has been read in, it is immutable; any desired
 changes must be made to copies of the models. This is to allow for easy
@@ -55,9 +53,9 @@ return to default while exploring the data without having to read in the file
 again.
 
 Additional functionality is added by the
-:class:`utils <sofia_redux.visualization.utils>`
-module, which contains classes for processing unit conversions, configuring
-the logger, and defining custom errors for the Eye.
+:class:`utils <sofia_redux.visualization.utils>` module, which contains
+classes for processing unit conversions, configuring the logger, and defining
+custom errors for the Eye.
 
 
 
@@ -86,13 +84,19 @@ For quick reference a quick summary of the purpose of each module follows:
 
   + View: Supervise GUI, Figure
 
-  + Artists: Keep track of all artists, implement changes to artists
+  + Drawing: Manages a single artist object for the Eye, handles all
+    updates to artists.
+
+  + Gallery: Stores and manages all Drawing objects
 
   + Blitter: Keep track of Figure background; draw artists
 
   + CursorLocation: Show coordinates of cursor location in pop-out window
 
   + FittingResults: Show results of curve fitting in pop-out window
+
+  + ReferenceWindow: Handles loading and displaying spectral
+    reference lines.
 
   + Quicklook: General quick plots of data sets
 
@@ -106,6 +110,8 @@ For quick reference a quick summary of the purpose of each module follows:
 
   + UnitConversion: Handles converting units for all models
 
+  + ModelFit: Manages model fits made to data
+
 + Models:
 
   + Model: Initialize a HighModel
@@ -116,6 +122,9 @@ For quick reference a quick summary of the purpose of each module follows:
   + MidModel: Defines a model that describes a single observation
 
   + LowModel: Defines a model that describes a single measurement
+
+  + ReferenceData: Manages spectral reference data loaded through
+    ReferenceWindow
 
 .. _simple_uml:
 
@@ -131,7 +140,7 @@ Class UML Diagram
   Class UML diagram for the Eye of SOFIA. The color corresponds to
   what part of the MVC framework the class belongs. Blue classes
   make up the "Model", green classes make up the "View", and
-  pink classes make up the "Control". The red are auxiliary
+  pink classes make up the "Control". The purple are auxiliary
   utility modules.
 
 

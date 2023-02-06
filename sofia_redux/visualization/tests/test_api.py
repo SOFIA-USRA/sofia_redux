@@ -1,5 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-
+import logging
 import os
 
 from astropy.io import fits
@@ -114,7 +114,8 @@ class TestAPI(object):
         assert empty_eye_app.models_per_pane() == [2, 1, 1, 1]
 
     def test_assign_data_first(self, empty_eye_app, spectral_filenames,
-                               capsys):
+                               capsys, caplog):
+        caplog.set_level(logging.DEBUG)
         empty_eye_app.load(spectral_filenames)
         empty_eye_app.add_panes(n_panes=4, layout='grid', kind='spectrum')
         empty_eye_app.assign_data('first')
@@ -122,7 +123,7 @@ class TestAPI(object):
         # 2 are mismatched exes and are discarded
         # all valid models are in first pane
         assert empty_eye_app.models_per_pane() == [3, 0, 0, 0]
-        assert 'Incompatible units' in capsys.readouterr().err
+        assert caplog.text.count('Removing ') == 2
 
     def test_assign_data_last(self, empty_eye_app, spectral_filenames):
         empty_eye_app.load(spectral_filenames)

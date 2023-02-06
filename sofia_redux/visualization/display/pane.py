@@ -876,9 +876,11 @@ class OneDimPane(Pane):
 
             self.data_changed = True
 
-            new_order_lines = self._plot_model(model)
+            new_order_lines = self._plot_model(self.models[model.id])
             if new_order_lines:
                 new_lines.extend(new_order_lines)
+            else:
+                raise EyeError('Unable to plot model')
 
         return new_lines
 
@@ -933,6 +935,7 @@ class OneDimPane(Pane):
                     if filename == m.filename:
                         target_mid = k
         if target_mid:
+            log.debug(f'Removing {target_mid}')
             for collection in [self.models, self.colors, self.markers,
                                self.orders]:
                 try:
@@ -997,6 +1000,8 @@ class OneDimPane(Pane):
 
         """
         if reference_models is None and self.reference is None:
+            return None
+        if self.fields['x'] != 'wavepos':
             return None
         if reference_models is not None:
             # replace any existing reference with new one
@@ -1182,18 +1187,30 @@ class OneDimPane(Pane):
             A list of reference_model.ReferenceData objects associated with
             the current model.
         """
-        new_artists = list()
-
         # TODO add a clause for y-alt
         if self.fields['y'] == self.fields['x']:
             self.signals.obtain_raw_model.emit()
 
+        new_artists = list()
+        to_remove = set()
         for model_id, model in self.models.items():
-            new_artists.extend(self._plot_model(model))
+            new_artist = self._plot_model(model)
+            if new_artist is None:
+                to_remove.add(model)
+            else:
+                new_artists.extend(new_artist)
+
+        if to_remove:
+            names = list()
+            for model in list(to_remove):
+                self.remove_model(model=model)
+                names.append(os.path.basename(model.filename))
+            log.warning(f'Files {", ".join(names)} are not compatible with '
+                        f'the pane\'s current settings.')
 
         return new_artists
 
-    def _plot_model(self, model: MT) -> List[DT]:
+    def _plot_model(self, model: MT) -> Optional[List[DT]]:
         """
         Plot a model in the current axes.
 
@@ -1205,7 +1222,8 @@ class OneDimPane(Pane):
         Returns
         -------
         new_lines : list of Drawing
-            New lines plotted.
+            New lines plotted. None is returned if the model is
+            incompatible with the pane, such as irreconcilable units.
         """
         log.debug(f'Starting limits: {self.get_axis_limits()}, '
                   f'{self.ax.get_autoscale_on()}')
@@ -1222,7 +1240,6 @@ class OneDimPane(Pane):
             log.debug(f'Alpha values for {n_orders} orders: {alpha_val}')
         else:
             alpha_val = [1]
-
         for ap_i in range(n_apertures):
             for order_i, orders in enumerate(model.orders):
                 order = orders.number
@@ -1262,10 +1279,7 @@ class OneDimPane(Pane):
                                                field=self.fields['y'],
                                                aperture=aperture)
                     except ValueError:
-                        log.warning('Incompatible units. '
-                                    'Try a different pane.')
-                        self.remove_model(model=model)
-                        break
+                        return None
                 else:
                     x = model.retrieve(order=order, level='raw',
                                        field=self.fields['x'],
@@ -1371,7 +1385,7 @@ class OneDimPane(Pane):
                 # break statement the user would get a separate pop-up
                 # warning for each aperture.
                 continue
-            break
+            break  # pragma: no cover
         self.ax.grid(self.show_grid)
 
         # set initial units from first loaded model
@@ -1561,8 +1575,11 @@ class OneDimPane(Pane):
         if xlim is None:
             xlim = self.get_axis_limits('x')
         names_in_limits = dict()
-        converted_lines = self.reference.convert_line_list_unit(
-            target_unit=self.units['x'])
+        try:
+            converted_lines = self.reference.convert_line_list_unit(
+                target_unit=self.units['x'])
+        except KeyError:
+            return names_in_limits
 
         for n, w in converted_lines.items():
             for x in w:
@@ -2161,7 +2178,6 @@ class OneDimPane(Pane):
                 self.signals.obtain_raw_model.emit()
 
             for model_id, model in self.models.items():
-
                 for order_number in self.orders[model_id]:
                     o_num, a_num = (int(i) for i in order_number.split('.'))
                     try:
@@ -2201,12 +2217,13 @@ class OneDimPane(Pane):
                     log.debug(f'Min/max data limits: {min_lim} -> {max_lim}')
                     self.limits[axis] = [min_lim, max_lim]
 
-        if 'flux' in self.fields['y'] and len(updates) > 0:
-            updates.extend(self._update_error_artists())
+        if len(updates) > 0:
+            if 'flux' in self.fields['y']:
+                updates.extend(self._update_error_artists())
 
-        if self.reference and len(updates) > 0:
-            ref_updates = self._update_reference_artists()
-            updates.extend(ref_updates)
+            if self.reference:
+                ref_updates = self._update_reference_artists()
+                updates.extend(ref_updates)
         return updates
 
     def _update_error_artists(self) -> List[DT]:

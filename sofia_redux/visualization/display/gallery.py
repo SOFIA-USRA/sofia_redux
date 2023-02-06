@@ -739,6 +739,8 @@ class Gallery(object):
             The number of drawings successfully added.
         """
         results = list()
+        if drawings is None:
+            return 0
         for d in drawings:
             results.append(self.add_drawing(d))
         return sum(results)

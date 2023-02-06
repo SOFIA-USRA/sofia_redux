@@ -842,7 +842,13 @@ class TestPane(object):
         assert blank_onedim.reference is ref
         assert len(updates) == 0
 
+        # bad x-field
+        blank_onedim.fields['x'] = 'spectral_flux'
+        updates = blank_onedim.update_reference_data(reference_models=ref)
+        assert updates is None
+
         # plot true/false calls different functions
+        blank_onedim.fields['x'] = 'wavepos'
         m1 = mocker.patch.object(blank_onedim, '_plot_reference_lines')
         m2 = mocker.patch.object(blank_onedim, '_current_reference_options')
         blank_onedim.update_reference_data(plot=True)
@@ -930,20 +936,23 @@ class TestPane(object):
         blank_onedim.reference = ref
         mocker.patch.object(ref, 'convert_line_list_unit',
                             return_value=dict())
-        # mocker.patch.object(pane.OneDimPane, 'get_axis_limits()',
-        #                      side_effect=ValueError)
         fn = grism_hdul.filename()
         grism_model = high_model.Grism(grism_hdul)
         blank_onedim.models[fn] = grism_model
         blank_onedim.orders[fn] = [0]
         blank_onedim.units['x'] = 'pixel'
-        # blank_onedim.markers[fn] = 'x'
-        # blank_onedim.colors[fn] = 'blue'
-        # ax = mpf.Figure().subplots(1, 1)
-        # blank_onedim.ax = ax
 
         name_limits = blank_onedim._window_line_list()
         assert name_limits == dict()
+
+    def test_window_line_list_fail(self, blank_onedim, mocker):
+        ref = reference_model.ReferenceData()
+        blank_onedim.reference = ref
+        mocker.patch.object(ref, 'convert_line_list_unit',
+                            side_effect=KeyError)
+
+        output = blank_onedim._window_line_list([2, 4])
+        assert output == dict()
 
     def test_current_reference_options(self, blank_onedim, line_list_csv):
         ax = mpf.Figure().subplots(1, 1)
@@ -1248,6 +1257,20 @@ class TestOneDimPane(object):
         with qtbot.wait_signal(one_dim_pane.signals.obtain_raw_model):
             one_dim_pane.create_artists_from_current_models()
 
+    def test_create_artists_from_current_models_bad(self, one_dim_pane,
+                                                    mocker, grism_hdul,
+                                                    caplog):
+        caplog.set_level(logging.WARNING)
+        model = high_model.Grism(grism_hdul)
+        one_dim_pane.add_model(model)
+
+        mocker.patch.object(pane.OneDimPane, '_plot_model', return_value=None)
+
+        one_dim_pane.create_artists_from_current_models()
+
+        assert 'not compatible' in caplog.text
+        assert model.id not in one_dim_pane.models
+
     def test_update_colors(self, one_dim_pane, multiorder_multiap_hdul):
         model = high_model.MultiOrder(multiorder_multiap_hdul)
         one_dim_pane.add_model(model)
@@ -1265,7 +1288,7 @@ class TestOneDimPane(object):
     def test_get_orders(self, one_dim_pane, multiorder_hdul_spec, grism_hdul):
         model = high_model.MultiOrder(multiorder_hdul_spec)
         one_dim_pane.add_model(model)
-        one_dim_pane.add_model(high_model.Grism(grism_hdul))
+        # one_dim_pane.add_model(high_model.Grism(grism_hdul))
 
         orders = one_dim_pane.get_orders(model_id=model.id)
         assert isinstance(orders, list)

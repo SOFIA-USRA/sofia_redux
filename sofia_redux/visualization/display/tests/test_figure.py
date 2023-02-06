@@ -1,7 +1,6 @@
 #  Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 import logging
-
 from astropy import units as u
 from matplotlib import figure as mpf
 from matplotlib import gridspec
@@ -281,6 +280,16 @@ class TestFigure(object):
         blank_figure.current_pane = None
         assert blank_figure.get_current_pane() == list()
 
+    def test_assign_models_split(self, grism_hdul, blank_figure):
+        blank_figure.add_panes(n_dims=1, n_panes=2)
+        model_1 = high_model.Grism(grism_hdul)
+        model_2 = high_model.Grism(grism_hdul)
+        models = {model_1.id: model_1, model_2.id: model_2}
+
+        blank_figure.assign_models('split', models)
+
+        assert all([len(p.models) == 1 for p in blank_figure.panes])
+
     def test_assign_models_bad(self, blank_figure):
         models = dict()
         with pytest.raises(RuntimeError) as msg:
@@ -288,12 +297,27 @@ class TestFigure(object):
 
         assert 'Invalid mode' in str(msg)
 
+    @pytest.mark.parametrize('mode', ['split', 'first', 'last', 'assigned'])
+    def test_assign_models_errors(self, mode, blank_figure, mocker,
+                                  grism_hdul):
+        mocker.patch.object(blank_figure, 'add_model_to_pane',
+                            side_effect=eye_error.EyeError)
+
+        blank_figure.add_panes(n_dims=1, n_panes=2)
+        model_1 = high_model.Grism(grism_hdul)
+        model_2 = high_model.Grism(grism_hdul)
+        models = {model_1.id: model_1, model_2.id: model_2}
+        indicies = [0, 1]
+
+        result = blank_figure.assign_models(mode, models, indicies)
+        assert result == 2
+
     @pytest.mark.parametrize('layout,shape', [('rows', (3, 1)),
                                               ('columns', (1, 3)),
                                               ('grid', (2, 2))])
     def test_add_model_to_pane_different(self, blank_figure, mocker,
                                          caplog, grism_hdul, layout, shape):
-        caplog.set_level(logging.INFO)
+        caplog.set_level(logging.DEBUG)
         mocker.patch.object(figure.Figure, 'model_matches_pane',
                             return_value=False)
 
@@ -317,6 +341,22 @@ class TestFigure(object):
         assert blank_figure.pane_count() == 3
         for pane_ in blank_figure.panes:
             assert pane_.show_overplot
+
+    @pytest.mark.parametrize('matches', [True, False])
+    def test_add_model_to_pane_bad(self, blank_figure, mocker, grism_hdul,
+                                   caplog, matches):
+        caplog.set_level(logging.INFO)
+        mocker.patch.object(pane.OneDimPane, 'add_model',
+                            side_effect=eye_error.EyeError)
+        mocker.patch.object(figure.Figure, 'model_matches_pane',
+                            return_value=matches)
+        remove_mock = mocker.patch.object(pane.OneDimPane, 'remove_model')
+
+        with pytest.raises(eye_error.EyeError):
+            blank_figure.add_model_to_pane(high_model.Grism(grism_hdul))
+
+        assert 'Added model to panes' not in caplog.text
+        assert remove_mock.called_once
 
     def test_remove_model_from_pane(self, blank_figure, mocker):
 
@@ -353,6 +393,17 @@ class TestFigure(object):
         blank_figure.remove_model_from_pane(filename='test',
                                             panes='bad')
         assert remove.call_count == 6
+
+        mock = mocker.patch.object(figure.Figure, 'end_cursor_records')
+        blank_figure.recording = False
+        blank_figure.remove_model_from_pane(filename='test',
+                                            panes=panes[0])
+        assert mock.call_count == 0
+
+        blank_figure.recording = True
+        blank_figure.remove_model_from_pane(filename='test',
+                                            panes=panes[0])
+        assert mock.call_count == 1
 
     def test_remove_all_panes(self, blank_figure):
         count = 4
@@ -474,15 +525,11 @@ class TestFigure(object):
         assert len(colors[0]) == 1
         assert isinstance(colors[0][0], str)
 
-    @pytest.mark.parametrize('list_panes', [True, False])
-    def test_crosshair(self, blank_figure, mocker, qtbot, list_panes):
+    @pytest.mark.parametrize('panes_list', [[0, 1, 2], 0, [0], []])
+    def test_crosshair(self, blank_figure, mocker, qtbot, panes_list):
         direction = 'v'
-        if list_panes:
-            mocker.patch.object(figure.Figure, 'determine_selected_pane',
-                                return_value=0)
-        else:
-            mocker.patch.object(figure.Figure, 'determine_selected_pane',
-                                return_value=[0, 1, 2])
+        mocker.patch.object(figure.Figure, 'determine_selected_pane',
+                            return_value=panes_list)
         art_mock = mocker.patch.object(gallery.Gallery, 'update_crosshair')
         cross_mock = mocker.patch.object(figure.Figure,
                                          '_parse_cursor_direction',
@@ -490,18 +537,23 @@ class TestFigure(object):
         sigs = signals.Signals()
 
         blank_figure.panes = [pane.OneDimPane(sigs)]
-        blank_figure.current_pane = [0]
+        blank_figure._cursor_pane = [0]
         event = mpb.MouseEvent(x=2, y=3, canvas=blank_figure.widget.canvas,
                                name='motion_notify_event')
         event.xdata = 2
         event.ydata = 3
 
-        with qtbot.wait_signal(blank_figure.signals.atrophy):
+        if isinstance(panes_list, list) and len(panes_list) == 0:
             blank_figure.crosshair(event)
+            assert art_mock.call_count == 0
+            assert cross_mock.call_count == 0
+        else:
+            with qtbot.wait_signal(blank_figure.signals.atrophy):
+                blank_figure.crosshair(event)
 
-        assert art_mock.called_with({'data_point': (2, 3),
-                                     'direction': direction})
-        assert cross_mock.called_with({'mode': 'crosshair'})
+            assert art_mock.called_with({'data_point': (2, 3),
+                                         'direction': direction})
+            assert cross_mock.called_with({'mode': 'crosshair'})
 
     def test_reset_data_points_empty(self, blank_figure, mocker):
         mock = mocker.patch.object(gallery.Gallery, 'hide_cursor_markers')
@@ -829,3 +881,16 @@ class TestFigure(object):
         blank_figure._cursor_locations = [[4, 4], [6, 4]]
         blank_figure._end_zoom(0, 'x')
         assert m1.call_count == 3
+
+    def test_end_zoom_bad_call(self, blank_figure, mocker, caplog, grism_hdul):
+        caplog.set_level(logging.DEBUG)
+        model = high_model.Grism(grism_hdul)
+        blank_figure.add_model_to_pane(model)
+
+        blank_figure._cursor_locations = [(2, 4)]
+        blank_figure._cursor_mode = 'x-zoom'
+
+        blank_figure._end_zoom(0)
+
+        assert 'Cancelling zoom' in caplog.text
+        assert len(blank_figure._cursor_locations) == 0

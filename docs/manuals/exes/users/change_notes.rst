@@ -35,7 +35,8 @@ EXES Redux v3.0.0
   5th row.
 - Added handling for resolution value configuration tables for
   cross-dispersed modes.
-- Replaced ATRAN reference atmospheric spectra with PSG model files.
+- Replaced ATRAN reference atmospheric spectra with Planetary Spectrum
+  Generator (PSG) model files.
 - Time keywords EXPTIME, INTTIME, and TOTTIME were revised to reflect
   nominal on-source time, integration time, and total elapsed time,
   respectively.

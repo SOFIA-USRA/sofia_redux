@@ -568,6 +568,9 @@ class TestGallery(object):
         assert result is False
         assert len(obj.arts['line']) == 0
 
+        result = obj.add_drawings(None)
+        assert result == 0
+
     def test_add_drawing(self):
         art = ml.Artist()
         draw = drawing.Drawing(kind='line', artist=art)

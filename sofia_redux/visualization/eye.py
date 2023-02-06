@@ -110,7 +110,7 @@ class Eye(object):
         fhand.setFormatter(logging.Formatter(
             "%(asctime)s - %(origin)s - %(levelname)s - %(message)s"))
         log.addHandler(fhand)
-        log.info(f'Event log initiated at: {fname}')
+        log.debug(f'Event log initiated at: {fname}')
 
     def _setup_log_terminal(self) -> None:
         """Set logging level for the stream logger."""
@@ -294,7 +294,7 @@ class Eye(object):
         data_list : list of str or astropy.io.fits.HDUList
             Data to load.
         """
-        log.info(f'Loading file list ({len(data_list)} items)')
+        log.debug(f'Loading file list ({len(data_list)} items)')
         if not isinstance(data_list, list):
             data_list = [data_list]
         for data in data_list:
@@ -658,7 +658,7 @@ class Eye(object):
         kwargs : dict
             Optional arguments to pass to `view.View.save`.
         """
-        log.info(f'Saving image to {filename}')
+        log.debug(f'Saving image to {filename}')
         self.view.save(filename, **kwargs)
 
     def remove_data(self, model_ids: Optional[List[str]] = None) -> None:
@@ -692,8 +692,8 @@ class Eye(object):
         self.signals.refresh_file_table.emit()
         self.signals.atrophy.emit()
 
-    def remove_panes(self, panes: Optional[Union[str, List[int]]] = 'all') -> \
-            None:
+    def remove_panes(self, panes: Optional[Union[str, List[int]]] = 'all'
+                     ) -> None:
         """
         Remove currently displayed panes.
 
@@ -711,16 +711,23 @@ class Eye(object):
         model_ids = self.view.current_files_selected()
         if not model_ids:
             return
-        # self.view.hold_atrophy()
         if self.view.timer:
             self.view.timer.stop()
+        errors = list()
         for model_id in model_ids:
             try:
                 self.view.display_model(self.models[model_id])
             except KeyError:
                 # self.view.release_atrophy()
                 raise RuntimeError(f'Cannot locate model {model_id}')
-        # self.view.release_atrophy()
+            except EyeError:
+                errors.append(self.models[model_id].filename)
+        if errors:
+            if len(errors) == 1:
+                s = '1 file does not match pane'
+            else:
+                s = f'{len(errors)} files do not match pane.'
+            log.warning(s)
         self.signals.atrophy.emit()
         if self.view.timer:
             self.view.timer.start()

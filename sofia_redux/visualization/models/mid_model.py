@@ -164,7 +164,7 @@ class MidModel(object):
             If True, the model is visible/enabled. If False,
             the model is hidden/disabled.
         """
-        log.info(f'Disabling {self.name}')
+        log.debug(f'Disabling {self.name}')
         self.enabled = enabled
 
     def set_enabled_state(self, state: Dict[str, bool]) -> None:
@@ -336,8 +336,8 @@ class Order(MidModel):
         filename : str
             Name of the FITS file.
         """
-        log.info(f'Load combined order from {filename}, '
-                 f'{hdu.name}')
+        log.debug(f'Load combined order from {filename}, '
+                  f'{hdu.name}')
         fields = ['wavepos', 'spectral_flux',
                   'spectral_error', 'transmission', 'response']
         kinds = ['wavelength', 'flux', 'flux', 'scale', 'response']
@@ -349,7 +349,6 @@ class Order(MidModel):
         else:
             response = 'Me / s / Jy'
         units = [x_units, y_units, y_units, None, response]
-
         for (i, field), kind, unit in zip(enumerate(fields), kinds, units):
             try:
                 if hdu.data.ndim == 2:
@@ -386,7 +385,7 @@ class Order(MidModel):
             The number of expected apertures. If not provided,
             only 1 aperture is expected.
         """
-        log.info(f'Load split order from {filename}')
+        log.debug(f'Load split order from {filename}')
         correct_name = not any(['spectral_flux' in hdu.name.lower()
                                 for hdu in hdul])
         for extension in hdul:
@@ -450,11 +449,11 @@ class Order(MidModel):
         key = [k for k in self.data.keys()
                if field == k.split('_order_')[0]]
         if len(key) == 0:
-            log.info(f'Field {field} not found in Order')
+            log.debug(f'Field {field} not found in Order')
             return None
         elif len(key) > 1:
-            log.info(f'Field {field} does not uniquely identify a '
-                     f'field in Order')
+            log.debug(f'Field {field} does not uniquely identify a '
+                      f'field in Order')
             return None
         else:
             key = key[0]

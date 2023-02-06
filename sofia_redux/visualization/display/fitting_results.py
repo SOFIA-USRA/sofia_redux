@@ -94,6 +94,7 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
         self.ax = self.fig.add_subplot()
         self.fit_color = '#2848ad'
         self.splitter.setStretchFactor(1, 1)
+        self.currently_plotted = list()
 
         self.save_button.clicked.connect(self.save_results)
         self.close_button.clicked.connect(self.close)
@@ -214,8 +215,10 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
         self.ax.clear()
         self.canvas.draw_idle()
         self.last_fit_values.setText('')
+        self.currently_plotted = list()
 
-    def _update_figure(self, fits: Optional[List[model_fit.ModelFit]] = None):
+    def _update_figure(self, fits: Optional[List[model_fit.ModelFit]] = None,
+                       current_only: Optional[bool] = False) -> None:
         """
         Plot the last model fit.
 
@@ -229,10 +232,15 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
         self.ax.clear()
 
         html = list()
-        if fits is None:
+        if current_only:
+            fits = self.currently_plotted.copy()
+        elif fits is None:
             fits = self.model_fits
         if len(fits) == 0:
             return
+        self.currently_plotted = list()
+
+        # Only fit most recent fit
         for fit in fits:
             status = fit.get_status()
 
@@ -258,6 +266,7 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
                 self.ax.axvline(fit.get_mid_point(), color='gray',
                                 linestyle='dotted', alpha=0.6)
 
+            self.currently_plotted.append(fit)
             html.append(fit.parameters_as_html())
 
         # show all the parameters
@@ -505,13 +514,14 @@ class FittingResults(QtWidgets.QDialog, frw.Ui_Dialog):
            update to be applied.
 
         """
+        fits = self.currently_plotted
         for pane_, update in updates.items():
             for up in update:
                 if up.kind == 'line':
-                    for fit in self.model_fits:
+                    for fit in fits:
                         mid_model = f'{fit.order}.{fit.aperture}'
                         checks = [fit.model_id == up.model_id,
                                   mid_model == up.mid_model]
                         if all(checks):
                             fit.color = up.updates['color']
-        self._update_figure()
+        self._update_figure(current_only=True)

@@ -117,7 +117,7 @@ class LowModel(object):
                           'pixel': u.pix
                           }
         time_units = {'sec': u.s,
-                      'pixel': u.pix}
+                      'pix': u.pix}
         response_units = {'Me / (Jy s)': u.Mct / (u.Jy * u.s)}
 
         available_units = {'scale': scale_units,
@@ -169,7 +169,6 @@ class LowModel(object):
             unit = ''
 
         self.unit = uc.parse_unit(unit)
-
         self.unit_key = str(self.unit)
         self._verify_unit_parse()
 

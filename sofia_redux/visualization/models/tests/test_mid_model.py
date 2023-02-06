@@ -140,7 +140,7 @@ class TestOrder(object):
         assert combined.call_count == co_count
 
     def test_load_split(self, split_order_hdul, caplog):
-        caplog.set_level(logging.INFO)
+        caplog.set_level(logging.DEBUG)
 
         model = mid_model.Order(hdul=split_order_hdul,
                                 filename=split_order_hdul.filename(),
@@ -216,7 +216,7 @@ class TestOrder(object):
 
     def test_load_combined(self, combined_order_hdul, caplog,
                            split_order_hdul):
-        caplog.set_level(logging.INFO)
+        caplog.set_level(logging.DEBUG)
         model = mid_model.Order(hdul=combined_order_hdul,
                                 filename=combined_order_hdul.filename(),
                                 number=0)
@@ -247,7 +247,7 @@ class TestOrder(object):
         if raw_units is not None:
             combined_order_hdul[0].header['RAWUNITS'] = raw_units
 
-        caplog.set_level(logging.INFO)
+        caplog.set_level(logging.DEBUG)
         model = mid_model.Order(hdul=combined_order_hdul,
                                 filename=combined_order_hdul.filename(),
                                 number=0)

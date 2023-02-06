@@ -11,6 +11,7 @@ from sofia_redux.visualization import eye
 from sofia_redux.visualization.display import (view, pane, fitting_results,
                                                cursor_location)
 from sofia_redux.visualization.models import model
+from sofia_redux.visualization.utils import eye_error
 
 PyQt5 = pytest.importorskip('PyQt5')
 
@@ -324,7 +325,7 @@ class TestEye(object):
           [0, 1], [], 2)])
     def test_zoom(self, loaded_eye, qtbot, caplog,
                   key, cid_name, deltax, deltay, changed, same, guide_count):
-        caplog.set_level(logging.INFO)
+        caplog.set_level(logging.DEBUG)
         qtbot.wait(200)
         starting_limits = (loaded_eye.view.figure.panes[0].ax.get_xlim(),
                            loaded_eye.view.figure.panes[0].ax.get_ylim())
@@ -382,7 +383,7 @@ class TestEye(object):
                            key, cid_name, deltax, deltay, changed,
                            same, guide_count):
         loaded_eye = loaded_eye_with_alt
-        caplog.set_level(logging.INFO)
+        caplog.set_level(logging.DEBUG)
         qtbot.wait(200)
         starting_limits = (loaded_eye.view.figure.panes[0].ax.get_xlim(),
                            loaded_eye.view.figure.panes[0].ax.get_ylim())
@@ -719,7 +720,7 @@ class TestEye(object):
         assert show_mock.call_count == 2
         assert vis_mock.call_count == 1
 
-    def test_display_selected_model(self, loaded_eye, qtbot, mocker):
+    def test_display_selected_model(self, loaded_eye, qtbot, mocker, caplog):
         m1 = mocker.patch.object(loaded_eye.view, 'display_model')
 
         # no ids selected - just returns
@@ -741,3 +742,20 @@ class TestEye(object):
             loaded_eye.display_selected_model()
         assert 'Cannot locate model' in str(err)
         assert m1.call_count == len(ids)
+
+    def test_display_selected_model_bad(self, loaded_eye, mocker, caplog):
+        caplog.set_level(logging.WARNING)
+        mocker.patch.object(loaded_eye.view, 'display_model',
+                            side_effect=eye_error.EyeError)
+
+        ids = list(loaded_eye.models.keys())
+        mocker.patch.object(loaded_eye.view, 'current_files_selected',
+                            return_value=ids)
+        loaded_eye.display_selected_model()
+        assert 'files do not match pane' in caplog.text
+        caplog.clear()
+
+        mocker.patch.object(loaded_eye.view, 'current_files_selected',
+                            return_value=[ids[0]])
+        loaded_eye.display_selected_model()
+        assert 'file does not match pane' in caplog.text

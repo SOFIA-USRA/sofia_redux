@@ -721,7 +721,7 @@ class Figure(object):
                 _pane.update_model(models)
 
     def assign_models(self, mode: str, models: Dict[str, MT],
-                      indices: Optional[List[int]] = None) -> None:
+                      indices: Optional[List[int]] = None) -> int:
         """
         Assign models to panes.
 
@@ -747,6 +747,7 @@ class Figure(object):
         RuntimeError :
             If an invalid mode is provided.
         """
+        errors = 0
         if mode == 'split':
             pane_count = self.pane_count()
             model_keys = list(models.keys())
@@ -756,23 +757,36 @@ class Figure(object):
                 model_count = models_per_pane[i]
                 for j in range(model_count):
                     model_ = models[model_keys.pop(0)]
-                    self.add_model_to_pane(model_=model_, panes=pane_)
+                    try:
+                        self.add_model_to_pane(model_=model_, panes=pane_)
+                    except EyeError:
+                        errors += 1
         elif mode == 'first':
             for model_ in models.values():
-                self.add_model_to_pane(model_=model_, panes=self.panes[0])
+                try:
+                    self.add_model_to_pane(model_=model_, panes=self.panes[0])
+                except EyeError:
+                    errors += 1
         elif mode == 'last':
             for model_ in models.values():
-                self.add_model_to_pane(model_=model_, panes=self.panes[-1])
+                try:
+                    self.add_model_to_pane(model_=model_, panes=self.panes[-1])
+                except EyeError:
+                    errors += 1
         elif mode == 'assigned':
             # TODO: This method assumes the dictionary remains ordered,
             #  which is the default behavior of dictionaries. However,
             #  it is not reliable. Change this so `indices` are also
             #  a dict with the same keys as models.
             for model_, pane_index in zip(models.values(), indices):
-                self.add_model_to_pane(model_=model_,
-                                       panes=self.panes[pane_index])
+                try:
+                    self.add_model_to_pane(model_=model_,
+                                           panes=self.panes[pane_index])
+                except EyeError:
+                    errors += 1
         else:
             raise RuntimeError('Invalid mode')
+        return errors
 
     @staticmethod
     def _assign_models_per_pane(model_count: int,
@@ -842,18 +856,33 @@ class Figure(object):
 
         successes = list()
         for pane_ in panes:
+            additions = list()
             if self.model_matches_pane(pane_, model_):
-                additions = pane_.add_model(model_)
+                try:
+                    addition = pane_.add_model(model_)
+                except EyeError:
+                    pane_.remove_model(model=model_)
+                    raise
+                    # index = self.panes.index(pane_)
+                    # log.warning(f'{os.path.basename(model_.filename)}  '
+                    #             f'incompatible with Pane {index + 1:d}')
+                else:
+                    additions.extend(addition)
             else:
                 self.add_panes(n_dims=model_.default_ndims, n_panes=1)
-                additions = list()
                 for p in self.current_pane:
-                    additions.extend(self.panes[p].add_model(model_))
-
-            successes.append(self.gallery.add_drawings(additions))
+                    try:
+                        addition = self.panes[p].add_model(model_)
+                    except EyeError:
+                        self.panes[p].remove_model(model=model_)
+                        raise
+                    else:
+                        additions.extend(addition)
+            if additions:
+                successes.append(self.gallery.add_drawings(additions))
 
         if successes:
-            log.info('Added model to panes')
+            log.debug('Added model to panes')
             self.signals.update_reference_lines.emit()
 
     def remove_model_from_pane(
@@ -922,6 +951,8 @@ class Figure(object):
 
         # trigger full artist and background regeneration
         self.clear_all()
+        if self.recording:
+            self.end_cursor_records()
         self.signals.atrophy_bg_full.emit()
 
     def update_reference_lines(self, models: RT):
@@ -938,9 +969,10 @@ class Figure(object):
         if models.get_visibility('ref_line'):
             for pane_ in self.panes:
                 additions = pane_.update_reference_data(models, plot=True)
-                success = self.gallery.add_drawings(additions)
-                if success:
-                    log.debug('Updated reference data')
+                if additions:
+                    success = self.gallery.add_drawings(additions)
+                    if success:
+                        log.debug('Updated reference data')
         self.signals.atrophy_bg_partial.emit()
 
     def model_extensions(self, model_id, pane_=None,
@@ -1086,8 +1118,8 @@ class Figure(object):
         """
         panes, axes = self.parse_pane_flag(target)
         if panes is None:
-            log.info(f'No valid panes found for (target, fields) = '
-                     f'({target}, {fields})')
+            log.debug(f'No valid panes found for (target, fields) = '
+                      f'({target}, {fields})')
         else:
             if axes == 'both':
                 fields['y_alt'] = fields['y']
@@ -1189,9 +1221,9 @@ class Figure(object):
         # when axes change (eg. border artist)
         self.clear_all()
 
-    def parse_pane_flag(
-            self, flags: Optional[Union[List, Dict, List[Union[int, PID]]]]
-    ) -> Tuple[List[PT], str]:
+    def parse_pane_flag(self, flags: Optional[Union[List, Dict,
+                                                    List[Union[int, PID]]]]
+                        ) -> Tuple[List[PT], str]:
         """
         Parse the specified panes from an input flag.
 
@@ -1218,8 +1250,8 @@ class Figure(object):
             try:
                 panes = [self.panes[flags]]
             except IndexError:
-                log.info(f'Unable to parse pane flag {flags}: '
-                         f'Invalid index')
+                log.debug(f'Unable to parse pane flag {flags}: '
+                          f'Invalid index')
         elif isinstance(flags, list):
             if all([isinstance(p, int) for p in flags]):
                 panes = list(map(self.panes.__getitem__, flags))
@@ -1562,8 +1594,13 @@ class Figure(object):
         """
         pane_index = self.determine_selected_pane(event.inaxes)
         if isinstance(pane_index, list):
-            pane_index = pane_index[0]
-        if pane_index is not None and pane_index in self._current_pane:
+            if len(pane_index) > 0:
+                pane_index = pane_index[0]
+            else:
+                pane_index = None
+        if (pane_index is not None
+                and self._cursor_pane is not None
+                and pane_index in self._cursor_pane):
             data_point = self.panes[pane_index].xy_at_cursor(event)
             direction = self._parse_cursor_direction(mode='crosshair')
             self.gallery.update_crosshair(pane_index, data_point=data_point,
@@ -1669,6 +1706,12 @@ class Figure(object):
             if len(self._cursor_locations) == 2:
                 self.end_cursor_records()
             else:
+                # after the first click, make sure the next click is
+                # in the same pane
+                # otherwise, weirdness happens with 'All' pane button
+                # and mismatched pane displays
+                self._cursor_pane = [pane_index]
+
                 guide_drawings = self.panes[pane_index].plot_guides(
                     location, kind=self._parse_cursor_direction())
                 self.gallery.add_drawings(guide_drawings)
@@ -1691,11 +1734,12 @@ class Figure(object):
         if not isinstance(pane_index, list):  # pragma: no cover
             # this should not be reachable
             pane_index = [pane_index]
-        for index in pane_index:
-            if 'zoom' in self._cursor_mode:
-                self._end_zoom(index)
-            elif 'fit' in self._cursor_mode:
-                self._end_fit(index)
+        if len(self._cursor_locations) == 2:
+            for index in pane_index:
+                if 'zoom' in self._cursor_mode:
+                    self._end_zoom(index)
+                elif 'fit' in self._cursor_mode:
+                    self._end_fit(index)
         # reset cursor, but not fit params -- is needed for the
         # cursor recording
         self._cursor_mode = ''
@@ -1758,8 +1802,12 @@ class Figure(object):
             direction = self._parse_cursor_direction()
 
         # perform zoom
-        self.panes[pane_index].perform_zoom(
-            zoom_points=self._cursor_locations, direction=direction)
+        if len(self._cursor_locations) == 2:
+            self.panes[pane_index].perform_zoom(
+                zoom_points=self._cursor_locations, direction=direction)
+        else:
+            log.debug('Cancelling zoom')
+            self._cursor_locations = list()
 
         # clear all h and v guides
         self.gallery.reset_artists(selection='h_guide',

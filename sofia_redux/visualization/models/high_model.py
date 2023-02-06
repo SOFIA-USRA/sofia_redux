@@ -446,7 +446,8 @@ class Grism(HighModel):
         # technically, these are apertures, but we'll handle them as orders
         # for display purposes
         self.num_aperture = self._aperture_test()
-        log.info(f'Loading {self.num_aperture} apertures from {self.filename}')
+        log.debug(f'Loading {self.num_aperture} apertures '
+                  f'from {self.filename}')
         for i in range(self.num_aperture):
             self.orders.append(mid_model.Order(self.hdul, self.filename, 0, i))
 
@@ -459,7 +460,6 @@ class Grism(HighModel):
         extensions or combined in one. Both cases
         are handled by the `Book` class.
         """
-
         self.books = [mid_model.Book(self.hdul, self.filename, 0)]
 
     def _aperture_test(self) -> int:
@@ -649,14 +649,14 @@ class MultiOrder(HighModel):
             if not spectrum_present:
                 raise EyeError('No spectral data present')
 
-        log.info(f'Loading {self.num_orders} orders and '
-                 f'{self.num_aperture} apertures from {self.filename}')
+        log.debug(f'Loading {self.num_orders} orders and '
+                  f'{self.num_aperture} apertures from {self.filename}')
         order_only_prodtypes = ['mrgordspec', 'orders_merged_1d',
                                 'combined_spectrum_1d', 'spectra_1d',
-                                'sky_orders_merged_1d',
+                                'sky_orders_merged_1d', 'general',
                                 'sky_combined_spectrum_1d', 'sky_spectra_1d']
         prodtype = str(self.hdul[0].header.get('PRODTYPE')).lower()
-        log.info(f'Len hdul: {len(self.hdul)}')
+        log.debug(f'Len hdul: {len(self.hdul)}')
         if len(self.hdul) == 1:
             data = self.hdul[0].data
             header = self.hdul[0].header
@@ -671,9 +671,15 @@ class MultiOrder(HighModel):
             elif data.shape[0] == self.num_orders:
                 # Case for each order being a different slice of
                 # the data array
+                # if general:
+                #     for i in range(self.num_aperture):
+                #         self.orders.append(
+                #             mid_model.Order(self.hdul, self.filename, 0, i))
+                # else:
                 for i in range(self.num_orders):
                     hdul = pf.HDUList(pf.ImageHDU(data[i], header))
                     self.orders.append(mid_model.Order(hdul, self.filename, i))
+
             elif self.num_orders * self.num_aperture == data.shape[0]:
                 # Case for each order and each aperture being a different
                 # slice of the data array

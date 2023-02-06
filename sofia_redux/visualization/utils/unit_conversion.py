@@ -13,7 +13,8 @@ __all__ = ['parse_unit', 'convert_flux', 'convert_wave']
 Me = u.def_unit('Me', u.Mct)
 sec = u.def_unit('sec', u.s)
 cm1 = u.def_unit('cm-1', u.kayser)
-u.add_enabled_units([Me, sec, cm1])
+pixel = u.def_unit('pixel', u.pix)
+u.add_enabled_units([Me, sec, cm1, pixel])
 
 
 def parse_unit(unit_string):

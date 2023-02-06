@@ -87,6 +87,12 @@ class TestHighModel(object):
         assert id(old_low_model) != id(new_low_model)
         assert np.mean(old_low_model) == np.mean(new_low_model)
 
+        for old_mid, new_mid in zip(model.orders, new_model.orders):
+            assert id(old_mid) != id(new_mid)
+            for old_low, new_low in zip(old_mid.data.values(),
+                                        new_mid.data.values()):
+                assert id(new_low) != id(old_low)
+
     @pytest.mark.parametrize('extname,naxis1,naxis2,result',
                              [('spectral_flux', 100, 100, True),
                               ('flux', 100, 5, True),
@@ -395,7 +401,7 @@ class TestMultiOrder(object):
         assert isinstance(model.orders, list)
 
     def test_load_data(self, multiorder_hdul_spec, caplog):
-        caplog.set_level(logging.INFO)
+        caplog.set_level(logging.DEBUG)
         model = high_model.MultiOrder(multiorder_hdul_spec)
 
         model.orders.clear()

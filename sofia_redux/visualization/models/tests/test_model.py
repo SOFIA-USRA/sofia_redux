@@ -62,6 +62,17 @@ class TestModel(object):
         obj = Model.add_model(hdul=hdul)
         assert isinstance(obj, high_model.HighModel)
 
+    def test_add_model_unitless(self, grism_hdul):
+        hdul = pf.HDUList()
+        hdu = pf.ImageHDU(grism_hdul['FLUX'].data)
+        hdul.append(hdu)
+        hdul[0].header['instrume'] = None
+        obj = Model.add_model(hdul=hdul)
+        assert isinstance(obj, high_model.HighModel)
+        # defaults set
+        assert obj.hdul[0].header['XUNITS'] == 'um'
+        assert obj.hdul[0].header['YUNITS'] == 'Jy'
+
     def test_add_model_general(self, spectrum_file):
         obj = Model.add_model(filename=spectrum_file)
         assert isinstance(obj, high_model.HighModel)

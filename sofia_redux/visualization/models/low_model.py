@@ -117,7 +117,7 @@ class LowModel(object):
                           'pixel': u.pix
                           }
         time_units = {'sec': u.s,
-                      'pix': u.pix}
+                      'pixel': u.pix}
         response_units = {'Me / (Jy s)': u.Mct / (u.Jy * u.s)}
 
         available_units = {'scale': scale_units,
@@ -170,6 +170,12 @@ class LowModel(object):
 
         self.unit = uc.parse_unit(unit)
         self.unit_key = str(self.unit)
+
+        # special handling for initial pixel units:
+        # it is recorded as 'pixel' everywhere else
+        if self.unit_key == 'pix':
+            self.unit_key = 'pixel'
+
         self._verify_unit_parse()
 
     def _verify_unit_parse(self) -> None:

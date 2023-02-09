@@ -110,9 +110,9 @@ class Model(object):
             # information has been provided.
             hdul[0].header['instrume'] = 'General'
             hdul[0].header['prodtype'] = 'General'
-            if not header.get('XUNIT') or not header.get('XUNITS'):
+            if not header.get('XUNIT') and not header.get('XUNITS'):
                 hdul[0].header['XUNITS'] = 'um'
-            if not header.get('YUNIT') or not header.get('YUNITS'):
+            if not header.get('YUNIT') and not header.get('YUNITS'):
                 hdul[0].header['YUNITS'] = 'Jy'
             model = high_model.MultiOrder(hdul, general=True)
         else:

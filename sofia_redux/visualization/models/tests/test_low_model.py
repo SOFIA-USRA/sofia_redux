@@ -62,7 +62,12 @@ class TestLowModel(object):
                               ('(cm-1)', 'XUNIT', 'wavelength', u.kayser,
                                '1 / cm'),
                               (None, 'XUNIT', 'wavelength',
-                               u.dimensionless_unscaled, '')])
+                               u.dimensionless_unscaled, ''),
+                              ('pixel', 'XUNIT', 'wavelength',
+                               u.pix, 'pixel'),
+                              ('pix', 'XUNIT', 'wavelength',
+                               u.pix, 'pixel'),
+                              ])
     def test_parse_units(self, spectrum_hdu, key, kind, unit, result, out_key):
         spectrum_hdu.header[key] = unit
         model = low_model.LowModel(spectrum_hdu, 'test.fits',

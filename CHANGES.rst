@@ -1,5 +1,5 @@
-1.3.1
-=====
+1.3.1 (2023-02-11)
+==================
 - Minor fixes for the spectral viewer, relating to plotting multiple
   spectra with potentially mismatched units.
 

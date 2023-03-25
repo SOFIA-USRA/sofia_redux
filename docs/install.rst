@@ -7,7 +7,7 @@ Stable release
 
 The `sofia_redux` package is available via anaconda or pip::
 
-   conda install -c sofia-usra -c astropy sofia_redux
+   conda install -c sofia-usra -c conda-forge sofia_redux
 
 or::
 

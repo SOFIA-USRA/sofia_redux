@@ -2,6 +2,7 @@
 =====
 - Minor bug fixes for EXES edge cases (raster flats with non-standard
   overlaps; occasional spurious zero-length orders).
+- Updated calibration files for EXES.
 - Environment update for astropy management.
 
 

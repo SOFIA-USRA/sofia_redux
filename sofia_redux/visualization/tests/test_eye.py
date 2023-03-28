@@ -26,10 +26,10 @@ class TestEye(object):
         assert 'Setup Eye' in log_
 
         # try to setup with bad log level - nothing should happen
-        assert log.handlers[0].level == 0
+        orig_level = log.handlers[0].level
         eye_app.log_level = 'BAD'
         eye_app._setup_log_terminal()
-        assert log.handlers[0].level == 0
+        assert log.handlers[0].level == orig_level
 
     def test_open_eye(self, mocker, qapp, log_args, capsys):
         opening = mocker.patch.object(view.View, 'open_eye',

@@ -1197,6 +1197,8 @@ class EXESReduction(Reduction):
         toss_int_dark = param.get_value('toss_int_dark')
         copy_int = param.get_value('copy_integrations')
         algorithm = str(param.get_value('algorithm')).lower().strip()
+        overlap = param.get_value('overlap')
+        fit_buffer = param.get_value('fit_buffer')
 
         # parse algorithm from:
         #  options = ['Default for read mode',
@@ -1245,7 +1247,8 @@ class EXESReduction(Reduction):
                 log.info('Processing raster flat.')
                 data, variance, lin_mask = derasterize(
                     data, header, dark_data=raster['dark'],
-                    dark_header=raster['dark_header'])
+                    dark_header=raster['dark_header'], overlap=overlap,
+                    fit_buffer=fit_buffer)
                 log.info('')
             else:
                 # get toss parameter by obstype

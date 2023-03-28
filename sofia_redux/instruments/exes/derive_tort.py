@@ -611,6 +611,19 @@ def _get_top_bottom_pixels(header, illum_x, illum_y,
             b1 = b1[0: norder]
         else:
             norder = t1.size
+
+        # Check for small dangling orders
+        if norder > 0 and norder > header['NORDERS']:
+            for i in range(norder - header['NORDERS']):
+                order_size = t1 - b1
+                idx = np.argmin(order_size)
+                log.warning(f'Deleting small partial order at '
+                            f'b1={b1[idx]}, t1={t1[idx]}')
+                b1 = np.delete(b1, idx)
+                t1 = np.delete(t1, idx)
+            norder = t1.size
+
+        # Set N order from edges
         header['NORDERS'] = norder
 
         # Check to see if all orders found

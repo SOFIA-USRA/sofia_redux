@@ -10,7 +10,8 @@ from sofia_redux.toolkit.utilities.fits import set_log_level
 __all__ = ['derasterize']
 
 
-def derasterize(data, header, dark_data=None, dark_header=None, overlap=32):
+def derasterize(data, header, dark_data=None, dark_header=None, overlap=32,
+                fit_buffer=5):
     """
     Read and recombine a rasterized flat file.
 
@@ -83,7 +84,8 @@ def derasterize(data, header, dark_data=None, dark_header=None, overlap=32):
     lin_mask = np.full((full_size, full_size), True)
 
     # some fudge values for subarray location and edge effects
-    fit_buffer = 5
+    # TODO: Clean up
+    # fit_buffer = 5
     bottom_buffer = 2
     offset_fudge = 2
 

@@ -291,35 +291,50 @@ class TestDeriveTort(object):
         ny, nx = 40, 30
         header = readhdr(fits.Header({'NSPAT': nx, 'NSPEC': ny,
                                       'WAVENO0': 1210.0,
-                                      'INSTCFG': 'HIGH_MED'}),
+                                      'INSTCFG': 'HIGH_MED',
+                                      'SPACING': 1, 'NORDERS': 10}),
                          check_header=False)
         illum_y = np.ones(ny)
 
         # flat illum: no orders found
         illum_x = np.ones(nx)
-        b1, t1, ss1, ee1 = dt._get_top_bottom_pixels(header, illum_x, illum_y)
+        hcopy = header.copy()
+        b1, t1, ss1, ee1 = dt._get_top_bottom_pixels(hcopy, illum_x, illum_y)
         assert b1 is None
         assert t1 is None
         assert ss1 is None
         assert ee1 is None
-        assert header['NORDERS'] == 0
+        assert hcopy['NORDERS'] == 0
         assert 'Not all orders were found' in capsys.readouterr().err
 
         # some orders indicated
         illum_x[::3] = 0
-        b1, t1, ss1, ee1 = dt._get_top_bottom_pixels(header, illum_x, illum_y)
+        hcopy = header.copy()
+        b1, t1, ss1, ee1 = dt._get_top_bottom_pixels(hcopy, illum_x, illum_y)
         assert b1.size == 9
         assert t1.size == 9
-        assert header['NORDERS'] == 9
+        assert hcopy['NORDERS'] == 9
         assert capsys.readouterr().err == ''
+        illum_x[:] = 1
+
+        # too many orders found
+        illum_x[::3] = 0
+        hcopy = header.copy()
+        hcopy['NORDERS'] = 8
+        b1, t1, ss1, ee1 = dt._get_top_bottom_pixels(hcopy, illum_x, illum_y)
+        assert b1.size == 8
+        assert t1.size == 8
+        assert hcopy['NORDERS'] == 8
+        assert 'Deleting small partial order' in capsys.readouterr().err
         illum_x[:] = 1
 
         # mismatched order
         illum_x[-3:] = 0
-        b1, t1, ss1, ee1 = dt._get_top_bottom_pixels(header, illum_x, illum_y)
+        hcopy = header.copy()
+        b1, t1, ss1, ee1 = dt._get_top_bottom_pixels(hcopy, illum_x, illum_y)
         assert b1 is None
         assert t1 is None
-        assert header['NORDERS'] == 0
+        assert hcopy['NORDERS'] == 0
         assert 'Not all orders were found' in capsys.readouterr().err
 
     def test_get_left_right_pixels_errors(self, capsys):

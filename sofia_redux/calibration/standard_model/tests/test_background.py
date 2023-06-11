@@ -183,4 +183,4 @@ def test_integrate_integrands(total_throughput, warr):
     integrals = bg.integrate_integrands(integrands, warr)
     assert set(integrals.keys()) == set(integrands.keys())
     for key, val in integrals.items():
-        assert isinstance(val, np.float)
+        assert isinstance(val, float)

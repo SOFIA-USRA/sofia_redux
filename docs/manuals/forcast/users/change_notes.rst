@@ -15,8 +15,8 @@ processed with this pipeline.
 For previously processed data, check the PIPEVERS keyword in the
 FITS header to determine the pipeline version used.
 
-FORCAST Redux v2.7.0
-~~~~~~~~~~~~~~~~~~~~
+FORCAST Redux v2.7.0 (2022-12-13)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. M*
 
 Imaging

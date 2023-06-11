@@ -84,13 +84,13 @@ class TestReferenceData(object):
         assert result is False
         assert len(obj.line_list) == 0
 
-    def test_add_linelist_fail1(self, caplog, mocker, line_list_simple):
+    def test_add_linelist_fail1(self, caplog, mocker, line_list_whitespace):
         caplog.set_level(logging.DEBUG)
         obj = reference_model.ReferenceData()
 
         # failure in first attempt with ValueError
         mocker.patch.object(obj, '_read_line_list', side_effect=ValueError)
-        result = obj.add_line_list(line_list_simple)
+        result = obj.add_line_list(line_list_whitespace)
 
         # tries to parse with space delim
         assert 'Error in reading line list:' not in caplog.text
@@ -102,7 +102,7 @@ class TestReferenceData(object):
         # failure in second attempt
         mocker.patch.object(obj, '_read_line_list_space_delim',
                             side_effect=ValueError)
-        result = obj.add_line_list(line_list_simple)
+        result = obj.add_line_list(line_list_whitespace)
 
         # fails
         assert 'Error in reading line list:' in caplog.text

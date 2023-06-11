@@ -193,7 +193,7 @@ class Flags(ABC):
             flag = cls.convert_flag(flag).value
 
         # For the single-value case
-        if not hasattr(thing, '__len__'):
+        if not hasattr(thing, '__len__') or isinstance(thing, enum.Enum):
             if not isinstance(thing, int):
                 thing = cls.convert_flag(thing).value
             if flag is None:
@@ -247,7 +247,7 @@ class Flags(ABC):
             flag = cls.convert_flag(flag).value
 
         # For the single value case.
-        if not hasattr(thing, '__len__'):
+        if not hasattr(thing, '__len__') or isinstance(thing, enum.Enum):
             if not isinstance(thing, int):
                 thing = cls.convert_flag(thing).value
             if flag is None:
@@ -288,7 +288,7 @@ class Flags(ABC):
         if flag is not None and not isinstance(flag, int):
             flag = cls.convert_flag(flag).value
 
-        if not hasattr(values, '__len__'):
+        if not hasattr(values, '__len__') or isinstance(values, enum.Enum):
             if not isinstance(values, int):
                 values = cls.convert_flag(values).value
 
@@ -313,7 +313,7 @@ class Flags(ABC):
         if flag is not None and not isinstance(flag, int):
             flag = cls.convert_flag(flag).value
 
-        if not hasattr(values, '__len__'):
+        if not hasattr(values, '__len__') or isinstance(values, enum.Enum):
             if not isinstance(values, int):
                 values = cls.convert_flag(values).value
 
@@ -559,6 +559,8 @@ class Flags(ABC):
         flags = cls.flags
         flag_class_name = flags.__name__
         for flag_name, flag_value in flags.__dict__.items():
+            if flag_name.startswith('_'):
+                continue
             if isinstance(flag_value, enum.Enum):
                 bit = flag_value.value
                 key = f'{prefix}FLAG{bit}'
@@ -586,7 +588,7 @@ class Flags(ABC):
         -------
         str or numpy.ndarray (str)
         """
-        if not hasattr(flag, '__len__'):
+        if not hasattr(flag, '__len__') or isinstance(flag, enum.Enum):
             return cls.flag_to_letter(flag)
 
         flag_array = np.asarray(flag).copy()

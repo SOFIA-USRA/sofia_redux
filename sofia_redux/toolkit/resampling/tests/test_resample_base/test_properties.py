@@ -21,7 +21,7 @@ def test_features(inputs):
     assert r.features == 2
     with pytest.raises(AttributeError) as err:
         r.features = 1
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_multiset(inputs):
@@ -34,7 +34,7 @@ def test_multiset(inputs):
 
     with pytest.raises(AttributeError) as err:
         r.multi_set = False
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_n_sets(inputs):
@@ -46,7 +46,7 @@ def test_n_sets(inputs):
     assert r.n_sets == 2
     with pytest.raises(AttributeError) as err:
         r.n_sets = 3
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_n_samples(inputs):
@@ -55,7 +55,7 @@ def test_n_samples(inputs):
     assert r.n_samples == 100
     with pytest.raises(AttributeError) as err:
         r.n_samples = 101
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_window(inputs):
@@ -66,7 +66,7 @@ def test_window(inputs):
     assert np.allclose(w, 2.0)
     with pytest.raises(AttributeError) as err:
         r.window = 3
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_fit_settings(inputs):
@@ -80,7 +80,7 @@ def test_fit_settings(inputs):
 
     with pytest.raises(AttributeError) as err:
         r.fit_settings = settings
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_fit_tree(inputs):
@@ -92,7 +92,7 @@ def test_fit_tree(inputs):
 
     with pytest.raises(AttributeError) as err:
         r.fit_tree = None
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_grid_class(inputs):

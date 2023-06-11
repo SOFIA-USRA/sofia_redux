@@ -26,8 +26,7 @@ __all__ = ['solve_kernel_fits', 'solve_kernel_fit', 'calculate_kernel_weights',
            'apply_mask_to_kernel_set_arrays']
 
 
-@njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=True, cache=True, parallel=False)
+@njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def solve_kernel_fits(sample_indices, sample_coordinates, sample_data,
                       sample_error, sample_mask, fit_coordinates,
                       knots, coefficients, degrees, panel_mapping, panel_steps,
@@ -290,8 +289,7 @@ def solve_kernel_fits(sample_indices, sample_coordinates, sample_data,
             rchi2_out, offset_variance_out)
 
 
-@njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True, parallel=False)
+@njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def solve_kernel_fit(window_coordinates, window_values, window_error,
                      window_mask, kernel_weights, fit_coordinate,
                      is_covar=False, cval=np.nan, error_weighting=True,
@@ -510,8 +508,7 @@ def solve_kernel_fit(window_coordinates, window_values, window_error,
             variance_offset)
 
 
-@njit(fastmath=_fast_flags_all.difference({'nnan', 'ninf'}),
-      nogil=False, cache=True, parallel=False)
+@njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def calculate_kernel_weights(coordinates, reference, knots, n_knots,
                              coefficients, degrees, panel_mapping, panel_steps,
                              knot_steps, nk1, spline_mapping, eps=1e-8,
@@ -619,7 +616,7 @@ def calculate_kernel_weights(coordinates, reference, knots, n_knots,
     return weights
 
 
-@njit(nogil=False, cache=True, fastmath=True, parallel=False)
+@njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def apply_mask_to_kernel_set_arrays(mask, data, error, weights, counts=None
                                     ):  # pragma: no cover
     """

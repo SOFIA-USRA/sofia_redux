@@ -11,7 +11,7 @@ __all__ = ['find_knots', 'find_knot', 'calculate_minimum_bandwidth',
            'rational_interp_zero', 'fit_point', 'perform_fit', 'single_fit']
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def find_knots(coordinates, knots, valid_knot_start, valid_knot_end
                ):  # pragma: no cover
     """
@@ -71,7 +71,7 @@ def find_knots(coordinates, knots, valid_knot_start, valid_knot_end
     return knot_indices
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def find_knot(coordinate, knots, valid_knot_start, valid_knot_end,
               allow_outside=True, lower_bounds=None, upper_bounds=None,
               ):  # pragma: no cover
@@ -144,7 +144,7 @@ def find_knot(coordinate, knots, valid_knot_start, valid_knot_end,
     return knot_index
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def calculate_minimum_bandwidth(degrees, n_knots, permutations
                                 ):  # pragma: no cover
     """
@@ -229,7 +229,7 @@ def calculate_minimum_bandwidth(degrees, n_knots, permutations
     return min_bandwidth + 1, min_permutation, min_i != 0
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def flat_index_mapping(shape):  # pragma: no cover
     """
     Return index slices for Numba flattened arrays.
@@ -304,8 +304,8 @@ def flat_index_mapping(shape):  # pragma: no cover
     return flat_indices, transpose_indices, step_size
 
 
-@nb.njit(cache=True, parallel=False)
-def create_ordering(indices, size=None):  # pragma: no cover
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def create_ordering(indices, size=-1):  # pragma: no cover
     """
     Given a list of indices, create an ordering structure for fast access.
 
@@ -348,7 +348,7 @@ def create_ordering(indices, size=None):  # pragma: no cover
     -------
     start_indices, next_indices : numpy.ndarray (int), numpy.ndarray (int)
     """
-    if size is None:
+    if size == -1:
         size = max(max(indices) + 1, indices.size)
 
     n_data = indices.size
@@ -362,7 +362,7 @@ def create_ordering(indices, size=None):  # pragma: no cover
     return start_indices, next_indices
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def check_input_arrays(values, coordinates, weights):  # pragma: no cover
     """
     Check all input arrays.
@@ -406,7 +406,7 @@ def check_input_arrays(values, coordinates, weights):  # pragma: no cover
     return valid
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def givens_parameters(x, y):  # pragma: no cover
     """
     Calculate the parameters of a Givens transformation.
@@ -433,7 +433,7 @@ def givens_parameters(x, y):  # pragma: no cover
     return updated_y, cos, sin
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def givens_rotate(cos, sin, x, y):  # pragma: no cover
     """
     Apply the Givens transformation to a value.
@@ -455,7 +455,7 @@ def givens_rotate(cos, sin, x, y):  # pragma: no cover
     return x, y
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def build_observation(coordinates, values, weights, n_coefficients, bandwidth,
                       degrees, knots, knot_steps, start_indices,
                       next_indices, panel_mapping, spline_mapping
@@ -594,7 +594,7 @@ def build_observation(coordinates, values, weights, n_coefficients, bandwidth,
     return amat, beta, splines, sum_square_residual
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def back_substitute(amat, beta, n_coefficients, bandwidth):  # pragma: no cover
     """
     Use back-substitution to solve a reduced row-echelon form matrix.
@@ -643,7 +643,7 @@ def back_substitute(amat, beta, n_coefficients, bandwidth):  # pragma: no cover
     return coefficients
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def solve_rank_deficiency(amat, beta, n_coefficients, bandwidth, tolerance
                           ):  # pragma: no cover
     """
@@ -865,7 +865,7 @@ def solve_rank_deficiency(amat, beta, n_coefficients, bandwidth, tolerance
     return coefficients, sum_squared_residuals, rank
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def solve_observation(amat, beta, n_coefficients, bandwidth, eps
                       ):  # pragma: no cover
     """
@@ -924,7 +924,7 @@ def solve_observation(amat, beta, n_coefficients, bandwidth, eps
     return coefficients, rank, sum_squared_residuals
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def knot_fit(splines, coefficients, start_indices, next_indices, panel_mapping,
              spline_mapping, knot_steps, panel_shape, k1, weights, values,
              coordinates):  # pragma: no cover
@@ -1020,7 +1020,7 @@ def knot_fit(splines, coefficients, start_indices, next_indices, panel_mapping,
     return fit, knot_weights, knot_coordinates
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def add_knot(knot_weights, knot_coords, panel_shape, knots, n_knots,
              knot_estimate, k1):  # pragma: no cover
     """
@@ -1099,7 +1099,7 @@ def add_knot(knot_weights, knot_coords, panel_shape, knots, n_knots,
         return exit_code
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def evaluate_bspline(knot_line, degree, x, knot_index, spline=None
                      ):  # pragma: no cover
     """
@@ -1156,7 +1156,7 @@ def evaluate_bspline(knot_line, degree, x, knot_index, spline=None
     return spline
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def determine_smoothing_spline(knots, n_knots, knot_estimate, degrees,
                                initial_sum_square_residual, smoothing,
                                smoothing_difference,
@@ -1442,7 +1442,7 @@ def determine_smoothing_spline(knots, n_knots, knot_estimate, degrees,
         return coefficients, fp, ier, fitted_values
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def discontinuity_jumps(knot_line, n_knot, degree, b_spline
                         ):  # pragma: no cover
     """
@@ -1500,7 +1500,7 @@ def discontinuity_jumps(knot_line, n_knot, degree, b_spline
             lp += 1
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def rational_interp_zero(p1, f1, p2, f2, p3, f3):  # pragma: no cover
     """
     Determines p where (u + p + v)/(p + w) = 0.
@@ -1546,7 +1546,7 @@ def rational_interp_zero(p1, f1, p2, f2, p3, f3):  # pragma: no cover
     return p, p1, f1, p2, f2, p3, f3
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def fit_point(coefficients, spline, spline_mapping, knot_steps, j_rot,
               n_spline, n_dimensions):  # pragma: no cover
     """
@@ -1590,7 +1590,7 @@ def fit_point(coefficients, spline, spline_mapping, knot_steps, j_rot,
     return fit_value
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def perform_fit(coordinates, knots, coefficients, degrees, panel_mapping,
                 panel_steps, knot_steps, nk1, spline_mapping, n_knots
                 ):  # pragma: no cover
@@ -1702,7 +1702,7 @@ def perform_fit(coordinates, knots, coefficients, degrees, panel_mapping,
     return fitted_values
 
 
-@nb.njit(cache=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def single_fit(coordinate, knots, coefficients, degrees, panel_mapping,
                panel_steps, knot_steps, nk1, spline_mapping,
                k1=None, n_spline=None, work_spline=None,

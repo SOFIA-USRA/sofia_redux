@@ -17,7 +17,7 @@ from sofia_redux.toolkit.utilities \
 __all__ = ['apply_atran', 'telluric_correct', 'wrap_telluric_correct']
 
 
-@nb.njit(fastmath={'nsz', 'ninf'}, cache=True, nogil=True)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def apply_atran_correction(wave, data, var, atran, cutoff):  # pragma: no cover
     """
     Apply an atmospheric transmission correction to the flux data.

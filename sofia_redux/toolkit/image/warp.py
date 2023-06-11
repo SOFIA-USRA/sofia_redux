@@ -240,7 +240,7 @@ def polywarp_image(image, x0, y0, x1, y1, order=1, method='cubic',
     return (result, interpolator) if get_transform else result
 
 
-@nb.njit(cache=True, parallel=False, fastmath=True)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def is_homography_transform(transform, n_dimensions):  # pragma: no cover
     """
     Check if a transform is homographic.
@@ -267,7 +267,7 @@ def is_homography_transform(transform, n_dimensions):  # pragma: no cover
     return False
 
 
-@nb.njit(cache=True, parallel=False, fastmath=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def full_transform(coordinates, transform):  # pragma: no cover
     """
     Apply a metric transform to the supplied coordinates.
@@ -348,7 +348,7 @@ def full_transform(coordinates, transform):  # pragma: no cover
     return output
 
 
-@nb.njit(cache=True, parallel=False, fastmath=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def warp_terms(terms, coefficients):  # pragma: no cover
     """
     Apply coefficients to polynomial terms.

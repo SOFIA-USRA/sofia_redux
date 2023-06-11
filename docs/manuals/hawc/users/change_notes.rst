@@ -9,8 +9,8 @@ for more information.
 For previously processed data, check the PIPEVERS keyword in the FITS
 header to determine the pipeline version used.
 
-HAWC DRP v3.2.0
-~~~~~~~~~~~~~~~
+HAWC DRP v3.2.0 (2022-12-20)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. L*
 
 - Improved the 'fixjumps' algorithm for correcting discrepant artifacts

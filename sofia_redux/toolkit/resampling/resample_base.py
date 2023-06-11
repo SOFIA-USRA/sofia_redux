@@ -406,7 +406,7 @@ class ResampleBase(object):
                         "for each data set.")
 
         if mask is not None:
-            mask = np.asarray(mask, dtype=np.bool)
+            mask = np.asarray(mask, dtype=bool)
             if mask.shape != shape:
                 raise ValueError("Mask shape does not match data")
 

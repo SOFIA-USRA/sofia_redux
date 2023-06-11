@@ -12,8 +12,16 @@ data, check the PIPEVERS keyword in the FITS header to determine the
 pipeline version used.
 
 
-FIFI-LS Redux v2.7.1
+
+FIFI-LS Redux v2.8.0
 ~~~~~~~~~~~~~~~~~~~~
+*User manual: Rev. L*
+
+- Update spatial flat handling to expect different files by dichroic.
+- Reject very small spectral flat values.
+
+FIFI-LS Redux v2.7.1 (2022-12-13)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. L*
 
 - Fix a bug in the option to produce a final map aligned with the

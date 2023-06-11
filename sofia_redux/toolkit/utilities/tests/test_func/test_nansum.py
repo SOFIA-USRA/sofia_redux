@@ -33,7 +33,7 @@ def test_missing():
     a = np.full(5, np.nan)
     result = nansum(a, missing=0)
     assert result == 0
-    assert isinstance(result, np.float)  # Check casting ok
+    assert isinstance(result, float)  # Check casting ok
 
 
 def test_non_array():

@@ -15,7 +15,7 @@ def test_regular():
     assert not grid.regular
     with pytest.raises(AttributeError) as err:
         grid.regular = False
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_singular():
@@ -24,7 +24,7 @@ def test_singular():
     grid = BaseGrid(1, 1)
     with pytest.raises(AttributeError) as err:
         grid.singular = True
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_shape():
@@ -32,7 +32,7 @@ def test_shape():
     assert grid.shape == (4, 3)
     with pytest.raises(AttributeError) as err:
         grid.shape = (2, 3)
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_size():
@@ -40,7 +40,7 @@ def test_size():
     assert grid.size == 12
     with pytest.raises(AttributeError) as err:
         grid.size = 100
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_scale_factor():
@@ -49,7 +49,7 @@ def test_scale_factor():
     assert np.allclose(grid.scale_factor, [2, 3])
     with pytest.raises(AttributeError) as err:
         grid.scale_factor = None
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_scale_offset():
@@ -58,7 +58,7 @@ def test_scale_offset():
     assert np.allclose(grid.scale_offset, [4, 5])
     with pytest.raises(AttributeError) as err:
         grid.scale_offset = None
-    assert "can't set attribute" in str(err.value).lower()
+    assert "has no setter" in str(err.value).lower()
 
 
 def test_tree_class():
@@ -66,4 +66,4 @@ def test_tree_class():
     assert grid.tree_class == BaseTree
     with pytest.raises(AttributeError) as err:
         grid.tree_class = None
-    assert "can't set attribute" in str(err.value).lower()
+    assert "has no setter" in str(err.value).lower()

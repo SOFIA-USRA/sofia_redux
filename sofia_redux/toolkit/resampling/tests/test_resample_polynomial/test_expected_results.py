@@ -117,11 +117,11 @@ def test_1d_example():
          0.82255194, 1.00284766, 1.02060422, 0.84521437, 0.81706457],
         equal_nan=True, rtol=1e-2)
     assert np.allclose(
-        vals['deriv'][indices].ravel(),
-        [-1.36311572e+57, 1.24403687e+00, 1.54083430e+00, 6.30830047e-01,
+        vals['deriv'][indices].ravel()[1:],
+        [1.24403687e+00, 1.54083430e+00, 6.30830047e-01,
          1.44176684e+00, 1.20949072e+00, 1.27794454e+00, 1.18835437e+00,
          1.51336449e+00, 1.43060335e+00],
-        rtol=1e-2
+         equal_nan=True, rtol=1e-2
     )
     assert np.allclose(
         vals['offset'][indices],

@@ -50,7 +50,7 @@ def test_shape(tree2d):
     assert tree.shape == (9, 11)
     with pytest.raises(AttributeError) as err:
         tree.shape = None
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_features(tree2d):
@@ -58,7 +58,7 @@ def test_features(tree2d):
     assert tree.features == 2
     with pytest.raises(AttributeError) as err:
         tree.features = 1
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_n_blocks(tree2d):
@@ -66,7 +66,7 @@ def test_n_blocks(tree2d):
     assert tree.n_blocks == 99
     with pytest.raises(AttributeError) as err:
         tree.n_blocks = 1
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_search(tree1d, tree2d, tree3d):
@@ -80,7 +80,7 @@ def test_search(tree1d, tree2d, tree3d):
                         [-1, 0, 1] * 9])
     with pytest.raises(AttributeError) as err:
         tree2d.search = 1
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_balltree_initialized(tree2d):

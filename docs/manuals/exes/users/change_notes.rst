@@ -11,8 +11,8 @@ v3.0.0 and later were implemented in Python.  For previously processed data,
 check the PIPEVERS keyword in the FITS header to determine the pipeline
 version used.
 
-EXES Redux v3.0.0
-~~~~~~~~~~~~~~~~~
+EXES Redux v3.0.0 (2022-12-13)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. E*
 
 - Full reimplementation of the IDL pipeline into Python 3.

@@ -26,7 +26,7 @@ def test_fit_tree(inputs):
 
     with pytest.raises(AttributeError) as err:
         r.fit_tree = None
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_grid_class(inputs):
@@ -35,7 +35,7 @@ def test_grid_class(inputs):
     assert r.grid_class == PolynomialGrid
     with pytest.raises(AttributeError) as err:
         r.grid_class = None
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)
 
 
 def test_order(inputs):
@@ -48,4 +48,4 @@ def test_order(inputs):
     assert np.allclose(r.order, [2, 3])
     with pytest.raises(AttributeError) as err:
         r.order = 3
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)

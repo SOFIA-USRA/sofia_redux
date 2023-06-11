@@ -76,7 +76,7 @@ def jbfft(data, bar_spacing=16):
 
     # Create mask in Fourier space
     nbars = data.shape[1] // bar_spacing
-    jailbar_mask = np.full(data.shape, np.complex(1.0))
+    jailbar_mask = np.full(data.shape, complex(1.0))
     for idx in range(nbars - 1):
         jailbar_mask[:, (idx + 1) * bar_spacing] = 0
 

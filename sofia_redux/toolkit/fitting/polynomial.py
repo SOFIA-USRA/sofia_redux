@@ -706,7 +706,7 @@ def nonlinear_evaluate(matrix_in, data, matrix_out,
     return coefficients @ matrix_out
 
 
-@njit
+@njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def linear_vector_solve(alpha, beta, matrix_out):  # pragma: no cover
     nc = alpha.shape[0]
     result = np.empty((beta.shape[0], matrix_out.shape[1]))

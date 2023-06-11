@@ -10,7 +10,7 @@ from astropy.stats import sigma_clipped_stats
 from astropy.table import Table
 from astropy.time import Time
 import bottleneck as bn
-import numba
+import numba as nb
 import numpy as np
 
 from sofia_redux.instruments.fifi_ls.get_badpix \
@@ -216,14 +216,13 @@ def resize_data(data, readout_range, indpos, remove_first_ramps=True,
     return data, bad_ramps
 
 
-@numba.njit(cache=True, fastmath={'nsz', 'nnan', 'ninf'},
-            nogil=True, parallel=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def calculate_fit(data, maxidx):   # pragma: no cover
 
     ramps_per_spaxel, nramp, nwave, nspaxel = data.shape
-    mat = np.empty((nramp, 2), dtype=numba.int64)
-    ata = np.empty((nramp, 2, 2), dtype=numba.float64)
-    vfac = np.empty(nramp, dtype=numba.float64)
+    mat = np.empty((nramp, 2), dtype=nb.int64)
+    ata = np.empty((nramp, 2, 2), dtype=nb.float64)
+    vfac = np.empty(nramp, dtype=nb.float64)
     sum1 = 0
     sum2 = 0
 
@@ -241,9 +240,9 @@ def calculate_fit(data, maxidx):   # pragma: no cover
         else:
             vfac[i] = 0.0
 
-    slopes = np.empty((ramps_per_spaxel, nwave, nspaxel), dtype=numba.float64)
-    var = np.empty((ramps_per_spaxel, nwave, nspaxel), dtype=numba.float64)
-    for i in numba.prange(ramps_per_spaxel):
+    slopes = np.empty((ramps_per_spaxel, nwave, nspaxel), dtype=nb.float64)
+    var = np.empty((ramps_per_spaxel, nwave, nspaxel), dtype=nb.float64)
+    for i in nb.prange(ramps_per_spaxel):
         for j in range(nwave):
             for k in range(nspaxel):
                 idx = maxidx[i, j, k]
@@ -256,7 +255,7 @@ def calculate_fit(data, maxidx):   # pragma: no cover
 
                 line = data[i, :idx, j, k]
                 a = ata[idx - 1]
-                b = np.empty(2, dtype=numba.float64)
+                b = np.empty(2, dtype=nb.float64)
                 b[0] = 0.0
                 b[1] = 0.0
                 for ln in range(idx):

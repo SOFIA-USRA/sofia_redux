@@ -192,7 +192,7 @@ def get_flat(header):
             cstr = f'B{b_order}{b_filter}'
 
     # expected spatial and spectral file names
-    spatfile = 'spatialFlat{}.txt'.format(fstr)
+    spatfile = 'spatialFlat{}{}.txt'.format(fstr, dstr)
     specfile = 'spectralFlats{}{}.fits'.format(cstr, dstr)
 
     # paths to files
@@ -246,7 +246,7 @@ def get_flat(header):
     return fname, spat, spec_flat, spec_wave, spec_err
 
 
-@nb.njit(fastmath={'nsz', 'ninf'}, cache=True, nogil=True)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def stripnans(x, y, e):   # pragma: no cover
     n = x.size
     xout = np.empty(n, dtype=nb.float64)
@@ -263,7 +263,7 @@ def stripnans(x, y, e):   # pragma: no cover
     return xout[:found], yout[:found], eout[:found]
 
 
-@nb.njit(fastmath={'nsz', 'ninf'}, cache=True)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def calculate_flat(wave, data, var, spatdata, specdata,
                    specwave, specerr, skiperr):   # pragma: no cover
     """Workhorse for math stuff - fast"""
@@ -303,7 +303,7 @@ def calculate_flat(wave, data, var, spatdata, specdata,
             # Interpolate spectral response onto wavelength for spexel
             flatval, eout = interp(sw, sd, se, xk)
 
-            if flatval == 0 or np.isnan(flatval):
+            if flatval < 0.1 or np.isnan(flatval):
                 flat_store[i, k, j] = np.nan
                 flat_corr[i, k, j] = np.nan
                 flat_err_store[i, k, j] = np.nan

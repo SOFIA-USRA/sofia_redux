@@ -114,7 +114,7 @@ class TestApplyStaticFlat(FIFITestCase):
         header['DICHROIC'] = 130
         result = get_flat(header)
         assert result is not None
-        assert 'spatialflatr' in result[0].lower()
+        assert 'spatialflatrd130' in result[0].lower()
         assert 'spectralflatsr1d130' in result[0].lower()
 
         # check red flat, d105
@@ -122,7 +122,7 @@ class TestApplyStaticFlat(FIFITestCase):
         header['DICHROIC'] = 105
         result = get_flat(header)
         assert result is not None
-        assert 'spatialflatr' in result[0].lower()
+        assert 'spatialflatrd105' in result[0].lower()
         assert 'spectralflatsr1d105' in result[0].lower()
 
         # check blue 1 flat, d130
@@ -131,7 +131,7 @@ class TestApplyStaticFlat(FIFITestCase):
         header['G_ORD_B'] = 1
         result = get_flat(header)
         assert result is not None
-        assert 'spatialflatb1' in result[0].lower()
+        assert 'spatialflatb1d130' in result[0].lower()
         assert 'spectralflatsb1d130' in result[0].lower()
 
         # check blue 1 flat, d105
@@ -140,7 +140,7 @@ class TestApplyStaticFlat(FIFITestCase):
         header['G_ORD_B'] = 1
         result = get_flat(header)
         assert result is not None
-        assert 'spatialflatb1' in result[0].lower()
+        assert 'spatialflatb1d105' in result[0].lower()
         assert 'spectralflatsb1d105' in result[0].lower()
 
         # check blue 2 flat, d130
@@ -149,7 +149,7 @@ class TestApplyStaticFlat(FIFITestCase):
         header['G_ORD_B'] = 2
         result = get_flat(header)
         assert result is not None
-        assert 'spatialflatb2' in result[0].lower()
+        assert 'spatialflatb2d130' in result[0].lower()
         assert 'spectralflatsb2d130' in result[0].lower()
 
         # check blue 2 flat, d105
@@ -158,7 +158,7 @@ class TestApplyStaticFlat(FIFITestCase):
         header['G_ORD_B'] = 2
         result = get_flat(header)
         assert result is not None
-        assert 'spatialflatb2' in result[0].lower()
+        assert 'spatialflatb2d105' in result[0].lower()
         assert 'spectralflatsb2d105' in result[0].lower()
 
         # check blue 2 filter 1 flat, d130
@@ -168,7 +168,7 @@ class TestApplyStaticFlat(FIFITestCase):
         header['G_FLT_B'] = 1
         result = get_flat(header)
         assert result is not None
-        assert 'spatialflatb2' in result[0].lower()
+        assert 'spatialflatb2d130' in result[0].lower()
         assert 'spectralflatsb21d130' in result[0].lower()
 
         # check blue 2 filter 1 flat, d105
@@ -178,7 +178,7 @@ class TestApplyStaticFlat(FIFITestCase):
         header['G_FLT_B'] = 1
         result = get_flat(header)
         assert result is not None
-        assert 'spatialflatb2' in result[0].lower()
+        assert 'spatialflatb2d105' in result[0].lower()
         assert 'spectralflatsb21d105' in result[0].lower()
 
         # also explicitly check blue 2 filter 2 - should
@@ -216,7 +216,7 @@ class TestApplyStaticFlat(FIFITestCase):
 
         # make a spatial flat to check that spectral flat fails too
         os.makedirs(tmpdir.join('data', 'flat_files'))
-        spatflat = tmpdir.join('data', 'flat_files', 'spatialFlatR.txt')
+        spatflat = tmpdir.join('data', 'flat_files', 'spatialFlatRD105.txt')
         spatflat.write('date test1\n10000000 1\n')
         result = get_flat(header)
         assert result is None
@@ -341,11 +341,18 @@ class TestApplyStaticFlat(FIFITestCase):
         # construct expected flat data from spec and spat
         expected_flat = np.ones((10, 16, 25))
         expected_flat_err = np.ones((10, 16, 25))
-        expected_flat *= spatdata[None, None, :]
-        expected_flat_err *= spatdata[None, None, :]
         for i in range(16):
             spec = specdata[int(wave[i][0]), :, :]
             expected_flat[:, i, :] *= spec[None, :, i]
+
+        # any values before spatial application that are < 0.1
+        # are set to NaN
+        nans = expected_flat < 0.1
+        expected_flat[nans] = np.nan
+        expected_flat_err[nans] = np.nan
+
+        expected_flat *= spatdata[None, None, :]
+        expected_flat_err *= spatdata[None, None, :]
 
         result = calculate_flat(wave, data, var, spatdata, specdata,
                                 specwave, specerr, True)
@@ -353,21 +360,22 @@ class TestApplyStaticFlat(FIFITestCase):
         flat_corr, var_corr, flat_store, flat_err_store = result
 
         # returned flat and error should be as expected
-        assert np.allclose(flat_store, expected_flat)
-        assert np.allclose(flat_err_store, expected_flat_err)
+        assert np.allclose(flat_store, expected_flat, equal_nan=True)
+        assert np.allclose(flat_err_store, expected_flat_err, equal_nan=True)
         # corrected data should be divided by it
-        assert np.allclose(flat_corr, 1 / expected_flat)
+        assert np.allclose(flat_corr, 1 / expected_flat, equal_nan=True)
         # variance should be divided by it, squared
-        assert np.allclose(var_corr, 1 / expected_flat ** 2)
+        assert np.allclose(var_corr, 1 / expected_flat ** 2, equal_nan=True)
 
         # propagate flat error
         result = calculate_flat(wave, data, var, spatdata, specdata,
                                 specwave, specerr, False)
         # all should be same except variance, which should be higher
-        assert np.allclose(result[0], flat_corr)
-        assert np.all(result[1] > var_corr)
-        assert np.allclose(result[2], flat_store)
-        assert np.allclose(result[3], flat_err_store)
+        assert np.allclose(result[0], flat_corr, equal_nan=True)
+        not_nan = ~np.isnan(result[1])
+        assert np.all(result[1][not_nan] > var_corr[not_nan])
+        assert np.allclose(result[2], flat_store, equal_nan=True)
+        assert np.allclose(result[3], flat_err_store, equal_nan=True)
 
     def test_bad_parameters(self, capsys, mocker):
         from sofia_redux.instruments.fifi_ls.apply_static_flat \

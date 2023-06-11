@@ -8,7 +8,7 @@ import pytest
 
 from sofia_redux.instruments.hawc.datafits import DataFits
 from sofia_redux.instruments.hawc.tests.resources \
-    import DRPTestCase, pol_raw_data, pol_bgs_data
+    import DRPTestCase, pol_raw_data, pol_bgs_data, add_col, del_col
 
 
 class TestDataFits(DRPTestCase):
@@ -996,8 +996,22 @@ class TestDataFits(DRPTestCase):
         assert 'returning first' in capt.err
 
         # wtavg, with samples
-        data3.columns[1].name = 'Samples'
-        data4.columns[1].name = 'Samples'
+        new_cols = [data3.columns[0],
+                    fits.Column(name='Samples',
+                                array=data3[data3.columns[1].name],
+                                format=data3.columns[1].format),
+                    data3.columns[2]]
+        new_hdu = fits.BinTableHDU.from_columns(new_cols)
+        data3 = new_hdu.data
+
+        new_cols = [data4.columns[0],
+                    fits.Column(name='Samples',
+                                array=data4[data4.columns[1].name],
+                                format=data4.columns[1].format),
+                    data4.columns[2]]
+        new_hdu = fits.BinTableHDU.from_columns(new_cols)
+        data4 = new_hdu.data
+
         data3['Samples'] += 10
         names[1] = 'Samples'
         val = []

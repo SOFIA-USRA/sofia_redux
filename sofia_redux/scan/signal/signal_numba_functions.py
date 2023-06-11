@@ -17,7 +17,7 @@ __all__ = ['get_signal_variance', 'get_ml_correlated',
            'prepare_frame_temp_fields']
 
 
-@nb.jit(cache=True, nogil=False, parallel=False, fastmath=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def get_signal_variance(values, weights=None):  # pragma: no cover
     """
     Return the signal variance.

@@ -293,7 +293,7 @@ def model_minor_body(obs_times, atran):
         name of the model and calibration files.
 
     """
-    obs = pd.DataFrame()
+    rows = []
     for index, row in obs_times.iterrows():
         params = horizons.asteroid_query(
             target=row['target'], date=row['date'], time=row['time'])
@@ -303,8 +303,8 @@ def model_minor_body(obs_times, atran):
                                     time=row['time'], outfile=model_outfile)
         row['model_file'] = model_outfile
         row['cal_file'] = calibration_outfile
-        obs = obs.append(row)
-    return obs
+        rows.append(row)
+    return pd.DataFrame(rows)
 
 
 def generate_minor_outfile(row):
@@ -378,7 +378,7 @@ def model_major_body(obs_times, caldata, atran):
         name of the model and calibration files.
 
     """
-    obs = pd.DataFrame()
+    rows = []
     for index, row in obs_times.iterrows():
         herschel_file = select_herschel_file(row['target'])
         model_outfile = \
@@ -391,8 +391,8 @@ def model_major_body(obs_times, caldata, atran):
         apply_scale_factor(herschel_file, model_outfile, fscale)
         row['model_file'] = model_outfile
         row['cal_file'] = calibration_outfile
-        obs = obs.append(row)
-    return obs
+        rows.append(row)
+    return pd.DataFrame(rows)
 
 
 def calibration(obs_file, atran):

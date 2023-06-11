@@ -146,7 +146,7 @@ def classify_files(filenames, offbeam=False):
     return df
 
 
-@nb.njit(fastmath={'nsz', 'ninf'}, cache=True)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def interp_b_nods(atime, btime, bdata, berr):   # pragma: no cover
     """
     Interpolate two B nods to the A time.

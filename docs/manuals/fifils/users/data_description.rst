@@ -593,10 +593,10 @@ In order to correct for variations in response among the individual
 pixels, the FIFI-LS team has generated flat field data that correct
 for the differences in spatial and spectral response across the
 detector. There is a normalized spatial flat field for each of the RED
-and BLUE channels, which specifies the correction for each spaxel.  This
-correction may vary over time.  There is also a set of spectral flat
-fields, for each channel, order, and dichroic, over the full wavelength
-range for the mode, which specifies the correction for each spexel.
+and BLUE channels, in each of the dichroics, which specifies the correction
+for each spaxel.  This correction may vary over time.  There is also a set of
+spectral flat fields, for each channel, order, and dichroic, over the full
+wavelength range for the mode, which specifies the correction for each spexel.
 
 In order to apply the flat fields to the data, the pipeline interpolates
 the appropriate spectral flat onto the wavelengths of the observation, for

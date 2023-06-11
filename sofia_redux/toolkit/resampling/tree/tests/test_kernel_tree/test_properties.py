@@ -152,4 +152,4 @@ def test_setters(uninitialized_tree_2d):
               'resampling_arguments']:
         with pytest.raises(AttributeError) as err:
             setattr(tree, p, None)
-        assert "can't set attribute" in str(err.value)
+        assert "has no setter" in str(err.value)

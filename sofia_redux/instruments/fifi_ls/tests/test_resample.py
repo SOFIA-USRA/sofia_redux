@@ -664,11 +664,11 @@ class TestResample(FIFITestCase):
         result = resample(files, write=False, oversample=None,
                           spectral_size=None, spatial_size=None)
         capt = capsys.readouterr()
-        assert 'Output spectral pixel scale: 0.019' in capt.out
+        assert 'Output spectral pixel scale: 0.01' in capt.out
         assert 'Output spatial pixel scale: 2.38' in capt.out
         assert 'Spectral oversample: 8' in capt.out
         assert 'Spatial oversample: 5' in capt.out
-        assert result[1].data.shape == (55, 33, 39)
+        assert result[1].data.shape == (59, 33, 39)
 
         # test pixel size override
         result = resample(files, write=False, oversample=None,

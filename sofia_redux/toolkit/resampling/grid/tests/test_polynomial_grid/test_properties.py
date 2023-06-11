@@ -12,4 +12,4 @@ def test_tree_class():
     assert grid.tree_class == PolynomialTree
     with pytest.raises(AttributeError) as err:
         grid.tree_class = None
-    assert "can't set attribute" in str(err.value)
+    assert "has no setter" in str(err.value)

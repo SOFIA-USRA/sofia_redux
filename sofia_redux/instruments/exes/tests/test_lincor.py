@@ -58,9 +58,9 @@ class TestLinCor(object):
         assert minframe.shape == (ny, nx)
         assert maxframe.shape == (ny, nx)
         assert coeffs.shape[1:] == (ny, nx)
-        assert np.issubdtype(np.float, coeffs.dtype)
-        assert np.issubdtype(np.int, minframe.dtype)
-        assert np.issubdtype(np.int, maxframe.dtype)
+        assert np.issubdtype(float, coeffs.dtype)
+        assert np.issubdtype(int, minframe.dtype)
+        assert np.issubdtype(int, maxframe.dtype)
 
     def test_apply_correction(self, header):
         bias = lincor.get_reset_dark(header)

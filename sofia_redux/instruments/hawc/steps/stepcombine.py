@@ -230,7 +230,7 @@ class StepCombine(StepParent):
                 self.dataout.imageset(rv, r_var)
                 self.dataout.imageset(tv, t_var)
 
-                tmpmask = np.ones(len(table), dtype=np.bool)
+                tmpmask = np.ones(len(table), dtype=bool)
                 tbhdu = self.comb_table(table, tmpmask)
                 self.dataout.tableset(tbhdu.data,
                                       'TABLE HWP%d NOD%d' % (hwp, nod),

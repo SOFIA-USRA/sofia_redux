@@ -965,7 +965,7 @@ class TestFORCASTSpectroscopyReduction(object):
             assert red.input[0][ext].data.shape[0] == nwave
 
         # check that new wave is subset of old wave
-        np.allclose(old_wave[4:-5], red.input[0]['WAVEPOS'].data)
+        np.allclose(old_wave[4:-6], red.input[0]['WAVEPOS'].data)
 
         # test mismatched input wavelengths: raises error
         red = pickle.loads(red_copy)

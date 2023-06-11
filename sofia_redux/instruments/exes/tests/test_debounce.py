@@ -172,9 +172,9 @@ class TestDebounce(object):
 
         data_mask, frame_mask = ed._check_masks(None, data)
         assert data_mask.shape == (ny, nx)
-        assert data_mask.dtype == np.bool
+        assert data_mask.dtype == bool
         assert frame_mask.shape == (nz,)
-        assert frame_mask.dtype == np.bool
+        assert frame_mask.dtype == bool
         assert np.all(data_mask)
         assert np.all(frame_mask)
 
@@ -188,8 +188,8 @@ class TestDebounce(object):
 
         data = np.zeros(in_mask.shape)
         data_mask, frame_mask = ed._check_masks(in_mask, data)
-        assert data_mask.dtype == np.bool
-        assert frame_mask.dtype == np.bool
+        assert data_mask.dtype == bool
+        assert frame_mask.dtype == bool
         assert data_mask.shape == in_mask.shape[-2:]
         assert not np.all(data_mask)
         assert data_mask.sum() == 2

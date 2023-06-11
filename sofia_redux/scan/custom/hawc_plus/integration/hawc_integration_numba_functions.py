@@ -663,7 +663,7 @@ def flag_zeroed_channels(frame_data, frame_valid, channel_indices,
                 channel_flags[i] |= discard_flag
 
 
-@nb.jit(cache=True, nogil=False, parallel=False, fastmath=True)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
 def check_jumps(start_counter, jump_counter, frame_valid, has_jumps,
                 channel_indices):  # pragma: no cover
     """
@@ -711,7 +711,7 @@ def check_jumps(start_counter, jump_counter, frame_valid, has_jumps,
     return jumps_found
 
 
-@nb.jit(cache=True, nogil=False, parallel=False, fastmath=False)
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
 def detect_jumps(data, has_jumps, jumps, threshold, start_pad=0, end_pad=0
                  ):  # pragma: no cover
     """

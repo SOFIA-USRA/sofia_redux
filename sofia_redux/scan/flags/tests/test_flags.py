@@ -9,10 +9,18 @@ from sofia_redux.scan.flags.flags import Flags
 
 
 class BasicFlags(Flags):
-    class BasicFlagTypes(enum.Flag):
-        FLAG1 = enum.auto()
-        FLAG2 = enum.auto()
-        FLAG3 = enum.auto()
+    try:
+        # Python >=3.11
+        class BasicFlagTypes(enum.Flag, boundary=enum.STRICT):
+            FLAG1 = enum.auto()
+            FLAG2 = enum.auto()
+            FLAG3 = enum.auto()
+    except (AttributeError, TypeError):
+        # Python <=3.10
+        class BasicFlagTypes(enum.Flag):
+            FLAG1 = enum.auto()
+            FLAG2 = enum.auto()
+            FLAG3 = enum.auto()
 
     flags = BasicFlagTypes
     descriptions = {

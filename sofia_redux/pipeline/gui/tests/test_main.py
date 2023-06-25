@@ -4,6 +4,7 @@
 import os
 import pickle
 
+from astropy import log
 from astropy.io import fits
 import numpy as np
 import pytest
@@ -16,7 +17,7 @@ from sofia_redux.pipeline.parameters import Parameters
 from sofia_redux.pipeline.reduction import Reduction
 from sofia_redux.pipeline.viewer import Viewer
 from sofia_redux.pipeline.gui.widgets import RemoveFilesDialog, ParamView, \
-    ConfigView, EditParam, StepRunnable
+    ConfigView, EditParam, StepRunnable, TextEditLogger
 
 try:
     from PyQt5 import QtWidgets
@@ -68,6 +69,11 @@ class TestMainWindow(object):
     def mock_app(self, qapp, mocker):
         mocker.patch.object(QtWidgets, 'QApplication',
                             return_value=qapp)
+
+    def teardown(self):
+        for hand in log.handlers:
+            if isinstance(hand, TextEditLogger):
+                log.removeHandler(hand)
 
     def make_window(self, qtbot, mocker, show=False):
         """Make and register a main window, with recipe modification."""

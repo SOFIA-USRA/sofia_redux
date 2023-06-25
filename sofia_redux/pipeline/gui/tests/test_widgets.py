@@ -29,6 +29,11 @@ class TestWidgets(object):
         mocker.patch.object(QtWidgets, 'QApplication',
                             return_value=qapp)
 
+    def teardown(self):
+        for hand in log.handlers:
+            if isinstance(hand, TextEditLogger):
+                log.removeHandler(hand)
+
     def make_default_param(self):
         """Make a set of parameters from a default dictionary."""
         # make at least one of every type of widget

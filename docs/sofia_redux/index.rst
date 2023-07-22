@@ -65,7 +65,8 @@ Tutorials are available for data reduction procedures, via the
 - `FLITECAM Spectroscopy <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FLITECAM_spectroscopy_tutorial.pdf>`__
 - `FORCAST Imaging <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FORCAST_imaging_tutorial.pdf>`__
 - `FORCAST Spectroscopy <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FORCAST_spectroscopy_tutorial.pdf>`__
-- HAWC+ Imaging and Polarimetry: TBD
+- `HAWC+ Imaging <https://www.sofia.usra.edu/sites/default/files/2023-07/hawc_imaging_tutorial.pdf>`__
+- `HAWC+ Polarimetry <https://www.sofia.usra.edu/sites/default/files/2023-07/hawc_polarimetry_tutorial.pdf>`__
 - EXES Spectroscopy: TBD
 
 Manuals

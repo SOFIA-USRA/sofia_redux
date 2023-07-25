@@ -351,8 +351,8 @@ class TestFORCASTWavecalReduction(object):
         # test guess lines with accurate guesses
         red = pickle.loads(red_copy)
         parset = red.parameters.current[idx]
-        parset['guess_lines']['value'] = '5.64,6.056,6.11,6.49,6.79,7.67'
-        parset['guess_positions']['value'] = '62,97,102,134,159,233'
+        parset['guess_lines']['value'] = '5.64,5.88,6.056,6.11,6.49,6.79,7.67'
+        parset['guess_positions']['value'] = '62,81,97,102,134,159,233'
         red.step()
         assert self.check_lines(red.input[0][0].header['LINEWAV'], dw)
         assert self.check_lines(red.input[0][0].header['LINEPOS'], dp)

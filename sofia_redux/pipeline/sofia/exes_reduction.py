@@ -773,8 +773,7 @@ class EXESReduction(Reduction):
         prof.name = 'ProfileViewer'
         prof.title = 'Spatial Profiles'
         prof.layout = 'rows'
-        # todo: check if this value is needed/correct
-        prof.max_plot = 20
+        prof.max_plot = 99
 
         spec = EyeViewer()
         spec.name = 'SpectralViewer'

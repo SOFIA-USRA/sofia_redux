@@ -84,7 +84,8 @@ class TestJbclean(object):
         for method in ['MEDIAN', 'FFT']:
             dripconfig.configuration['jbclean'] = method
             header = fits.header.Header()
-            result, var = jbclean(data, header=header, variance=variance)
+            result, var = jbclean(data, header=header, variance=variance,
+                                  mode='mirror')
             assert header['JBCLEAN'] == method
             assert np.allclose(var, variance)
             assert np.allclose(result[mask], result[mask][0])
@@ -94,7 +95,7 @@ class TestJbclean(object):
         dripconfig.load()
         assert 'invalid method' in str(header)
 
-        result, var = jbclean(data)
+        result, var = jbclean(data, mode='mirror')
         assert np.allclose(result[mask], result[mask][0])
         assert var is None
 

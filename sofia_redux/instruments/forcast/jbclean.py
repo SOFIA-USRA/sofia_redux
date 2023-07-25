@@ -6,7 +6,7 @@ from astropy import log
 from astropy.io.fits.header import Header
 import numpy as np
 from scipy import fftpack
-from scipy.signal import medfilt
+from scipy.ndimage import median_filter
 
 from sofia_redux.toolkit.utilities.fits import add_history_wrap
 
@@ -64,7 +64,7 @@ def jbfft(data, bar_spacing=16):
         return data
     masked = data.copy()
     if mask.any():
-        # interpolate over NaNs in along bar direction
+        # interpolate over NaNs along bar direction
         y = np.arange(data.shape[0])
         for x in range(data.shape[1]):
             d, m = masked[:, x], mask[:, x]
@@ -89,13 +89,13 @@ def jbfft(data, bar_spacing=16):
     return filtered
 
 
-def jbmedian(data, width=4, bar_spacing=16):
+def jbmedian(data, width=4, bar_spacing=16, mode='wrap'):
     """
     Remove jailbars using the median of correlated columns
 
-    Replace the jailbar patter with the median of correlated columns
+    Replace the jailbar pattern with the median of correlated columns
     (every 16).  Large scale variations are removed by subtracting
-    an image smoothed with a 16-pixel box
+    an image smoothed with a 16-pixel box.
 
     Parameters
     ----------
@@ -107,6 +107,8 @@ def jbmedian(data, width=4, bar_spacing=16):
         median filtering will be applied along rows using a kernel
         width of `bar_spacing + width`.  An additional pixel will be
         added to make the kernel odd sized if necessary.
+    mode : str, optional
+        Specifies the edge handling mode for median filter.
 
     Returns
     -------
@@ -122,13 +124,9 @@ def jbmedian(data, width=4, bar_spacing=16):
 
     kw = bar_spacing + width
     kw += (kw % 2) == 0
-    mid = kw // 2
-    wrapped = np.empty((data.shape[0], data.shape[1] + kw - 1), data.dtype)
-    wrapped[:, :mid] = data.copy()[:, -mid:]
-    wrapped[:, mid: -mid] = data.copy()[:, :]
-    wrapped[:, -mid:] = data.copy()[:, :mid]
-    filtered = medfilt(wrapped, kernel_size=(1, kw))
-    filtered = filtered[:, mid: -mid]
+    if kw <= 1:
+        raise ValueError('Width is too small')
+    filtered = median_filter(data, size=(1, kw), mode=mode)
     jailbar = data - filtered
 
     nbars = data.shape[1] // bar_spacing
@@ -149,14 +147,15 @@ def jbmedian(data, width=4, bar_spacing=16):
     return data - jailbar
 
 
-def jbclean(data, header=None, variance=None, bar_spacing=16, width=4):
+def jbclean(data, header=None, variance=None, bar_spacing=16, width=4,
+            mode='wrap'):
     """
     Removes "jailbar" artifacts from images
 
     Filter the input data with a 16x16 box and remove the filtered
-    image from the input image.  Then, the jil bar is most of the
+    image from the input image.  Then, the jail bar is most of the
     features found in the subtracted image.  We use this image to
-    calcular the jail bar using median.  This function checks the
+    calculate the jail bar using median.  This function checks the
     configuration file (dripconf.txt) for a preferred method.  If
     JBCLEAN is set to fft, it does a Fourier transform of the image,
     to mask the 16-pixel periodic jailbar pattern.  This median
@@ -168,7 +167,7 @@ def jbclean(data, header=None, variance=None, bar_spacing=16, width=4):
     sofia_redux.instruments.forcast.stack, on the chop/nod subtracted frames.
 
     Note: for now, it is assumed that the jailbar has no error, so the
-    variance, if passes, is not modified.
+    variance, if passed, is not modified.
 
     Parameters
     ----------
@@ -183,6 +182,9 @@ def jbclean(data, header=None, variance=None, bar_spacing=16, width=4):
         known jailbar spacing between columns
     width : int, optional
         Only applies if JBCLEAN=median.  See `jbmedian` for details
+    mode : str, optional
+        Specifies the edge handling mode for median filter. Only applies
+        if JBCLEAN=median.
 
     Returns
     -------
@@ -214,7 +216,8 @@ def jbclean(data, header=None, variance=None, bar_spacing=16, width=4):
     if jbmethod == 'FFT':
         jbcleaned = jbfft(jbcleaned, bar_spacing=bar_spacing)
     elif jbmethod == 'MEDIAN':
-        jbcleaned = jbmedian(jbcleaned, bar_spacing=bar_spacing, width=width)
+        jbcleaned = jbmedian(jbcleaned, bar_spacing=bar_spacing, width=width,
+                             mode=mode)
     else:
         addhist(header, 'Jailbars not cleaned (invalid method)')
         log.error("jailbar method %s unrecognized" % jbmethod)

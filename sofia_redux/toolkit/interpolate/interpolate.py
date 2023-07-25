@@ -644,7 +644,7 @@ def interp_error_nd(points, error, xi, cval=np.nan):
     if not mask.any():
         return result
 
-    vertices = tri.vertices[simplices[mask]]
+    vertices = tri.simplices[simplices[mask]]
 
     if not hasattr(error, '__len__'):
         error = to_array_shape(float(error), np.max(vertices) + 1)
@@ -661,7 +661,7 @@ def interp_error_nd(points, error, xi, cval=np.nan):
         mask[same] = False
         if not mask.any():
             return result
-        vinds = tri.vertices[simplices[mask]]
+        vinds = tri.simplices[simplices[mask]]
 
     else:
         vinds = vertices

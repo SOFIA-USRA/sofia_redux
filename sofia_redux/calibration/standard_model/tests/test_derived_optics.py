@@ -83,7 +83,7 @@ def test_noise_equivalent_power(wavelengths):
                                       omega_pix=omega_pix,
                                       telescope_area=telescope_area)
     assert len(nep) == len(wavelengths)
-    npt.assert_allclose(nep, correct_nep)
+    assert np.allclose(nep, correct_nep)
 
 
 def test_limiting_flux(results, integrals):

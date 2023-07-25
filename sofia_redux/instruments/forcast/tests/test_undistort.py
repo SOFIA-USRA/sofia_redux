@@ -210,8 +210,8 @@ class TestUndistort(object):
         assert np.allclose(abs(p11['x01'] - p11['x0']), test['factor'])
         assert np.allclose(abs(p11['y01'] - p11['y0']), test['factor'])
 
-        # one iteration -- fails
-        p11 = u.find_pixat11(transform, x0, y0, epsilon=eps, xrange=xrange,
+        # check failure condition
+        p11 = u.find_pixat11(transform, x0, y0, epsilon=1e-24, xrange=xrange,
                              yrange=yrange, maxiter=1, direct=False)
         assert p11 is None
 

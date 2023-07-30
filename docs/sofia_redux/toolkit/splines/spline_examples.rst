@@ -77,5 +77,3 @@ of the data where the spacing between each point is set to 1.
         kg = np.meshgrid(kx, ky)
         ky, kx = kg[0].ravel(), kg[1].ravel()
         axis.plot(kx, ky, '.', color='r', markersize=4 / (i + 1))
-
-    plt.show()

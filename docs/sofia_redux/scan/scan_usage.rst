@@ -54,7 +54,6 @@ simulated FITS file and perform a simple reduction.
     plt.imshow(image_data, origin='lower')
     plt.xlabel('Right Ascension')
     plt.ylabel('Declination')
-    plt.show()
 
 
 The exact nature of the reduction depends heavily on the

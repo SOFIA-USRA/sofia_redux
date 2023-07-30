@@ -1,7 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """Main GUI window for the QAD standalone tool."""
 
-import mimetypes
 import os
 import signal
 import subprocess
@@ -441,28 +440,14 @@ class QADMainWindow(QtWidgets.QMainWindow, ui_qad_main.Ui_MainWindow):
                 return
 
         if len(other_files) > 0:
-            # if not FITS related, try xdg-open (for Linux)
-            # or open (for Mac)
+            # if not FITS related, try open (for Mac only)
             from sys import platform
             if platform == 'darwin':
                 cmd = ['open']
             else:
-                cmd = ['xdg-open']
-                openable = []
-                for fname in other_files:
-                    mtype = mimetypes.guess_type(fname)
-                    try:
-                        out = subprocess.check_output(
-                            'xdg-mime query default {}'.format(mtype[0]),
-                            shell=True)
-                        if out.decode('utf-8').strip() != '':
-                            openable.append(fname)
-                    except Exception:
-                        # never mind if there's an error
-                        continue
-                other_files = openable
+                cmd = None
 
-            if len(other_files) > 0:
+            if len(other_files) > 0 and cmd is not None:
                 for fname in other_files:
                     try:
                         subprocess.call(cmd + [fname])

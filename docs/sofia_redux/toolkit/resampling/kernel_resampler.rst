@@ -146,7 +146,6 @@ with irregular coordinates.
     ax2.set_title('Interpolated regular kernel')
     ax3.imshow(edges, cmap='gray')
     ax3.set_title('Irregular kernel convolved with image')
-    plt.show()
 
 
 The next example shows the usage of the kernel resampler on both irregular data
@@ -188,4 +187,3 @@ and an irregular kernel.
              color='r', label='impulses')
     plt.legend()
     plt.title('A set of impulse signals convolved with an irregular kernel.')
-    plt.show()

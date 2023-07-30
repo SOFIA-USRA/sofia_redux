@@ -121,7 +121,7 @@ def test_1d_example():
         [1.24403687e+00, 1.54083430e+00, 6.30830047e-01,
          1.44176684e+00, 1.20949072e+00, 1.27794454e+00, 1.18835437e+00,
          1.51336449e+00, 1.43060335e+00],
-         equal_nan=True, rtol=1e-2
+        equal_nan=True, rtol=1e-2
     )
     assert np.allclose(
         vals['offset'][indices],

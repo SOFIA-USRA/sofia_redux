@@ -131,16 +131,17 @@ def background_integrand_2(plancks, temperatures, warr, total_throughput,
     field_order = ['atmosphere', 'telescope', 'window',
                    'foreoptics', 'instrument']
     numerators = dict()
-    numerators['atmosphere'] = [np.prod(emissivity['atmosphere']) * total_throughput]
-    numerators['telescope'] = [np.prod(emissivity['telescope']) *
-                               total_throughput / etas['telescope']]
+    numerators['atmosphere'] = [np.prod(emissivity['atmosphere'])
+                                * total_throughput]
+    numerators['telescope'] = [np.prod(emissivity['telescope'])
+                               * total_throughput / etas['telescope']]
     numerators['foreoptics'] = [np.prod([emissivity['foreoptics'],
                                 etas['window'][filter_number],
-                                etas['instrument'][filter_number]]) *
-                                transmissions]
+                                etas['instrument'][filter_number]])
+                                * transmissions]
     numerators['window'] = [np.prod([emissivity['window'][filter_number],
-                            etas['instrument'][filter_number]]) *
-                            transmissions]
+                            etas['instrument'][filter_number]])
+                            * transmissions]
     numerators['instrument'] = [etas['instrument'][filter_number]]
     temperatures = temperatures.copy()
     temperatures['instrument'] = temperatures['window']

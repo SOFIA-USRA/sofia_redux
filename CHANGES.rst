@@ -5,6 +5,7 @@
 - Updated calibration files for HAWC, FORCAST, and EXES for prior cycles with
   new analysis from data reprocessing efforts.
 - Minor updates for compatibility with third-party dependency changes.
+- Update packaging for PEP compliance.
 
 1.3.2 (2023-03-29)
 ==================

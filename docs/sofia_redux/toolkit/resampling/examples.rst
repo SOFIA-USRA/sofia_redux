@@ -69,7 +69,6 @@ true sine function.
     plt.plot(x, ytrue, '--', label='Truth')
     plt.legend()
     plt.title("Fit using wide window with distance weighting")
-    plt.show()
 
 
 Multiple data-sets
@@ -129,7 +128,6 @@ coordinate mappings with all other sets.
     plt.axis('off')
     plt.imshow(good)
     plt.title("Reconstructed image")
-    plt.show()
 
 
 .. _edge_clipping_example:
@@ -199,7 +197,6 @@ has been used to preserve detail.
     plt.subplot(224)
     plt.imshow(com_edges, cmap='copper')
     plt.title("'com_distance' edge mode")
-    plt.show()
 
 
 .. _adaptive_weighting_example:
@@ -302,7 +299,6 @@ dimensions for a second order polynomial (requires `order` + 1).
     axs[1, 2].title.set_text("Adaptive Fitting Weights")
     fig.colorbar(wadapt_img, ax=axs[1, 2], fraction=0.046, pad=0.04,
                  format='%.3f')
-    plt.show()
 
 
 The left-most images display the result and associated weight map using these

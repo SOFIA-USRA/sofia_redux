@@ -318,15 +318,6 @@ class TestQADMain(object):
         assert capt.out == ''
         assert capt.err == ''
 
-        # tries to call xdg-open otherwise
-        mocker.patch('sys.platform', 'other')
-        mocker.patch('subprocess.call', log_cmd)
-        self.select_files(mw, fname=str(txtfile))
-        mw.onRow()
-        capt = capsys.readouterr()
-        assert "'xdg-open'" in capt.out
-        assert os.path.basename(txtfile) in capt.out
-
         # raise error in check output instead
         mocker.patch('subprocess.check_output', err_cmd)
         self.select_files(mw, fname=str(txtfile))

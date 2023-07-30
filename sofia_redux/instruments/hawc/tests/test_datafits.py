@@ -8,7 +8,7 @@ import pytest
 
 from sofia_redux.instruments.hawc.datafits import DataFits
 from sofia_redux.instruments.hawc.tests.resources \
-    import DRPTestCase, pol_raw_data, pol_bgs_data, add_col, del_col
+    import DRPTestCase, pol_raw_data, pol_bgs_data
 
 
 class TestDataFits(DRPTestCase):

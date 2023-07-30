@@ -1,0 +1,61 @@
+# GitHub Actions workflow for testing and continuous integration.
+#
+# This file performs testing using tox and tox.ini to define and configure the test environments.
+
+name: CI
+
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+  #  branches: # only build on PRs against 'main' if you need to further limit when CI is run.
+  #  - main
+  # schedule: # schedule a regular run if needed
+  #  # Weekly Monday 9AM build
+  #  - cron: "0 9 * * 1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    uses: OpenAstronomy/github-actions-workflows/.github/workflows/tox.yml@main
+    with:
+      envs: |
+        - linux: check-style
+  test:
+    uses: OpenAstronomy/github-actions-workflows/.github/workflows/tox.yml@main
+    with:
+      envs: |
+        - linux: test-alldeps
+          python-version: 3.11
+        - macos: test-alldeps
+          python-version: 3.11
+        - windows: test-alldeps
+          python-version: 3.11
+  build-docs:
+    uses: OpenAstronomy/github-actions-workflows/.github/workflows/tox.yml@main
+    with:
+      cache-path: docs/_build/html
+      cache-key: docs-${{ github.run_id }}
+      envs: |
+        - linux: build-docs
+  deploy-docs:
+    runs-on: ubuntu-latest
+    needs: build-docs
+    steps:
+      - name: Download docs artifact
+        uses: actions/cache@v3
+        with:
+          path: docs/_build/html
+          key: docs-${{ github.run_id }}
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        with:
+          publish_branch: gh-pages
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/_build/html
+          force_orphan: true

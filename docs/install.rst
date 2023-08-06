@@ -133,14 +133,14 @@ from the `Planetary Spectrum Generator (PSG) <https://psg.gsfc.nasa.gov/>`__.
 
   - Approximate models, not accounting for water vapor variation
 
-    - Download: `atran_forcast_standard.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_forcast_standard.tgz>`__
+    - Download: `atran_forcast_standard.tgz <https://irsa.ipac.caltech.edu/data/SOFIA/ATRAN_FITS/atran_forcast_standard.tgz>`__
     - Size: 531.3 MB
     - MD5 checksum: 61141843b245eea1fdfd45167a1a750b
 
   - More accurate models, enabling programmatic optimization of
     the telluric correction
 
-    - Download: `atran_forcast_wv.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_forcast_wv.tgz>`__
+    - Download: `atran_forcast_wv.tgz <https://irsa.ipac.caltech.edu/data/SOFIA/ATRAN_FITS/atran_forcast_wv.tgz>`__
     - Size: 37.5 GB
     - MD5 checksum: 49264dfd6c3288af2553f73f8082ec97
 
@@ -148,14 +148,14 @@ from the `Planetary Spectrum Generator (PSG) <https://psg.gsfc.nasa.gov/>`__.
 
   - Approximate models, not accounting for water vapor variation
 
-    - Download: `atran_fifi-ls_standard.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_fifi-ls_standard.tgz>`__
+    - Download: `atran_fifi-ls_standard.tgz <https://irsa.ipac.caltech.edu/data/SOFIA/ATRAN_FITS/atran_fifi-ls_standard.tgz>`__
     - Size: 143.9 MB
     - MD5 checksum: 9a6480d5967f4287388a3070e71e40e8
 
   - More accurate models, enabling use of water vapor values
     recorded in the FITS headers for more accurate telluric correction
 
-    - Download: `atran_fifi-ls_wv.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_fifi-ls_wv.tgz>`__
+    - Download: `atran_fifi-ls_wv.tgz <https://irsa.ipac.caltech.edu/data/SOFIA/ATRAN_FITS/atran_fifi-ls_wv.tgz>`__
     - Size: 2.8 GB
     - MD5 checksum: 486a34fd229b13d8e45768f3664fff64
 
@@ -163,7 +163,7 @@ from the `Planetary Spectrum Generator (PSG) <https://psg.gsfc.nasa.gov/>`__.
 
   - Approximate models, not accounting for water vapor variation
 
-    - Download: `atran_flitecam_standard.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/atran_flitecam_standard.tgz>`__
+    - Download: `atran_flitecam_standard.tgz <https://irsa.ipac.caltech.edu/data/SOFIA/ATRAN_FITS/atran_flitecam_standard.tgz>`__
     - Size: 875 MB
     - MD5 checksum: 6576883144bcc381eacdfe16688ad4d2
 
@@ -171,7 +171,7 @@ from the `Planetary Spectrum Generator (PSG) <https://psg.gsfc.nasa.gov/>`__.
 
   - Approximate models, not accounting for water vapor variation
 
-    - Download: `psg_exes_standard.tgz <https://sofia-downloads.s3-us-gov-west-1.amazonaws.com/psg_exes_standard.tgz>`__
+    - Download: `psg_exes_standard.tgz <https://irsa.ipac.caltech.edu/data/SOFIA/ATRAN_FITS/psg_exes_standard.tgz>`__
     - Size: 5.4 GB
     - MD5 checksum: 147cf56cf15f2626b75a600e1ede5410
 

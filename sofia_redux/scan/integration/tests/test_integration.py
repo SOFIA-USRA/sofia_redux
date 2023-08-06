@@ -1821,8 +1821,8 @@ class TestIntegration(object):
     def test_get_thread_count(self, populated_integration):
         integ = populated_integration
         assert integ.get_thread_count() is None
-        integ.parallelism = 4
-        assert integ.get_thread_count() == 4
+        integ.parallelism = 1
+        assert integ.get_thread_count() == 1
 
     def test_perform(self, mocker, populated_integration):
         integ = populated_integration

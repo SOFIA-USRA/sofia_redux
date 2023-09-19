@@ -20,6 +20,7 @@ from sofia_redux.scan.coordinate_systems.grid.spherical_grid_2d1 import \
     SphericalGrid2D1
 from sofia_redux.scan.utilities.utils import round_values
 from sofia_redux.scan.source_models import source_numba_functions as snf
+from sofia_redux.scan.flags.polarimetry_flags import PolarModulation
 
 __all__ = ['SpectralCube']
 
@@ -845,7 +846,10 @@ class SpectralCube(AstroIntensityMap):
         index : Index3D
             The peak (x, y, z) coordinate.
         """
-        sign = self.configuration.get_sign('source.sign')
+        if self.signal_mode not in [PolarModulation.Q, PolarModulation.U]:
+            sign = self.configuration.get_sign('source.sign')
+        else:
+            sign = 0
         s2n = self.get_significance()
 
         if sign > 0:

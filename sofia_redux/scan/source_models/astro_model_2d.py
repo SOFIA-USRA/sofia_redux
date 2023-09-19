@@ -869,7 +869,7 @@ class AstroModel2D(SourceModel):
             integration=integration,
             pixels=integration.channels.get_mapping_pixels(keep_flag=0),
             source_gains=integration.channels.get_source_gains(
-                filter_corrected=signal_correction),
+                filter_corrected=signal_correction, signal_mode=signal_mode),
             signal_mode=signal_mode)
 
         log.debug(f"Mapping frames: {mapping_frames} --> "
@@ -1047,7 +1047,7 @@ class AstroModel2D(SourceModel):
             signal_mode = self.signal_mode
 
         source_gains = integration.channels.get_source_gains(
-            filter_corrected=False)
+            filter_corrected=False, signal_mode=signal_mode)
 
         if (integration.source_sync_gain is None
                 or integration.source_sync_gain.size != source_gains.size):
@@ -1065,7 +1065,7 @@ class AstroModel2D(SourceModel):
                 sync_gains=integration.source_sync_gain)
             # Get updated source gains
             source_gains = integration.channels.get_source_gains(
-                filter_corrected=False)
+                filter_corrected=False, signal_mode=signal_mode)
 
         self.sync_pixels(
             integration=integration,
@@ -1162,7 +1162,7 @@ class AstroModel2D(SourceModel):
 
         # Remove source from all but blind channels
         self.sync_source_gains(
-            frames=integration.frames,
+            frames=frames,
             pixels=pixels,
             frame_gains=frame_gains,
             source_gains=source_gains,

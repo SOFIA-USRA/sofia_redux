@@ -219,7 +219,8 @@ class StepScanMap(StepMOParent):
 
         """
         # collect input options in dict
-        kwargs = {'write': {'source': False}}
+        kwargs = {'write': {'source': False},
+                  'blacklist': 'polarization'}
         options = {}
 
         # output path

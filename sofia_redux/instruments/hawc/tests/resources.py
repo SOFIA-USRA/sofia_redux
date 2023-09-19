@@ -319,6 +319,29 @@ def scan_raw_data(nframe=20):
     return hdul
 
 
+def scan_sim_data(nframe=None):
+    from sofia_redux.scan.custom.hawc_plus.simulation.simulation \
+        import HawcPlusSimulation
+    from sofia_redux.scan.reduction.reduction import Reduction
+
+    reduction = Reduction('hawc_plus')
+    sim = HawcPlusSimulation(reduction.info)
+
+    header = basic_header()
+    header['SRCAMP'] = 20.0  # NEFD estimate
+    header['SRCS2N'] = 30.0  # source signal to noise
+    header['SRCSIZE'] = 20  # source FWHM (arcsec)
+    header['ALTI_STA'] = 41993.0
+    header['ALTI_END'] = 41998.0
+    header['LON_STA'] = -108.182373
+    header['LAT_STA'] = 47.043457
+    header['EXPTIME'] = 30.0  # scan length (seconds)
+    header['DATE-OBS'] = '2016-12-14T06:41:30.450'
+
+    hdul = sim.create_simulated_hdul(header_options=header)
+    return hdul
+
+
 def add_col(hdul, colname, copy_from, fill=None):
     tabhdu = hdul[2]
     new_data = tabhdu.data[copy_from].copy()

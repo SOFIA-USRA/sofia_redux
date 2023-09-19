@@ -9,7 +9,7 @@ __all__ = ['StepBinPixels', 'StepBgSubtract', 'StepCalibrate', 'StepCheckhead',
            'StepPolDip', 'StepPolMap', 'StepPolVec', 'StepPrepare',
            'StepRegion', 'StepRotate', 'StepScanMap',
            'StepScanMapFlat', 'StepScanMapFocus', 'StepScanMapPol',
-           'StepScanStokes', 'StepShift',
+           'StepScanPolMerge', 'StepScanStokes', 'StepShift',
            'StepSkycal', 'StepSkydip', 'StepSplit', 'StepStdPhotCal',
            'StepStokes', 'StepWcs', 'StepZeroLevel']
 
@@ -45,6 +45,7 @@ from sofia_redux.instruments.hawc.steps.stepscanmap import *
 from sofia_redux.instruments.hawc.steps.stepscanmapflat import *
 from sofia_redux.instruments.hawc.steps.stepscanmapfocus import *
 from sofia_redux.instruments.hawc.steps.stepscanmappol import *
+from sofia_redux.instruments.hawc.steps.stepscanpolmerge import *
 from sofia_redux.instruments.hawc.steps.stepshift import *
 from sofia_redux.instruments.hawc.steps.stepskycal import *
 from sofia_redux.instruments.hawc.steps.stepskydip import *

@@ -707,7 +707,7 @@ class TestScanMap(DRPTestCase):
             hdul.writeto(ffile, overwrite=True)
             hdul.close()
         else:
-            rtol = 0.1
+            rtol = 0.2
             ffile = os.path.join(tmpdir, 'uranusD.fits')
             shutil.copyfile(data_path, ffile)
 

@@ -11,7 +11,9 @@ __all__ = ['calculate_coupling_increment', 'get_sample_points',
            'blank_sample_values', 'flag_out_of_range_coupling',
            'sync_map_samples', 'get_delta_sync_parms', 'flag_outside',
            'validate_pixel_indices', 'add_skydip_frames',
-           'get_source_signal']
+           'get_source_signal', 'calculate_total_power',
+           'calculate_polarized_power', 'calculate_polarized_fraction',
+           'calculate_polarization_angles']
 
 
 @nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
@@ -920,3 +922,351 @@ def add_skydip_frames(data, weight, signal_values, signal_weights,
             continue
         data[data_bin] += w * signal_values[frame]
         weight[data_bin] += w
+
+
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def calculate_polarized_power(p, p_weight, p_flag,
+                              q, q_weight, q_valid,
+                              u, u_weight, u_valid,
+                              bad_flag, debias=True,
+                              efficiency=1.0,
+                              allow_invalid=False):
+    """
+    Calculate the polarized power from the Q and U parameters.
+
+    De-biases the Rice distribution.  The following calculation is correct for
+    S/N > 4 according to Simmons & Steward 1984 as better approximations are
+    numerically unstable.
+
+    Parameters
+    ----------
+    p : numpy.ndarray (float)
+        The polarized power image to update in place with shape (shape,).
+    p_weight : numpy.ndarray (float)
+        The polarized power weights to update in place with shape (shape,).
+    p_flag : numpy.ndarray (int)
+        The polarized power flag array to update in place with shape (shape,).
+    q : numpy.ndarray (float)
+        The Q map values of shape (shape,).
+    q_weight : numpy.ndarray (float)
+        The Q map weights of shape (shape,).
+    q_valid : numpy.ndarray (bool)
+        The Q validity mask of shape (shape,) where `False` indicates that
+        a given datum is invalid.
+    u : numpy.ndarray (float)
+        The U map values of shape (shape,).
+    u_weight : numpy.ndarray (float)
+        The U map weights of shape (shape,).
+    u_valid : numpy.ndarray (bool)
+        The U validity mask of shape (shape,) where `False` indicates that
+        a given datum is invalid.
+    bad_flag : int
+        The integer flag to mark the P map with if the Q or U map is invalid
+        at a given datum.
+    debias : bool, optional
+        If `True`, apply Ricean debiasing.
+    efficiency : float, optional
+        The polarization efficiency.
+    allow_invalid : bool, optional
+        If `True`, does not pay attention to invalid Q/U map points.  This
+        is important if they have been marked as invalid due to previous
+        clipping operations that are irrelevant when creating the
+        total intensity map (a dependent of this polarization map).
+
+    Returns
+    -------
+    None
+    """
+    eff_2 = efficiency ** 2
+    i_eff_2 = 1.0 / eff_2
+
+    flat_p, flat_q, flat_u = p.flat, q.flat, u.flat
+    flat_pw, flat_qw, flat_uw = p_weight.flat, q_weight.flat, u_weight.flat
+    flat_pf, flat_qv, flat_uv = p_flag.flat, q_valid.flat, u_valid.flat
+    n = p.size
+    for i in range(n):
+        if not allow_invalid:
+            if not flat_qv[i] or not flat_uv[i]:
+                flat_pf[i] = bad_flag
+                continue
+        q2 = flat_q[i] * flat_q[i] * i_eff_2
+        u2 = flat_u[i] * flat_u[i] * i_eff_2
+        qw, uw = flat_qw[i] * eff_2, flat_uw[i] * eff_2
+
+        if qw == 0 or uw == 0:
+            flat_pf[i] = bad_flag
+            continue
+        sigma_2q = 1.0 / qw
+        sigma_2u = 1.0 / uw
+        q2u2 = q2 + u2
+        if q2u2 == 0:
+            flat_pf[i] = bad_flag
+            continue
+
+        sigma_2p = ((q2 * sigma_2q) + (u2 * sigma_2u)) / q2u2
+
+        if sigma_2p == 0:
+            flat_pf[i] = bad_flag
+            continue
+
+        pol_2 = q2 + u2
+        if debias:
+            pol_2 -= sigma_2p
+            if pol_2 < 0.0:
+                pol_2 = 0.0
+
+        flat_p[i] = np.sqrt(pol_2)
+        flat_pw[i] = 1.0 / sigma_2p
+        flat_pf[i] = 0
+
+
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def calculate_total_power(polarized_power, unpolarized_power,
+                          polarized_valid, unpolarized_valid,
+                          polarized_weight, unpolarized_weight,
+                          exposure, total_power,
+                          total_power_weight, total_power_flags,
+                          total_power_exposure, bad_flag,
+                          allow_invalid=False,
+                          add_np_weights=True
+                          ):  # pragma: no cover
+    """
+    Calculate the total power from polarized and unpolarized sources.
+
+    Parameters
+    ----------
+    polarized_power : numpy.ndarray (float)
+        The polarized power of shape (shape,).
+    unpolarized_power : numpy.ndarray (float)
+        The unpolarized power of shape (shape,).
+    polarized_valid : numpy.ndarray (bool)
+        A boolean mask of shape (shape,) where `False` indicates that the
+        polarized values of a given datum are invalid.
+    unpolarized_valid : numpy.ndarray (bool)
+        A boolean mask of shape (shape,) where `False` indicates that the
+        unpolarized values of a given datum are invalid.
+    polarized_weight : numpy.ndarray (float)
+        The polarized weight values of shape (shape,).
+    unpolarized_weight : numpy.ndarray (float)
+        The unpolarized weight values of shape (shape,).
+    exposure : numpy.ndarray (float)
+        The exposure times to propagate of shape (shape,).
+    total_power : numpy.ndarray (float)
+        The total power value array of shape (shape,).  Updated in-place.
+    total_power_weight : numpy.ndarray (float)
+        The total power weight array of shape (shape,).  Updated in-place.
+    total_power_flags : numpy.ndarray (int)
+        The total power flag array of shape (shape,).  Updated in-place.
+    total_power_exposure : numpy.ndarray (float)
+        The total power exposure time of shape (shape,).  Updated in-place.
+    bad_flag : int
+        The integer flag to mark the total power map with if the polarized or
+        unpolarized datum is invalid.  Of shape (shape,) and updated in-place.
+    allow_invalid : bool, optional
+        If `True`, does not pay attention to invalid Q/U map points.  This
+        is important if they have been marked as invalid due to previous
+        clipping operations that are irrelevant when creating the
+        total intensity map.
+    add_np_weights : bool, optional
+       If `True`, calculate I weights by aggregating N and P weights.
+       Otherwise, just use N weights (copy).
+
+    Returns
+    -------
+    None
+    """
+    p, pw = polarized_power.flat, polarized_weight.flat
+    n, nw = unpolarized_power.flat, unpolarized_weight.flat
+    e = exposure.flat
+
+    pv, nv = polarized_valid.flat, unpolarized_valid.flat
+    t, tw = total_power.flat, total_power_weight.flat
+    te, tf = total_power_exposure.flat, total_power_flags.flat
+
+    for i in range(polarized_power.size):
+        if not allow_invalid:
+            if not pv[i] or not nv[i]:
+                tf[i] = bad_flag
+                continue
+
+        if add_np_weights and pw[i] > 0 and nw[i] > 0:
+            # tw[i] = 1.0 / ((1.0 / nw[i]) + (1.0 / pw[i]))
+            tw[i] = nw[i] + pw[i]
+        else:
+            tw[i] = nw[i]
+
+        t[i] = n[i] + p[i]
+        te[i] = e[i]
+        tf[i] = 0
+
+
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def calculate_polarized_fraction(total_power, total_power_weight,
+                                 total_power_valid,
+                                 polarized, polarized_weight, polarized_valid,
+                                 exposure, fraction, fraction_weight,
+                                 fraction_exposure, fraction_flags,
+                                 bad_flag, accuracy):
+    """
+    Calculate the polarized fraction from the total and polarized power.
+
+    Parameters
+    ----------
+    total_power : numpy.ndarray (float)
+        The total power of shape (shape,).
+    total_power_weight : numpy.ndarray (float)
+        The total power weights of shape (shape,).
+    total_power_valid : numpy.ndarray (bool)
+        The total power validity mask of shape (shape,) where `False` marks
+        an invalid total power datum.
+    polarized : numpy.ndarray (float)
+        The polarized power of shape (shape,).
+    polarized_weight : numpy.ndarray (float)
+        The polarized power weights of shape (shape,).
+    polarized_valid : numpy.ndarray (bool)
+        The polarized power validity mask of shape (shape,) where `False` marks
+        an invalid polarized power datum.
+    exposure : numpy.ndarray (float)
+        The exposure times to propagate of shape (shape,).
+    fraction : numpy.ndarray (float)
+        The fractional polarized power of shape (shape,).  Updated in-place.
+    fraction_weight : numpy.ndarray (float)
+        The fractional polarized power weights of shape (shape,).  Updated
+        in-place.
+    fraction_exposure : numpy.ndarray (float)
+        The exposure times of shape (shape,).  Updated in-place.
+    fraction_flags : numpy.ndarray (int)
+        The fractional polarized power flags of shape (shape,).  Updated
+        in-place.
+    bad_flag : int
+        The flag to mark `fraction_flags` with if the fractional polarized
+        power is invalid for a given datum.
+    accuracy : float
+        The fractional accuracy limit below which the fractional power will be
+        marked as invalid.
+
+    Returns
+    -------
+    None
+    """
+    if accuracy == 0:
+        return
+    min_weight = 1.0 / (accuracy * accuracy)
+
+    t, p, e = total_power.flat, polarized.flat, exposure.flat
+    tw, pw = total_power_weight.flat, polarized_weight.flat
+    tv, pv = total_power_valid.flat, polarized_valid.flat
+    f, fw, ff = fraction.flat, fraction_weight.flat, fraction_flags.flat
+    fe = fraction_exposure.flat
+
+    for i in range(total_power.size):
+        if not tv[i] or not pv[i]:
+            ff[i] = bad_flag
+            continue
+
+        t_value = t[i]
+        if t_value == 0:
+            ff[i] = bad_flag
+            continue
+
+        p_value = p[i]
+        if p_value == 0:
+            ff[i] = bad_flag
+            continue
+
+        f[i] = p_value / t_value
+        p2 = p_value * p_value
+        t2 = t_value * t_value
+
+        tw_value = tw[i]
+        if tw_value == 0:
+            ff[i] = bad_flag
+            continue
+
+        pw_value = pw[i]
+        if pw_value == 0:
+            ff[i] = bad_flag
+            continue
+
+        weight = t2 / p2
+        weight /= (1.0 / (p2 * pw_value)) + (1.0 / (t2 * tw_value))
+        fw[i] = weight
+        if weight < min_weight:
+            ff[i] = bad_flag
+        else:
+            ff[i] = 0
+        fe[i] = e[i]
+
+
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def calculate_polarization_angles(polarized_power, fraction_valid,
+                                  stokes_q, stokes_q_weight,
+                                  stokes_u, stokes_u_weight,
+                                  angles, angles_weight, angles_flag,
+                                  bad_flag):  # pragma: no cover
+    """
+    Calculate the polarization angles.
+
+    Angles are calculated in degrees.
+
+    Parameters
+    ----------
+    polarized_power : numpy.ndarray (float)
+        The polarized power values of shape (shape,).
+    fraction_valid : numpy.ndarray (bool)
+        The fractional polarization validity mask of shape (shape,) where
+        `False` marks an invalid datum.
+    stokes_q : numpy.ndarray (float)
+        The Stokes Q parameter values of shape (shape,).
+    stokes_q_weight : numpy.ndarray (float)
+        The Stokes Q weight values of shape (shape,).
+    stokes_u : numpy.ndarray (float)
+        The Stokes U parameter values of shape (shape,).
+    stokes_u_weight : numpy.ndarray (float)
+        The Stokes U weight values of shape (shape,).
+    angles : numpy.ndarray (float)
+        The polarization angle in degrees of shape (shape,).  Updated in-place.
+    angles_weight : numpy.ndarray (float)
+        The polarization angle (degree) weights of shape (shape,).  Updated
+        in-place.
+    angles_flag : numpy.ndarray (int)
+        The angle map flags of shape (shape,).  Updated in-place.
+    bad_flag : int
+        The integer flag marking a bad datum in the angle map.
+
+    Returns
+    -------
+    None
+    """
+    p, fv = polarized_power.flat, fraction_valid.flat
+    q, qw = stokes_q.flat, stokes_q_weight.flat
+    u, uw = stokes_u.flat, stokes_u_weight.flat
+    a, aw, af = angles.flat, angles_weight.flat, angles_flag.flat
+
+    rad2deg = 180.0 / np.pi
+    weight_fac = 2.0 / rad2deg
+    weight_fac *= weight_fac
+
+    for i in range(polarized_power.size):
+        if not fv[i]:
+            af[i] = bad_flag
+            continue
+
+        p0 = p[i]
+        if p0 == 0:
+            af[i] = bad_flag
+            continue
+
+        qw0, uw0 = qw[i], uw[i]
+        if qw0 == 0 or uw0 == 0:
+            af[i] = bad_flag
+            continue
+
+        sigma_2q, sigma_2u = 1.0 / qw0, 1.0 / uw0
+        q0, u0 = q[i], u[i]
+        a[i] = np.rad2deg(0.5 * np.arctan2(u0, q0))
+        q0, u0 = q[i], u[i]
+        weight = p0 * p0 * p0 * p0 * weight_fac
+        weight /= (sigma_2u * q0 * q0) + (sigma_2q * u0 * u0)
+        aw[i] = weight
+        af[i] = 0

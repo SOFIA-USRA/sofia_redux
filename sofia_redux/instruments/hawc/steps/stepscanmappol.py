@@ -20,7 +20,7 @@ __all__ = ['StepScanMapPol']
 
 class StepScanMapPol(StepMOParent):
     """
-    Reconstruct an image from scanning polarimetry data.
+    Reconstruct R/T images from scanning polarimetry data.
 
     This step requires that scanning polarimetry data are taken with
     four HWP angles, one per input file. Sets of data are identified
@@ -29,6 +29,18 @@ class StepScanMapPol(StepMOParent):
     input file to.  This step assembles them into a single file with
     R0 and T0 extensions (DATA, ERROR, and EXPOSURE) for each HWP angle.
     One output file is produced for each set of 4 HWP angles.
+
+    NOTE:
+    In HAWC DRP v3.3.0, the functionality in this step, as well as
+    the scanstokes, ip, and rotate steps, were moved to the scan module
+    for more direct reconstruction of the Stokes I, Q, and U maps.
+    See `sofia_redux.instruments.hawc.steps.StepScanPolMerge` for more
+    information on the new interface. This step is preserved for
+    comparison and diagnostic reductions and may be invoked directly
+    via the 'legacy_scanpol' pipeline mode, defined in the default pipeline
+    configuration file (hawc/data/config/pipeconf.cfg). This mode is also
+    left as the default reduction mode, since the newer method is largely
+    untested.
     """
     def setup(self):
         """
@@ -433,7 +445,7 @@ class StepScanMapPol(StepMOParent):
             fnum = {'ALL': [v[0] for v in fnum.values()]}
 
         # collect input options in dict
-        kwargs = {}
+        kwargs = {'blacklist': 'polarization'}
         options = {}
         if not self.getarg('save_intermediate'):
             kwargs['write'] = {'source': False}

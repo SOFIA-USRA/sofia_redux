@@ -16,6 +16,7 @@ from sofia_redux.scan.coordinate_systems.projector.astro_projector import \
     AstroProjector
 from sofia_redux.scan.coordinate_systems.grid.spherical_grid import \
     SphericalGrid
+from sofia_redux.scan.flags.polarimetry_flags import PolarModulation
 
 __all__ = ['AstroIntensityMap']
 
@@ -343,7 +344,10 @@ class AstroIntensityMap(AstroData2D):
         index : Index2D
             The peak (x, y) coordinate.
         """
-        sign = self.configuration.get_sign('source.sign')
+        if self.signal_mode not in [PolarModulation.Q, PolarModulation.U]:
+            sign = self.configuration.get_sign('source.sign')
+        else:
+            sign = 0
         s2n = self.get_significance()
 
         if sign > 0:
@@ -425,6 +429,53 @@ class AstroIntensityMap(AstroData2D):
         else:
             return peak_source
 
+    # def update_mask(self, blanking_level=None, min_neighbors=2):
+    #     """
+    #     Update the map mask based on significance levels and valid neighbors.
+    #
+    #     If a blanking level is supplied, significance values above or equal to
+    #     the blanking level will be masked.
+    #
+    #     Parameters
+    #     ----------
+    #     blanking_level : float, optional
+    #         The significance level used to mark the map.  If not supplied,
+    #         significance is irrelevant.  See above for more details.
+    #     min_neighbors : int, optional
+    #         The minimum number of neighbors including the pixel itself.
+    #         Therefore, the default of 2 excludes single pixels as this would
+    #         require a single valid pixel and one valid neighbor.
+    #
+    #     Returns
+    #     -------
+    #     None
+    #     """
+    #     if blanking_level is None or np.isnan(blanking_level):
+    #         blanking_range = np.array([-np.inf, np.inf])
+    #         check_blanking = False
+    #     else:
+    #         blanking_range = np.array([-blanking_level, blanking_level],
+    #                                   dtype=float)
+    #         sign = self.configuration.get_sign(self.source_option('sign'))
+    #         check_blanking = True
+    #         if sign < 0:
+    #             blanking_range[1] = np.inf
+    #         elif sign > 0:
+    #             blanking_range[0] = -np.inf
+    #
+    #     neighbors = self.map.get_neighbors()
+    #     valid = neighbors >= min_neighbors  # neighbors includes center pix
+    #     valid &= self.map.valid
+    #
+    #     if check_blanking:
+    #         significance = self.map.significance_values()
+    #         blank = significance < blanking_range[0]
+    #         blank |= significance >= blanking_range[1]
+    #         valid &= blank
+    #
+    #     self.map.set_flags(self.mask_flag, valid)
+    #     self.map.unflag(self.mask_flag, ~valid)
+
     def update_mask(self, blanking_level=None, min_neighbors=2):
         """
         Update the map mask based on significance levels and valid neighbors.
@@ -460,17 +511,19 @@ class AstroIntensityMap(AstroData2D):
                 blanking_range[0] = -np.inf
 
         neighbors = self.map.get_neighbors()
-        mask = neighbors >= min_neighbors  # neighbors includes center pix
-        mask &= self.map.valid
+        valid = neighbors >= min_neighbors  # neighbors includes center pix
+        valid &= self.map.valid
 
         if check_blanking:
             significance = self.map.significance_values()
             blank = significance < blanking_range[0]
             blank |= significance >= blanking_range[1]
-            mask &= blank
-
-        self.map.set_flags(self.mask_flag, mask)
-        self.map.unflag(self.mask_flag, ~mask)
+            blank &= valid
+            self.map.set_flags(self.mask_flag, blank)
+            self.map.unflag(self.mask_flag, ~blank)
+        else:
+            self.map.set_flags(self.mask_flag, ~valid)
+            self.map.unflag(self.mask_flag, valid)
 
     def merge_mask(self, other_map):
         """
@@ -778,8 +831,8 @@ class AstroIntensityMap(AstroData2D):
         None
         """
         super().process_final()
-        if not (self.configuration.get_bool('extended')
-                | self.configuration.get_bool('deep')):
+        if not (self.configuration.get_bool('extended') |
+                self.configuration.get_bool('deep')):
             if self.enable_level:
                 self.map.level(robust=True)
             if self.enable_weighting:

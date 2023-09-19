@@ -246,10 +246,8 @@ class Pipeline(ABC):
         """
         renewed_source = self.scan_source.copy()
         renewed_source.renew()
-        renewed_source.reduction = None
-        renewed_source.scans = None
-        renewed_source.hdul = None
-        renewed_source.info = None
+        renewed_source.purge_artifacts()
+
         temp_directory = tempfile.mkdtemp('_sofscan_update_source_pipeline')
 
         n_scans = len(self.scans)
@@ -314,7 +312,7 @@ class Pipeline(ABC):
             source = cloudpickle.load(f)
 
         source.set_info(scan.info)
-        source.scans = [scan]
+        source.set_scans([scan])
 
         for integration in scan.integrations:
             if integration.has_option('jackknife'):
@@ -332,14 +330,12 @@ class Pipeline(ABC):
 
         # Now need to save for later
         update_file = os.path.join(temp_directory, f'source_update_{block}.p')
-        source.info = None
-        source.reduction = None
-        source.scans = None
+        source.purge_artifacts()
         with open(update_file, 'wb') as f:
             cloudpickle.dump(source, f)
-        source.set_info(scan.info)
-        source.scans = [scan]
 
+        source.set_info(scan.info)
+        source.set_scans([scan])
         source.process_scan(scan)
         source.post_process_scan(scan)
 
@@ -350,8 +346,7 @@ class Pipeline(ABC):
 
         # Remove all references
         scan.info.set_parent(scan)
-        source.info = None
-        source.scans = None
+        source.purge_artifacts()
         del source
         del scan
         return update_file

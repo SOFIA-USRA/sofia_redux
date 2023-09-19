@@ -1054,7 +1054,7 @@ class Reduction(ReductionVersion):
             elif mode == 'ops':
                 self.parallel_scans = 1
                 self.parallel_tasks = self.max_jobs
-            else:
+            else:  # hybrid
                 self.parallel_scans = int(np.clip(n_scans, 1, self.max_jobs))
                 self.parallel_tasks = int(np.clip(
                     self.max_jobs // self.parallel_scans, 1, self.max_jobs))

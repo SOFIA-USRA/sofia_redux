@@ -434,8 +434,6 @@ The errors and covariances become:
 
 .. math:: \sigma_{Q'U'} = cos(\alpha)sin(\alpha)(\sigma_Q^2 - \sigma_U^2) + (sin^2(\alpha) - cos^2(\alpha)) \sigma_{QU}.
 
-.. _calibrate:
-
 Correct for Atmospheric Opacity
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -456,6 +454,8 @@ altitude and zenith angle of each observation is calculated from the fit
 coefficients. The pipeline applies this relative opacity correction
 factor directly to the flux in the Stokes I, Q, and U images, and
 propagates it into the corresponding error and covariance images.
+
+.. _calibrate:
 
 Calibrate Flux
 ~~~~~~~~~~~~~~
@@ -1213,6 +1213,13 @@ file per file group, saved with PRODTYPE = *scanmap* (file name code SMP).
 These files contain an image of the source map in units of detector counts,
 and several other extensions.
 
+Since the scan map step sets the background level for a scan image from
+the median of the full map, the zero-level may not be correctly set
+if there is significant diffuse emission across the map.  In this case, the
+pipeline may optionally correct the zero-level the scan image prior to
+flux calibration.  It does so by identifying a sky region with no emission
+and subtracting the mean or median level in this region from the image.
+
 The flux calibrated map file is saved as the *calibrate* product type
 (CAL).  The primary HDU in the CAL file contains the flux image in
 units of Jy/pixel. The first extension (EXTNAME = EXPOSURE)
@@ -1231,42 +1238,30 @@ reduction algorithms, described above.
 
 Scan-Pol observations are performed in a sequence of four scans, where
 each scan has a different HWP position angle in the following sequence:
-5 degrees, 50 degrees, 27.5 degrees, and 72.5 degrees. This sequence is
-called a 'set' hereafter. The pipeline sorts observations into sets
-and runs the scan map reconstruction algorithm on each set, following the
-procedure in :ref:`scanmap`. For Scan-Pol observations, the pipeline produces two images
-per scan per HWP angle associated with the R and T arrays. Thus, for a
-single set, 8 images are generated, one for each of R0 and T0 at each angle.
-The pipeline creates all maps in the same output coordinate system and
-pixel scale, so that they are all registered to each other.
+5 degrees, 50 degrees, 27.5 degrees, and 72.5 degrees. The scan map algorithm
+uses all 4 input HWP angles from the R and T arrays to compute Stokes parameters
+from the raw timestream on the fly, following the same method as in the
+Nod-Pol :ref:`stokes` step.  Instrumental polarization correction
+and Stokes parameter rotation are performed immediately before combining
+the data from multiple scans into a final map, following the method in the
+:ref:`ip` and :ref:`rotate` steps.
 
-Since the scan map step sets the background level independently for each
-scan image from the median of the full map, there may be inconsistencies
-in the zero-level between the images, if there is significant diffuse
-emission across the map.  In this case, the pipeline may optionally correct
-the zero-level in each image by identifying a sky region with no emission,
-and subtracting the median level in this region from each image.  The same
-region is used for each HWP angle and subarray, so that all images are set
-independently to a common zero level.
 
-After zero-level correction, the R and T arrays are directly added
-and subtracted at each HWP angle, and combined as described above to
-generate Stokes I, Q, and U images (the :ref:`stokes` step).  The output
-data format is the same as for the *stokes* product for the Nod-Pol pipeline.
+The output data format from the scan map step is the same as for the
+*stokes* product for the Nod-Pol pipeline, containing Stokes I, Q, and
+U images with their associated errors and covariances.  As for scan images,
+the zero-level may be corrected by identifying a background region in
+the Stokes I image, then using the same region to correct all three Stokes
+maps.
 
-After Stokes calculation, the following steps are also performed,
-in the way described above for the Nod-Pol pipeline:
-
-- :ref:`ip`
-- :ref:`rotate`
-- :ref:`calibrate`
-- :ref:`merge_images`
-- :ref:`vectors`
+After Stokes calculation, the :ref:`calibrate` and :ref:`vectors` steps
+are also performed, in the way described above for the Nod-Pol pipeline.
 
 Note that the scan map pipeline step performs opacity and background level
-corrections on individual scans and resamples data into sky coordinates with
-full WCS corrections, as part of its standard processing, so these
-steps from the Nod-Pol pipeline are not applied.
+corrections on individual scans, resamples data into sky coordinates with
+full WCS corrections, corrects for instrumental polarization, and rotates
+the Stokes parameters as part of its standard processing, so these
+steps from the Nod-Pol pipeline are not applied separately.
 
 The final output product is a polarization map, the same as is
 produced by the Nod-Pol pipeline.
@@ -1343,8 +1338,8 @@ header, under the keyword PRODTYPE. By default, for Nod-Pol mode, the
 *demodulate*, *opacity*, *calibrate*, *merge*, and *polmap* products
 are saved. For Chop-Nod mode, the *demodulate*, *opacity*, *merge*,
 and *calibrate* products are saved. For Scan mode, the *scanmap*
-and *calibrate* products are saved.  For Scan-Pol mode, the *scanmappol*,
-*calibrate*, *merge*, and *polmap* products are saved.
+and *calibrate* products are saved.  For Scan-Pol mode, the *scanpolmerge*,
+*calibrate*, and *polmap* products are saved.
 
 For polarization data, the pipeline also generates two auxiliary products: a
 polarization map image in PNG format, with polarization vectors plotted
@@ -1353,7 +1348,7 @@ format, for displaying with FITS images. These products are alternate
 representations of the data in the FINAL POL DATA table in the
 polarization map (PMP) FITS file. Similarly, for imaging data, a PNG
 quick-look preview image is generated as a final step in the pipeline.
-These auxiliary products may be distrubuted to observers separately from
+These auxiliary products may be distributed to observers separately from
 the FITS file products.
 
 Data products that contain multiple AORs or that contain observations from
@@ -1459,21 +1454,12 @@ products can be multi-mission:
 .. _scanpol_products:
 .. table:: Scan-Pol mode intermediate and final pipeline data products
 
-   +--------------------+-------------------------------------+------------+------------+--------------+---------+
-   | Step               | Description                         | PRODTYPE   | PROCSTAT   | Identifier   | Saved   |
-   +====================+=====================================+============+============+==============+=========+
-   | Construct Scan Map | Source model iteratively derived    | scanmappol | LEVEL\_2   | SMP          | Y       |
-   +--------------------+-------------------------------------+------------+------------+--------------+---------+
-   | Compute Stokes     | Stokes parameters calculated        | stokes     | LEVEL\_2   | STK          | N       |
-   +--------------------+-------------------------------------+------------+------------+--------------+---------+
-   | Subtract IP        | Instrumental polarization removed   | ip         | LEVEL\_2   | IPS          | N       |
-   +--------------------+-------------------------------------+------------+------------+--------------+---------+
-   | Rotate Coordinates | Polarization angle corrected to sky | rotate     | LEVEL\_2   | ROT          | N       |
-   +--------------------+-------------------------------------+------------+------------+--------------+---------+
-   | Calibrate Flux     | Flux calibrated to physical units   | calibrate  | LEVEL\_3   | CAL          | Y       |
-   +--------------------+-------------------------------------+------------+------------+--------------+---------+
-   | Merge Images       | HWP sets merged to single map       | merge      | LEVEL\_3   | MRG          | Y       |
-   +--------------------+-------------------------------------+------------+------------+--------------+---------+
-   | Compute Vectors    | Polarization vectors calculated     | polmap     | LEVEL\_4   | PMP          | Y       |
-   +--------------------+-------------------------------------+------------+------------+--------------+---------+
-
+   +-----------------------+-------------------------------------+--------------+------------+--------------+---------+
+   | Step                  | Description                         | PRODTYPE     | PROCSTAT   | Identifier   | Saved   |
+   +=======================+=====================================+==============+============+==============+=========+
+   | Construct Stokes Maps | Source model iteratively derived    | scanpolmerge | LEVEL\_2   | SPR          | Y       |
+   +-----------------------+-------------------------------------+--------------+------------+--------------+---------+
+   | Calibrate Flux        | Flux calibrated to physical units   | calibrate    | LEVEL\_3   | CAL          | Y       |
+   +-----------------------+-------------------------------------+--------------+------------+--------------+---------+
+   | Compute Vectors       | Polarization vectors calculated     | polmap       | LEVEL\_4   | PMP          | Y       |
+   +-----------------------+-------------------------------------+--------------+------------+--------------+---------+

@@ -25,7 +25,7 @@ from sofia_redux.scan.signal import signal_numba_functions as snf
 __all__ = ['FifiLsInfo', 'normalize_scan_coordinates', 'correct_for_gain']
 
 
-@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+@nb.njit(cache=True, fastmath=False)
 def normalize_scan_coordinates(ra, dec, x, y, z, data, error, valid, flags,
                                channel_valid):  # pragma: no cover
     """
@@ -95,7 +95,7 @@ def normalize_scan_coordinates(ra, dec, x, y, z, data, error, valid, flags,
             d_out[:i], e_out[:i])
 
 
-@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+@nb.njit(cache=True, fastmath=False)
 def correct_for_gain(data, frame_valid, frame_gains, sync_gains,
                      channel_flags, sample_flags, source_blank_flag
                      ):  # pragma: no cover

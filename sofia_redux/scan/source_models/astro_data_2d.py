@@ -430,8 +430,8 @@ class AstroData2D(AstroModel2D):
         if self.enable_bias and self.has_option('clip'):
             clip_level = self.configuration.get_float('clip')
             self.add_process_brief(f'(clip:{clip_level}) ')
-            sign = self.configuration.get_sign('source.sign', default=0)
             s2n_reject = Range(-clip_level, clip_level)
+            sign = self.configuration.get_sign('source.sign', default=0)
             if sign > 0:
                 s2n_reject.min = -np.inf
             elif sign < 0:

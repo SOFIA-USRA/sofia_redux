@@ -1,11 +1,14 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 from astropy import log, units
+from astropy.io import fits
 from astropy.time import Time
 import numpy as np
 
 from sofia_redux.scan.custom.hawc_plus.flags.frame_flags import (
     HawcPlusFrameFlags)
+from sofia_redux.scan.custom.hawc_plus.flags.polarimetry_flags import \
+    HawcPlusPolarModulation
 from sofia_redux.scan.custom.hawc_plus.frames import \
     hawc_plus_frame_numba_functions as hnf
 from sofia_redux.scan.custom.sofia.frames.frames import SofiaFrames
@@ -45,6 +48,9 @@ class HawcPlusFrames(SofiaFrames):
         self.los = None
         self.roll = None
         self.status = None
+        self.unpolarized_gain = None
+        self.q = None
+        self.u = None
 
         # Special 2-D
         self.jump_counter = None
@@ -87,7 +93,10 @@ class HawcPlusFrames(SofiaFrames):
             'hwp_angle': 0.0 * units.Unit('deg'),
             'los': 0.0 * units.Unit('deg'),
             'roll': 0.0 * units.Unit('deg'),
-            'status': 0
+            'status': 0,
+            'unpolarized_gain': 0.0,  # polarization parameters
+            'q': 0.0,
+            'u': 0.0
         })
         return fields
 
@@ -122,6 +131,9 @@ class HawcPlusFrames(SofiaFrames):
         fields.add('hwp_angle')
         fields.add('mjd')
         fields.add('mce_serial')
+        fields.add('unpolarized_gain')
+        fields.add('q')
+        fields.add('u')
         return fields
 
     @property
@@ -511,6 +523,272 @@ class HawcPlusFrames(SofiaFrames):
             self.dark_correct()
 
         super().validate()
+        self.validate_polarimetry()
+
+    def get_polarization_theta(self, offset=5 * units.Unit('degree'),
+                               telvpa_from_header=False):
+        """
+        Return the polarization theta angle from HawcPlusFrames.
+
+        where::
+            theta = vpa + (2 * (hwp_zero - offset)) + grid_angle
+
+        The vpa is taken from the TELVPA key in the header if
+        `telvpa_from_header`=`True`, or the instrument vpa otherwise.
+        `hwp_zero` is taken from HWPINIT in the header if present and
+        commanded, or the calculated HWP angle in the frame data.  The
+        grid_angle is provided in the configuration from the
+        polarization.grid_angle parameter.
+
+        Parameters
+        ----------
+        offset : units.Quantity, optional
+            The offset to apply to the correction.
+        telvpa_from_header : bool, optional
+            If `True`, get the telescope VPA from the header rather than using
+            the actual instrument VPA.
+
+        Returns
+        -------
+        units.Quantity
+        """
+        degree = units.Unit('degree')
+        half = 180 * degree
+        full = 360 * degree
+        header = self.configuration.fits.header
+        if header is None:
+            header = fits.Header()
+
+        hwp_angle = self.hwp_angle - self.telescope_vpa
+        hwp_init = header.get('HWPINIT', -9999) * degree
+        hwp_zero = header.get('HWPSTART', -9999) * degree
+        hwp_tolerance = self.configuration.get_float(
+            'polarization.hwp_tolerance', 5.0) * degree
+        zero_option = self.configuration.get_string(
+            'polarization.hwp_zero', 'actual').lower().strip()
+        grid_angle = self.configuration.get_float(
+            'polarization.gridangle', default=0.0) * degree
+
+        mean_hwp = np.nanmean(hwp_init)
+        mean_zero = np.nanmean(hwp_zero)
+
+        if telvpa_from_header and 'TELVPA' in header:
+            vpa = header.get('TELVPA') * degree
+        else:
+            vpa = self.instrument_vpa
+
+        if zero_option == 'actual':
+            log.warning("HWP method: actual")
+            hwp_zero = offset
+        elif zero_option == 'model':
+            log.warning("HWP method: model")
+            hwp_zero = hwp_angle
+        elif zero_option == 'commanded':
+            log.warning("HWP method: commanded")
+            if hwp_zero == -9999 * degree:
+                log.error("HWPSTART not in header.  Cannot apply commanded "
+                          "HWP ZERO option")
+                hwp_zero = offset
+            else:
+                if hwp_init == -9999 * degree:
+                    hwp_init = np.nanmean(hwp_angle)
+                if hwp_zero == -9999 * degree:
+                    hwp_zero = hwp_init
+                if hwp_init > half:
+                    hwp_init -= full
+                if hwp_zero > half:
+                    hwp_init -= full
+                if abs(hwp_zero - hwp_init) > hwp_tolerance:
+                    msg = (f'Initial HWP angle is above the tolerance of '
+                           f'{hwp_tolerance}.  HWP zero: {mean_zero}, '
+                           f'HWP init: {mean_hwp}.')
+                    log.warning(msg)
+                hwp_zero = hwp_init
+        else:
+            raise ValueError(f"Invalid HWP zero option: {zero_option}")
+
+        log.info(f"Determining polarization angle using offset={offset} "
+                 f"hwp_zero={hwp_zero} grid_angle={grid_angle}")
+
+        horizontal = 2 * (hwp_zero - offset)
+        return vpa, horizontal, grid_angle
+
+    # For testing...
+    # def validate_polarimetry(self):
+    #     """
+    #     Populate the polarimetry values in the frame data.
+    #
+    #     Returns
+    #     -------
+    #     None
+    #     """
+    #     degree = units.Unit('degree')
+    #     vpa, horizontal, grid_angle = self.get_polarization_theta()
+    #     eta_qh, eta_uh = self.get_instrumental_polarization()
+    #
+    #     # Fixed
+    #     horizontal_polarization = False
+    #     apply_analyzer_position = True
+    #     analyzer_difference_angle = -45 * degree
+    #     incidence_phase = 90 * degree
+    #     counter_rotating = False
+    #
+    #     # Logic
+    #     cos_i = np.cos(grid_angle).decompose().value
+    #     if counter_rotating:
+    #         horizontal *= -1
+    #
+    #     v_plate_angle = grid_angle + horizontal
+    #
+    #     projected = incidence_phase + np.arctan2(
+    #         np.sin(v_plate_angle - incidence_phase),
+    #         cos_i * np.cos(v_plate_angle - incidence_phase)
+    #     )
+    #
+    #     v_pol_angle = (4 * projected)
+    #     if apply_analyzer_position:
+    #         v_pol_angle += 2 * analyzer_difference_angle
+    #
+    #     qh = np.cos(-v_pol_angle)
+    #     uh = np.sin(-v_pol_angle)
+    #
+    #     if isinstance(qh, units.Quantity):
+    #         qh = qh.decompose().value
+    #         uh = uh.decompose().value
+    #
+    #     if horizontal_polarization:
+    #         self.q = qh
+    #         self.u = uh
+    #         self.unpolarized_gain = 1.0 + (qh * eta_qh) + (uh * eta_uh)
+    #     else:  # This is applying VPA (telescope_vpa)
+    #         cos2pa = (self.cos_pa * self.cos_pa) - (self.sin_pa * self.sin_pa)
+    #         sin2pa = (2 * self.sin_pa * self.cos_pa)
+    #         self.q = (cos2pa * qh) - (sin2pa * uh)
+    #         self.u = (sin2pa * qh) + (cos2pa * uh)
+    #         eta_q = (cos2pa * eta_qh) - (sin2pa * eta_uh)
+    #         eta_u = (sin2pa * eta_qh) + (cos2pa * eta_uh)
+    #         self.unpolarized_gain = 1.0 + (self.q * eta_q) + (self.u * eta_u)
+
+    def validate_polarimetry(self):
+        """
+        Populate the polarimetry values in the frame data.
+
+        Returns
+        -------
+        None
+        """
+        degree = units.Unit('degree')
+        vpa, horizontal, grid_angle = self.get_polarization_theta()
+        eta_qh, eta_uh = self.get_instrumental_polarization()
+
+        # Fixed
+        horizontal_polarization = False
+        analyzer_difference_angle = -45 * degree
+        incidence_phase = 90 * degree
+
+        # Logic
+        cos_i = np.cos(grid_angle).decompose().value
+        v_plate_angle = grid_angle + horizontal
+        projected = incidence_phase + np.arctan2(
+            np.sin(v_plate_angle - incidence_phase),
+            cos_i * np.cos(v_plate_angle - incidence_phase)
+        )
+        v_pol_angle = (4 * projected) + (2 * analyzer_difference_angle)
+        qh = np.cos(-v_pol_angle)
+        uh = np.sin(-v_pol_angle)
+
+        if isinstance(qh, units.Quantity):
+            qh = qh.decompose().value
+            uh = uh.decompose().value
+
+        if horizontal_polarization:
+            self.q = qh
+            self.u = uh
+            self.unpolarized_gain = 1.0 + (qh * eta_qh) + (uh * eta_uh)
+        else:  # This is applying VPA (telescope_vpa)
+            cos2pa = (self.cos_pa * self.cos_pa) - (self.sin_pa * self.sin_pa)
+            sin2pa = (2 * self.sin_pa * self.cos_pa)
+            self.q = (cos2pa * qh) - (sin2pa * uh)
+            self.u = (sin2pa * qh) + (cos2pa * uh)
+            eta_q = (cos2pa * eta_qh) - (sin2pa * eta_uh)
+            eta_u = (sin2pa * eta_qh) + (cos2pa * eta_uh)
+            self.unpolarized_gain = 1.0 + (self.q * eta_q) + (self.u * eta_u)
+
+    def get_instrumental_polarization(self):
+        """
+        Return the instrument polarization.
+
+        Returns
+        -------
+        q_inst, u_inst : float, float
+        """
+        method = self.configuration.get_string(
+            'polarization.fileip', 'none')
+
+        if method.lower() in ['none', 'uniform']:
+            q_inst = self.configuration.get_float('polarization.qinst', 0.0)
+            u_inst = self.configuration.get_float('polarization.uinst', 0.0)
+            return q_inst, u_inst
+
+        return self.read_instrumental_polarization_file(method)
+
+    def read_instrumental_polarization_file(self, filename):
+        """
+        Read an instrumental polarization file.
+
+        This will not currently work as the instrumental polarization needs
+        to be applied in channel space, not frame space.  This makes things
+        fairly complicated.  Uniform instrumental polarization is currently
+        applied to the unpolarized frame gain by::
+
+          unpolarized_gain = 1 + (q * qi) + (u * ui)
+
+        where q and u are the Q/U gains, and qi/ui are the respective
+        uniform instrumental polarization factors.
+
+        This will need to be changed to unpolarized_gain = 1
+
+        For the N Stokes map only, we will then need to apply the instrumental
+        polarization at a few places::
+
+          1) AstroModel2D.sync_integration
+          2) AstroIntensityMap.calculate_coupling
+          3) AstroModel2D.add_frames_from_integration
+          4) AstroModel2D.sync_pixels
+
+        However, this needs to be applied as a cross-product of the frame
+        gains with the channel gains.  The correction for instrumental
+        polarization will need to add (q * qi) + (u * uh) to the input gains
+        in the above methods where q/u are in frame space, and qi/ui are in
+        channel space.
+
+        There is not a pretty way to do this, so it might be worth considering
+        creating a child class of AstroIntensityMap for the Stokes parameter
+        maps to keep these changes away from the main classes.
+
+        Parameters
+        ----------
+        filename : str
+
+        Returns
+        -------
+        q_inst, u_inst : (float, float) or (np.ndarray, np.ndarray)
+        """
+        raise NotImplementedError("This needs to be built somewhere else")
+        # if os.path.isfile(filename):
+        #     ip_file = filename
+        # else:
+        #     filenames = self.configuration.find_configuration_files(filename)
+        #     if len(filenames) == 0:
+        #         log.warning(f"Instrumental polarization file {filename} not "
+        #                     f"found.  Will not correct for instrumental "
+        #                     f"polarization.")
+        #         return 0.0, 0.0
+        #     # Get the highest_priority
+        #     ip_file = filenames[-1]
+        #
+        # df = pd.read_csv(ip_file, names=['ch', 'qi', 'qei', 'ui', 'uie'],
+        #                  comment='#', delimiter=r'\s+')
 
     def dark_correct(self):
         """
@@ -585,3 +863,39 @@ class HawcPlusFrames(SofiaFrames):
         # Note: due to a bug the original added on the smoothed value to the
         # existing values (not replicated here)
         self.hwp_angle = low_res_hwp
+
+    def get_source_gain(self, mode_flag):
+        """
+        Return the source gain.
+
+        The basic frame class will only return a result for the TOTAL_POWER
+        flag.  Polarimetry flags should derive from the PolarModulation class.
+
+        Parameters
+        ----------
+        mode_flag : FrameFlagTypes or str or int or enum.Enum
+            The gain mode flag type.
+
+        Returns
+        -------
+        gain : numpy.ndarray (float)
+            The source gains.
+        """
+        gain = super().get_source_gain(self.flagspace.flags.TOTAL_POWER)
+
+        n_gain = HawcPlusPolarModulation.get_n_gain()
+        qu_gain = HawcPlusPolarModulation.get_qu_gain()
+
+        if mode_flag == HawcPlusPolarModulation.N:
+            return self.unpolarized_gain * gain * n_gain
+        elif mode_flag == HawcPlusPolarModulation.Q:
+            return self.q * gain * qu_gain
+        elif mode_flag == HawcPlusPolarModulation.U:
+            return self.u * gain * qu_gain
+        else:
+            flag = self.flagspace.convert_flag(mode_flag)
+            if flag == self.flagspace.flags.TOTAL_POWER:
+                return gain
+            else:  # pragma: no cover
+                # maybe for future development
+                return super().get_source_gain(mode_flag)

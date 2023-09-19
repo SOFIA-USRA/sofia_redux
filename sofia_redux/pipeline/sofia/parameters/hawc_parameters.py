@@ -483,6 +483,24 @@ class HAWCParameters(Parameters):
         # save data
         self.current[step_index].set_value("save", True)
 
+    def scanpolmerge(self, step_index):
+        """
+        Modify parameters for the scanmappol step.
+
+        Don't load data into memory: scanmap loads it separately.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        """
+        # never load data -- it will do it itself.
+        self.current[step_index].set_value("load", False)
+
+        # save and display data
+        self.current[step_index].set_value("save", True)
+        self.current[step_index].set_value("display", True)
+
     def skycal(self, step_index):
         """
         Modify parameters for the skycal step.

@@ -9,6 +9,15 @@ for more information.
 For previously processed data, check the PIPEVERS keyword in the FITS
 header to determine the pipeline version used.
 
+HAWC DRP v3.3.0dev0
+~~~~~~~~~~~~~~~~~~~
+*User manual: Rev. M*
+
+- Revised scan-pol algorithms to reduce all scans together within the
+  scan map step, directly producing rotation-corrected Stokes maps from
+  the raw timestream data.
+
+
 HAWC DRP v3.2.0 (2022-12-20)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *User manual: Rev. L*

@@ -16,6 +16,7 @@ from sofia_redux.scan.channels.modality.coupled_modality import (
 from sofia_redux.scan.channels.modality.correlated_modality import (
     CorrelatedModality)
 from sofia_redux.scan.channels.modality.modality import Modality
+from sofia_redux.scan.flags.polarimetry_flags import PolarModulation
 
 __all__ = ['HawcPlusChannels']
 
@@ -528,3 +529,40 @@ class HawcPlusChannels(SofiaCamera):
             return self.band_id
         else:
             return super().get_table_entry(name)
+
+    def get_source_gains(self, filter_corrected=True, signal_mode=None):
+        """
+        Return the source gains.
+
+        The source gains are taken from the coupling data.  If gains are not
+        fixed (as determined by "source.fixedgains"), gains are multiplied by
+        the channel gains.  It will also be multiplied by the source filter
+        if `filter_corrected` is `True`.
+
+        Parameters
+        ----------
+        filter_corrected : bool, optional
+            Apply source filtering.
+        signal_mode : enum.Enum, optional
+            A flag for optional processing in certain cases such as
+            polarimetry.
+
+        Returns
+        -------
+        gains : numpy.ndarray (float)
+            The source gains.
+        """
+        return super().get_source_gains(filter_corrected=filter_corrected)
+
+        # gains = super().get_source_gains(filter_corrected=filter_corrected)
+        # if (signal_mode == PolarModulation.Q or
+        #         signal_mode == PolarModulation.U):
+        #     if self.subarray_groups is None:
+        #         return gains
+        #     invert = np.full(self.size, False)
+        #     for group in self.subarray_groups:
+        #         if group.name.lower().startswith('t'):
+        #             invert[group.indices] = True
+        #     gains[invert] *= -1
+        #
+        # return gains

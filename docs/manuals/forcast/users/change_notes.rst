@@ -316,7 +316,7 @@ FORCAST Redux v1.0.6 (2015-06-26)
 Imaging
 ^^^^^^^
 - Fix for negative values in variance plane.
-- Stop re-doing photometry for standards when applyin calibration factors.
+- Stop re-doing photometry for standards when applying calibration factors.
 
 FORCAST Redux v1.0.5 (2015-05-27)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

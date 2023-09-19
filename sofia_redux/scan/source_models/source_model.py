@@ -1,5 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-
+import enum
 from abc import ABC, abstractmethod
 from astropy import log, units
 from astropy.time import Time
@@ -47,6 +47,7 @@ class SourceModel(ABC):
         self.enable_bias = True
         self.process_brief = None
         self.reduction = reduction
+        self._signal_mode = None
         self.set_info(info)
 
     def copy(self, with_contents=True):
@@ -246,7 +247,27 @@ class SourceModel(ABC):
         -------
         enum
         """
-        return self.frame_flagspace.flags.TOTAL_POWER
+        if self._signal_mode is None:
+            return self.frame_flagspace.flags.TOTAL_POWER
+        return self._signal_mode
+
+    @signal_mode.setter
+    def signal_mode(self, value):
+        """
+        Set a different source signal mode.
+
+        Parameters
+        ----------
+        value : enum.Enum or None
+            If `None`, will default to the TOTAL_POWER mode.
+
+        Returns
+        -------
+        None
+        """
+        if not isinstance(value, enum.Enum) and value is not None:
+            raise TypeError(f'Must pass {enum.Enum} or None to signal mode.')
+        self._signal_mode = value
 
     @property
     def exclude_samples(self):
@@ -383,6 +404,22 @@ class SourceModel(ABC):
         self.info = info
         if self.info is not None:
             self.info.set_parent(self)
+
+    def set_scans(self, scans):
+        """
+        Set the scans for this model by reference.
+
+        Nothing fancy, but important for child classes.
+
+        Parameters
+        ----------
+        scans : list (Scan)
+
+        Returns
+        -------
+        None
+        """
+        self.scans = scans
 
     def add_process_brief(self, message):
         """
@@ -1119,6 +1156,19 @@ class SourceModel(ABC):
 
         log.info('\n'.join(messages))
         return False
+
+    def purge_artifacts(self):
+        """
+        Generally used to remove all data but that relevant to the model.
+
+        Returns
+        -------
+        None
+        """
+        self.reduction = None
+        self.scans = None
+        self.hdul = None
+        self.info = None
 
     @abstractmethod
     def count_points(self):  # pragma: no cover

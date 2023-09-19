@@ -94,7 +94,7 @@ data in any observation mode.
 After obtaining the source code, install the pipeline with
 the command::
 
-    python setup.py install
+    pip install .
 
 from the top-level directory.
 
@@ -485,14 +485,11 @@ for more information.
       'rounds=10 sigmaclip=True'.  See :ref:`scanmap_glossary` for
       a full list of available options.
 
--  **scanmappol**
+-  **scanpolmerge**
 
    -  *save_intermediate*: If set, individual output files from the scan
       map algorithm are saved in separate files.  This is primarily
       for diagnostic use.
-
-   -  *vpa_tol*: If differences between telescope angles (VPA) within
-      a scanpol group are more than this value, this step will issue a warning.
 
    -  *use_frames*: Frames (time samples) to use from the reduction. Specify
       a particular range, as '400:-400' or '400:1000'
@@ -521,7 +518,7 @@ for more information.
    -  *removeR1stokesi*: Set to False to keep the R1 array in the Stokes
       I image. Default is True.
 
--  **scanstokes**
+-  **zerolevel**
 
    -  *zero\_level\_method*: Statistic for zero-level calculation
       ('mean', 'median', or 'none').
@@ -534,11 +531,11 @@ for more information.
       will be determined from the ZERO_RA, ZERO_DEC, ZERO_RAD keywords
       (for RA center, Dec center, and radius, respectively).
       If set to 'auto', a mean- or median-filter will be
-      applied to the R and T images, with the radius specified by the
+      applied to the Stokes I image, with the radius specified by the
       zero\_level\_radius parameter.  The lowest negative local
-      average that is negative in both R and T for all HWP angles
-      is assumed to be the zero level.  R and T values are applied
-      separately, from the value of the average at the same pixel.
+      average is assumed to be the zero level.  Stokes Q and U background
+      values are determined and subtracted separately, from the value of
+      the average at the same pixel.
       Otherwise, a region may be directly provided as a list of
       [RA center, Dec center, radius], in degrees.
 
@@ -826,9 +823,9 @@ For Scan or Scan-Pol mode:
 -  Check the log for warnings about scans that may have been excluded
    from reduction or are of poor quality.
 
--  Display the final CRH image. Check that no unusual artifacts appear
+-  Display the final scan map image. Check that no unusual artifacts appear
    (e.g. holes or "worms" caused by bad pixels that were not properly
-   excluded from the scans). Try reducing the data with the *-fixjumps*
+   excluded from the scans). Try reducing the data with the *fixjumps=True*
    option to see if these artifacts improve.
 
 -  Check that the map is not unusually large and does not include
@@ -842,7 +839,7 @@ For Scan or Scan-Pol mode:
    should be within 20%; if it is not, the calibration factors or the
    opacity correction may need to be adjusted.
 
--  Check the FHWM and PSF shape of the source. If it is larger than
+-  Check the FWHM and PSF shape of the source. If it is larger than
    expected, or not round, there may have been a problem with telescope
    guiding or focus.
 

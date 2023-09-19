@@ -270,7 +270,7 @@ def test_set_grid(initialized_spike_map):
     # Deconvolution and encompassing occurs
     new_grid.set_resolution(1 * arcsec)
     m.set_grid(new_grid)
-    assert np.allclose(m.smoothing_beam.x_fwhm, 2 * fwhm1)
+    assert np.allclose(m.smoothing_beam.x_fwhm, 1.627153 * arcsec, atol=1e-6)
     assert np.allclose(m.smoothing_beam.y_fwhm, 1.627153 * arcsec, atol=1e-6)
 
 

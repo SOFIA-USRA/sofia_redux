@@ -277,18 +277,21 @@ def test_update_mask(data_source):
     source = data_source.copy()
     assert np.allclose(source.map.flag, 0)
     source.update_mask()
-    flag_value = source.FLAG_MASK.value
-    assert np.allclose(source.map.flag, flag_value)
-    source.configuration.parse_key_value('source.sign', '+')
-    source.update_mask(blanking_level=3)
+    assert np.allclose(source.map.flag, 0)
+
     mask = np.full(source.map.shape, False)
     mask[50, 50] = True
+    source.update_mask(blanking_level=3)
+    flag_value = source.FLAG_MASK.value
+    assert np.allclose(source.map.flag[mask], flag_value)
+    assert np.allclose(source.map.flag[~mask], 0)
+    source.configuration.parse_key_value('source.sign', '+')
+    source.update_mask(blanking_level=3)
     assert np.allclose(source.map.flag[mask], flag_value)
     assert np.allclose(source.map.flag[~mask], 0)
     source.configuration.parse_key_value('source.sign', '-')
     source.update_mask(blanking_level=3)
     assert np.allclose(source.map.flag, 0)
-
 
 def test_merge_mask(data_source):
     source = data_source.copy()

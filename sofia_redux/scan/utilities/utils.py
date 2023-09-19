@@ -1202,9 +1202,16 @@ def combine_beams(beam1, beam2, deconvolve=False):
         theta = (theta1.value + (0.5 * np.arcsin(sin_beta))) * rad
         theta = theta.to(delta_unit)
 
-    new.x_stddev = x_stddev
-    new.y_stddev = y_stddev
-    new.theta = theta
+    if isinstance(new, Gaussian2D):
+        new.x_stddev = x_stddev
+        new.y_stddev = y_stddev
+        new.theta = theta
+    else:
+        new.model.x_stddev = x_stddev
+        new.model.y_stddev = y_stddev
+        new.model.theta = theta
+        new.validate()
+
     return new
 
 

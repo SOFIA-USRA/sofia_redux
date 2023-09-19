@@ -1135,7 +1135,7 @@ class Channels(ABC):
         self.data.set_hardware_gain(self.info)
         self.data.temp = self.data.hardware_gain.copy()
 
-    def get_source_gains(self, filter_corrected=True):
+    def get_source_gains(self, filter_corrected=True, signal_mode=None):
         """
         Return the source gains.
 
@@ -1148,6 +1148,9 @@ class Channels(ABC):
         ----------
         filter_corrected : bool, optional
             Apply source filtering.
+        signal_mode : enum.Enum, optional
+            A flag for optional processing in certain cases such as
+            polarimetry.
 
         Returns
         -------

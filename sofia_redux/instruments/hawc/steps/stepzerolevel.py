@@ -20,13 +20,13 @@ class StepZeroLevel(StepParent):
     Correct zero level for scanning data.
 
     This step applies an optional zero-level correction to the
-    Stokes I image for scan mode imaging data, using user input or a
+    Stokes I, Q, and U images for scan mode data, using user input or a
     mean- or median-filter to identify the background region in the
     image.
 
-    Input for this step must be a single DataFits that contains
-    3 image planes (HDUs) for the total Stokes I flux.  The three images are:
-    DATA, ERROR, and EXPOSURE.
+    Input for this step must be a single DataFits that contains either
+    an extension for Stokes I only (called PRIMARY IMAGE), or an
+    extension for each of STOKES I, STOKES Q, and STOKES U.
 
     Output from this step has the same format as the input.
     """
@@ -123,14 +123,21 @@ class StepZeroLevel(StepParent):
 
     def correct_zero_level_auto(self, data, method, radius):
         """
-        Correct image zero level from automatically determined regions.
+        Correct image zero level from automatically determined region.
 
-        Data array is updated in place.
+        The first data array is assumed to be the Stokes I map and is
+        used to determine the background region.  If additional images
+        are present, they are assumed to be the Stokes Q and U maps,
+        and will be corrected using the region determined in the Stokes
+        I map.
+
+        Data arrays are updated in place.
 
         Parameters
         ----------
-        data : array-like
-            Data to correct.
+        data : list of array-like
+            Data to correct. Must have either one element (Stokes I)
+            or 3 elements (Stokes I, Q, and U).
         method : {'mean', 'median'}
             Filter method.
         radius : int
@@ -143,53 +150,59 @@ class StepZeroLevel(StepParent):
 
         # mean value and error within aperture at each point,
         # ignoring any regions containing NaNs
-        if 'mean' in method:
-            d_filter = generic_filter(
-                data, np.mean, footprint=kernel,
-                mode='constant', cval=np.nan)
-        else:
-            # median filter is much faster than generic filter
-            # with median function
-            d_filter = median_filter(
-                data, footprint=kernel,
-                mode='constant', cval=np.nan)
+        filters = []
+        for img in data:
+            if 'mean' in method:
+                d_filter = generic_filter(
+                    img, np.mean, footprint=kernel,
+                    mode='constant', cval=np.nan)
+            else:
+                # median filter is much faster than generic filter
+                # with median function
+                d_filter = median_filter(
+                    img, footprint=kernel,
+                    mode='constant', cval=np.nan)
 
-            # account for NaNs that the median filter ignores
-            def func(data):
-                return np.any(np.isnan(data))
+                # account for NaNs that the median filter ignores
+                def func(img):
+                    return np.any(np.isnan(img))
 
-            d_nan = generic_filter(
-                data, func, footprint=kernel,
-                mode='constant', cval=1)
-            d_filter[d_nan > 0] = np.nan
+                d_nan = generic_filter(
+                    img, func, footprint=kernel,
+                    mode='constant', cval=1)
+                d_filter[d_nan > 0] = np.nan
 
-        # check for negative regions
-        neg = d_filter < 0
-        if np.any(neg):
-            # find lowest region
-            zero_pix = np.nanargmin(d_filter)
-            zero_pix = np.unravel_index(zero_pix, data.shape)
-            log.info(f'Correcting zero level '
-                     f'at pix x,y: {zero_pix[1]},{zero_pix[0]}')
+            filters.append(d_filter)
 
-            # subtract zero level from filter image at the determined pixel
-            zero = d_filter[zero_pix]
-            log.info(f'  Zero level: {zero}')
-            data -= zero
-        else:
+        # check for negative regions in Stokes I - if none, return
+        neg = filters[0] < 0
+        if not np.any(neg):
             log.info('No negative zero level found; not '
                      'subtracting background.')
+            return
+
+        # otherwise, find the lowest region
+        zero_pix = np.nanargmin(filters[0])
+        zero_pix = np.unravel_index(zero_pix, data[0].shape)
+        log.info(f'Correcting zero level '
+                 f'at pix x,y: {zero_pix[1]},{zero_pix[0]}')
+
+        # subtract zero level from filter images at the determined pixel
+        for img, d_filter, stokes in zip(data, filters, ['I', 'Q', 'U']):
+            zero = d_filter[zero_pix]
+            log.info(f'  Stokes {stokes} zero level: {zero}')
+            img -= zero
 
     def correct_zero_level_region(self, data, method, region, refheader,
                                   robust=5.0):
         """
         Correct image zero level from specified circular regions.
 
-        Data array is updated in place.
+        Data arrays are updated in place.
 
         Parameters
         ----------
-        data : array-like
+        data : list of array-like
             Data to correct.
         method : {'mean', 'median'}
             Statistics method.
@@ -204,13 +217,13 @@ class StepZeroLevel(StepParent):
         Raises
         ------
         ValueError
-            If any specified region is not on the array.
+            If specified region is not on the array.
         """
         # reference WCS for identifying background pixels
         ref_wcs = WCS(refheader)
 
         # coordinates for region check
-        ny, nx = data.shape
+        ny, nx = data[0].shape
         y, x = np.ogrid[0:ny, 0:nx]
 
         # region center and radius
@@ -225,25 +238,28 @@ class StepZeroLevel(StepParent):
             log.error(msg)
             raise ValueError(msg)
 
-        test = ((x - cx) ** 2 + (y - cy) ** 2 <= cr ** 2)
-        if robust > 0:
-            # sigma clip data before taking stats
-            dmed, dmean, dsig = sigma_clipped_stats(data[test], sigma=robust)
-            if 'mean' in method:
-                zero = dmean
+        # iterate to correct all images at the same location
+        for img, stokes in zip(data, ['I', 'Q', 'U']):
+            test = ((x - cx) ** 2 + (y - cy) ** 2 <= cr ** 2)
+            if robust > 0:
+                # sigma clip data before taking stats
+                dmed, dmean, dsig = sigma_clipped_stats(
+                    img[test], sigma=robust)
+                if 'mean' in method:
+                    zero = dmean
+                else:
+                    zero = dmed
             else:
-                zero = dmed
-        else:
-            # just take stats
-            if 'mean' in method:
-                zero = np.nanmean(data[test])
-            else:
-                zero = np.nanmedian(data[test])
+                # just take stats
+                if 'mean' in method:
+                    zero = np.nanmean(img[test])
+                else:
+                    zero = np.nanmedian(img[test])
 
-        # now subtract level from image
-        log.info(f'Correcting zero level at pix x,y: {cx:.2f},{cy:.2f}')
-        log.info(f'  Zero level: {zero}')
-        data -= zero
+            # now subtract level from image
+            log.info(f'Correcting zero level at pix x,y: {cx:.2f},{cy:.2f}')
+            log.info(f'  Stokes {stokes} zero level: {zero}')
+            img -= zero
 
     def run(self):
         """
@@ -261,7 +277,26 @@ class StepZeroLevel(StepParent):
         # copy input to output
         self.dataout = self.datain.copy()
         header = self.dataout.header
-        data = self.dataout.image
+        imgnames = self.dataout.imgnames
+
+        if 'PRIMARY IMAGE' in imgnames and 'NOISE' in imgnames:
+            # for scan imaging products
+            extnames = ['PRIMARY IMAGE']
+        else:
+            nhwp = self.dataout.getheadval('nhwp')
+            if nhwp == 1:
+                stokes = ['I']
+            else:
+                stokes = ['I', 'Q', 'U']
+
+            # flux, error, pixel covariances
+            extnames = []
+            for var in stokes:
+                extnames.append('STOKES %s' % var)
+
+        data = []
+        for extname in extnames:
+            data.append(self.dataout.imageget(extname))
 
         # get zero-level parameters
         zl_method = str(self.getarg('zero_level_method')).lower()
@@ -335,4 +370,5 @@ class StepZeroLevel(StepParent):
             log.debug('No zero level correction attempted.')
 
         # Write out image
-        self.dataout.imageset(data)
+        for img, extname in zip(data, extnames):
+            self.dataout.imageset(img, extname)

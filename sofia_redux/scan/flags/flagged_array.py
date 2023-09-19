@@ -632,7 +632,7 @@ class FlaggedArray(FlaggedData):
             indices = np.asarray(indices)
 
         if factor is not None:
-            add_values = add_values * factor
+            add_values = add_values * factor  # No inplcace modification
 
         data = self.data
 

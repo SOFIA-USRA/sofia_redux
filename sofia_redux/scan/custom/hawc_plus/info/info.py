@@ -23,6 +23,10 @@ from sofia_redux.scan.custom.sofia.info.extended_scanning import (
     SofiaExtendedScanningInfo)
 from sofia_redux.scan.utilities.utils import (
     insert_info_in_header, to_header_float)
+from sofia_redux.scan.custom.hawc_plus.source_models\
+    .polarimetry_map_separate_rt import HawcPlusPolarimetryMapSeparateRt
+from sofia_redux.scan.custom.hawc_plus.source_models\
+    .polarimetry_map_direct import HawcPlusPolarimetryMapDirect
 
 from sofia_redux.toolkit.utilities import multiprocessing
 
@@ -206,12 +210,77 @@ class HawcPlusInfo(SofiaInfo):
             return
 
         reduction.update_parallel_config(reset=True)
+
         file_groups = self.group_files_by_hwp(
             filenames, jobs=reduction.parallel_read, force_threading=True)
+
         if len(file_groups) <= 1:
             super().perform_reduction(reduction, filenames)
             return
 
+        if self.configuration.get_bool('polarization.combined'):
+            self.perform_combined_polarimetry(reduction, file_groups)
+        else:
+            self.perform_prepare_for_redux_polarimetry(reduction, file_groups)
+
+    @staticmethod
+    def perform_combined_polarimetry(reduction, file_groups):
+        """
+        Perform a full polarimetric reduction.
+
+        Perform the reduction using a polarimetric source model.
+
+        Parameters
+        ----------
+        reduction : Reduction
+            The main reduction object.
+        file_groups : dict
+            The file groups to be reduced of the form
+            {<anything>: filenames (list of str)}.
+
+        Returns
+        -------
+        None
+        """
+        if len(file_groups) != 4:
+            raise ValueError(
+                "Files do not consist of 4 HWP groups.  Cannot reduce.")
+
+        reduction.configuration.unlock('source.type')
+        reduction.configuration.put('source.type', 'polmap')
+        reduction.configuration.lock('source.type')
+        reduction.configuration.unlock('subarray')
+        reduction.configuration.parse_key_value('subarray', 'R0,T0')
+        reduction.configuration.lock('subarray')
+
+        filenames = []
+        for files in file_groups.values():
+            filenames.extend(files)
+
+        reduction.read_scans(filenames)
+        reduction.validate()
+        reduction.reduce()
+
+    def perform_prepare_for_redux_polarimetry(self, reduction, file_groups):
+        """
+        Perform reductions for subsequent polarimetry reduction via redux.
+
+        Will perform scan reductions for each R and T subarray at each HWP
+        angle group.  The output products are then passed onto redux where the
+        actual polarization calculations are performed.
+
+        Parameters
+        ----------
+        reduction : Reduction
+        file_groups : dict
+            The file groups to be reduced of the form
+            {HWP angle (Quantity): filenames (list of str)}.
+
+        Returns
+        -------
+        None
+        """
+        log.info(f"{len(file_groups)} HWP groups will be reduced.")
         self.split_reduction(reduction, file_groups)
 
         reduction.read_scans()
@@ -285,7 +354,6 @@ class HawcPlusInfo(SofiaInfo):
             else:
                 file_groups[hwp_angle] = [filename]
 
-        log.info(f"{len(file_groups)} HWP groups will be reduced.")
         return file_groups
 
     @classmethod
@@ -413,3 +481,33 @@ class HawcPlusInfo(SofiaInfo):
             sub_reduction.parent_reduction = reduction
             sub_reduction.reduction_files = file_group
             sub_reduction.reduction_number = i + 1
+
+    def get_source_model_instance(self, scans, reduction=None):
+        """
+        Return the source model applicable to the channel type.
+
+        Parameters
+        ----------
+        scans : list (Scan)
+            A list of scans for which to create the source model.
+        reduction : Reduction, optional
+            The reduction to which the model will belong.
+
+        Returns
+        -------
+        Map
+        """
+        source_type = self.configuration.get_string('source.type')
+        if source_type == 'polmap':
+            method = self.configuration.get_string(
+                'polarization.method', default='direct'
+            ).strip().lower()
+            if method == 'direct':
+                log.info("Creating direct Stokes maps for polarimetry")
+                return HawcPlusPolarimetryMapDirect(
+                    info=self, reduction=reduction)
+            else:
+                log.info("Creating separate R and T maps for polarimetry")
+                return HawcPlusPolarimetryMapSeparateRt(
+                    info=self, reduction=reduction)
+        return super().get_source_model_instance(scans, reduction=reduction)

@@ -636,7 +636,7 @@ class Observation2D(Map2D):
         if chi2 == 0:
             return
 
-        weight_correction = 1.0 / self.get_chi2(robust=robust)
+        weight_correction = 1.0 / chi2
         self.get_weight_image().scale(weight_correction)
         self.noise_rescale *= 1.0 / np.sqrt(weight_correction)
 

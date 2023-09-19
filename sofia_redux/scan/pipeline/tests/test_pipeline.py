@@ -164,7 +164,6 @@ class TestPipeline(object):
 
     def test_iterate(self, start_pipe):
         pipe = start_pipe
-        pipe.scans = [pipe.scans[0]]
         pipe.configuration.parse_key_value('parallel.scans', True)
         pipe.configuration.parse_key_value('parallel.source', True)
         pipe.iterate()

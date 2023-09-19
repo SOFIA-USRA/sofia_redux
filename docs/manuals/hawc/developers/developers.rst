@@ -373,6 +373,15 @@ shown in :numref:`scan_hawc`.
 -  **HawcPlusInfo** :math:`\rightarrow` SofiaInfo :math:`\rightarrow`
    CameraInfo :math:`\rightarrow` Info
 
+-  **HawcPlusPolarimetryMapSeparateRt** :math:`\rightarrow` HawcPlusPolarimetryMap :math:`\rightarrow`
+   PolarimetryMap  :math:`\rightarrow`
+   AstroIntensityMap :math:`\rightarrow` AstroData :math:`\rightarrow` AstroModel2D
+   :math:`\rightarrow` SourceModel
+
+-  **HawcPlusPolarimetryMapDirect** :math:`\rightarrow` HawcPlusPolarimetryMap :math:`\rightarrow`
+   PolarimetryMap  :math:`\rightarrow`
+   AstroIntensityMap :math:`\rightarrow` AstroData :math:`\rightarrow` AstroModel2D
+   :math:`\rightarrow` SourceModel
 
 .. figure:: images/scan_hawc.png
    :alt: UML class diagram of HAWC+ scan classes
@@ -725,7 +734,12 @@ sofia_redux.scan
    :headings: ~^
 .. automodapi:: sofia_redux.scan.custom.hawc_plus.scan.scan
    :headings: ~^
-
+.. automodapi:: sofia_redux.scan.custom.hawc_plus.source_models.polarimetry_map
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.custom.hawc_plus.source_models.polarimetry_map_direct
+   :headings: ~^
+.. automodapi:: sofia_redux.scan.custom.hawc_plus.source_models.polarimetry_map_separate_rt
+   :headings: ~^
 
 sofia_redux.calibration
 -----------------------

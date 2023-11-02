@@ -28,7 +28,7 @@ offers several filters with limited support:
 *nbM*, and *L+M*. Detailed information about filter
 characteristics, saturation limits, sensitivities and observation
 planning can be found in the FLITECAM chapter of the `SOFIA Observer's
-Handbook <https://www.sofia.usra.edu/science/proposing-and-observing/sofia-observers-handbook-cycle-6/4-flitecam>`__.
+Handbook <- https://irsa.ipac.caltech.edu/data/SOFIA/docs/sites/default/files/Other/Documents/OH-Cycle6.pdf#https%3A//www.sofia.usra.edu/node/1420/flatbook%23FLITECAM>`__.
 
 
 .. figure:: images/flitecam_fov.png
@@ -1048,7 +1048,7 @@ wavelengths defined above,
 
 For most filters and spectral shapes, the color corrections are small
 (<10%). Tables listing *K* values and filter wavelengths are available
-from the `SOFIA website <https://www.sofia.usra.edu/science/proposing-and-observing/data-products>`__\ .
+from the `SOFIA website <https://irsa.ipac.caltech.edu/data/SOFIA/docs/data/data-processing/>`__\ .
 
 
 Spectrophotometric Flux Calibration

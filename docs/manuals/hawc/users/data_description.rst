@@ -484,7 +484,7 @@ wavelengths of each passband, such that the output flux in the
 calibrated data product is that of a nominal, flat spectrum source at
 the mean wavelength for the filter. See the FORCAST GO Handbook,
 available from the `SOFIA
-webpage <https://www.sofia.usra.edu/science/proposing-and-observing/data-products/data-resources>`__,
+webpage <https://irsa.ipac.caltech.edu/data/SOFIA/docs/instruments/handbooks/FORCAST_Handbook_for_Archive_Users_Ver1.0.pdf>`__,
 for more details on the calibration process.
 
 Raw calibration factors are computed as above by the pipeline,

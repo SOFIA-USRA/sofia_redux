@@ -13,7 +13,7 @@ This guide describes the reduction algorithms used by and the data produced
 by the SOFIA/HAWC+ data reduction pipeline for guest investigators. The
 HAWC+ observing modes, for both total intensity and polarimetric observations,
 are described in the SOFIA Observer's Handbook, available from the
-`Proposing and Observing <https://www.sofia.usra.edu/science/proposing-and-observing>`__
+`Instruments <https://irsa.ipac.caltech.edu/data/SOFIA/docs/instruments/>`__
 page on the SOFIA website.
 
 This handbook applies to HAWC DRP version 3.2.0.

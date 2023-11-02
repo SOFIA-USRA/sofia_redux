@@ -58,15 +58,15 @@ Tutorials
 =========
 
 Tutorials are available for data reduction procedures, via the
-`SOFIA website <https://www.sofia.usra.edu/science/data/data-pipelines>`__:
+`SOFIA website <https://irsa.ipac.caltech.edu/data/SOFIA/docs/data/data-pipelines/>`__:
 
-- `FIFI-LS <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FIFI-LS_tutorial.pdf>`__
-- `FLITECAM Imaging <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FLITECAM_imaging_tutorial.pdf>`__
-- `FLITECAM Spectroscopy <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FLITECAM_spectroscopy_tutorial.pdf>`__
-- `FORCAST Imaging <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FORCAST_imaging_tutorial.pdf>`__
-- `FORCAST Spectroscopy <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/FORCAST_spectroscopy_tutorial.pdf>`__
-- `HAWC+ Imaging <https://www.sofia.usra.edu/sites/default/files/2023-07/hawc_imaging_tutorial.pdf>`__
-- `HAWC+ Polarimetry <https://www.sofia.usra.edu/sites/default/files/2023-07/hawc_polarimetry_tutorial.pdf>`__
+- `FIFI-LS <https://irsa.ipac.caltech.edu/data/SOFIA/docs/sites/default/files/USpot_DCS_DPS/Documents/FIFI-LS_tutorial.pdf>`__
+- `FLITECAM Imaging <https://irsa.ipac.caltech.edu/data/SOFIA/docs/sites/default/files/USpot_DCS_DPS/Documents/FLITECAM_imaging_tutorial.pdf>`__
+- `FLITECAM Spectroscopy <https://irsa.ipac.caltech.edu/data/SOFIA/docs/sites/default/files/USpot_DCS_DPS/Documents/FLITECAM_spectroscopy_tutorial.pdf>`__
+- `FORCAST Imaging <https://irsa.ipac.caltech.edu/data/SOFIA/docs/sites/default/files/USpot_DCS_DPS/Documents/FORCAST_imaging_tutorial.pdf>`__
+- `FORCAST Spectroscopy <https://irsa.ipac.caltech.edu/data/SOFIA/docs/sites/default/files/USpot_DCS_DPS/Documents/FORCAST_spectroscopy_tutorial.pdf>`__
+- `HAWC+ Imaging <https://irsa.ipac.caltech.edu/data/SOFIA/docs/sites/default/files/2023-07/hawc_imaging_tutorial.pdf>`__
+- `HAWC+ Polarimetry <https://irsa.ipac.caltech.edu/data/SOFIA/docs/sites/default/files/2023-07/hawc_polarimetry_tutorial.pdf>`__
 - EXES Spectroscopy: TBD
 
 Manuals

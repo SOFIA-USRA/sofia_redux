@@ -13,7 +13,7 @@ This guide describes the data produced by the SOFIA/EXES data reduction
 pipeline (Redux) for guest investigators. The EXES observing modes for
 spectroscopic observations are described in the SOFIA Observer’s Handbook,
 available from the
-`Proposing and Observing <https://www.sofia.usra.edu/science/proposing-and-observing>`__
+`Instruments <https://irsa.ipac.caltech.edu/data/SOFIA/docs/instruments/>`__
 page on the SOFIA website.
 
 This handbook applies to EXES Redux version 3.0.0.

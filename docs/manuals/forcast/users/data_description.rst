@@ -1306,7 +1306,7 @@ wavelengths defined above,
 
 For most filters and spectral shapes, the color corrections are small
 (<10%). Tables listing *K* values and filter wavelengths are available
-from the `SOFIA website <https://www.sofia.usra.edu/science/proposing-and-observing/data-products>`__\ .
+from the `SOFIA website <https://irsa.ipac.caltech.edu/data/SOFIA/docs/data/data-processing/>`__\ .
 
 
 Spectrophotometric Flux Calibration
@@ -1730,7 +1730,7 @@ may have the following values:
 The keyword WCSQUAL refers to the quality of the World Coordinate System
 (WCS) for astrometry. In very early FORCAST cycles, there were many issues
 with astrometry, as described in the
-`Known Issues <https://www.sofia.usra.edu/sites/default/files/USpot_DCS_DPS/Documents/DCS_Known_Issues.pdf>`__
+`Known Issues <https://irsa.ipac.caltech.edu/data/SOFIA/docs/sites/default/files/USpot_DCS_DPS/Documents/DCS_Known_Issues.pdf>`__
 document. Astrometry could, in the worst cases, be off by a full chop- or
 nod-throw distance (up to hundreds of pixels/arcseconds). These issues
 were resolved in Cycle 3 and 4. However, there still appears to be a slight

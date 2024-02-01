@@ -17,7 +17,7 @@ except ImportError:
 
 if not _ASTROPY_SETUP_:  # noqa
     import os
-    from warnings import warn
+#    from warnings import warn
 # Deprecated
 #    from astropy.config.configuration import (
 #        update_default_config,

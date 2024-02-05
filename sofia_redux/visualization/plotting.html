@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Plotting &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../_static/plot_directive.css" />
+    
+    <script src="../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Signals" href="signals.html" />
+    <link rel="prev" title="Artists and Blitting" href="drawing.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li class="right">
+	<a href="signals.html" title="Signals">
+	  next &raquo;
+	</a>
+      </li>
+      <li class="right">
+	<a href="drawing.html" title="Artists and Blitting">
+	  &laquo; previous
+	</a>
+	 |
+      </li>
+      <li>
+	<a href="../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../index.html" >SOFIA Redux</a> &#187;</li>
+      <li><a href="index.html" accesskey="U">sofia_redux.visualization: The Eye of SOFIA</a> &#187;</li>
+      
+      <li>Plotting</li> 
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="plotting">
+<span id="id1"></span><h1>Plotting<a class="headerlink" href="#plotting" title="Link to this heading">¶</a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">¶</a></h2>
+<p>The plotting routines are the very core of the Eye, which interprets the
+information stored in models and coverts them to images/plots in the
+<a class="reference internal" href="../../api/sofia_redux.visualization.display.figure.Figure.html#sofia_redux.visualization.display.figure.Figure" title="sofia_redux.visualization.display.figure.Figure"><code class="xref py py-class docutils literal notranslate"><span class="pre">Figure</span></code></a>.
+The <code class="xref py py-class docutils literal notranslate"><span class="pre">Figure</span></code> class creates a
+<a class="reference internal" href="../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane" title="sofia_redux.visualization.display.pane.Pane"><code class="xref py py-class docutils literal notranslate"><span class="pre">Pane</span></code></a> instance for
+each axes created. The <code class="xref py py-class docutils literal notranslate"><span class="pre">Pane</span></code> oversees the details of applying plot
+configurations and data to the underlying <code class="xref py py-class docutils literal notranslate"><span class="pre">matplotlib.Axes</span></code> instance.</p>
+<p>All display processes are overseen by the
+:class`View &lt;sofia_redux.visualization.display.view.View&gt;` class which
+interprets commands from the
+<a class="reference internal" href="../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye" title="sofia_redux.visualization.eye.Eye"><code class="xref py py-class docutils literal notranslate"><span class="pre">Eye</span></code></a> class along with interactions
+from the user and GUI to create instructions for the <code class="xref py py-class docutils literal notranslate"><span class="pre">Figure</span></code> class. To
+keep the display current, the <code class="xref py py-class docutils literal notranslate"><span class="pre">View</span></code> utilizes <a class="reference internal" href="signals.html#signals"><span class="std std-ref">Signals</span></a> to respond
+to instructions (from the <code class="xref py py-class docutils literal notranslate"><span class="pre">Eye</span></code> and the user) in preparation for the
+refresh loop to complete.</p>
+</section>
+<section id="diagram">
+<h2>Diagram<a class="headerlink" href="#diagram" title="Link to this heading">¶</a></h2>
+<figure class="align-center" id="plotting-loop">
+<a class="reference internal image-reference" href="../../_images/plotting_loop.png"><img alt="Activity diagram for plotting loop" src="../../_images/plotting_loop.png" style="width: 800px;" /></a>
+<figcaption>
+<p><span class="caption-number">Fig. 137 </span><span class="caption-text">Activity diagram for the figure refresh loop. Blue events are handled
+by the <code class="xref py py-class docutils literal notranslate"><span class="pre">Figure</span></code> class, red events are handled by the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">Pane</span></code> class, green events are handled by the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">BlitManager</span></code> class.</span><a class="headerlink" href="#plotting-loop" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+</section>
+<section id="initial-plot-creation">
+<h2>Initial Plot Creation<a class="headerlink" href="#initial-plot-creation" title="Link to this heading">¶</a></h2>
+<p>When the Eye initially starts up, the figure is blank, with no axes or Panes.
+A data set is loaded into the Eye, either through command line arguments, GUI
+navigation, or API calls. The user can then select the model from the
+“model_list” to display. The <code class="xref py py-class docutils literal notranslate"><span class="pre">Eye</span></code> passes the model selected to the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">View</span></code>, which then passes it to the <code class="xref py py-class docutils literal notranslate"><span class="pre">Figure</span></code>, flags the full
+background as stale (see <a class="reference internal" href="#figure-atrophy"><span class="std std-ref">Atrophy System</span></a>), and updates the controls
+panels to reflect the newly visible dataset.</p>
+<p>The <code class="xref py py-class docutils literal notranslate"><span class="pre">Figure</span></code> instance starts the display process by first determining
+what pane the model should be added to. Since initially there are no panes, one
+must be created. A singe <code class="xref py py-class docutils literal notranslate"><span class="pre">Pane</span></code> object is instantiated based on the
+number
+of dimensions the data being displayed has, so diplaying spectral data leads
+to the creation of a one-dimensional pane object (ie
+<a class="reference internal" href="../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane" title="sofia_redux.visualization.display.pane.OneDimPane"><code class="xref py py-class docutils literal notranslate"><span class="pre">OneDimPane</span></code></a>).</p>
+<p>After the pane is created, the model is added. The pane creates a copy of the
+model and keeps reference to that. This allows the pane to change and
+manipulate the model (e.g., by changing units) while keeping the original
+model tracked by the <code class="xref py py-class docutils literal notranslate"><span class="pre">Eye</span></code> identical to the FITS file. The pane then
+sets the extensions to be plotted based on the pane’s fields,
+assigns a color to the model based on its color cycle, and assigns a marker
+style. With the model now configured for the pane, an artist object can be
+created.</p>
+<p>In the <code class="xref py py-class docutils literal notranslate"><span class="pre">OneDimPane</span></code>, an artist represents a single line of data that
+displays one field against another (e.g., ‘flux’ vs. ‘wavepos’). Each order
+in the model to be displayed represents an additional line to be plotted. By
+default, all orders in a model are shown. For grism data, there is only every
+one model. However echelle data can have several orders, all of which are
+displayed by default. The data are then converted to the desired units based
+on the :class`Pane` settings, For each order in the model, the data
+corresponding to
+the <em>x</em>- and <em>y</em>-axis are pulled using the <code class="xref py py-mod docutils literal notranslate"><span class="pre">retrieve</span></code> method and used to
+create <a class="reference external" href="https://matplotlib.org/stable/api/_as_gen/matplotlib.lines.Line2D.html#matplotlib.lines.Line2D" title="(in Matplotlib v3.8.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">matplotlib.lines.Line2D</span></code></a> objects. It the <em>y</em>-axis field shows is
+‘flux’ then an additional artist
+(<a class="reference external" href="https://matplotlib.org/stable/api/collections_api.html#matplotlib.collections.PolyCollection" title="(in Matplotlib v3.8.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">matplotlib.collections.PolyCollection</span></code></a> this time) is created to show
+the error  range based on the associated error extension.</p>
+<p>All artists created are then returned to the <code class="xref py py-class docutils literal notranslate"><span class="pre">Figure</span></code>, which then adds
+them to the <code class="xref py py-class docutils literal notranslate"><span class="pre">Artist</span></code>
+instance to be tracked. The <code class="xref py py-class docutils literal notranslate"><span class="pre">Pane</span></code> only keeps track of the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">matplotlib.Axes</span></code> instance and the plot configurations, then uses them
+to create and return artists and returns. If the artists need to be
+updated, removed,  or redrawn in any manner, the <code class="xref py py-class docutils literal notranslate"><span class="pre">Artists</span></code> class handles
+those changes.</p>
+<p>Once the artists have been added to the <code class="xref py py-class docutils literal notranslate"><span class="pre">Artist</span></code> instance everything is
+prepped to be drawn. The standard refresh process describe in
+<a class="reference internal" href="#figure-atrophy"><span class="std std-ref">Atrophy System</span></a> is utilized to finally draw all artists on screen.</p>
+</section>
+<section id="atrophy-system">
+<span id="figure-atrophy"></span><h2>Atrophy System<a class="headerlink" href="#atrophy-system" title="Link to this heading">¶</a></h2>
+<p>The Eye is an interactive tool, meaning it spends much of its time running an
+idle looping waiting for user interactions. After the user interacts with the
+Eye in a manner, be that by adding new models, changing the color, or merely
+moving the cursor across the plot, the Eye must assess the interaction,
+determine what actions need to be taken to respond to the interaction, then
+process those actions.</p>
+<p>Whenever the Eye determines an interaction requires
+the plot to respond, it implements the change in two steps. First the
+settings and underlying data structures of the plot are changed. This can be
+changing the units of a model, selecting a different field to plot, or just
+updating the cursor’s location. Second the figure is marked as “stale” by
+emitting the “atrophy” signal.
+During the idle loop, the Eye checks if the figure is stale. If is not stale,
+then the loop continues on, waiting for its next interaction. However if the
+figure is stale, the figure is updated to reflect the new settings and data.</p>
+<p>By default, matplotlib plots redraw every part of
+themselves whenever they are updated. Usually this is minor, but if there are
+many panes, models, or fits plotted it can get wasteful. If the user moved
+the cursor to a new location on the plot, only the cursor’s location artist
+needs to be updated. The axis, labels, and other lines do not need to
+redrawn, but the default implementation of matplotlib will do just that.
+This issue is avoided by implementing blitting techniques, which are
+described in <a class="reference internal" href="drawing.html#blitting"><span class="std std-ref">Blitting</span></a>. To use it properly, the Eye needs to keep track
+of when the background of a pane needs to be updated or if just the artists
+need to be updated. To differentiate between the type of update that needs to
+happen, the Eye has three different atrophy signals which correspond to three
+different stale states.</p>
+<ul class="simple">
+<li><p>atrophy: The simplest of the atrophy signals, this marks the figure as
+“stale” which corresponds to the lowest level of changes required. In this
+state only the animated artists will be updated. The background and axes of
+the figure are still valid and does not need to be updated.</p></li>
+<li><p>atrophy_background_partial: The second stage of atrophy signals. In this
+state the background needs to updated but the axis are still good, which
+keeps the figure from having to redraw the  <code class="xref py py-class docutils literal notranslate"><span class="pre">matplotlib.Axes</span></code> objects.
+This signal is used when the current <code class="xref py py-class docutils literal notranslate"><span class="pre">Axes</span></code> is still valid but
+needs to be altered, such as turning on the grid, changing limits, changing
+the scale, or enabling dark mode.</p></li>
+<li><p>atrophy_background_full: The third stage of atrophy signals, this marks
+everything in the figure as out of date. All aspects of the <code class="xref py py-class docutils literal notranslate"><span class="pre">Axes</span></code>
+object are redrawn. This is used when new data is added to a pane, or a new
+pane itself is added to the figure, or other similarly large scale changes.</p></li>
+</ul>
+<p>If any of the atrophy signals are emitted, the refresh loop in the Eye
+catches it and sets up the figure to be refreshed. Before that, though, the
+refresh flags are reset. If this did not happen until after the figure
+refresh, the Eye could miss later atrophy emits that occur while the figure
+is refreshing.</p>
+<p>Updating the figure has two steps. First the panes each have to apply any
+changes they’ve recorded to their axes. The “correct” value of an axis
+property, such as its limit or scale, is held by the Pane instance the axis
+is member of. Any changes made by the user or from other parts of the Eye do
+not interact with the axis itself. Instead the changes are made to the
+properties of the Pane instance. This limits the access to the axes to the
+Pane, preventing any other commands to overwrite the axes, as well as
+abstracting away the details of how to apply a parameter to the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">matplotlib.Axes</span></code> object in favor of the easier to use
+<code class="xref py py-class docutils literal notranslate"><span class="pre">Pane</span></code> object. The cost of this protection and abstraction is the
+additional step of applying the parameters of the pane to the Axes object.
+This is the first step of the refresh process.</p>
+<p>Once all the axes object have been updated with the correct configuration,
+the second step is to use the
+<a class="reference internal" href="../../api/sofia_redux.visualization.display.blitting.BlitManager.html#sofia_redux.visualization.display.blitting.BlitManager" title="sofia_redux.visualization.display.blitting.BlitManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">BlitManager</span></code></a>
+class to actually implement the changes. If either the
+“atrophy_background_full” or “atrophy_background_partial” flags were
+triggered, then the blitter is instructed to update everything. Otherwise,
+only the animated artists are updated.</p>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+<ul>
+<li><a class="reference internal" href="#">Plotting</a><ul>
+<li><a class="reference internal" href="#overview">Overview</a></li>
+<li><a class="reference internal" href="#diagram">Diagram</a></li>
+<li><a class="reference internal" href="#initial-plot-creation">Initial Plot Creation</a></li>
+<li><a class="reference internal" href="#atrophy-system">Atrophy System</a></li>
+</ul>
+</li>
+</ul>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right">
+    <a href="../../_sources/sofia_redux/visualization/plotting.rst.txt"
+       rel="nofollow">Page Source</a> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

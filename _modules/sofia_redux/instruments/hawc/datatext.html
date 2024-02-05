@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.datatext &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.datatext</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Data storage class for text-based data.&quot;&quot;&quot;
+
+import os
+import re
+import time
+
+from astropy import log
+
+from sofia_redux.instruments.hawc.dataparent import DataParent
+
+__all__ = [&#39;DataText&#39;]
+
+
+<div class="viewcode-block" id="DataText">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datatext.DataText.html#sofia_redux.instruments.hawc.datatext.DataText">[docs]</a>
+class DataText(DataParent):
+    &quot;&quot;&quot;
+    Pipeline data text object.
+
+    The data is stored as a list of strings, with an optional
+    header.
+    &quot;&quot;&quot;
+
+    # File Name Fit: Regexp expression that fits valid filenames
+    # fill files .txt and end of name
+    filenamefit = r&#39;\.txt\Z&#39;
+    &quot;&quot;&quot;str : Regular expression that matches valid text file names.&quot;&quot;&quot;
+
+    def __init__(self, filename=&#39;&#39;, config=None):
+        &quot;&quot;&quot;
+        Initialize data object and variables.
+
+        Parameters
+        ----------
+        filename : str, optional
+            Path to a text file.  If specified, data will be loaded
+            immediately from the file.
+        config : `configobj.ConfigObj`, dict, str, or list of str, optional
+            If specified, the configuration will be loaded.
+        &quot;&quot;&quot;
+
+        # Run Parent Constructor
+        # loads config, set up header
+        super().__init__(config=config)
+
+        # Match for header: a &#39;#&#39; at start of line followed
+        # by space or end of line
+        self.headermatch = r&#39;\A#(\Z|\s)&#39;
+
+        # Match for header keyword: Alphanumeric
+        # values (with spaces) followed by
+        # &#39;:&#39; or &#39;=&#39; and any number of spaces
+        self.keymatch = r&#39;\A#[A-Za-z0-9\s_-]{0,20}(:|=)\s*&#39;
+
+        # if file exists, load it
+        if os.path.exists(filename):
+            self.load(filename)
+        elif filename != &#39;&#39;:
+            # user specified a non-existent filename
+            msg = &#39;No such file %s&#39; % filename
+            log.error(msg)
+            raise IOError(msg)
+
+<div class="viewcode-block" id="DataText.sethead">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datatext.DataText.html#sofia_redux.instruments.hawc.datatext.DataText.sethead">[docs]</a>
+    def sethead(self, line):
+        &quot;&quot;&quot;
+        Add a text line to the header.
+
+        Header keywords in the line are identified by the
+        self.keymatch regular expression.
+
+        Parameters
+        ----------
+        line : str
+            The header line to add.
+        &quot;&quot;&quot;
+        # Identify keywords
+        match = re.search(self.keymatch, line)
+        if match:
+            # Get key
+            key = match.group()
+
+            # Get value (rest of line after match)
+            value = line[len(key):].strip()
+
+            # remove header match and clean up key
+            match = re.search(self.headermatch, key)
+            key = key[len(match.group()):].strip()[:-1].strip()
+
+            # Set header keyword
+            self.setheadval(key, value)
+        else:
+            # Not a key, it&#39;s a comment
+            comment = line
+
+            # remove header match and clean up comment
+            match = re.search(self.headermatch, comment)
+            if not match:
+                # bad header line
+                log.warning(&#39;Bad header line: {}&#39;.format(comment))
+                return
+            comment = comment[len(match.group()):].strip()
+
+            # Set header keyword
+            self.setheadval(&#39;COMMENT&#39;, comment)</div>
+
+
+<div class="viewcode-block" id="DataText.loadhead">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datatext.DataText.html#sofia_redux.instruments.hawc.datatext.DataText.loadhead">[docs]</a>
+    def loadhead(self, filename=&#39;&#39;):
+        &quot;&quot;&quot;
+        Load the header for text file given.
+
+        Header lines are identified by the self.headermatch
+        regular expression.
+
+        Parameters
+        ----------
+        filename : str, optional
+            The path to the file to load.  If not specified,
+            self.filename is used.
+        &quot;&quot;&quot;
+        # set self.filename and filename
+        if len(filename) &gt; 0:
+            self.filename = filename
+            self.rawname = filename
+        else:
+            filename = self.filename
+        # Open file
+        with open(filename, &#39;rt&#39;) as inf:
+            # Load header
+            for line in inf:
+                # identify header lines
+                match = re.search(self.headermatch, line)
+                if match:
+                    self.sethead(line)</div>
+
+
+<div class="viewcode-block" id="DataText.load">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datatext.DataText.html#sofia_redux.instruments.hawc.datatext.DataText.load">[docs]</a>
+    def load(self, filename=&#39;&#39;):
+        &quot;&quot;&quot;
+        Load the data and header from a given text file.
+
+        After loading, self.loaded is set to True.
+
+        Parameters
+        ----------
+        filename : str, optional
+            The path to the file to load.
+        &quot;&quot;&quot;
+        # set self.filename and filename
+        if len(filename) &gt; 0:
+            self.filename = filename
+            self.rawname = filename
+        else:
+            filename = self.filename
+
+        # Open file
+        with open(filename, &#39;rt&#39;) as inf:
+            # Load header and data
+            self.data = []
+            for line in inf:
+                # identify header lines
+                match = re.search(self.headermatch, line)
+                if match:
+                    self.sethead(line)
+                else:
+                    self.data.append(line.strip())
+        self.loaded = True</div>
+
+
+<div class="viewcode-block" id="DataText.save">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datatext.DataText.html#sofia_redux.instruments.hawc.datatext.DataText.save">[docs]</a>
+    def save(self, filename=&#39;&#39;):
+        &quot;&quot;&quot;
+        Save the data to the specified file.
+
+        Existing files are overwritten.
+
+        Parameters
+        ----------
+        filename : str, optional
+            The path to the file to load.
+        &quot;&quot;&quot;
+        # get file name
+        if not filename:
+            filename = self.filename
+
+        # update pipeline keywords
+        self.setheadval(&#39;Pipeline Version&#39;,
+                        &#39;Pipe v&#39; + DataParent.pipever.replace(&#39;.&#39;, &#39;_&#39;))
+        self.setheadval(&#39;File Name&#39;, os.path.split(filename)[-1])
+        self.setheadval(&#39;File Date&#39;, time.strftime(&#39;%Y-%m-%dT%H:%M:%S&#39;))
+
+        # Open file
+        with open(filename, &#39;wt&#39;) as outf:
+            # Save header
+            for key in self.header:
+                if &#39;COMMENT&#39; in key:
+                    for comm in self.header[&#39;COMMENT&#39;]:
+                        outf.write(&#39;# %s\n&#39; % comm)
+                elif &#39;HISTORY&#39; in key:
+                    for hist in self.header[&#39;HISTORY&#39;]:
+                        outf.write(&#39;# HISTORY: %s\n&#39; % hist)
+                else:
+                    outf.write(&#39;# %s: %s\n&#39; % (key, self.header[key]))
+
+            # Save data
+            for line in self.data:
+                outf.write(&#39;%s\n&#39; % line)
+
+        log.debug(&#39;Save: saved text file %s&#39; % filename)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

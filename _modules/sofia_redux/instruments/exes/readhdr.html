@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.exes.readhdr &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.exes.readhdr</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import os
+import re
+
+from astropy import log
+from astropy.io.fits.header import Header
+from astropy.time import Time
+from astropy.utils.data import download_file
+import numpy as np
+import pandas as pd
+
+from sofia_redux.instruments import exes
+from sofia_redux.instruments.exes.utils import \
+    set_elapsed_time, parse_central_wavenumber
+from sofia_redux.toolkit.utilities.fits import hdinsert
+from sofia_redux.toolkit.utilities.func import goodfile, robust_bool
+
+__all__ = [&#39;readhdr&#39;]
+
+# back up download URL for non-source installs
+DATA_URL = &#39;https://sofia-exes-reference.s3-us-gov-west-1.amazonaws.com/&#39;
+
+
+<div class="viewcode-block" id="readhdr">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.readhdr.readhdr.html#sofia_redux.instruments.exes.readhdr.readhdr">[docs]</a>
+def readhdr(header, check_header=True,
+            config_file=None, comments_file=None):
+    r&quot;&quot;&quot;
+    Read and update an EXES FITS header.
+
+    Keywords that must be present in the output header are defined in
+    exes/data/header/headerdef.dat.  Default values and acceptable
+    ranges are also defined there.  For each keyword defined there,
+    the header is checked for a value.  If it is found, the value is
+    added to the output header.
+
+    If checkreq=True, it is checked against the allowed values.  If
+    it is out of range, header_ok will be set to False.  If the
+    value is not found, the default value is added.  If it is missing
+    and required, header_ok will be set to False, but the value
+    will be updated.
+
+    Some additional special values are added to the output header:
+
+        * Comments associated with all keywords are read from
+          exes/data/header/headercomment.dat.
+        * The full path to the package containing this routine is
+          stored under the key &#39;PKGPATH&#39;.
+        * The full path to the package/data directory is stored
+          under the key &#39;DATAPATH&#39;.
+        * Distortion correction parameters are read from
+          exes/data/tort/\*.dat and added to the output header.
+          Some additional parameters are calculated from these and
+          other header parameters and added to the output header.
+        * The slit angle is converted from degrees to cm using
+          the values in exes/data/slitval.dat.
+        * Filenames for BPM, LINFILE, and DARKFILE are looked up
+          by date from exes/data/caldefault.dat.
+        * The current date is added under the key &#39;DATE&#39;.
+
+    Parameters
+    ----------
+    header : fits.Header
+        The FITS header to check and update.
+    check_header : bool, optional
+        If True, check against header requirements and return success or
+        failure status.
+    config_file : str, optional
+        Path to the headerdef.dat header defaults configuration file
+    comments_file : str, optional
+        Path to the headercomment.dat header keyword comments file
+
+    Returns
+    -------
+    updated_header : fits.Header
+        The updated FITS header
+    success : bool, optional
+        True if header checks succeeded; False if they did not.
+
+    Raises
+    ------
+    ValueError if header is incorrectly formatted.
+    &quot;&quot;&quot;
+    if not isinstance(header, Header):
+        raise ValueError(f&quot;Header is not {Header}&quot;)
+
+    header_config = _get_header_configuration(
+        config_file=config_file, comments_file=comments_file)
+
+    new_header = header.copy()
+    success = True
+    for keyword in header_config.index:
+        value = header.get(keyword)
+        default_value = _get_default(keyword, header_config)
+        comment = header_config.loc[keyword].comment
+
+        # try to convert to expected type
+        if value is not None:
+            try:
+                value = header_config.loc[keyword].type(value)
+            except (ValueError, TypeError):
+                # leave it if it fails
+                pass
+
+        if check_header:
+            success &amp;= _checkreq(keyword, value, header_config)
+
+        if value is not None:
+            hdinsert(new_header, keyword, value, comment=comment)
+        elif default_value is not None:
+            hdinsert(new_header, keyword, default_value, comment=comment)
+
+    _standardize_values(new_header)
+    _set_decimal_date(new_header)
+    _process_instrument_configuration(new_header)
+    _process_slit_configuration(new_header)
+    _process_tort_configuration(new_header)
+    _add_configuration_files(new_header)
+
+    if check_header:
+        return new_header, success
+    else:
+        return new_header</div>
+
+
+
+def _get_configuration_file(filename, subdir=None, check=True):
+    &quot;&quot;&quot;Get a configuration file from exes path.&quot;&quot;&quot;
+    datadir = os.path.join(os.path.dirname(exes.__file__), &#39;data&#39;)
+    if subdir is not None:
+        datadir = os.path.join(datadir, subdir)
+
+    if check and not os.path.isdir(datadir):
+        raise ValueError(f&quot;{datadir} does not exist&quot;)
+
+    datafile = os.path.join(datadir, filename)
+    if check and not goodfile(datafile):
+        raise ValueError(f&quot;Could not read: {datafile}&quot;)
+    return datafile
+
+
+def _get_header_configuration(config_file=None, comments_file=None):
+    &quot;&quot;&quot;Get header configuration from a stored definition.&quot;&quot;&quot;
+    if config_file is None:
+        config_file = _get_configuration_file(&#39;headerdef.dat&#39;, subdir=&#39;header&#39;)
+    else:
+        if not goodfile(config_file, verbose=True):
+            raise ValueError(
+                f&quot;Header default file does not exist: {config_file}&quot;)
+
+    if comments_file is None:
+        comments_file = _get_configuration_file(
+            &#39;headercomment.dat&#39;, subdir=&#39;header&#39;)
+    else:
+        if not goodfile(comments_file, verbose=True):
+            raise ValueError(f&#39;header comments file does not exist: &#39;
+                             f&#39;{comments_file}&#39;)
+
+    columns = [&#39;required&#39;, &#39;default&#39;, &#39;type&#39;, &#39;min&#39;, &#39;max&#39;, &#39;enum&#39;]
+    types = {&#39;int&#39;: int, &#39;integer&#39;: int, &#39;float&#39;: float, &#39;bool&#39;: robust_bool,
+             &#39;str&#39;: str, &#39;string&#39;: str, &#39;complex&#39;: complex, &#39;double&#39;: float}
+    converters = {&#39;required&#39;: robust_bool,
+                  &#39;default&#39;: lambda x: None if x == &#39;.&#39; else x,
+                  &#39;type&#39;: lambda x: types.get(x),
+                  &#39;min&#39;: lambda x: float(x) if x != &#39;.&#39; else None,
+                  &#39;max&#39;: lambda x: float(x) if x != &#39;.&#39; else None,
+                  &#39;enum&#39;: lambda x: x.split(&#39;|&#39;) if x != &#39;.&#39; else []}
+    df = pd.read_csv(config_file, delim_whitespace=True, comment=&#39;#&#39;,
+                     index_col=0, names=columns, converters=converters)
+    df.index = df.index.str.upper().str.strip()
+
+    converters = {&#39;comment&#39;: str.strip, &#39;keyword&#39;: str.strip}
+    comments = pd.read_csv(comments_file, comment=&#39;#&#39;,
+                           names=[&#39;keyword&#39;, &#39;comment&#39;],
+                           converters=converters,
+                           sep=&#39;^([^,]+),&#39;,
+                           engine=&#39;python&#39;)
+    comments.set_index(&#39;keyword&#39;, inplace=True)
+    comments.index = comments.index.str.upper()
+
+    return df.join(comments)
+
+
+def _get_default(keyword, table):
+    &quot;&quot;&quot;
+    Get a keyword default value from the keyword defaults table.
+
+    Parameters
+    ----------
+    keyword : str
+    table : pandas.DataFrame
+
+    Returns
+    -------
+    value : str, float, int, or bool
+        The default value.
+    &quot;&quot;&quot;
+    if keyword not in table.index:
+        log.error(f&quot;Keyword {keyword} not found in keywords default table&quot;)
+        return
+    dtype = table.loc[keyword][&#39;type&#39;]
+    if dtype is bool:
+        dtype = robust_bool
+    value = table.loc[keyword][&#39;default&#39;]
+
+    # handle missing default, for keywords that should be
+    # tracked but not added if missing
+    if value is None:
+        return None
+
+    try:
+        value = dtype(value)
+    except (ValueError, TypeError, AttributeError):
+        value = None
+
+    # handle poorly specified default
+    if value is None:
+        if dtype is robust_bool:  # pragma: no cover
+            # shouldn&#39;t be reachable, for robust bool type
+            value = False
+        elif dtype in [float, int]:
+            value = dtype(-9999)
+        elif dtype is str:  # pragma: no cover
+            # shouldn&#39;t be reachable, for str type
+            value = &#39;UNKNOWN&#39;
+    return value
+
+
+def _checkreq(key, value, table):
+    &quot;&quot;&quot;
+    Check whether the value of a key fits requirements.
+
+    Parameters
+    ----------
+    key : str
+        Key name
+    value : str, float, int, or bool
+        Value to test
+    table : pandas.DataFrame
+        Keyword defaults table
+
+    Returns
+    -------
+    bool
+        True if value fits the requirements, False otherwise.  If the
+        keyword is not found in the keyword defaults table or is not
+        required, then None will be returned.
+    &quot;&quot;&quot;
+    # special check for UTC 0 date (a common FIFI-LS glitch)
+    if key == &#39;DATE-OBS&#39;:
+        try:
+            mjd = Time(value).mjd
+        except (ValueError, AttributeError, TypeError):
+            mjd = 40587
+        if int(mjd) == 40587:
+            log.error(f&quot;Required keyword DATE-OBS has wrong value ({value})&quot;)
+            return False
+
+    if key not in table.index:  # If there are no rules, allow it to go through
+        log.warning(f&quot;{key} keyword not found in keyword defaults table&quot;)
+        return True
+    row = table.loc[key]
+
+    if not row[&#39;required&#39;]:
+        return True
+
+    if value is None:
+        log.error(f&#39;Required keyword {key} has missing value&#39;)
+        return False
+
+    rtype = row[&#39;type&#39;]
+    rtype = bool if rtype is robust_bool else rtype
+    if not isinstance(value, rtype):
+        # allow ints for float values
+        if not (rtype is float and isinstance(value, int)):
+            log.error(
+                f&quot;Required keyword {key} has wrong type (value: {value}). &quot;
+                f&quot;Should be {row[&#39;type&#39;]}&quot;)
+            return False
+
+    # Check enum
+    if len(row[&#39;enum&#39;]) &gt; 0:
+        dtype = row[&#39;type&#39;]
+        dtype = robust_bool if dtype is bool else dtype
+        check_enum = [dtype(x) for x in row[&#39;enum&#39;]]
+        if value not in check_enum:
+            log.error(f&quot;Required keyword {key} has wrong value {value}. &quot;
+                      f&quot;Should be within [{&#39;,&#39;.join(row[&#39;enum&#39;])}]&quot;)
+            return False
+
+    # Check min
+    if not np.isnan(row[&#39;min&#39;]) and value &lt; row[&#39;min&#39;]:
+        log.error(f&quot;Required keyword {key} has wrong value {value}. &quot;
+                  f&quot;Should be &gt;= {row[&#39;min&#39;]}&quot;)
+        return False
+
+    # Check max
+    if not np.isnan(row[&#39;max&#39;]) and value &gt; row[&#39;max&#39;]:
+        log.error(f&quot;Required keyword {key} has wrong value {value}. &quot;
+                  f&quot;Should be &lt;= {row[&#39;min&#39;]}&quot;)
+        return False
+    return True
+
+
+def _set_decimal_date(header):
+    &quot;&quot;&quot;
+    Set the FDATE key in the header to a decimal value representing date.
+
+    Parameters
+    ----------
+    header : fits.Header
+        Header to update.
+    &quot;&quot;&quot;
+
+    # Decimal date
+    date = header.get(&#39;DATE-OBS&#39;, &#39;UNKNOWN&#39;)
+    fdate = header[&#39;FDATE&#39;]
+    try:
+        time = Time(date, scale=&#39;utc&#39;, format=&#39;isot&#39;).isot
+    except ValueError:
+        log.warning(f&#39;DATE-OBS {date} not understood, using date={fdate}&#39;)
+        return
+
+    pattern = re.compile(r&#39;(\d{4})-(\d{2})-(\d{2})T(\d{2})&#39;)
+    regex = pattern.match(time)
+    if regex is None:  # pragma: no cover
+        # shouldn&#39;t be reachable, if Time was created correctly
+        log.warning(f&#39;DATE-OBS {date} not understood, using date={fdate}&#39;)
+        return
+
+    y, m, d, h = map(int, regex.groups())
+    if y &gt; 100:
+        y -= 2000
+
+    fdate = round(y + (m / 1e2) + (d / 1e4) + (h / 1e6), 6)
+    header[&#39;FDATE&#39;] = fdate
+
+
+def _standardize_values(header):
+    &quot;&quot;&quot;
+    Reformat certain values.
+
+    Header is updated in-place.
+
+    Parameters
+    ----------
+    header : fits.Header
+        Header to update.
+    &quot;&quot;&quot;
+    package_path = os.path.dirname(exes.__file__)
+    header[&#39;PKGPATH&#39;] = package_path
+    header[&#39;DATAPATH&#39;] = os.path.join(package_path, &#39;data&#39;)
+
+    header[&#39;ASSC_AOR&#39;] = str(header.get(&#39;AOR_ID&#39;, &#39;UNKNOWN&#39;))
+    header[&#39;CARDMODE&#39;] = str(header.get(&#39;CARDMODE&#39;, &#39;UNKNOWN&#39;)).upper().strip()
+    header[&#39;INSTMODE&#39;] = str(header.get(&#39;INSTMODE&#39;, &#39;UNKNOWN&#39;)).upper().strip()
+
+    float_keys = [&#39;EXPTIME&#39;, &#39;WAVENO0&#39;, &#39;XDDGR&#39;, &#39;GRATANGL&#39;,
+                  &#39;XDDELTA&#39;, &#39;SDEG&#39;, &#39;HRFL0&#39;, &#39;XDFL0&#39;,
+                  &#39;EFL0&#39;, &#39;PIXELWD&#39;, &#39;SLITVAL&#39;, &#39;SLITWID&#39;,
+                  &#39;HRG&#39;, &#39;WNO0&#39;, &#39;HRDGR&#39;, &#39;HRR&#39;, &#39;FDATE&#39;]
+    for key in float_keys:
+        if key in header:
+            try:
+                header[key] = float(header[key])
+            except Exception as err:
+                header[key] = -9999.0
+                log.warning(f&quot;Unable to convert {key} key to float: {err}&quot;)
+        else:
+            header[key] = -9999.0
+
+    instcfg = header[&#39;INSTCFG&#39;].upper().strip()
+    if instcfg in [&#39;HI-MED&#39;, &#39;HIGH-MED&#39;, &#39;HIMED&#39;]:
+        header[&#39;INSTCFG&#39;] = &#39;HIGH_MED&#39;
+    elif instcfg in [&#39;HI-LO&#39;, &#39;HIGH-LOW&#39;, &#39;HILO&#39;]:
+        header[&#39;INSTCFG&#39;] = &#39;HIGH_LOW&#39;
+    elif instcfg in [&#39;MED&#39;]:
+        header[&#39;INSTCFG&#39;] = &#39;MEDIUM&#39;
+    elif instcfg in [&#39;LO&#39;]:
+        header[&#39;INSTCFG&#39;] = &#39;LOW&#39;
+    elif instcfg in [&#39;CAM&#39;, &#39;PUP&#39;]:
+        header[&#39;INSTCFG&#39;] = &#39;CAMERA&#39;
+    else:
+        header[&#39;INSTCFG&#39;] = instcfg
+
+    nexp = int(header.get(&#39;NEXP&#39;, -9999))
+    header[&#39;NEXP&#39;] = 1 if nexp == -9999 else nexp
+
+    # For SOFIA
+    header[&#39;EFL0&#39;] = 3000.0
+
+    # Check for pinhole mode
+    header[&#39;PINHOLE&#39;] = False  # not used for EXES yet
+
+    # Add the current date/time
+    header[&#39;DATE&#39;] = Time.now().isot[:-4]
+
+    # Set the elapsed time within the file
+    set_elapsed_time(header)
+
+    # If raw filename has not yet been added, add it now
+    if &#39;RAWFNAME&#39; not in header:
+        header[&#39;RAWFNAME&#39;] = (str(header.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;)),
+                              &#39;Raw file name&#39;)
+
+
+def _process_instrument_configuration(header):
+    &quot;&quot;&quot;
+    Update header based on instrument configuration.
+
+    Header is updated in-place.
+
+    Parameters
+    ----------
+    header : fits.Header
+    &quot;&quot;&quot;
+    instcfg = header[&#39;INSTCFG&#39;]
+    if instcfg in [&#39;MEDIUM&#39;, &#39;HIGH_MED&#39;, &#39;LOW&#39;, &#39;HIGH_LOW&#39;]:
+        header[&#39;GRATANGL&#39;] = header[&#39;ECHELLE&#39;]
+        if &#39;LOW&#39; in instcfg:
+            header[&#39;XDDGR&#39;] = header[&#39;XDLRDGR&#39;]  # LOW
+        else:
+            header[&#39;XDDGR&#39;] = header[&#39;XDMRDGR&#39;]  # MEDIUM
+
+    if instcfg != &#39;CAMERA&#39;:
+        w0 = parse_central_wavenumber(header)
+        xddgr = float(header[&#39;XDDGR&#39;])
+        gangle = float(header[&#39;GRATANGL&#39;])
+        iorder = int(np.round(2 * xddgr * np.sin(np.radians(gangle)) * w0))
+
+        if instcfg in [&#39;MEDIUM&#39;, &#39;HIGH_MED&#39;]:
+            sinang = iorder / (2 * xddgr * w0)
+            theta = np.arcsin(sinang)
+        else:
+            theta = np.radians(gangle)
+
+        header[&#39;XDR&#39;] = np.tan(theta + float(header[&#39;XDDELTA&#39;]))
+
+        if instcfg == &#39;HIGH_LOW&#39;:
+            # XDR seems underestimated by 2 for high-low mode
+            header[&#39;XDR&#39;] /= 2
+
+        # assign a rough resolution if it is missing entirely
+        # or has a bad value
+        res = header.get(&#39;RESOLUN&#39;, -9999)
+        if res &lt; 500:
+            log.warning(f&#39;RESOLUN has incorrect value: {res}&#39;)
+            if &#39;HIGH&#39; in instcfg:
+                header[&#39;RESOLUN&#39;] = 75000
+            elif instcfg == &#39;LOW&#39;:
+                header[&#39;RESOLUN&#39;] = 2000
+            else:
+                header[&#39;RESOLUN&#39;] = 10000
+            log.warning(f&quot;Assigning default value: {header[&#39;RESOLUN&#39;]}&quot;)
+
+
+def _process_slit_configuration(header):
+    &quot;&quot;&quot;
+    Update the SLITVAL keyword based on configuration and header.
+
+    Header is updated in-place.
+
+    Parameters
+    ----------
+    header : fits.Header
+    &quot;&quot;&quot;
+    slit_file = os.path.join(
+        os.path.dirname(exes.__file__), &#39;data&#39;, &#39;slit&#39;, &#39;slitval.dat&#39;)
+    if not goodfile(slit_file, verbose=True):
+        raise ValueError(f&quot;Could not read slit configuration &quot;
+                         f&quot;file: {slit_file}&quot;)
+
+    columns = [&#39;date&#39;, &#39;limit&#39;, &#39;div1&#39;, &#39;div2&#39;, &#39;c1&#39;, &#39;c2&#39;]
+    columns.extend([f&#39;v{i}&#39; for i in range(24)])
+
+    df = pd.read_csv(slit_file, delim_whitespace=True, comment=&#39;#&#39;,
+                     names=columns, dtype=float)
+    row = df[df[&#39;date&#39;] &gt; header[&#39;fdate&#39;]].iloc[0]
+
+    slit = float(header[&#39;SDEG&#39;])
+    if slit &lt; row[&#39;limit&#39;]:
+        c = row[&#39;c1&#39;]
+        m = row[&#39;div1&#39;]
+    else:
+        c = row[&#39;c2&#39;]
+        m = row[&#39;div2&#39;]
+
+    islit = int(slit / m) + int(c) - 1
+    slitval = 0
+    if 0 &lt;= islit &lt; 24:
+        slitval = row[f&#39;v{islit}&#39;]
+
+    if slitval == 0:
+        log.warning(&quot;Slit angle out of range&quot;)
+        slitval = 0.01
+
+    header[&#39;SLITVAL&#39;] = slitval
+
+
+def _process_tort_configuration(header):
+    &quot;&quot;&quot;
+    Set tort parameters from central wave number and date.
+
+    Header is updated in-place.
+
+    Parameters
+    ----------
+    header : fits.Header
+    &quot;&quot;&quot;
+    tort_directory = os.path.join(
+        os.path.dirname(exes.__file__), &#39;data&#39;, &#39;tort&#39;)
+    tort_name = header[&#39;INSTCFG&#39;].replace(&#39;_&#39;, &#39;&#39;).lower()
+    tort_file = os.path.join(tort_directory, &#39;tortparm_&#39; + tort_name + &#39;.dat&#39;)
+    if not goodfile(tort_file, verbose=True):
+        log.warning(f&quot;Cannot read tort file: {tort_file}&quot;)
+        log.warning(&#39;Using low mode parameters.&#39;)
+        tort_file = os.path.join(tort_directory, &#39;tortparm_low.dat&#39;)
+
+    columns = [&#39;date&#39;, &#39;hrfl0&#39;, &#39;xdfl0&#39;, &#39;slitrot&#39;,
+               &#39;krot&#39;, &#39;brl&#39;, &#39;x0brl&#39;, &#39;y0brl&#39;, &#39;hrr&#39;, &#39;detrot&#39;]
+    df = pd.read_csv(tort_file, delim_whitespace=True, comment=&#39;#&#39;,
+                     names=columns, dtype=float)
+    row = df[df[&#39;date&#39;] &gt; header[&#39;fdate&#39;]].iloc[0]
+    log.info(f&quot;Using tort parameters from: {tort_file} {row[&#39;date&#39;]}&quot;)
+
+    header[&#39;BRL&#39;] = row[&#39;brl&#39;]
+    header[&#39;X0BRL&#39;] = row[&#39;x0brl&#39;]
+    header[&#39;Y0BRL&#39;] = row[&#39;y0brl&#39;]
+
+    # Only use default values if not already set for the following keys
+    override_keys = [&#39;KROT&#39;, &#39;SLITROT&#39;, &#39;HRFL0&#39;, &#39;XDFL0&#39;, &#39;HRR&#39;, &#39;DETROT&#39;]
+    for key in override_keys:
+        if np.isclose(header[key], -9999):
+            header[key] = row[key.lower()]
+
+    hrfl0 = float(header[&#39;HRFL0&#39;])
+    xdfl0 = float(header[&#39;XDFL0&#39;])
+    efl0 = float(header[&#39;EFL0&#39;])
+    slitval = float(header[&#39;SLITVAL&#39;])
+    hrg = float(header[&#39;HRG&#39;])
+
+    # This value is a holdover from the TEXES pipeline,
+    # which used a focal reducer. EXES doesn&#39;t have one,
+    # but the calculation is preserved here for historical
+    # reasons.
+    fred = 1.0
+    header[&#39;HRFL&#39;] = hrfl0 / fred
+    header[&#39;XDFL&#39;] = xdfl0 / fred
+    header[&#39;EFL&#39;] = efl0 / fred
+    header[&#39;HRDGR&#39;] = 0.3 * 2.54 * 0.996 * np.cos(hrg)
+
+    # preferentially use slit width from estimated header value
+    # instead of recalculating:
+    slitwid = header.get(&#39;SLIT_AS&#39;, -9999)
+    if slitwid == -9999:
+        slitwid = slitval / (efl0 * 4.848e-06)
+    header[&#39;SLITWID&#39;] = slitwid
+
+    # set platescale value by mode
+    instcfg = header[&#39;INSTCFG&#39;]
+    pltscale = 0.201
+    if &#39;HIGH&#39; in instcfg:
+        # input angle
+        alpha = np.radians(header[&#39;ECHELLE&#39;])
+
+        # difference between input and output beams: 5.43 degrees
+        delta = np.radians(5.43)
+
+        # output angle
+        beta = alpha + delta
+
+        # corrected plate scale
+        header[&#39;PLTSCALE&#39;] = pltscale * np.cos(beta) / np.cos(alpha)
+    else:
+        header[&#39;PLTSCALE&#39;] = pltscale
+
+    # set solid angle per pixel from plate scale and slit width
+    header[&#39;OMEGAP&#39;] = header[&#39;PLTSCALE&#39;] * slitwid * (4.848e-06) ** 2
+
+
+def _add_configuration_files(header):
+    &quot;&quot;&quot;
+    Add file paths to configuration files.
+
+    Header is updated in-place.
+
+    Parameters
+    ----------
+    header : fits.Header
+    &quot;&quot;&quot;
+    datapath = os.path.join(os.path.dirname(exes.__file__), &#39;data&#39;)
+    default_file = os.path.join(datapath, &#39;caldefault.dat&#39;)
+    if not goodfile(default_file, verbose=True):
+        raise ValueError(f&quot;Could not read default file: {default_file}&quot;)
+
+    columns = [&#39;date&#39;, &#39;bpmfile&#39;, &#39;darkfile&#39;, &#39;linfile&#39;]
+    df = pd.read_csv(default_file, delim_whitespace=True,
+                     comment=&#39;#&#39;, names=columns)
+    df[&#39;date&#39;] = df[&#39;date&#39;].apply(float)
+    row = df[df[&#39;date&#39;] &gt; header[&#39;fdate&#39;]].iloc[0]
+
+    bpmfile = os.path.join(datapath, &#39;bpm&#39;, row[&#39;bpmfile&#39;])
+    if goodfile(bpmfile, verbose=True):
+        # standard cal path for source distribution
+        header[&#39;BPM&#39;] = bpmfile
+    else:
+        # retrieve remotely if needed
+        header[&#39;BPM&#39;] = _download_cache_file(row[&#39;bpmfile&#39;])
+
+    linfile = os.path.join(datapath, &#39;lincoeff&#39;, row[&#39;linfile&#39;])
+    if goodfile(linfile, verbose=True):
+        header[&#39;LINFILE&#39;] = linfile
+    else:
+        header[&#39;LINFILE&#39;] = _download_cache_file(row[&#39;linfile&#39;])
+
+    darkfile = os.path.join(datapath, &#39;dark&#39;, row[&#39;darkfile&#39;])
+    if goodfile(darkfile, verbose=True):
+        header[&#39;DRKFILE&#39;] = darkfile
+    else:
+        header[&#39;DRKFILE&#39;] = _download_cache_file(row[&#39;darkfile&#39;])
+
+
+def _download_cache_file(filename):
+    basename = os.path.basename(filename)
+    url = f&#39;{DATA_URL}{basename}&#39;
+
+    try:
+        cache_file = download_file(url, cache=True, pkgname=&#39;sofia_redux&#39;)
+    except (OSError, KeyError):
+        # return basename only if file can&#39;t be downloaded;
+        # pipeline will issue clearer errors later
+        cache_file = basename
+        log.warning(f&#39;File {cache_file} could not be downloaded from {url}&#39;)
+
+    return cache_file
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

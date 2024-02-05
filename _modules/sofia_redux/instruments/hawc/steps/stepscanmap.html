@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepscanmap &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepscanmap</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Scan image reconstruction pipeline step.&quot;&quot;&quot;
+
+import os
+import warnings
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.instruments.hawc.datafits import DataFits
+from sofia_redux.instruments.hawc.stepmiparent import StepMIParent
+from sofia_redux.instruments.hawc.stepmoparent import StepMOParent
+from sofia_redux.scan.reduction.reduction import Reduction
+
+
+__all__ = [&#39;StepScanMap&#39;]
+
+
+<div class="viewcode-block" id="StepScanMap">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepscanmap.StepScanMap.html#sofia_redux.instruments.hawc.steps.stepscanmap.StepScanMap">[docs]</a>
+class StepScanMap(StepMOParent):
+    &quot;&quot;&quot;
+    Reconstruct an image from scanning data.
+
+    Input data for this step are raw HAWC data FITS files.
+
+    Output from this step is typically a single output DataFits,
+    with 4 image planes (HDUs): SIGNAL, EXPOSURE, NOISE and S/N.
+    Additionally, binary table HDUs (index 4+) are added for each input scan
+    (controlled by the write.scandata option), which contains original
+    header information for each scan, per-scan reduction summary data,
+    and a binary table of scan data (e.g. pixel gains, weights,
+    per-pixel spectral filter profile, pixel noise spectra etc.).
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepScanMap.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepscanmap.StepScanMap.html#sofia_redux.instruments.hawc.steps.stepscanmap.StepScanMap.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;scanmap&#39;, and are named with
+        the step abbreviation &#39;SMP&#39;.
+
+        Parameters defined for this step are:
+
+        noout : bool
+            If set, FITS output is not expected and will not be
+            loaded. This may be set for off-nominal reductions, like
+            skydip observations.
+        subarray : str
+            Specify the subarrays to use in the reduction. Default is
+            all available (&#39;R0,T0,R1&#39;).
+        use_frames : str
+            Frames to use from the reduction. Specify a particular
+            range, as &#39;400:-400&#39; or &#39;400:1000&#39;
+        grid : float
+            Output pixel scale.  If not set, default values from scan map
+            configuration will be used.
+        deep : bool
+            If set, faint point-like emission is prioritized.
+        faint : bool
+            If set, faint emission (point-like or extended) is prioritized.
+        extended : bool
+            If set, extended emission is prioritized.
+            This may increase noise on large angular scales.
+        options : str
+            Additional options to pass to the scan map algorithm.
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;scanmap&#39;
+        self.description = &#39;Construct Scan Map&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;smp&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+
+        # Append parameters
+        self.paramlist.append([&#39;noout&#39;, False,
+                               &#39;No FITS output is expected&#39;])
+        self.paramlist.append([&#39;subarray&#39;, &#39;R0,T0,R1&#39;,
+                               &quot;Subarrays to use in reduction &quot;
+                               &quot;(&#39;&#39; for default)&quot;])
+        self.paramlist.append([&#39;use_frames&#39;, &#39;&#39;,
+                               &quot;Frames to use from reduction. &quot;
+                               &quot;Specify a particular range, as &quot;
+                               &quot;&#39;400:-400&#39;, or &#39;400:1000&#39;.&quot;])
+        self.paramlist.append([&#39;grid&#39;, &#39;&#39;,
+                               &quot;Output pixel scale, if not default. &quot;
+                               &quot;Specify in arcsec.&quot;])
+        self.paramlist.append([&#39;deep&#39;, False,
+                               &#39;Attempt to recover faint point-like &#39;
+                               &#39;emission&#39;])
+        self.paramlist.append([&#39;faint&#39;, False,
+                               &#39;Attempt to recover faint emission &#39;
+                               &#39;(point-like or extended)&#39;])
+        self.paramlist.append([&#39;extended&#39;, False,
+                               &#39;Attempt to recover extended emission &#39;
+                               &#39;(may increase noise)&#39;])
+        self.paramlist.append([&#39;options&#39;, &#39;&#39;,
+                               &#39;Additional options for scan reconstruction&#39;])</div>
+
+
+<div class="viewcode-block" id="StepScanMap.merge_scan_hdr">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepscanmap.StepScanMap.html#sofia_redux.instruments.hawc.steps.stepscanmap.StepScanMap.merge_scan_hdr">[docs]</a>
+    @staticmethod
+    def merge_scan_hdr(df, scnhead, datain):
+        &quot;&quot;&quot;
+        Merge headers from scan output files.
+
+        The header in the `df` is updated in place.
+
+        Parameters
+        ----------
+        df : DataFits
+            The output data to update.
+        scnhead : fits.Header
+            The header from the scan output file.
+        datain : list of DataFits
+            The list of input data to merge into the output data.
+        &quot;&quot;&quot;
+        # Get card lists and add scan keywords
+        othercards = scnhead.cards
+        for cardi, card in enumerate(othercards):
+            kwd = card.keyword
+
+            # skip comments
+            if kwd == &#39;COMMENT&#39;:
+                continue
+
+            # otherwise add key normally
+            try:
+                if len(card.comment) &gt; 0:
+                    df.setheadval(kwd, card.value, card.comment)
+                else:
+                    df.setheadval(kwd, card.value)
+            except (KeyError, ValueError, TypeError):
+                log.warning(&quot;Unable to add FITS keyword %s=%s&quot; %
+                            (kwd, card.value))
+
+        # set ASSC_AOR and ASSC_MSN value in input header, before merging
+        try:
+            df.setheadval(&#39;ASSC_AOR&#39;,
+                          df.getheadval(&#39;AOR_ID&#39;),
+                          &#39;Associated AORs&#39;)
+        except KeyError:
+            pass
+        try:
+            df.setheadval(&#39;ASSC_MSN&#39;,
+                          df.getheadval(&#39;MISSN-ID&#39;),
+                          &#39;Associated Mission IDs&#39;)
+        except KeyError:
+            pass
+
+        # update header keywords from datain list
+        for i, df_in in enumerate(datain):
+            try:
+                df_in.setheadval(&#39;ASSC_AOR&#39;, df_in.getheadval(&#39;AOR_ID&#39;),
+                                 &#39;Associated AORs&#39;)
+            except KeyError:
+                pass
+            try:
+                df_in.setheadval(&#39;ASSC_MSN&#39;, df_in.getheadval(&#39;MISSN-ID&#39;),
+                                 &#39;Associated Mission IDs&#39;)
+            except KeyError:
+                pass
+
+            # remove any previous history for less clutter
+            df_in.delheadval(&#39;HISTORY&#39;)
+
+            df.mergehead(df_in)
+
+        # Remove an engineering keyword if necessary
+        df.delheadval(&#39;XPADDING&#39;)</div>
+
+
+<div class="viewcode-block" id="StepScanMap.check_use_frames">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepscanmap.StepScanMap.html#sofia_redux.instruments.hawc.steps.stepscanmap.StepScanMap.check_use_frames">[docs]</a>
+    @staticmethod
+    def check_use_frames(datain, use_frames):
+        if use_frames == &#39;&#39;:
+            return use_frames
+        try:
+            nframes = np.array([float(df.header.get(&#39;EXPTIME&#39;))
+                                * float(df.header.get(&#39;SMPLFREQ&#39;))
+                                for df in datain])
+        except (ValueError, TypeError):
+            log.warning(&#39;Could not read EXPTIME or SMPLFREQ from header.&#39;)
+            return use_frames
+        else:
+            try:
+                ranges = use_frames.split(&#39;,&#39;)
+                for r in ranges:
+                    s = r.split(&#39;:&#39;)
+                    if len(s) &gt; 1:
+                        if s[0].strip() not in [&#39;&#39;, &#39;*&#39;]:
+                            nframes -= abs(int(s[0]))
+                        if s[1].strip() not in [&#39;&#39;, &#39;*&#39;]:
+                            nframes -= abs(int(s[1]))
+                    elif s[0].strip() not in [&#39;&#39;, &#39;*&#39;]:
+                        nframes -= abs(int(s[0]))
+                if np.any(nframes &lt; 10):
+                    log.warning(&#39;Frame range parameter is out of &#39;
+                                &#39;bounds for this scan set. Turning off &#39;
+                                &#39;frame clipping.&#39;)
+                    use_frames = &#39;&#39;
+            except (ValueError, TypeError):
+                log.warning(&#39;Bad use_frames parameter. Turning off &#39;
+                            &#39;frame clipping.&#39;)
+                use_frames = &#39;&#39;
+        return use_frames</div>
+
+
+<div class="viewcode-block" id="StepScanMap.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepscanmap.StepScanMap.html#sofia_redux.instruments.hawc.steps.stepscanmap.StepScanMap.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        This step is run as a multi-in multi-out (MIMO) step:
+        self.datain should be a list of DataFits, and output
+        will also be a list of DataFits, stored in self.dataout.
+
+        The process is:
+
+        1. Assemble the scan map options from input parameters.
+        2. Call the iterative scan map reconstructor.
+        3. Retrieve output and update headers as necessary.
+
+        &quot;&quot;&quot;
+        # collect input options in dict
+        kwargs = {&#39;write&#39;: {&#39;source&#39;: False}}
+        options = {}
+
+        # output path
+        outpath = os.path.dirname(self.datain[0].filename)
+        kwargs[&#39;outpath&#39;] = outpath
+
+        # output basename
+        outname = os.path.basename(self.datain[0].filenamebegin
+                                   + self.procname.upper()
+                                   + self.datain[0].filenameend)
+        kwargs[&#39;name&#39;] = outname
+
+        # get options
+        subarr = str(self.getarg(&#39;subarray&#39;)).strip()
+        if subarr != &#39;&#39;:
+            kwargs[&#39;subarray&#39;] = subarr
+            kwargs[&#39;lock&#39;] = &#39;subarray&#39;
+
+        # add additional top-level parameters
+        for arg in [&#39;deep&#39;, &#39;faint&#39;, &#39;extended&#39;]:
+            if self.getarg(arg):
+                kwargs[arg] = True
+
+        # add frame clipping if necessary
+        use_frames = str(self.getarg(&#39;use_frames&#39;)).strip()
+        use_frames = self.check_use_frames(self.datain, use_frames)
+        if use_frames != &#39;&#39;:
+            kwargs[&#39;frames&#39;] = use_frames
+
+        # set the output pixel scale if supplied
+        try:
+            grid = float(str(self.getarg(&#39;grid&#39;)).strip())
+        except (ValueError, TypeError):
+            grid = None
+        if grid is not None:
+            kwargs[&#39;grid&#39;] = grid
+
+        # add additional options from parameters at end,
+        # so they can override any defaults set by the above
+        additional = str(self.getarg(&#39;options&#39;)).strip()
+        if additional != &#39;&#39;:
+            all_val = additional.split()
+            for val in all_val:
+                try:
+                    k, v = val.split(&#39;=&#39;)
+                except (IndexError, ValueError, TypeError):
+                    pass
+                else:
+                    options[k] = v
+        kwargs[&#39;options&#39;] = options
+
+        # get input file names
+        infiles = []
+        for datain in self.datain:
+            if os.path.exists(datain.filename):
+                infiles.append(datain.filename)
+            else:
+                rawname = datain.rawname
+                if os.path.exists(rawname):
+                    infiles.append(rawname)
+
+        # log input
+        log.debug(f&#39;All provided options: {kwargs}&#39;)
+        log.debug(f&#39;Input files: {infiles}&#39;)
+
+        # run the reduction
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            reduction = Reduction(&#39;hawc_plus&#39;)
+            output_hdul = reduction.run(infiles, **kwargs)
+
+        # If no output requested
+        if self.getarg(&#39;noout&#39;):
+            log.debug(&#39;Not loading output - copy from input&#39;)
+
+            # copy input
+            self.dataout = self.datain
+
+            # SOFIA keywords are not updated since this output is not
+            # intended to be saved
+            return
+
+        # read output file(s)
+        if output_hdul is not None and isinstance(output_hdul, fits.HDUList):
+            # single output file
+            df = DataFits(config=self.config)
+            df.filename = self.datain[-1].filename
+            df.load(hdul=output_hdul)
+
+            # store the output in dataout
+            self.dataout = df
+        else:
+            if output_hdul is None:
+                log.error(&#39;No output created.&#39;)
+                raise ValueError(&#39;No output created.&#39;)
+            else:
+                log.error(&#39;Unexpected output for scan imaging mode. &#39;
+                          &#39;Check INSTCFG.&#39;)
+                raise ValueError(&quot;Expected output not found.&quot;)
+
+        # Copy and save headers
+        scnhead = self.dataout.header.copy()
+        self.dataout.header = self.datain[0].header.copy()
+        self.merge_scan_hdr(self.dataout, scnhead, self.datain)
+
+        # Update SOFIA mandated keywords (since this is first pipe step)
+        obsid = &#39;P_&#39; + self.datain[0].getheadval(&#39;OBS_ID&#39;)
+        self.dataout.setheadval(&#39;OBS_ID&#39;, obsid)
+        self.dataout.setheadval(&#39;PIPELINE&#39;, &#39;HAWC_DRP&#39;)
+
+        # Set BUNIT correctly in S/N and exposure extensions
+
+        if &#39;S/N&#39; in self.dataout.imgnames and \
+                &#39;EXPOSURE&#39; in self.dataout.imgnames:
+            self.dataout.setheadval(&#39;BUNIT&#39;, &#39;&#39;,
+                                    comment=&#39;Data units&#39;,
+                                    dataname=&#39;S/N&#39;)
+            self.dataout.setheadval(&#39;BUNIT&#39;, &#39;s&#39;,
+                                    comment=&#39;Data units&#39;,
+                                    dataname=&#39;EXPOSURE&#39;)
+
+        # Set output list for MIMO compatibility
+        self.dataout = [self.dataout]</div>
+
+
+<div class="viewcode-block" id="StepScanMap.runend">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepscanmap.StepScanMap.html#sofia_redux.instruments.hawc.steps.stepscanmap.StepScanMap.runend">[docs]</a>
+    def runend(self, data):
+        &quot;&quot;&quot;
+        Clean up after a pipeline step.
+
+        Override the default method to call MISO-style header
+        updating, in the case where a single file is returned.
+
+        Parameters
+        ----------
+        data : list of DataFits or DataText
+            Output data to update.
+        &quot;&quot;&quot;
+        # if one output file, use the MISO update header;
+        # if multiple, use MIMO
+        if len(data) == 1:
+            log.debug(&#39;Updating headers for single-output format&#39;)
+            self.iomode = &#39;MISO&#39;
+            StepMIParent.runend(self, data[0])
+        else:
+            log.debug(&#39;Updating headers for multiple-output format&#39;)
+            self.iomode = &#39;MIMO&#39;
+            StepMOParent.runend(self, data)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

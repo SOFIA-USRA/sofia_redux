@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.distcorr_model &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.distcorr_model</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import os
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+import pandas
+
+from sofia_redux.toolkit.utilities.fits import hdinsert, kref
+
+import sofia_redux.instruments.forcast as drip
+import sofia_redux.instruments.forcast.configuration as dripconfig
+from sofia_redux.instruments.forcast.getpar import getpar
+
+__all__ = [&#39;pinhole_defaults&#39;, &#39;read_pinhole_file&#39;,
+           &#39;pinhole_model&#39;, &#39;view_model&#39;, &#39;distcorr_model&#39;]
+
+
+<div class="viewcode-block" id="pinhole_defaults">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.distcorr_model.pinhole_defaults.html#sofia_redux.instruments.forcast.distcorr_model.pinhole_defaults">[docs]</a>
+def pinhole_defaults():
+    # get pinhole filename with getpar
+    # (will load config if not already done)
+    filename = getpar(fits.header.Header(),
+                      &#39;fpinhole&#39;, default=&#39;undefined&#39;)
+
+    # may have subdirectories specified with /
+    # replace them OS independently.
+    filename = os.path.join(*filename.split(&#39;/&#39;))
+    datadir = os.path.join(os.path.dirname(drip.__file__), &#39;data&#39;, &#39;pinhole&#39;)
+    fpinhole = os.path.join(datadir, filename)
+
+    # retrieve the rest of the values directly
+    # from the config
+    config = dripconfig.configuration
+    order = int(config.get(&#39;order&#39;, 4))
+
+    return {
+        &#39;fpinhole&#39;: fpinhole, &#39;order&#39;: order
+    }</div>
+
+
+
+<div class="viewcode-block" id="read_pinhole_file">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.distcorr_model.read_pinhole_file.html#sofia_redux.instruments.forcast.distcorr_model.read_pinhole_file">[docs]</a>
+def read_pinhole_file(pinhole_file):
+    &quot;&quot;&quot;
+    Read the pinhole file and return a dataframe
+
+    Note that 1 is subtracted from the xpos and ypos pixel
+    positions for consistency with Python/IDL indexing.
+
+    Parameters
+    ----------
+    pinhole_file : str, optional
+        Path to the pinhole file.  If None is supplied, will read
+        the default pinhole file
+
+    Returns
+    -------
+    pandas.DataFrame
+        contents of the pinhole file as a dataframe
+    &quot;&quot;&quot;
+    if not isinstance(pinhole_file, str) or not os.path.isfile(pinhole_file):
+        log.error(&quot;File %s does not exist&quot; % repr(pinhole_file))
+        return
+    log.info(&quot;Reading pinhole file %s&quot; % pinhole_file)
+    table = pandas.read_csv(pinhole_file, comment=&#39;#&#39;,
+                            delim_whitespace=True)
+    return table</div>
+
+
+
+<div class="viewcode-block" id="pinhole_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.distcorr_model.pinhole_model.html#sofia_redux.instruments.forcast.distcorr_model.pinhole_model">[docs]</a>
+def pinhole_model(xpos, ypos, xid, yid):
+    &quot;&quot;&quot;
+    Generate the pinhole model from paramters.
+
+    Parameters
+    ----------
+    xpos : array-like
+    ypos : array-like
+    xid : array-like
+    yid : array-like
+
+    Returns
+    -------
+    dict
+        The model parameters. Keys are &#39;avgdx&#39;, &#39;avgdy&#39;,
+        &#39;angle&#39;, &#39;xmodel&#39;, &#39;ymodel&#39;.
+    &quot;&quot;&quot;
+    # the FORCAST array is 256 x 256
+    nximg = 256
+    nyimg = 256
+
+    # number of pinhole points in table
+    nxpts = np.max(xid) + 1
+    nypts = np.max(yid) + 1
+
+    # Check that positions make sense (greater than 0 and lower than
+    # image size)
+    if (xpos[~np.isnan(xpos)] &lt; 0).any() or \
+            (xpos[~np.isnan(xpos)] &gt;= nximg).any():
+        log.error(&quot;X positions are lower than 0 or greater than %s&quot; % nximg)
+        return
+    elif (ypos[~np.isnan(ypos)] &lt; 0).any() or \
+            (ypos[~np.isnan(ypos)] &gt;= nyimg).any():
+        log.error(&quot;Y positions are lower than 0 or greater than %s&quot; % nyimg)
+        return
+
+    results = {}
+
+    # Rearrange pinholes into arrays
+    xpos_arr = np.full((nypts, nxpts), np.nan)
+    ypos_arr = np.full((nypts, nxpts), np.nan)
+    xpos_arr[yid, xid] = xpos
+    ypos_arr[yid, xid] = ypos
+
+    # Diff adjacent pins to get dx and dy, for pin spacing
+    # NaNs are propagated
+    dxpos = xpos_arr[:, 1:] - xpos_arr[:, :-1]
+    dypos = ypos_arr[1:, :] - ypos_arr[:-1, :]
+
+    # Also get the change in x position up a column, for angle
+    # estimation
+    dxlpos = xpos_arr[1:, :] - xpos_arr[:-1, :]
+    theta = np.arctan2(dxlpos[:, :-1], dxpos[:-1, :])
+
+    results[&#39;angle&#39;] = float(np.nanmean(theta))
+
+    # If angle is small, it&#39;s better to just set it
+    # to zero
+    log.debug(&#39;Estimated angle: {}&#39;.format(np.rad2deg(results[&#39;angle&#39;])))
+    if np.abs(np.rad2deg(results[&#39;angle&#39;])) &lt; 0.9:
+        log.debug(&#39;Estimated angle is close to zero: &#39;
+                  &#39;ignoring angle correction.&#39;)
+        results[&#39;angle&#39;] = 0.0
+
+    # Average x and y separation of pin holes,
+    # corrected by the angle
+    results[&#39;avgdx&#39;] = float(np.nanmean(dxpos)) / abs(np.cos(results[&#39;angle&#39;]))
+    results[&#39;avgdy&#39;] = float(np.nanmean(dypos)) / abs(np.cos(results[&#39;angle&#39;]))
+
+    # Create model x,y coordinates
+    mody, modx = np.mgrid[:nypts, :nxpts].astype(&#39;float&#39;)
+    modx = modx * results[&#39;avgdx&#39;] + xpos_arr[0, 0]
+    mody = mody * results[&#39;avgdy&#39;] + ypos_arr[0, 0]
+
+    # Rotate model about the center of the array
+    xcen = nximg / 2.0 + 0.5
+    ycen = nyimg / 2.0 + 0.5
+    ang = results[&#39;angle&#39;]
+    xp = ((modx - xcen) * np.cos(ang)) + (mody - ycen) * np.sin(ang) + xcen
+    yp = ((modx - xcen) * -np.sin(ang)) + (mody - ycen) * np.cos(ang) + ycen
+
+    # Offset to match a central pinhole
+    distsq = (xpos_arr - xcen)**2 + (ypos_arr - ycen)**2
+    minpin = np.unravel_index(np.nanargmin(distsq), distsq.shape)
+    xp = xp - xp[minpin] + xpos_arr[minpin]
+    yp = yp - yp[minpin] + ypos_arr[minpin]
+
+    # Flatten arrays and remove NaNs
+    idx = np.logical_and(~np.isnan(xpos_arr), ~np.isnan(ypos_arr))
+    results[&#39;xpos&#39;] = xpos_arr[idx].flatten()
+    results[&#39;ypos&#39;] = ypos_arr[idx].flatten()
+    results[&#39;xmodel&#39;] = xp[idx].flatten()
+    results[&#39;ymodel&#39;] = yp[idx].flatten()
+
+    return results</div>
+
+
+
+<div class="viewcode-block" id="view_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.distcorr_model.view_model.html#sofia_redux.instruments.forcast.distcorr_model.view_model">[docs]</a>
+def view_model(x, y, fwhm=1.5, amplitude=3000,
+               write_file=None, force=False, show=False):
+    &quot;&quot;&quot;
+    View the pinhole model and optionally write to FITS file.
+
+    Image will effectively be convolved with a gaussian for
+    visibility
+
+    Parameters
+    ----------
+    x : array-like
+        x-pixel pinhole locations
+    y : array-like
+        y-pixel pinhole locations
+    fwhm : float, optional
+        fwhm of gaussian convolution kernel (pixels)
+    amplitude : float, optional
+        Amplitude of gaussian convolution kernel
+    force : bool, optional
+        Force overwrite of `write_file` if it already exists
+    write_file : str, optional
+        Write the image in FITS format to this location
+    show : bool, optional
+        Show plot with matplotlib.
+
+    Returns
+    -------
+    None
+    &quot;&quot;&quot;
+    from astropy.modeling.models import Gaussian2D
+    from astropy.stats import gaussian_sigma_to_fwhm
+
+    nx, ny = 256, 256
+    yy, xx = np.mgrid[:ny, :nx]
+    fwhm = gaussian_sigma_to_fwhm * fwhm
+    gmodel = Gaussian2D(amplitude=amplitude, x_stddev=fwhm, y_stddev=fwhm)
+    image = np.zeros((ny, nx), dtype=float)
+    for gy, gx in zip(y, x):
+        gmodel.x_mean = gx
+        gmodel.y_mean = gy
+        image += gmodel(xx, yy)
+
+    if show:  # pragma: no cover
+        import matplotlib.pyplot as plt
+        plt.ion()
+        plt.figure()
+        plt.imshow(image, origin=&#39;lower&#39;)
+        plt.title(&#39;Pinhole Model&#39;)
+        plt.show()
+        plt.pause(0.001)
+
+    if isinstance(write_file, str):
+        if os.path.isfile(write_file):
+            if not force:
+                log.warning(&quot;will not overwrite: %s&quot; % write_file)
+                return
+            else:
+                os.remove(write_file)
+        fits.writeto(write_file, image)</div>
+
+
+
+<div class="viewcode-block" id="distcorr_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.distcorr_model.distcorr_model.html#sofia_redux.instruments.forcast.distcorr_model.distcorr_model">[docs]</a>
+def distcorr_model(pinhole=None,
+                   viewpin=False, basehead=None, order=None):
+    &quot;&quot;&quot;
+    Generate model array of pin holes base on input file
+
+    Read the positions of the pinholes and average the distance
+    between positions; creates a model where the pinholes are
+    regularly spaced.  The model is then shifted and rotated in
+    order to match the observed pinhole mask.
+
+    Parameters
+    ----------
+    pinhole : str or pandas.dataframe
+        File path to a text file containing a list of the positions
+        of the pinholes or dataframe object.  Columns are
+        xid, yid, xpos, ypos.
+    viewpin : bool or str, optional
+        If set to True, will display the pin model.
+        If a string is provided, it will be interpreted
+        as a filename, and the model will be written to the
+        file instead of shown.
+    basehead : astropy.io.fits.header.Header, optional
+        Header array to update with pin model array
+        (PIN_MOD=[dx,dy,angle,order]).
+    order : int, optional
+        Order of distortion model.  If not provided, the default
+        value of 4 will be used.
+
+    Notes
+    -----
+    A value of None for pinhole or order will cause default
+    values specified in the drip configuration file to be used.
+
+    Returns
+    -------
+    dict
+        model -&gt; numpy.ndarray
+            N(x, y) model reference positions of shape (N, 2)
+        pins -&gt; numpy.ndarray
+            N(x, y) pin positions of shape (N, 2)
+        nx, ny -&gt; int
+            define number of pixels for both pins and image in x and y
+        dx, dy -&gt; float
+            model x, y spacing
+        angle -&gt; float
+            clockwise rotation of the model about the center
+            in degrees.
+        order -&gt; int
+            order to be used if using the &quot;polynomial&quot; method in
+            sofia_redux.instruments.forcast.undistort based upon this model.
+    &quot;&quot;&quot;
+    defaults = pinhole_defaults()
+    if pinhole is None:
+        pinhole = defaults.get(&#39;fpinhole&#39;)
+    if order is None:
+        order = defaults.get(&#39;order&#39;)
+
+    if isinstance(pinhole, pandas.DataFrame):
+        table = pinhole.copy()
+    else:
+        table = read_pinhole_file(pinhole)
+    if not isinstance(table, pandas.DataFrame):
+        log.error(&quot;Invalid pinhole data&quot;)
+        return
+
+    xpos = table.xpos.values.copy()
+    ypos = table.ypos.values.copy()
+    xid = table.xid.values.copy()
+    yid = table.yid.values.copy()
+    positions = pinhole_model(xpos, ypos, xid, yid)
+
+    log.info(&quot;avgdx=%f, avgdy=%f, angle=%f&quot; %
+             (positions[&#39;avgdx&#39;],
+              positions[&#39;avgdy&#39;],
+              np.rad2deg(positions[&#39;angle&#39;])))
+
+    if viewpin:
+        if isinstance(viewpin, str):
+            fout = viewpin
+            show = False
+        else:  # pragma: no cover
+            fout = None
+            show = True
+        view_model(positions[&#39;xmodel&#39;], positions[&#39;ymodel&#39;],
+                   write_file=fout, show=show)
+
+    # Update header
+    if isinstance(basehead, fits.header.Header):
+        value = &#39;[%f,%f,%f,%s]&#39; % (
+            positions[&#39;avgdx&#39;], positions[&#39;avgdy&#39;],
+            np.rad2deg(positions[&#39;angle&#39;]), int(order))
+        comment = &quot;pinhole model coeffs&quot;
+        hdinsert(basehead, &#39;PIN_MOD&#39;, value, comment=comment, refkey=kref)
+
+    return {
+        &#39;model&#39;: np.stack((positions[&#39;xmodel&#39;], positions[&#39;ymodel&#39;]), axis=1),
+        &#39;pins&#39;: np.stack((positions[&#39;xpos&#39;], positions[&#39;ypos&#39;]), axis=1),
+        &#39;dx&#39;: positions[&#39;avgdx&#39;],
+        &#39;dy&#39;: positions[&#39;avgdy&#39;],
+        &#39;nx&#39;: 256,
+        &#39;ny&#39;: 256,
+        &#39;order&#39;: int(order),
+        &#39;angle&#39;: np.rad2deg(positions[&#39;angle&#39;])
+    }</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

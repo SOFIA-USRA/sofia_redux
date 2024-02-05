@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.imgnonlin &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.imgnonlin</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import re
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+from numpy.polynomial.polynomial import polyval
+
+from sofia_redux.toolkit.utilities.fits import add_history_wrap, hdinsert, kref
+
+from sofia_redux.instruments.forcast.getdetchan import getdetchan
+from sofia_redux.instruments.forcast.getpar import getpar
+
+addhist = add_history_wrap(&#39;Image nonlin&#39;)
+
+__all__ = [&#39;get_siglev&#39;, &#39;get_camera_and_capacitance&#39;,
+           &#39;get_reference_scale&#39;, &#39;get_coefficients&#39;,
+           &#39;get_coeff_limits&#39;, &#39;imgnonlin&#39;]
+
+
+<div class="viewcode-block" id="get_siglev">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.imgnonlin.get_siglev.html#sofia_redux.instruments.forcast.imgnonlin.get_siglev">[docs]</a>
+def get_siglev(header):
+    &quot;&quot;&quot;
+    Return the signal level from the header
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+
+    Returns
+    -------
+    numpy.ndarray
+
+    &quot;&quot;&quot;
+    siglev = getpar(header, &#39;NLINSLEV&#39;, dtype=str, default=&#39;NONE&#39;, warn=True,
+                    comment=&#39;Signal level of background&#39;)
+    if siglev == &#39;NONE&#39;:
+        return
+    siglev = [float(x) for x in re.sub(r&#39;[\[\]]&#39;, &#39;&#39;, siglev).split(&#39;,&#39;)]
+    return np.array(siglev)</div>
+
+
+
+<div class="viewcode-block" id="get_camera_and_capacitance">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.imgnonlin.get_camera_and_capacitance.html#sofia_redux.instruments.forcast.imgnonlin.get_camera_and_capacitance">[docs]</a>
+def get_camera_and_capacitance(header):
+    &quot;&quot;&quot;
+    Read header and determine camera
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+
+    Returns
+    -------
+    str
+       camera + capacitance.  All uppercase.  For example, &#39;LWCLO&#39;
+    &quot;&quot;&quot;
+    detchan = getdetchan(header)
+    camera = &#39;SWC&#39; if detchan == &#39;SW&#39; else &#39;LWC&#39;
+    epadu = getpar(header, &#39;EPERADU&#39;, dtype=int, default=None, warn=True)
+    if epadu is None:
+        return
+    cap = {136: &#39;Lo&#39;, 1294: &#39;Hi&#39;}.get(epadu)
+    if cap is None:
+        return
+    return (camera + cap).upper().strip()</div>
+
+
+
+<div class="viewcode-block" id="get_reference_scale">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.imgnonlin.get_reference_scale.html#sofia_redux.instruments.forcast.imgnonlin.get_reference_scale">[docs]</a>
+def get_reference_scale(header, camcap, update=False):
+    &quot;&quot;&quot;
+    Get non-linearity scale from the header based on camera and capacitance
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+    camcap : str
+        camera + 2-letter-capacitance, e.g., SWCHI, LWCLO, etc.
+    update : bool, optional
+        If True, update the header with a HISTORY message stating the
+        scale
+
+    Returns
+    -------
+    tuple of float
+        reference, scale
+    &quot;&quot;&quot;
+    refsig = getpar(header, &#39;NLR&#39; + camcap,
+                    dtype=float, default=9000, warn=True,
+                    comment=&#39;count reference for linearity correction&#39;)
+    scale = getpar(header, &#39;NLS&#39; + camcap,
+                   dtype=float, default=refsig, warn=True,
+                   comment=&#39;count scale for linearity correction&#39;)
+    if update:
+        addhist(header, &#39;Scale is %f&#39; % scale)
+
+    return refsig, scale</div>
+
+
+
+<div class="viewcode-block" id="get_coefficients">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.imgnonlin.get_coefficients.html#sofia_redux.instruments.forcast.imgnonlin.get_coefficients">[docs]</a>
+def get_coefficients(header, camcap, update=False):
+    &quot;&quot;&quot;
+    Get non-linearity coefficients from the header based on camera and
+    capacitance
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+    camcap : str
+        camera + 2-letter-capacitance, e.g., SWCHI, LWCLO, etc.
+    update : bool, optional
+        If True, update the header with the coefficients.  keys will
+        be NLINC# where # represents a number.  The NLC + camap key
+        will also be removed as it does not fit in the line.  A
+        HISTORY message will also be appended stating the read
+        coefficients
+
+    Returns
+    -------
+    numpy.ndarray
+        float coefficient values from header
+    &quot;&quot;&quot;
+    # Get coeff depending on camera and cap
+    cread = getpar(header, &#39;NLC&#39; + camcap, dtype=str, default=&#39;NONE&#39;,
+                   warn=True, comment=&#39;linearity correction coefficients&#39;)
+    if cread == &#39;NONE&#39;:
+        return
+    coeffs = [float(x) for x in re.sub(r&#39;[\[\]]&#39;, &#39;&#39;, cread).split(&#39;,&#39;)]
+
+    if update:
+        addhist(header, &#39;Coeff=%s&#39; % cread)
+        key = (&#39;NLC&#39; + camcap)[:8]
+        if key in header:
+            del header[key]
+        for idx, val in enumerate(coeffs):
+            hdinsert(header, &#39;NLINC%s&#39; % idx, val, refkey=kref,
+                     comment=&#39;linearity correction coeff #%s&#39; % idx)
+
+    return np.array(coeffs)</div>
+
+
+
+<div class="viewcode-block" id="get_coeff_limits">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.imgnonlin.get_coeff_limits.html#sofia_redux.instruments.forcast.imgnonlin.get_coeff_limits">[docs]</a>
+def get_coeff_limits(header, camcap, update=False):
+    &quot;&quot;&quot;
+    Get non-linearity coefficient limits from the header based on camera
+    and capacitance
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+    camcap : str
+        camera + 2-letter-capacitance, e.g., SWCHI, LWCLO, etc.
+    update : bool, optional
+        If True, update the header with HISTORY messages
+
+    Returns
+    -------
+    numpy.ndarray
+        float coefficient limit values from header of length 2
+    &quot;&quot;&quot;
+    # Get lims depending on camera and cap
+    limread = getpar(header, &#39;LIM&#39; + camcap, dtype=str, default=&#39;NONE&#39;,
+                     comment=&#39;linearity correction limits&#39;, warn=True)
+    if limread == &#39;NONE&#39;:
+        return
+    if update:
+        addhist(header, &#39;level limits are %s&#39; % limread)
+
+    lims = [float(x) for x in re.sub(r&#39;[\[\]]&#39;, &#39;&#39;, limread).split(&#39;,&#39;)]
+    if len(lims) != 2:
+        return
+    return np.array(lims)</div>
+
+
+
+<div class="viewcode-block" id="imgnonlin">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.imgnonlin.imgnonlin.html#sofia_redux.instruments.forcast.imgnonlin.imgnonlin">[docs]</a>
+def imgnonlin(data, header, siglev=None, variance=None):
+    &quot;&quot;&quot;
+    Corrects for non-linearity in detector response due to general background.
+
+    The header must contain the information to determine the camera.  If
+    siglev is not passed, the header must also contain a keyword
+    (NLINSLEV) to indicate the background level and size of the section
+    used to calculate the level.  In practice, this means that
+    sofia_redux.instruments.forcast.background should be run first to
+    calculate the background level.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        Input data array (nimage, nrow, ncol)
+    header : astropy.io.fits.header.Header
+        Input FITS header.  Will be updated with a HISTORY message
+    siglev : array_like, optional
+        Background level.  There should be a single value for each input
+        frame
+    variance : numpy.ndarray, optional
+        Variance array (nimage, nrow, ncol) to update in parallel with the
+        data frame.
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        The linearity corrected array (nimage, nrow, ncol) or (nrow, ncol)
+        The propagated variance array (nimage, nrow, ncol) or (nrow, ncol)
+    &quot;&quot;&quot;
+    if not isinstance(header, fits.header.Header):
+        log.error(&quot;invalid header&quot;)
+        return
+
+    if not isinstance(data, np.ndarray) or len(data.shape) not in [2, 3]:
+        addhist(header, &#39;not corrected (invalid data)&#39;)
+        log.error(&quot;invalid data&quot;)
+        return
+    ndim = len(data.shape)
+    d = data.copy()
+    if ndim == 2:
+        d = np.array([d])
+
+    dovar = variance is not None and variance.shape == data.shape
+    var = variance.copy() if dovar else None
+    if variance is not None and not dovar:
+        addhist(header, &#39;Not propagating variance (invalid variance)&#39;)
+        log.error(&#39;invalid variance&#39;)
+    if ndim == 2:
+        var = np.array([var])
+    elif not dovar:
+        var = [None] * 3
+
+    # Read background level in header
+    if siglev is None:
+        siglev = get_siglev(header)
+    else:
+        siglev = np.array(siglev)
+    if not isinstance(siglev, np.ndarray):
+        addhist(header, &#39;not corrected (invalid signal levels)&#39;)
+        log.error(&#39;invalid signal levels&#39;)
+        return
+    elif len(siglev) != d.shape[0]:
+        addhist(header, &#39;not corrected (mismatch data and signal levels)&#39;)
+        log.error(&#39;signal size does not match data shape&#39;)
+        return
+
+    # Get the camera and capacitance level
+    camcap = get_camera_and_capacitance(header)
+    if camcap is None:
+        addhist(header, &#39;not corrected (unknown capacitance)&#39;)
+        log.error(&#39;E/ADU is not correctly defined&#39;)
+        return
+    log.info(&quot;Using camera %s with %s capacitance&quot; % (camcap[:3], camcap[3:]))
+
+    # get non-linearity reference and scale
+    refscale = get_reference_scale(header, camcap, update=True)
+
+    # get non-linearity coefficients
+    coeffs = get_coefficients(header, camcap, update=True)
+    if coeffs is None:
+        addhist(header, &#39;not corrected (invalid non-linearity coefficients)&#39;)
+        log.error(&#39;invalid non-linearity coefficients&#39;)
+        return
+
+    # get non-linearity coefficient limits
+    lims = get_coeff_limits(header, camcap, update=True)
+    if lims is None:
+        msg = &#39;invalid limits of non-linearity coefficients&#39;
+        addhist(header, &#39;not corrected (%s)&#39; % msg)
+        log.error(msg)
+        return
+
+    # Check limits
+    outside = np.where((siglev &lt; lims[0]) | (siglev &gt; lims[1]))[0]
+    if len(outside) &gt; 0:
+        hdinsert(header, &#39;NLINFLAG&#39;, True, refkey=kref,
+                 comment=&#39;flag outside range levels in lin. correction&#39;)
+        for idx in outside:
+            msg = &#39;Signal level %s for plane %i outside range&#39; % (
+                siglev[idx], idx)
+            addhist(header, msg)
+            log.warning(&quot;level %f outside fit range: %s&quot; % (siglev[idx], lims))
+        addhist(header, &#39;not corrected (level outside correction range)&#39;)
+        log.warning(&#39;level outside correction range&#39;)
+        return
+
+    # Apply correction
+    plane = 0
+    xval = (siglev - refscale[0]) / refscale[1]
+    corr = polyval(xval, coeffs)
+    for factor, frame, vframe in zip(corr, d, var):
+        msg = &#39;factor of plane %s is %s&#39; % (plane, factor)
+        log.info(msg)
+        addhist(header, msg)
+        frame /= factor
+        if dovar:
+            vframe /= factor ** 2
+        plane += 1
+
+    if ndim == 2:
+        d, var = d[0], var[0]
+    elif not dovar:
+        var = None
+
+    return d, var</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.configuration.options &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.configuration.options</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC
+from astropy import log
+from configobj import ConfigObj
+from copy import deepcopy
+import numpy as np
+
+from sofia_redux.scan.utilities import utils
+from sofia_redux.scan.utilities.range import Range
+
+__all__ = [&#39;Options&#39;]
+
+
+<div class="viewcode-block" id="Options">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options">[docs]</a>
+class Options(ABC):
+
+    append_keys = ()
+
+    def __init__(self, allow_error=False, verbose=True):
+        &quot;&quot;&quot;
+        Initialize an Options object.
+
+        The Options contain a :class:`ConfigObj` as the container for any
+        given configuration.  There is also handling provided for cases when
+        a configuration functionality results in an error.  These may be
+        emitted as log messages if `verbose` is `True`, or raised as errors if
+        `allow_error` is `False`.
+
+        Since all configuration values are stored as strings, there are
+        special handling methods to retrieve the desired value type such as
+        integers, strings, angles, or time.
+
+        Parameters
+        ----------
+        allow_error : bool, optional
+            If `True`, allow poorly formatted options to be skipped rather than
+            raising an error.
+        verbose : bool, optional
+            If `True`, issues a warning when a poorly option is encountered.
+        &quot;&quot;&quot;
+        self.options = ConfigObj()
+        self.allow_error = allow_error
+        self.verbose = verbose
+
+    def __len__(self):
+        &quot;&quot;&quot;
+        Return the number of options keys.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        if not hasattr(self.options, &#39;__len__&#39;):
+            return 0
+        return len(self.options)
+
+    def __contains__(self, key):
+        &quot;&quot;&quot;
+        Check if a key is available in the configuration.
+
+        Note that disabled (forgotten, blacklisted) keys will be returned as
+        `False`.
+
+        Parameters
+        ----------
+        key : str
+            The key to check.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        if not isinstance(self.options, dict):
+            return False
+        return key in self.options
+
+    def __getitem__(self, key):
+        &quot;&quot;&quot;
+        Retrieve the options value for the given key.
+
+        Parameters
+        ----------
+        key : str
+            The key to retrieve from the options.
+
+        Returns
+        -------
+        value : str or None
+            The configuration value, or `None` if it does not exist in the
+            configuration.
+        &quot;&quot;&quot;
+        result = self.get(key)
+        if result is None:
+            raise KeyError(key)
+        else:
+            return result
+
+    def __delitem__(self, key):
+        &quot;&quot;&quot;
+        Delete a key from the options.
+
+        Parameters
+        ----------
+        key : str or object
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.options is None:
+            raise KeyError(&quot;Options are not initialized.&quot;)
+        del self.options[key]
+
+    @property
+    def size(self):
+        &quot;&quot;&quot;
+        Return the number of available options.
+
+        Returns
+        -------
+        n_options : int
+        &quot;&quot;&quot;
+        return len(self)
+
+    @property
+    def is_empty(self):
+        &quot;&quot;&quot;
+        Return `True` if the options contain any key-values.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self.size == 0
+
+<div class="viewcode-block" id="Options.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the options.
+
+        Returns
+        -------
+        Options
+        &quot;&quot;&quot;
+        return deepcopy(self)</div>
+
+
+<div class="viewcode-block" id="Options.clear">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.clear">[docs]</a>
+    def clear(self):
+        &quot;&quot;&quot;
+        Clear all options.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.options = ConfigObj()</div>
+
+
+<div class="viewcode-block" id="Options.get">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.get">[docs]</a>
+    def get(self, key, default=None, unalias=True):
+        &quot;&quot;&quot;
+        Retrieve the given key value from the options.
+
+        Parameters
+        ----------
+        key : str
+            The name of the value to retrieve.
+        default : object, optional
+            The value to return if the options do not contain the given `key`.
+        unalias : bool, optional
+            If `True`, unalias the key before attempting retrieval.
+
+        Returns
+        -------
+        value : str
+            The retrieved value.  Note that all :class:`ConfigObj` values are
+            strings.
+        &quot;&quot;&quot;
+        return self.options.get(key, default=default)</div>
+
+
+<div class="viewcode-block" id="Options.get_string">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.get_string">[docs]</a>
+    def get_string(self, key, default=None, unalias=True):
+        &quot;&quot;&quot;
+        Return a string value from the options for the given key.
+
+        Parameters
+        ----------
+        key : str
+            The name of the options value to retrieve.
+        default : str, optional
+            The default value to return if `key` does not exist in the options.
+        unalias : bool, optional
+            If `True`, unalias the key before attempting retrieval.
+
+        Returns
+        -------
+        value : str
+        &quot;&quot;&quot;
+        return utils.get_string(self.get(key, unalias=unalias),
+                                default=default)</div>
+
+
+<div class="viewcode-block" id="Options.get_bool">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.get_bool">[docs]</a>
+    def get_bool(self, key, default=False, unalias=True):
+        &quot;&quot;&quot;
+        Return a boolean value from the options for the given key.
+
+        Parameters
+        ----------
+        key : str
+            The name of the options value to retrieve.
+        default : bool, optional
+            The default value to return if `key` does not exist in the options.
+        unalias : bool, optional
+            If `True`, unalias the key before attempting retrieval.
+
+        Returns
+        -------
+        value : bool
+        &quot;&quot;&quot;
+        return utils.get_bool(self.get(key, unalias=unalias), default=default)</div>
+
+
+<div class="viewcode-block" id="Options.get_int">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.get_int">[docs]</a>
+    def get_int(self, key, default=0, unalias=True):
+        &quot;&quot;&quot;
+        Return an integer value from the options for the given key.
+
+        Parameters
+        ----------
+        key : str
+            The name of the options value to retrieve.
+        default : int, optional
+            The default value to return if `key` does not exist in the options.
+        unalias : bool, optional
+            If `True`, unalias the key before attempting retrieval.
+
+        Returns
+        -------
+        value : int
+        &quot;&quot;&quot;
+        return utils.get_int(self.get(key, unalias=unalias), default=default)</div>
+
+
+<div class="viewcode-block" id="Options.get_float">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.get_float">[docs]</a>
+    def get_float(self, key, default=np.nan, unalias=True):
+        &quot;&quot;&quot;
+        Return a float value from the options for the given key.
+
+        Parameters
+        ----------
+        key : str
+            The name of the options value to retrieve.
+        default : float, optional
+            The default value to return if `key` does not exist in the options.
+        unalias : bool, optional
+            If `True`, unalias the key before attempting retrieval.
+
+        Returns
+        -------
+        value : float
+        &quot;&quot;&quot;
+        return utils.get_float(self.get(key, unalias=unalias), default=default)</div>
+
+
+<div class="viewcode-block" id="Options.get_range">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.get_range">[docs]</a>
+    def get_range(self, key, default=Range(), is_positive=False, unalias=True):
+        &quot;&quot;&quot;
+        Return a Range value from the options for the given key.
+
+        Parameters
+        ----------
+        key : str
+            The name of the options value to retrieve.
+        default : Range, optional
+            The default value to return if `key` does not exist in the options.
+        is_positive : bool, optional
+            If `True`, all values in the range are considered positive and any
+            &#39;-&#39; character in `spec` will be treated as a delimiter rather than
+            a minus sign.
+        unalias : bool, optional
+            If `True`, unalias the key before attempting retrieval.
+
+        Returns
+        -------
+        value : Range
+        &quot;&quot;&quot;
+        return utils.get_range(self.get(key, unalias=unalias),
+                               default=default, is_positive=is_positive)</div>
+
+
+<div class="viewcode-block" id="Options.get_list">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.get_list">[docs]</a>
+    def get_list(self, key, default=None, unalias=True):
+        &quot;&quot;&quot;
+        Return a list value from the options for the given key.
+
+        Parameters
+        ----------
+        key : str
+            The name of the options value to retrieve.
+        default : list, optional
+            The default value to return if `key` does not exist in the options.
+        unalias : bool, optional
+            If `True`, unalias the key before attempting retrieval.
+
+        Returns
+        -------
+        value : list
+        &quot;&quot;&quot;
+        return utils.get_list(self.get(key, default=default, unalias=unalias))</div>
+
+
+<div class="viewcode-block" id="Options.get_string_list">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.get_string_list">[docs]</a>
+    def get_string_list(self, key, delimiter=&#39;,&#39;, default=None, unalias=True):
+        &quot;&quot;&quot;
+        Return a list of strings from the options for the given key.
+
+        Parameters
+        ----------
+        key : str
+            The name of the options value to retrieve.
+        delimiter : str, optional
+            The string delimiter used to separate one element from the next.
+        default : list, optional
+            The default value to return if `key` does not exist in the options.
+        unalias : bool, optional
+            If `True`, unalias the key before attempting retrieval.
+
+        Returns
+        -------
+        value : list (str)
+        &quot;&quot;&quot;
+        return utils.get_string_list(
+            self.get(key, default=None, unalias=unalias),
+            default=default, delimiter=delimiter)</div>
+
+
+<div class="viewcode-block" id="Options.get_int_list">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.get_int_list">[docs]</a>
+    def get_int_list(self, key, delimiter=&#39;,&#39;, default=None, unalias=True,
+                     is_positive=False):
+        &quot;&quot;&quot;
+        Return a list of integers from the options for the given key.
+
+        Parameters
+        ----------
+        key : str
+            The name of the options value to retrieve.
+        delimiter : str, optional
+            The string delimiter used to separate one element from the next.
+        default : list, optional
+            The default value to return if `key` does not exist in the options.
+        unalias : bool, optional
+            If `True`, unalias the key before attempting retrieval.
+        is_positive : bool, optional
+            If `True`, ranges may be specified using both &#39;:&#39; and &#39;-&#39;
+            characters in a string.  Otherwise, the &#39;-&#39; character will imply
+            a negative value.
+
+        Returns
+        -------
+        value : list (int)
+        &quot;&quot;&quot;
+        return utils.get_int_list(self.get(key, default=None, unalias=unalias),
+                                  default=default, delimiter=delimiter,
+                                  is_positive=is_positive)</div>
+
+
+<div class="viewcode-block" id="Options.get_float_list">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.get_float_list">[docs]</a>
+    def get_float_list(self, key, delimiter=&#39;,&#39;, default=None, unalias=True):
+        &quot;&quot;&quot;
+        Return a list of floats from the options for the given key.
+
+        Parameters
+        ----------
+        key : str
+            The name of the options value to retrieve.
+        delimiter : str, optional
+            The string delimiter used to separate one element from the next.
+        default : list, optional
+            The default value to return if `key` does not exist in the options.
+        unalias : bool, optional
+            If `True`, unalias the key before attempting retrieval.
+
+        Returns
+        -------
+        value : list (float)
+        &quot;&quot;&quot;
+        return utils.get_float_list(
+            self.get(key, default=None, unalias=unalias),
+            default=default, delimiter=delimiter)</div>
+
+
+<div class="viewcode-block" id="Options.get_dms_angle">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.get_dms_angle">[docs]</a>
+    def get_dms_angle(self, key, default=np.nan, unalias=True):
+        &quot;&quot;&quot;
+        Return a degree:minutes:seconds angle for the given options key.
+
+        Parameters
+        ----------
+        key : str
+            The name of the options value to retrieve.  The value should be
+            expected to be parsable as a degree:minutes:second angle according
+            to :func:`utils.parse_angle`.
+        default : int or float or units.Quantity, optional
+            The default angle to return in cases where the `value` cannot be
+            parsed correctly
+        unalias : bool, optional
+            If `True`, unalias the key before attempting retrieval.
+
+        Returns
+        -------
+        value : units.Quantity
+            The resolved angle in degrees.
+        &quot;&quot;&quot;
+        return utils.get_dms_angle(self.get(key, default=None,
+                                            unalias=unalias),
+                                   default=default)</div>
+
+
+<div class="viewcode-block" id="Options.get_hms_time">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.get_hms_time">[docs]</a>
+    def get_hms_time(self, key, angle=False, default=np.nan, unalias=True):
+        &quot;&quot;&quot;
+        Return a hour:minutes:seconds angle for the given options key.
+
+        Parameters
+        ----------
+        key : str
+            The name of the options value to retrieve.  The value should be
+            expected to be parsable as a degree:minutes:second angle according
+            to :func:`utils.parse_angle`.
+        angle : bool, optional
+            If `True`, return an hour angle unit instead of hour unit.
+        default : int or float or units.Quantity, optional
+            The default angle to return in cases where the `value` cannot be
+            parsed correctly
+        unalias : bool, optional
+            If `True`, unalias the key before attempting retrieval.
+
+        Returns
+        -------
+        time : units.Quantity
+            The resolved time in hours, or as an hour angle.
+        &quot;&quot;&quot;
+        return utils.get_hms_time(self.get(key, default=None, unalias=unalias),
+                                  default=default, angle=angle)</div>
+
+
+<div class="viewcode-block" id="Options.get_sign">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.get_sign">[docs]</a>
+    def get_sign(self, key, default=0, unalias=True):
+        &quot;&quot;&quot;
+        Return an integer representation of a sign value in the options.
+
+        Parameters
+        ----------
+        key : str
+            The name of the options value to retrieve.
+        default : int, optional
+            The default sign to return.
+        unalias : bool, optional
+            If `True`, unalias the key before attempting retrieval.
+
+        Returns
+        -------
+        sign : int
+            1 for a positive sign, -1 for a negative sign, and 0 for no sign.
+        &quot;&quot;&quot;
+        return utils.get_sign(self.get(key, default=default, unalias=unalias))</div>
+
+
+<div class="viewcode-block" id="Options.handle_error">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.handle_error">[docs]</a>
+    def handle_error(self, msg, error_class=ValueError):
+        &quot;&quot;&quot;
+        Handle an error.
+
+        If errors are allowed, will emit a log WARNING message and return if
+        verbose is set.  If errors are not allowed, raises an error.
+
+        Parameters
+        ----------
+        msg : str
+            The message to emit by via log or in the raised error.
+        error_class : class (BaseException)
+            The error type to raise.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        BaseException
+            If errors are not permitted.
+        &quot;&quot;&quot;
+        if self.allow_error:
+            if self.verbose:
+                log.warning(msg)
+            else:
+                log.debug(msg)
+        elif not self.allow_error:
+            raise error_class(msg)</div>
+
+
+<div class="viewcode-block" id="Options.update">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.update">[docs]</a>
+    def update(self, options):
+        &quot;&quot;&quot;
+        Update the stored options with another.
+
+        Parameters
+        ----------
+        options : dict or ConfigObj
+            The configuration options to read and parse.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        opts = self.options_to_dict(options, add_singular=False)
+        if opts is None:
+            self.handle_error(f&quot;Could not update with options: {options}&quot;)
+            return
+        self.options.merge(opts)</div>
+
+
+<div class="viewcode-block" id="Options.stringify">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.stringify">[docs]</a>
+    @classmethod
+    def stringify(cls, dictionary):
+        &quot;&quot;&quot;
+        Set all values in a nested dictionary to strings.
+
+        Parameters
+        ----------
+        dictionary : dict
+
+        Returns
+        -------
+        dict
+        &quot;&quot;&quot;
+        new_dict = {}
+        for k, v in dictionary.items():
+            if isinstance(v, dict):
+                new_dict[k] = cls.stringify(v)
+            elif isinstance(v, (list, tuple, set)):
+                new_dict[k] = [str(x) for x in v]
+            else:
+                new_dict[k] = str(v)
+
+        return new_dict</div>
+
+
+<div class="viewcode-block" id="Options.options_to_dict">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.options_to_dict">[docs]</a>
+    @staticmethod
+    def options_to_dict(options, add_singular=True):
+        &quot;&quot;&quot;
+        Converts a single command to a dictionary.
+
+        Parameters
+        ----------
+        options : str or dict or configobj.ConfigObj
+            The options to convert to a dict.
+        add_singular : bool, optional
+            If `True`, and a string option just consists of the name, allow it
+            to be added to the configuration as {&#39;add&#39;: option} to be parsed
+            accordingly during configuration validation.  Otherwise, `None`
+            will be returned
+
+        Returns
+        -------
+        dict_options : dict or None
+            A dictionary or `None` if the options could not be parsed.
+        &quot;&quot;&quot;
+        if isinstance(options, (dict, ConfigObj)):
+            return options
+
+        if isinstance(options, str):
+            options = [x for x in [x.strip() for x in options.split(&#39;=&#39;)]
+                       if x != &#39;&#39;]
+            if len(options) == 2:
+                options = {options[0]: options[1]}
+            elif len(options) == 1:
+                # A single option will just be added to the configuration if
+                # the condition is met.
+                if add_singular:
+                    options = {&#39;add&#39;: options[0]}
+                else:
+                    return None
+            else:
+                return None
+            return options
+
+        return None</div>
+
+
+<div class="viewcode-block" id="Options.merge_options">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.options.Options.html#sofia_redux.scan.configuration.options.Options.merge_options">[docs]</a>
+    @classmethod
+    def merge_options(cls, current, new):
+        &quot;&quot;&quot;
+        Merge new options into the current options.
+
+        Merging new conditions into the currently existing options is slightly
+        complicated.  Command key values must be appended to any currently
+        existing commands keys in the current conditions as a list.  There is
+        also additional handling in place to ensure conditions are updated
+        appropriately since branches may also contain specific values rather
+        than just a simply dictionary of values.  E.g., if we currently have
+        {&#39;sky&#39;: True} and we want to add the options {&#39;sky&#39;: {&#39;gain&#39;: &#39;0.3:3&#39;}}
+        then the output options should be:
+        {&#39;sky&#39;: {&#39;value&#39;: True, &#39;gain&#39;:&#39;0.3:3&#39;}}}.
+
+        Parameters
+        ----------
+        current : ConfigObj
+        new : dict or ConfigObj
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for key, value in new.items():
+            if key not in current:
+                if isinstance(value, dict):
+                    current[key] = ConfigObj()
+                    current[key].merge(value)
+                elif key in cls.append_keys:
+                    if isinstance(value, list):
+                        current[key] = value.copy()
+                    else:
+                        current[key] = value
+                else:
+                    current[key] = value
+            else:
+                current_value = current[key]
+                if key in cls.append_keys:
+                    if not isinstance(value, list):
+                        value = [value]
+                    if not isinstance(current_value, list):
+                        current[key] = [current_value]
+                        current_value = current[key]
+                    for x in value:
+                        if x not in current_value:
+                            current_value.append(x)
+                elif isinstance(current_value, (dict, ConfigObj)):
+                    if isinstance(value, dict):
+                        cls.merge_options(current_value, value)
+                    else:
+                        current_value[&#39;value&#39;] = value
+                elif isinstance(value, dict):
+                    current[key] = {&#39;value&#39;: current_value}
+                    current[key].merge(value)
+                else:
+                    current[key] = value</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

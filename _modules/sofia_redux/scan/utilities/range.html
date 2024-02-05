@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.utilities.range &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.utilities.range</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC
+import re
+import warnings
+
+from astropy import units
+from astropy.units import UnitConversionError
+import numpy as np
+
+__all__ = [&#39;Range&#39;]
+
+
+<div class="viewcode-block" id="Range">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range">[docs]</a>
+class Range(ABC):
+
+    def __init__(self, min_val=-np.inf, max_val=np.inf, include_min=True,
+                 include_max=True):
+        &quot;&quot;&quot;
+        Initialize a Range object.
+
+        A Range object defines a range of values that are considered &quot;valid&quot;,
+        and provides a few methods to check if given values fall within this
+        range.
+
+        Examples
+        --------
+        &gt;&gt;&gt; r = Range(1, 3)
+        &gt;&gt;&gt; print(r(np.arange(5)))
+        [False  True  True  True False]
+
+        &gt;&gt;&gt; r = Range(1, 3, include_min=False, include_max=False)
+        &gt;&gt;&gt; print(r(np.arange(5)))
+        [False False  True False False]
+
+        Parameters
+        ----------
+        min_val : int or float or units.Quantity, optional
+            The minimum value of the range.
+        max_val : int or float or units.Quantity, optional
+            The maximum value of the range.
+        include_min : bool, optional
+            Whether the minimum value of the range is considered valid.
+        include_max : bool, optional
+            Whether the maximum value of the range is considered valid.
+        &quot;&quot;&quot;
+        if isinstance(min_val, units.Quantity):
+            if not isinstance(max_val, units.Quantity):
+                if not np.isfinite(max_val):
+                    max_val = max_val * min_val.unit
+                else:
+                    raise ValueError(&quot;Range units are incompatible.&quot;)
+            else:
+                try:
+                    max_val.to(min_val.unit)
+                except UnitConversionError:
+                    raise ValueError(&quot;Range units are incompatible.&quot;)
+        elif isinstance(max_val, units.Quantity):
+            if not isinstance(min_val, units.Quantity):
+                if not np.isfinite(min_val):
+                    min_val = min_val * max_val.unit
+                else:
+                    raise ValueError(&quot;Range units are incompatible.&quot;)
+        else:
+            min_val = float(min_val)
+            max_val = float(max_val)
+
+        self.min = min_val
+        self.max = max_val
+
+        self.include_min = include_min
+        self.include_max = include_max
+
+<div class="viewcode-block" id="Range.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the Range.
+
+        Returns
+        -------
+        Range
+        &quot;&quot;&quot;
+        return Range(min_val=self.min,
+                     max_val=self.max,
+                     include_max=self.include_max,
+                     include_min=self.include_min)</div>
+
+
+    @property
+    def midpoint(self):
+        &quot;&quot;&quot;
+        Return the midpoint of the Range.
+
+        Returns
+        -------
+        float or units.Quantity
+        &quot;&quot;&quot;
+        return 0.5 * (self.min + self.max)
+
+    @property
+    def span(self):
+        &quot;&quot;&quot;
+        Return the span of the range.
+
+        The span is defined as the difference between the maximum and minimum
+        range values.
+
+        Returns
+        -------
+        float or units.Quantity
+        &quot;&quot;&quot;
+        span = self.max - self.min
+        if span &lt; 0:
+            if isinstance(self.min, units.Quantity):
+                return 0.0 * self.min.unit
+            else:
+                return 0.0
+        return span
+
+    @property
+    def lower_bounded(self):
+        &quot;&quot;&quot;
+        Return whether the range has a lower limit.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return not (np.isinf(self.min) and self.min &lt; 0)
+
+    @property
+    def upper_bounded(self):
+        &quot;&quot;&quot;
+        Return whether the range has an upper limit.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return not (np.isinf(self.max) and self.max &gt; 0)
+
+    @property
+    def bounded(self):
+        &quot;&quot;&quot;
+        Return whether the Range has upper or lower bounds.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self.upper_bounded and self.lower_bounded
+
+    def __eq__(self, other):
+        &quot;&quot;&quot;
+        Return whether this Range is equal to another.
+
+        Parameters
+        ----------
+        other : Range
+
+        Returns
+        -------
+        equal : bool
+        &quot;&quot;&quot;
+        if not isinstance(other, Range):
+            return False
+        if other is self:
+            return True
+        if self.min != other.min:
+            return False
+        if self.max != other.max:
+            return False
+        if self.include_min is not other.include_min:
+            return False
+        if self.include_max is not other.include_max:
+            return False
+        return True
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the Range.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return f&#39;({self.min} -&gt; {self.max})&#39;
+
+    def __repr__(self):
+        &quot;&quot;&quot;
+        Return a canonical string representation of the Range.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return object.__repr__(self) + f&#39; {self}&#39;
+
+<div class="viewcode-block" id="Range.__call__">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.__call__">[docs]</a>
+    def __call__(self, value):
+        &quot;&quot;&quot;
+        Check whether given values fall inside the range.
+
+        Parameters
+        ----------
+        value : int or float or units.Quantity or numpy.ndarray
+
+        Returns
+        -------
+        in_range : bool or np.ndarray (bool)
+        &quot;&quot;&quot;
+        return self.in_range(value)</div>
+
+
+    def __contains__(self, value):
+        &quot;&quot;&quot;
+        Return whether a given value falls inside the valid range.
+
+        Parameters
+        ----------
+        value : int or float or units.Quantity or Range
+
+        Returns
+        -------
+        contained : bool
+        &quot;&quot;&quot;
+        if isinstance(value, Range):
+            return self.in_range(value.min) and self.in_range(value.max)
+        return self.in_range(value)
+
+<div class="viewcode-block" id="Range.in_range">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.in_range">[docs]</a>
+    def in_range(self, value):
+        &quot;&quot;&quot;
+        Return whether a given value is inside the valid range.
+
+        Parameters
+        ----------
+        value : int or float or units.Quantity or numpy.ndarray.
+
+        Returns
+        -------
+        valid : bool or numpy.ndarray (bool)
+        &quot;&quot;&quot;
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            if self.include_min:
+                result = value &gt;= self.min
+            else:
+                result = value &gt; self.min
+            if self.include_max:
+                result &amp;= value &lt;= self.max
+            else:
+                result &amp;= value &lt; self.max
+        return result</div>
+
+
+<div class="viewcode-block" id="Range.intersect_with">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.intersect_with">[docs]</a>
+    def intersect_with(self, *args):
+        &quot;&quot;&quot;
+        Intersects the current range with the new supplied range.
+
+        Parameters
+        ----------
+        args : Range or value, value
+           Either one or two arguments can be supplied.  If a single argument
+           is received, it should be another Range object.  Otherwise, an
+           intersection minimum and maximum must be supplied.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if len(args) == 1:
+            min_value = args[0].min
+            max_value = args[0].max
+        elif len(args) &gt; 2:
+            raise ValueError(
+                &quot;Intersection requires two arguments (min, max) or a Range.&quot;)
+        else:
+            min_value, max_value = args
+
+        if min_value &gt; self.min:
+            self.min = min_value
+        if max_value &lt; self.max:
+            self.max = max_value</div>
+
+
+<div class="viewcode-block" id="Range.include_value">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.include_value">[docs]</a>
+    def include_value(self, value):
+        &quot;&quot;&quot;
+        Extend the range if necessary to include the provided value.
+
+        Note that a NaN value will set the Range to be unbounded (-inf, inf).
+
+        Parameters
+        ----------
+        value : int or float or units.Quantity.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if np.isnan(value):
+            self.full()
+            return
+        if value &lt; self.min:
+            self.min = value
+        elif value &gt; self.max:
+            self.max = value</div>
+
+
+<div class="viewcode-block" id="Range.include">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.include">[docs]</a>
+    def include(self, *args):
+        &quot;&quot;&quot;
+        Extend the range if necessary.
+
+        Parameters
+        ----------
+        args : Range or value, value
+           Either one or two arguments can be supplied.  If a single argument
+           is received, it should be another Range object.  Otherwise, an
+           inclusion minimum and maximum must be supplied.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if len(args) == 1 and isinstance(args[0], Range):
+            args = args[0].min, args[0].max
+        for arg in args:
+            self.include_value(arg)</div>
+
+
+<div class="viewcode-block" id="Range.scale">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.scale">[docs]</a>
+    def scale(self, value):
+        &quot;&quot;&quot;
+        Scale the range by a given factor.
+
+        Parameters
+        ----------
+        value : int or float or units.Quantity or units.Unit
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.min *= value
+        self.max *= value</div>
+
+
+<div class="viewcode-block" id="Range.flip">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.flip">[docs]</a>
+    def flip(self):
+        &quot;&quot;&quot;
+        Swap the minimum and maximum values of the Range.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        temp = self.min
+        self.min = self.max
+        self.max = temp</div>
+
+
+<div class="viewcode-block" id="Range.empty">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.empty">[docs]</a>
+    def empty(self):
+        &quot;&quot;&quot;
+        Remove the range values.
+
+        Sets the (min,max) to (+inf,-inf).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.min = np.inf
+        self.max = -np.inf</div>
+
+
+<div class="viewcode-block" id="Range.is_empty">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.is_empty">[docs]</a>
+    def is_empty(self):
+        &quot;&quot;&quot;
+        Return whether the range is empty.
+
+        A Range is considered empty when the minimum is greater than the
+        maximum.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self.min &gt; self.max</div>
+
+
+<div class="viewcode-block" id="Range.full">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.full">[docs]</a>
+    def full(self):
+        &quot;&quot;&quot;
+        Set the range to -inf -&gt; +inf
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.min = -np.inf
+        self.max = np.inf</div>
+
+
+<div class="viewcode-block" id="Range.is_intersecting">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.is_intersecting">[docs]</a>
+    def is_intersecting(self, other):
+        &quot;&quot;&quot;
+        Return whether this Range is intersecting with another.
+
+        Parameters
+        ----------
+        other : Range
+
+        Returns
+        -------
+        intersecting : bool
+        &quot;&quot;&quot;
+        if other.is_empty():
+            return False
+        if self.is_empty():
+            return False
+        return (other.min in self) or (other.max in self) or (self in other)</div>
+
+
+<div class="viewcode-block" id="Range.grow">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.grow">[docs]</a>
+    def grow(self, factor):
+        &quot;&quot;&quot;
+        Grow a bounded range.
+
+        The span is increased by the specified factor while keeping the
+        midpoint fixed.
+
+        Parameters
+        ----------
+        factor : int or float
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.bounded:
+            return
+        grow = 0.5 * (factor - 1) * self.span
+        self.min -= grow
+        self.max += grow</div>
+
+
+<div class="viewcode-block" id="Range.from_spec">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.from_spec">[docs]</a>
+    @staticmethod
+    def from_spec(spec, is_positive=False):
+        &quot;&quot;&quot;
+        Return a Range object from a string specification.
+
+        Specifications should be of the form min:max or min-max if
+        `is_positive` is `True` where min and max should be replaced by a
+        number.  min and max can also be replaced by &#39;*&#39; indicating no minimum
+        or maximum range limit should be placed.  i.e., the spec 5:* would
+        range from 5 to infinity.
+
+        A single value can also be supplied by just supplying a single number
+        without any &#39;:&#39; or &#39;-&#39; delimiter.  Note that the returned range will
+        be inclusive and must not contain any units.  i.e. min &lt;= valid &lt;= max.
+        You can always set units later by using the scale method.  e.g.,
+
+        - An infinite range may be set with &#39;*&#39;
+        - Unbounded ranges may be set with &#39;&gt;=#&#39;, &#39;&lt;=#&#39;, &#39;&gt;#&#39;, &#39;&lt;#&#39; where #
+          indicates a number.
+
+        &gt;&gt;&gt; r = Range.from_spec(&#39;1:3&#39;)
+        &gt;&gt;&gt; r.scale(units.Unit(&#39;minute&#39;))
+        &gt;&gt;&gt; print(r)
+        (1.0 min -&gt; 3.0 min)
+
+        Parameters
+        ----------
+        spec : str or None
+            The range specification.  Usually read from a configuration file.
+        is_positive : bool, optional
+            If `True`, all values in the range are considered positive and any
+            &#39;-&#39; character in `spec` will be treated as a delimiter rather than
+            a minus sign.
+
+        Returns
+        -------
+        Range
+        &quot;&quot;&quot;
+        if spec is None:
+            return None
+
+        spec = str(spec).strip()
+        if spec == &#39;*&#39;:
+            return Range(-np.inf, np.inf)
+        if spec.startswith(&#39;&gt;=&#39;):
+            return Range(float(spec[2:]), np.inf, include_min=True)
+        if spec.startswith(&#39;&lt;=&#39;):
+            return Range(-np.inf, float(spec[2:]), include_max=True)
+        if spec.startswith(&#39;&gt;&#39;):
+            return Range(float(spec[1:]), np.inf, include_min=False)
+        if spec.startswith(&#39;&lt;&#39;):
+            return Range(-np.inf, float(spec[1:]), include_max=False)
+
+        splitter = r&#39;[:-]&#39; if is_positive else r&#39;[:]&#39;
+        ranges = re.split(splitter, spec)
+        n_range = len(ranges)
+        if n_range not in [1, 2]:
+            raise ValueError(f&quot;Incorrect range spec format: {spec}&quot;)
+        if n_range == 1:
+            min_val = float(ranges[0])
+            max_val = float(ranges[0])
+        else:
+            if ranges[0] == &#39;*&#39;:
+                min_val = -np.inf
+            else:
+                min_val = float(ranges[0])
+            if ranges[1] == &#39;*&#39;:
+                max_val = np.inf
+            else:
+                max_val = float(ranges[1])
+        return Range(min_val, max_val)</div>
+
+
+<div class="viewcode-block" id="Range.full_range">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.full_range">[docs]</a>
+    @staticmethod
+    def full_range():
+        &quot;&quot;&quot;
+        Return a completely unbounded Range.
+
+        The range will extend from -infinity -&gt; +infinity.
+
+        Returns
+        -------
+        Range
+        &quot;&quot;&quot;
+        r = Range()
+        r.full()
+        return r</div>
+
+
+<div class="viewcode-block" id="Range.positive_range">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.positive_range">[docs]</a>
+    @staticmethod
+    def positive_range():
+        &quot;&quot;&quot;
+        Return a range valid for positive values.
+
+        Returns
+        -------
+        Range
+        &quot;&quot;&quot;
+        return Range(0, np.inf)</div>
+
+
+<div class="viewcode-block" id="Range.negative_range">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.range.Range.html#sofia_redux.scan.utilities.range.Range.negative_range">[docs]</a>
+    @staticmethod
+    def negative_range():
+        &quot;&quot;&quot;
+        Return a range valid for negative values.
+
+        Returns
+        -------
+        Range
+        &quot;&quot;&quot;
+        return Range(-np.inf, 0)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

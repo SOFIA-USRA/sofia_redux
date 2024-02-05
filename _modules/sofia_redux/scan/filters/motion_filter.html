@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.filters.motion_filter &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.filters.motion_filter</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log, units
+import numpy as np
+import scipy
+
+from sofia_redux.scan.filters.kill_filter import KillFilter
+from sofia_redux.scan.flags.motion_flags import MotionFlags
+from sofia_redux.scan.utilities.numba_functions import smart_median, pow2ceil
+from sofia_redux.scan.utilities import utils
+from sofia_redux.scan.filters import filters_numba_functions as fnf
+
+__all__ = [&#39;MotionFilter&#39;]
+
+
+<div class="viewcode-block" id="MotionFilter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.motion_filter.MotionFilter.html#sofia_redux.scan.filters.motion_filter.MotionFilter">[docs]</a>
+class MotionFilter(KillFilter):
+
+    def __init__(self, integration=None, data=None):
+        &quot;&quot;&quot;
+        Initializes a motion filter.
+
+        The motion filter kills specific frequencies based on motion
+        statistics.
+
+        Parameters
+        ----------
+        integration : Integration, optional
+        data : numpy.ndarray (float), optional
+            An array of shape (nt, n_channels) where nt is the nearest power of
+            2 integer above the number of integration frames. i.e., if
+            n_frames=5, nt=8, or if n_frames=13, nt=16.  If not provided will
+            be set to frame_data * frame_relative_weight.
+        &quot;&quot;&quot;
+        self.critical = 10.0
+        self.half_width = 0.0  # For AM noise on &gt;5s
+        self.harmonics = 1
+        self.odd_harmonics_only = False
+        super().__init__(integration=integration, data=data)
+
+<div class="viewcode-block" id="MotionFilter.set_integration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.motion_filter.MotionFilter.html#sofia_redux.scan.filters.motion_filter.MotionFilter.set_integration">[docs]</a>
+    def set_integration(self, integration):
+        &quot;&quot;&quot;
+        Set the filter integration.
+
+        Sets the padding of the FFT filter, the number of frequencies, the
+        frequency spacing, and retrieves the channels from the integration if
+        necessary.
+
+        This is where the integration is examined to extract the relevant
+        motion statistics.
+
+        Parameters
+        ----------
+        integration : Integration
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_integration(integration)
+        if self.integration.configuration.get_bool(&#39;lab&#39;):
+            return
+
+        log.debug(&quot;Motion filter:&quot;)
+        if self.has_option(&#39;s2n&#39;):
+            self.critical = utils.get_float(self.option(&#39;s2n&#39;), default=10.0)
+
+        if self.has_option(&#39;stability&#39;):
+            stability = utils.get_float(self.option(&#39;stability&#39;))
+            self.half_width = 0.5 / np.abs(stability)  # in Hz
+
+        if self.has_option(&#39;harmonics&#39;):
+            self.harmonics = utils.get_float(self.option(&#39;harmonics&#39;))
+            self.harmonics = np.clip(self.harmonics, 1, None)
+
+        self.odd_harmonics_only = utils.get_bool(self.option(&#39;odd&#39;))
+
+        positions = self.integration.get_smooth_positions(&#39;SCANNING&#39;)
+        self.add_filter(positions, &#39;x&#39;)
+        self.add_filter(positions, &#39;y&#39;)
+
+        self.expand_filter()
+        self.harmonize()
+        self.range_check()
+
+        n_pass = np.sum(np.logical_not(self.reject))
+        log.debug(f&quot;{100 * n_pass / self.reject.size} pass.&quot;)</div>
+
+
+<div class="viewcode-block" id="MotionFilter.range_check">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.motion_filter.MotionFilter.html#sofia_redux.scan.filters.motion_filter.MotionFilter.range_check">[docs]</a>
+    def range_check(self):
+        &quot;&quot;&quot;
+        Applies the filter over a certain frequency range.
+
+        The frequency range is supplied by the &#39;filter.motion.range&#39;
+        configuration option.  All previously killed frequencies outside
+        of this range will be allowed to pass.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.has_option(&#39;range&#39;):
+            return
+        frequency_range = utils.get_range(
+            self.option(&#39;range&#39;), is_positive=True)
+
+        reject = self.get_reject_mask()
+        min_index = int(frequency_range.min / self.df)
+        max_index = int(np.ceil(frequency_range.max / self.df))
+        min_index = np.clip(min_index, 0, None)
+        max_index = np.clip(max_index, None, reject.size)
+        self.reject[:min_index] = False
+        self.reject[max_index:] = False</div>
+
+
+<div class="viewcode-block" id="MotionFilter.add_filter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.motion_filter.MotionFilter.html#sofia_redux.scan.filters.motion_filter.MotionFilter.add_filter">[docs]</a>
+    def add_filter(self, positions, direction):
+        &quot;&quot;&quot;
+        Filters motion in a given direction.
+
+        The FFT of the motion is calculated, and those frequencies where the
+        power spectrum is above a certain threshold are added to a kill
+        filter.
+
+        The cutoff threshold is given as:
+
+        threshold_rms = critical * RMS(power spectrum)
+
+        where &quot;critical` is determined from the filter.motion.s2n configuration
+        setting.  If filter.motion.above is set, then the threshold is set to:
+
+        max(threshold_rms, max(power_spectrum * above))
+
+        Parameters
+        ----------
+        positions : Quantity
+            An array of positions with shape (n_frames, 2)
+        direction : str or int or MotionFlagTypes
+            The direction of motion to examine.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        reject = self.get_reject_mask()
+        filter_size = pow2ceil(self.integration.size)
+        data = np.zeros(filter_size, dtype=float)
+
+        motion = MotionFlags(direction)
+
+        position_signal = motion(positions).value
+
+        data[:positions.size] = position_signal
+        data[~np.isfinite(data)] = np.nan
+
+        # Remove any constant scanning offset
+        data -= np.nanmean(data)
+
+        # Zero NaNs
+        data[np.isnan(data)] = 0.0
+
+        # FFT to get the scanning spectra
+        data = scipy.fft.rfft(data)
+
+        # Never
+        data.real[0] = 0.0
+        reject[0] = True
+
+        critical_level = self.critical * self.get_fft_rms(data)
+        signal_power = np.abs(data)
+        peak_index = np.argmax(signal_power)
+        peak = signal_power[peak_index]
+
+        if self.has_option(&#39;above&#39;):
+            above = utils.get_float(self.option(&#39;above&#39;))
+            cutoff = peak * above
+            critical_level = np.clip(critical_level, cutoff, None)
+
+        reject[signal_power &gt; critical_level] = True
+        dt = self.integration.info.sampling_interval.decompose().value
+        df = 1.0 / (dt * data.size)
+        peak_frequency = (peak_index / 2) * df * units.Unit(&#39;Hz&#39;)
+
+        for decade in [&#39;mHz&#39;, &#39;Hz&#39;, &#39;kHz&#39;, &#39;MHz&#39;, &#39;GHz&#39;, &#39;THz&#39;]:
+            print_frequency = peak_frequency.to(units.Unit(decade)).round(3)
+            if 1e1 &lt;= print_frequency.value &lt; 1e4:
+                break
+
+        log.debug(f&quot;{motion.direction.name} direction @ {print_frequency}&quot;)</div>
+
+
+<div class="viewcode-block" id="MotionFilter.get_fft_rms">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.motion_filter.MotionFilter.html#sofia_redux.scan.filters.motion_filter.MotionFilter.get_fft_rms">[docs]</a>
+    @staticmethod
+    def get_fft_rms(fft_signal):
+        &quot;&quot;&quot;
+        Return the RMS of an FFT signal.
+
+        Parameters
+        ----------
+        fft_signal : numpy.ndarray (complex)
+            The complex signal.
+
+        Returns
+        -------
+        rms : float
+        &quot;&quot;&quot;
+        variance = np.abs(fft_signal) ** 2
+        median_normalized_variance = 0.454937
+        rms = np.sqrt(smart_median(variance, max_dependence=1)[0])
+        rms /= median_normalized_variance
+        return rms</div>
+
+
+<div class="viewcode-block" id="MotionFilter.expand_filter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.motion_filter.MotionFilter.html#sofia_redux.scan.filters.motion_filter.MotionFilter.expand_filter">[docs]</a>
+    def expand_filter(self):
+        &quot;&quot;&quot;
+        Expand the kill filter based on stability.
+
+        A number of frequency bins on either side of each rejected point will
+        be added to the kill filter.  The number of additional bins on either
+        side is given as half_width / frequency_spacing.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        # Calculate the HWHM of the AM noise
+        fnf.expand_rejection_filter(
+            reject=self.get_reject_mask(),
+            half_width=self.half_width,
+            df=self.df)</div>
+
+
+<div class="viewcode-block" id="MotionFilter.harmonize">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.motion_filter.MotionFilter.html#sofia_redux.scan.filters.motion_filter.MotionFilter.harmonize">[docs]</a>
+    def harmonize(self):
+        &quot;&quot;&quot;
+        Kills harmonics of the rejected frequencies.
+
+        The number of harmonics will be determined from the
+        &#39;filter.motion.harmonics&#39; configuration setting.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.harmonics &lt; 2:
+            return
+
+        fnf.harmonize_rejection_filter(
+            reject=self.get_reject_mask(),
+            harmonics=self.harmonics,
+            odd_harmonics_only=self.odd_harmonics_only)</div>
+
+
+<div class="viewcode-block" id="MotionFilter.pre_filter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.motion_filter.MotionFilter.html#sofia_redux.scan.filters.motion_filter.MotionFilter.pre_filter">[docs]</a>
+    def pre_filter(self):
+        &quot;&quot;&quot;
+        Perform the pre-filtering steps.
+
+        During the pre-filtering steps, dependents are retrieved from the
+        filter integration and cleared (subtracted from integration dependents,
+        integration channels, and zeroed).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_channels(self.integration.channels.get_observing_channels())
+        super().pre_filter()</div>
+
+
+<div class="viewcode-block" id="MotionFilter.get_id">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.motion_filter.MotionFilter.html#sofia_redux.scan.filters.motion_filter.MotionFilter.get_id">[docs]</a>
+    def get_id(self):
+        &quot;&quot;&quot;
+        Return the filter ID.
+
+        Returns
+        -------
+        filter_id : str
+        &quot;&quot;&quot;
+        return &#39;Mf&#39;</div>
+
+
+<div class="viewcode-block" id="MotionFilter.get_config_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.motion_filter.MotionFilter.html#sofia_redux.scan.filters.motion_filter.MotionFilter.get_config_name">[docs]</a>
+    def get_config_name(self):
+        &quot;&quot;&quot;
+        Return the configuration name.
+
+        Returns
+        -------
+        config_name : str
+        &quot;&quot;&quot;
+        return &#39;filter.motion&#39;</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

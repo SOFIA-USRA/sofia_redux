@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.exes.despike &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.exes.despike</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+
+__all__ = [&#39;despike&#39;]
+
+
+<div class="viewcode-block" id="despike">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.despike.despike.html#sofia_redux.instruments.exes.despike.despike">[docs]</a>
+def despike(data, header, variance=None,
+            abeams=None, bbeams=None, gooddata=None,
+            propagate_nan=False):
+    &quot;&quot;&quot;
+    Correct outlier pixels due to temporal spikes.
+
+    All A frames are compared, and any pixels with values greater
+    than a threshold factor (header[&#39;SPIKEFAC&#39;]) of standard deviations
+    from the mean value across the other frames are replaced with
+    that mean value. B frames are similarly compared with each
+    other.
+
+    Optionally (if header[&#39;TRASH&#39;] is True), frames with significantly
+    discrepant overall background levels (&quot;trashed&quot; frames) may be
+    identified automatically and flagged for removal from subsequent
+    reduction.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        3D data cube [nframe, nspec, nspat].
+    header : fits.Header
+        Header of FITS file.
+    variance : numpy.ndarray
+        3D variance cube [nframe, nspec, nspat].
+    abeams : array-like of int
+        Index numbers of A frames in data cube.
+    bbeams : array-like of int
+        Index numbers of B frames in data cube.
+    good_data : numpy.ndarray, optional
+        Bad pixel array [nspec, nspat] indicating valid data
+        (True=good, False=bad).
+    propagate_nan : bool, optional
+        If True, outlier pixels will be replaced by NaN rather
+        than the average value.
+
+    Returns
+    -------
+    spike_data, spike_mask, good_frames : 3-tuple of numpy.ndarray
+        The corrected data, outlier pixel mask, and list of good data frames.
+        Data and mask have dimensions [nframe, nspec, nspat]. In the mask,
+        True=good, False=spike. The good frames list includes indices for
+        all good (non-trashed) frames in the input data.
+    &quot;&quot;&quot;
+
+    good_frames = list()
+    spike_mask = np.full(data.shape, True)
+
+    nz = _check_dimensions(data, header)
+    dovar = _check_variance(variance, header, nz)
+    good_index = _check_good_array(gooddata, header)
+
+    beams = _apply_beams(data, abeams, bbeams)
+
+    read_noise = _read_noise_contribution(header)
+
+    spike_data = data.copy()
+    for beam_name, beam in beams.items():
+        if beam[&#39;data&#39;].size == 0:
+            continue
+        log.info(&#39;&#39;)
+        log.info(f&#39;Despiking {beam_name} beams&#39;)
+
+        beam_nz = _check_dimensions(beam[&#39;data&#39;], header)
+        sky = np.nanmean(beam[&#39;data&#39;][:, good_index], axis=1)
+        trash_frame, ntrash = _trash_frame_check(sky, beam_nz, header,
+                                                 beam_name)
+
+        good_beam_frames = ~trash_frame
+        num_good_z = good_beam_frames.sum()
+        if num_good_z &lt; 2:
+            log.warning(f&quot;Can&#39;t despike an array with less than 2 &quot;
+                        f&quot;good frames. Not applying despike correction to &quot;
+                        f&quot;{beam_name} beams.&quot;)
+            good_frames.extend(list(beam[&#39;beam&#39;][good_beam_frames]))
+            continue
+
+        good_pix, scaled_data, avg_pix, avg_sky = _saturated_pixels(
+            header, full_sky=sky, beam_data=beam[&#39;data&#39;],
+            good_beam_frames=good_beam_frames,
+            frame_gain=read_noise[&#39;frame_gain&#39;],
+            good_index=good_index)
+
+        calc_var = _calculate_variance(scaled_data, avg_pix,
+                                       num_good_z, read_noise)
+
+        if float(header[&#39;SPIKEFAC&#39;]) &gt; 0:
+            above_average = ((calc_var[&#39;var&#39;] &gt; calc_var[&#39;avgvar&#39;])
+                             &amp; good_pix)
+
+            # loop over each frame, comparing the
+            # average without the value for this frame
+            # to the average with it
+            now_good = good_beam_frames
+            goodbeamframes = good_beam_frames.nonzero()[0]
+            spike_count_limit = 5e-3 * header[&#39;NSPEC&#39;] * header[&#39;NSPAT&#39;]
+            for i in range(num_good_z):
+                frame_index = goodbeamframes[i]
+                frame = beam[&#39;beam&#39;][frame_index]
+                frame_value = calc_var[&#39;value&#39;][i]
+                spike_index, averages = _find_spikes(
+                    header, calc_var[&#39;value&#39;], num_good_z,
+                    above_average, frame_value)
+
+                # mark saturated values in spike mask
+                spike_mask[frame] = good_pix.copy()
+
+                if spike_index.sum() &gt; 0:
+                    log.info(f&#39;Frame {frame}: {spike_index.sum()} spikes&#39;)
+
+                    # replace spikes in data
+                    _replace_spikes(spike_data, frame, spike_index,
+                                    averages, avg_pix,
+                                    sky[frame_index],
+                                    average_sky=avg_sky, do_var=dovar,
+                                    variance=variance,
+                                    propagate_nan=propagate_nan)
+
+                    # also mark them in the mask
+                    spike_mask[frame][spike_index] = False
+
+                if spike_index.sum() &gt; spike_count_limit:
+                    log.warning(f&#39;Too many spikes in frame {frame} &#39;
+                                f&#39;(&gt; {spike_count_limit}).&#39;)
+                    if now_good.sum() &gt;= 2:
+                        log.warning(&#39;Marking frame as bad.&#39;)
+                        now_good[frame_index] = False
+                    else:
+                        log.warning(&#39;But skipping would result &#39;
+                                    &#39;in no good pairs.&#39;)
+
+            good_beam_frames = now_good
+        good_frames.extend(list(beam[&#39;beam&#39;][good_beam_frames]))
+
+    # Sort frames: numbers refer to index of original data frames
+    good_frames.sort()
+    log.info(&#39;&#39;)
+    log.info(f&#39;All good frames after despike: {good_frames}&#39;)
+
+    return spike_data, spike_mask, good_frames</div>
+
+
+
+def _check_dimensions(data, header):
+    if data.ndim &lt;= 2:
+        nz = 1
+    else:
+        nz = data.shape[0]
+    if (data.ndim not in [2, 3]
+            or data.shape[-1] != header[&#39;NSPAT&#39;]
+            or data.shape[-2] != header[&#39;NSPEC&#39;]):
+        raise ValueError(f&#39;Data has wrong dimensions ({data.shape}). &#39;
+                         f&#39;Not despiking frames&#39;)
+    return nz
+
+
+def _check_variance(variance, header, nz):
+    if variance is not None:
+        dovar = True
+        if variance.ndim &lt;= 2:
+            nvz = 1
+        else:
+            nvz = variance.shape[0]
+        if (nz != nvz
+                or variance.shape[-1] != header[&#39;NSPAT&#39;]
+                or variance.shape[-2] != header[&#39;NSPEC&#39;]):
+            raise ValueError(f&#39;Variance has wrong dimensions &#39;
+                             f&#39;({variance.shape}). Not despiking frames.&#39;)
+    else:
+        dovar = False
+    return dovar
+
+
+def _check_good_array(good_data, header):
+    if good_data is None:
+        good_index = np.full((header[&#39;NSPAT&#39;], header[&#39;NSPEC&#39;]), True)
+    else:
+        good_index = good_data
+    if not good_index.any():
+        raise ValueError(&#39;No good pixels in data array. Not applying despike&#39;)
+    return good_index
+
+
+def _apply_beams(data, abeams, bbeams):
+    if data.ndim &lt;= 2:
+        nz = 1
+    else:
+        nz = data.shape[0]
+    beam_data = dict()
+    abeam_data, bbeam_data = np.empty((0, 0)), np.empty((0, 0))
+    if abeams is not None and len(abeams) != 0:
+        abeam_data = data[abeams]
+    if bbeams is not None and len(bbeams) != 0:
+        bbeam_data = data[bbeams]
+    if ((abeams is None and bbeams is None)
+            or (len(abeams) == 0 and len(bbeams) == 0)):
+        abeams = np.arange(nz)
+        abeam_data = data
+    beam_data[&#39;A&#39;] = {&#39;beam&#39;: np.array(abeams), &#39;data&#39;: abeam_data}
+    beam_data[&#39;B&#39;] = {&#39;beam&#39;: np.array(bbeams), &#39;data&#39;: bbeam_data}
+    return beam_data
+
+
+def _read_noise_contribution(header):
+    nx = header[&#39;NSPAT&#39;]
+    frame_time = header[&#39;FRAMETIM&#39;]
+    gain = header[&#39;PAGAIN&#39;]
+    beamtime = header[&#39;BEAMTIME&#39;]
+    e_per_adu = header[&#39;EPERADU&#39;]
+    read_noise = header[&#39;READNOIS&#39;]
+
+    if frame_time * beamtime * gain &lt;= 0:
+        frame_time = 1
+        beamtime = 1
+        gain = 1
+
+    frame_gain = frame_time * abs(gain)
+    varmin = nx / (frame_time * beamtime * gain ** 2)
+    e_per_adu *= beamtime
+    read_var = (read_noise / e_per_adu) ** 2
+
+    out = {&#39;frame_gain&#39;: frame_gain, &#39;varmin&#39;: varmin,
+           &#39;read_var&#39;: read_var, &#39;frame_time&#39;: frame_time,
+           &#39;beam_time&#39;: beamtime, &#39;read_noise&#39;: read_noise,
+           &#39;gain&#39;: gain, &#39;eperadu&#39;: e_per_adu}
+    return out
+
+
+def _trash_frame_check(sky, nz, header, beam_name):
+    trash_frame = np.zeros(nz, dtype=bool)
+    if header.get(&#39;TRASH&#39;, False):
+        diff = sky - np.nanmean(sky)
+        sum_diff = diff.sum()
+        sum_sq_diff = (diff ** 2).sum()
+
+        # average difference without a given frame
+        avg1 = (sum_diff - diff) / (nz - 1)
+
+        # variance without a given frame
+        var1 = (sum_sq_diff - diff ** 2) / (nz - 1) - avg1 ** 2
+
+        # frames for which the diff-avg is greater than trashpar * var
+        trash_frame = (diff - avg1) ** 2 &gt; header[&#39;TRASH&#39;] * var1
+        if np.any(trash_frame):
+            log.info(f&#39;{trash_frame.sum()} frame(s) &#39;
+                     f&#39;from {beam_name} are trashed&#39;)
+
+    return trash_frame, sum(trash_frame)
+
+
+def _saturated_pixels(header, full_sky, beam_data, good_beam_frames,
+                      frame_gain, good_index):
+    allowed_max = header[&#39;SATVAL&#39;] / frame_gain
+    sky = full_sky[good_beam_frames]
+    avg_sky = np.nanmean(sky)
+    scaled = np.zeros((len(sky), header[&#39;NSPEC&#39;], header[&#39;NSPAT&#39;]))
+
+    good_data = beam_data[good_beam_frames]
+    for i in range(len(sky)):
+        scaled[i] = good_data[i] * avg_sky / sky[i]
+
+    avg_pix = np.nanmean(scaled, axis=0)
+    if allowed_max &gt; 0:
+        saturated_mask = avg_pix &gt; allowed_max
+        good_index[saturated_mask] = False
+        if saturated_mask.sum():
+            log.info(f&#39;{saturated_mask.sum()} saturated pixels found&#39;)
+
+    return good_index, scaled, avg_pix, avg_sky
+
+
+def _calculate_variance(scaled, average_pixels, num_good_z,
+                        read_noise):
+
+    broadcast = np.broadcast_to(average_pixels,
+                                (num_good_z,) + average_pixels.shape)
+    value = scaled - broadcast
+    mean_value = np.nanmean(value, axis=0)
+    mean_value_sq = np.nanmean(value**2, axis=0)
+    var = (mean_value_sq - mean_value**2)
+
+    avgvar = np.nanmean(var)
+    calcvar = (np.nanmean(average_pixels) / read_noise[&#39;eperadu&#39;]
+               + read_noise[&#39;read_var&#39;])
+    log.info(f&#39;Mean measured, calculated stddev: {np.sqrt(avgvar):6f}, &#39;
+             f&#39;{np.sqrt(calcvar):6f}&#39;)
+    if avgvar &lt; read_noise[&#39;varmin&#39;]:
+        log.debug(&#39;Possible inadequate digitization&#39;)
+        rms = (np.abs(read_noise[&#39;gain&#39;])
+               * np.sqrt(avgvar * read_noise[&#39;frame_time&#39;]
+                         * read_noise[&#39;beam_time&#39;]))
+        mean_per_frame = np.nanmean(average_pixels) * read_noise[&#39;frame_gain&#39;]
+        log.debug(f&#39;RMS std dev, mean/frame = {rms:.6f}, {mean_per_frame:.6f}&#39;)
+
+    variance = {&#39;avgvar&#39;: avgvar, &#39;calcvar&#39;: calcvar, &#39;var&#39;: var,
+                &#39;value&#39;: value}
+    return variance
+
+
+def _find_spikes(header, var_value, num_good_z,
+                 above_average, frame_value):
+    # sum over all variance values (includes frame_value)
+    sum_value = np.sum(var_value, axis=0)
+    sum_sq_value = np.sum(var_value**2, axis=0)
+
+    # compare frame value to average without this frame
+    average_1 = (sum_value - frame_value) / (num_good_z - 1)
+    average_square_1 = ((sum_sq_value - frame_value**2)
+                        / (num_good_z - 1))
+    difference = (frame_value - average_1) ** 2
+
+    # compute threshold, in variance
+    threshold = header[&#39;SPIKEFAC&#39;]**2 * (average_square_1 - average_1**2)
+
+    # mark discrepant pixels
+    spike_index = above_average &amp; (difference &gt; threshold)
+    averages = {&#39;avg1&#39;: average_1, &#39;avgsq1&#39;: average_square_1}
+
+    return spike_index, averages
+
+
+def _replace_spikes(spike_data, frame_index, spike_index, averages,
+                    average_pixels, sky, average_sky, do_var, variance,
+                    propagate_nan=False):
+    &quot;&quot;&quot;
+    Replace spike with average value in data frame.
+
+    Parameters
+    ----------
+    spike_data
+    frame_index
+
+    Returns
+    -------
+
+    &quot;&quot;&quot;
+    d = spike_data[frame_index]
+    if propagate_nan:
+        d[spike_index] = np.nan
+    else:
+        d[spike_index] = ((averages[&#39;avg1&#39;][spike_index]
+                           + average_pixels[spike_index])
+                          * sky / average_sky)
+    spike_data[frame_index] = d
+
+    if do_var:
+        v = variance[frame_index]
+        if propagate_nan:
+            v[spike_index] = np.nan
+        else:
+            # Note: in previous versions of the pipeline, the variance
+            # was replaced by the variance in the data over the
+            # remaining frames:
+            #   v[spike_index] = (averages[&#39;avgsq1&#39;][spike_index]
+            #                     - averages[&#39;avg1&#39;][spike_index] ** 2)
+            # But this results in variance values that are much too low.
+            # We leave them as is here, rather than interpolating over
+            # them, since the calling pipeline now typically uses
+            # propagate_nan for this pipeline step anyway.
+
+            pass
+
+        variance[frame_index] = v
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

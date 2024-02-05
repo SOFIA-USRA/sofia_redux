@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.configuration.iterations &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.configuration.iterations</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import configobj
+
+from sofia_redux.scan.configuration.options import Options
+from sofia_redux.scan.utilities.utils import round_values
+
+__all__ = [&#39;IterationOptions&#39;]
+
+
+<div class="viewcode-block" id="IterationOptions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.iterations.IterationOptions.html#sofia_redux.scan.configuration.iterations.IterationOptions">[docs]</a>
+class IterationOptions(Options):
+
+    append_keys = (&#39;blacklist&#39;, &#39;whitelist&#39;, &#39;forget&#39;, &#39;recall&#39;,
+                   &#39;lock&#39;, &#39;unlock&#39;, &#39;add&#39;, &#39;config&#39;)
+
+    def __init__(self, allow_error=False, verbose=True, max_iteration=None):
+        &quot;&quot;&quot;
+        Initialize the configuration iteration options.
+
+        The iteration options store and apply configuration settings for the
+        main reduction configuration that depend on the current reduction
+        iteration.  It is also where the maximum number of iterations for the
+        reduction is stored and defined in all cases.
+
+        Parameters
+        ----------
+        allow_error : bool, optional
+            If `True`, allow poorly formatted options to be skipped rather than
+            raising an error.
+        verbose : bool, optional
+            If `True`, issues a warning when a poorly option is encountered.
+        max_iteration : int, optional
+            The maximum number of iterations available for a SOFSCAN reduction.
+        &quot;&quot;&quot;
+        super().__init__(allow_error=allow_error, verbose=verbose)
+        self._max_iteration = None
+        self.current_iteration = None
+        self._rounds_locked = False
+        if max_iteration is not None:
+            self._max_iteration = int(max_iteration)
+
+<div class="viewcode-block" id="IterationOptions.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.iterations.IterationOptions.html#sofia_redux.scan.configuration.iterations.IterationOptions.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the iteration options.
+
+        Returns
+        -------
+        IterationOptions
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+<div class="viewcode-block" id="IterationOptions.clear">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.iterations.IterationOptions.html#sofia_redux.scan.configuration.iterations.IterationOptions.clear">[docs]</a>
+    def clear(self):
+        &quot;&quot;&quot;
+        Clear all options.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().clear()
+        self._max_iteration = None
+        self.current_iteration = None</div>
+
+
+    def __getitem__(self, iteration):
+        &quot;&quot;&quot;
+        Retrieve the options for a given iteration.
+
+        Parameters
+        ----------
+        iteration : int or float or str
+            The iteration for which to retrieve options.
+
+        Returns
+        -------
+        options : configobj.ConfigObj
+        &quot;&quot;&quot;
+        result = self.get(iteration)
+        return result
+
+    def __setitem__(self, iteration, options):
+        &quot;&quot;&quot;
+        Set the options for a given iteration.
+
+        Parameters
+        ----------
+        iteration : int or float or str
+            The iteration for which to set options.
+        options : dict or configobj.ConfigObj
+            The options to set.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        iteration_options = self.options_to_dict(options, add_singular=True)
+        if iteration_options is None:
+            self.handle_error(f&quot;Could not parse iteration {iteration} option: &quot;
+                              f&quot;{options}&quot;)
+            return
+
+        self.set(iteration, iteration_options)
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the IterationOptions.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        s = &#39;Iteration configurations:&#39;
+        s += f&#39;\nMaximum iterations: {self.max_iteration}&#39;
+        switches = &#39;, &#39;.join([str(s) for s in self.options.keys()])
+        s += f&#39;\nIteration switches: {switches}&#39;
+        return s
+
+    def __repr__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the IterationOptions.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return f&#39;{super().__repr__()}\n{self}&#39;
+
+    @property
+    def max_iteration(self):
+        &quot;&quot;&quot;
+        Return the maximum number of iterations for the current reduction.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        return self._max_iteration
+
+    @max_iteration.setter
+    def max_iteration(self, iteration):
+        &quot;&quot;&quot;
+        Set the maximum number of iterations for the current reduction.
+
+        Parameters
+        ----------
+        iteration : int
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.rounds_locked:
+            return
+        if iteration is None:
+            self._max_iteration = None
+        else:
+            self._max_iteration = int(iteration)
+
+    @property
+    def rounds_locked(self):
+        &quot;&quot;&quot;
+        Return whether the maximum number of iterations is locked.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self._rounds_locked
+
+<div class="viewcode-block" id="IterationOptions.lock_rounds">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.iterations.IterationOptions.html#sofia_redux.scan.configuration.iterations.IterationOptions.lock_rounds">[docs]</a>
+    def lock_rounds(self, maximum_iterations=None):
+        &quot;&quot;&quot;
+        Lock the current maximum number of iterations in-place.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.rounds_locked:
+            return
+        if maximum_iterations is not None:
+            self.max_iteration = maximum_iterations
+        self._rounds_locked = True</div>
+
+
+<div class="viewcode-block" id="IterationOptions.unlock_rounds">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.iterations.IterationOptions.html#sofia_redux.scan.configuration.iterations.IterationOptions.unlock_rounds">[docs]</a>
+    def unlock_rounds(self):
+        &quot;&quot;&quot;
+        Allow the maximum number of iterations to be changed.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self._rounds_locked = False</div>
+
+
+<div class="viewcode-block" id="IterationOptions.parse_iteration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.iterations.IterationOptions.html#sofia_redux.scan.configuration.iterations.IterationOptions.parse_iteration">[docs]</a>
+    def parse_iteration(self, iteration):
+        r&quot;&quot;&quot;
+        Returns an iteration value as either an int or float value.
+
+        Parses string iterations including &quot;first&quot;, &quot;last&quot;, &quot;final&quot; to
+        integer of float representations.  Can also parse percentages
+        such as 90%.  A float iteration represents a fraction of the
+        maximum iteration, and must therefore be between 0 and 1.
+        Raises an error if fractional iteration is out of range, or
+        value could not be parsed.
+
+        Parameters
+        ----------
+        iteration : str or int or float
+
+        Returns
+        -------
+        iteration : int or float
+            If the return value is a float, it will be between 0 and 1 and
+            represents the fraction of the maximum iterations.  Negative
+            integers represent maximum_iteration - iteration.
+        &quot;&quot;&quot;
+        if isinstance(iteration, str):
+            iteration = iteration.strip().lower()
+            try:
+                if iteration.endswith(&#39;%&#39;):
+                    iteration = float(iteration[:-1]) / 100.0
+                elif &#39;.&#39; in iteration:
+                    iteration = float(iteration)
+                elif iteration in [&#39;last&#39;, &#39;final&#39;]:
+                    iteration = -1
+                elif iteration == &#39;first&#39;:
+                    iteration = 1
+                else:
+                    iteration = int(iteration)
+            except Exception as err:
+                self.handle_error(f&quot;Could not parse iteration string: &quot;
+                                  f&quot;{iteration}\nError: {err}&quot;)
+                return None
+
+        if not isinstance(iteration, (int, float)):
+            self.handle_error(f&quot;iteration must be {str}, {int}, or {float}.&quot;)
+            return None
+
+        if isinstance(iteration, float):
+            if iteration &lt; 0 or iteration &gt; 1:
+                msg = &quot;Fractional iterations must be in the range [0, 1].&quot;
+                self.handle_error(msg)
+                return None
+
+        return iteration</div>
+
+
+<div class="viewcode-block" id="IterationOptions.get">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.iterations.IterationOptions.html#sofia_redux.scan.configuration.iterations.IterationOptions.get">[docs]</a>
+    def get(self, iteration, default=None, unalias=True):
+        &quot;&quot;&quot;
+        Retrieve configuration options for a given date.
+
+        Parameters
+        ----------
+        iteration : str or int or float
+            The observation date.  If a string is used, it should be in ISOT
+            format in UTC scale.  Integers and floats will be parsed as
+            MJD times in the UTC scale.
+        default : dict or configobj.ConfigObj, optional
+            A value to return if no results are found.  Must be of dict or
+            configobj.ConfigObj type to be returned.
+        unalias : bool, optional
+            Not used by the IterationOptions.
+
+        Returns
+        -------
+        options : ConfigObj
+        &quot;&quot;&quot;
+        iteration = int(iteration)  # must be an integer
+        options = configobj.ConfigObj()
+        for check_iteration, iteration_options in self.options.items():
+            relative_iteration = self.relative_iteration(check_iteration)
+            if iteration != relative_iteration:
+                continue
+
+            self.merge_options(options, iteration_options)
+
+        if len(options) == 0 and isinstance(default, dict):
+            return default
+
+        return options</div>
+
+
+<div class="viewcode-block" id="IterationOptions.set">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.iterations.IterationOptions.html#sofia_redux.scan.configuration.iterations.IterationOptions.set">[docs]</a>
+    def set(self, iteration, options):
+        &quot;&quot;&quot;
+        Set the options for a given iteration.
+
+        Parameters
+        ----------
+        iteration : str or int or float
+            The iteration number or relative iteration number.  Please see
+            :func:`IterationOptions.parse_iteration` for further details.
+        options : dict or configobj.ConfigObj
+            The options to set for an iteration.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        iteration = self.parse_iteration(iteration)
+        if iteration is None:
+            return
+        iteration = str(iteration)
+
+        if iteration not in self.options:
+            self.options[iteration] = configobj.ConfigObj()
+        options = self.options_to_dict(options, add_singular=True)
+        self.merge_options(self.options[iteration], options)</div>
+
+
+<div class="viewcode-block" id="IterationOptions.relative_iteration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.iterations.IterationOptions.html#sofia_redux.scan.configuration.iterations.IterationOptions.relative_iteration">[docs]</a>
+    def relative_iteration(self, iteration):
+        &quot;&quot;&quot;
+        Return an iteration number relative to the current maximum.
+
+        Parameters
+        ----------
+        iteration : str or int or float
+            The iteration number to parse.  Please see
+            :func:`IterationOptions.parse_iteration` for further details.
+
+        Returns
+        -------
+        int or None
+            None will be returned if an iteration relative to a maximum
+            iteration is required, but no maximum iteration has been set.
+        &quot;&quot;&quot;
+        iteration = self.parse_iteration(iteration)
+        if isinstance(iteration, float):
+            if self.max_iteration is None:
+                return None
+            else:
+                return round_values(self.max_iteration * iteration)
+        if isinstance(iteration, int):
+            if iteration &lt; 0:
+                if self.max_iteration is None:
+                    return None
+                else:
+                    return self.max_iteration + 1 + iteration
+            else:
+                return iteration
+        else:
+            self.handle_error(f&quot;Relative iterations must be {int}, {float} or &quot;
+                              f&quot;can be converted to such from a {str}&quot;)
+            return None</div>
+
+
+<div class="viewcode-block" id="IterationOptions.update">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.iterations.IterationOptions.html#sofia_redux.scan.configuration.iterations.IterationOptions.update">[docs]</a>
+    def update(self, configuration_options):
+        &quot;&quot;&quot;
+        Update the iteration options with settings from another.
+
+        Parameters
+        ----------
+        configuration_options : dict or configobj.ConfigObj
+            The options used to update these options.  Must contain an
+            &#39;iteration&#39; key and values to have an effect.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if &#39;iteration&#39; not in configuration_options:
+            return
+        opts = configuration_options[&#39;iteration&#39;]
+        options = self.options_to_dict(opts, add_singular=False)
+        if options is None:
+            self.handle_error(f&quot;Supplied iteration options could not be &quot;
+                              f&quot;parsed: {opts}&quot;)
+            return
+
+        for key, value in options.items():
+            self.set(key, value)</div>
+
+
+<div class="viewcode-block" id="IterationOptions.set_iteration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.iterations.IterationOptions.html#sofia_redux.scan.configuration.iterations.IterationOptions.set_iteration">[docs]</a>
+    def set_iteration(self, configuration, iteration, validate=True):
+        &quot;&quot;&quot;
+        Set options for a given iteration in a configuration.
+
+        Parameters
+        ----------
+        configuration : Configuration
+            The configuration in which to apply the iteration options.
+        iteration : int or str or float
+            The iteration for which to apply options.
+        validate : bool, optional
+            If `True`, validate the configuration once the iteration options
+            have been applied.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        iteration = self.relative_iteration(iteration)
+        self.current_iteration = iteration
+        if iteration is None:
+            return
+        options = self.get(iteration)
+        configuration.apply_configuration_options(options, validate=validate)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

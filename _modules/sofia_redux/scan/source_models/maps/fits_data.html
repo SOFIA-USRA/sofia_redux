@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.source_models.maps.fits_data &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.source_models.maps.fits_data</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+from astropy import log, units
+from astropy.io import fits
+
+from sofia_redux.scan.flags.flagged_array import FlaggedArray
+from sofia_redux.scan.coordinate_systems.coordinate import Coordinate
+
+__all__ = [&#39;FitsData&#39;]
+
+
+<div class="viewcode-block" id="FitsData">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData">[docs]</a>
+class FitsData(FlaggedArray):
+
+    DEFAULT_UNIT = 1.0 * units.dimensionless_unscaled
+
+    def __init__(self, data=None, blanking_value=None, dtype=float,
+                 shape=None, unit=None):
+        &quot;&quot;&quot;
+        Creates a FitsData instance.
+
+        The FitsData class is an extension of `FlaggedArray` that allows
+        additional functionality for FITS data.  This includes specifying
+        data units (astropy.units), history messages and FITS handling.
+
+        Notably, the dimensional ordering will now be in FITS (x, y) order
+        rather than the `FlaggedArray` Numpy (y, x) ordering for the various
+        methods.
+
+        Parameters
+        ----------
+        data : numpy.ndarray, optional
+            Data to initialize the flagged array with.  If supplied, sets the
+            shape of the array.  Note that the data type will be set to that
+            defined by the `dtype` parameter.
+        blanking_value : int or float, optional
+            The blanking value defines invalid values in the data array.  This
+            is the equivalent of defining a NaN value.
+        dtype : type, optional
+            The data type of the data array.
+        shape : tuple (int), optional
+            The shape of the data array.  This will only be relevant if
+            `data` is not defined.
+        unit : str or units.Unit or units.Quantity, optional
+            The data unit.
+        &quot;&quot;&quot;
+        self.history = []
+        self.verbose = False
+        self._unit = None
+        self.local_units = {}
+        self.alternate_unit_names = {}
+
+        self.log_new_data = True
+        self.parallelism = 0
+        self.executor = None
+        if unit is not None:
+            self.unit = unit
+
+        super().__init__(data=data, blanking_value=blanking_value, dtype=dtype,
+                         shape=shape)
+
+        if self.unit is None:
+            self.unit = self.DEFAULT_UNIT
+
+<div class="viewcode-block" id="FitsData.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the FITS data.
+
+        Returns
+        -------
+        FitsData
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+    def __eq__(self, other):
+        &quot;&quot;&quot;
+        Check whether this data is equal to another.
+
+        Parameters
+        ----------
+        other : FitsData
+
+        Returns
+        -------
+        equal : bool
+        &quot;&quot;&quot;
+        if self is other:
+            return True
+        if not isinstance(other, FitsData):
+            return False
+        if self.unit != other.unit:
+            return False
+        return super().__eq__(other)
+
+    @property
+    def referenced_attributes(self):
+        &quot;&quot;&quot;
+        Return attribute names that should be referenced during a copy.
+
+        Returns
+        -------
+        set (str)
+        &quot;&quot;&quot;
+        referenced = super().referenced_attributes
+        referenced.add(&#39;local_units&#39;)
+        referenced.add(&#39;alternate_unit_names&#39;)
+        return referenced
+
+    @property
+    def unit(self):
+        &quot;&quot;&quot;
+        Return the current data unit.
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        return self._unit
+
+    @unit.setter
+    def unit(self, value):
+        &quot;&quot;&quot;
+        Set the unit value.
+
+        Parameters
+        ----------
+        value : str or astropy.units.Unit or astropy.units.Quantity.
+            The unit to set.  If a string or Unit is supplied, the quantity
+            value will be set to unity.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_unit(value)
+
+<div class="viewcode-block" id="FitsData.fits_to_numpy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.fits_to_numpy">[docs]</a>
+    @classmethod
+    def fits_to_numpy(cls, coordinates):
+        &quot;&quot;&quot;
+        Convert FITS based (x, y) coordinates/indices to numpy (y, x).
+
+        Reverses the dimensional ordering so that (x, y) coordinates are
+        returned as (y, x) coordinates.  Note that boolean arrays remain
+        unaltered, since these usually indicate masking arrays.
+
+        Parameters
+        ----------
+        coordinates : numpy.ndarray or Coordinate or iterable
+
+        Returns
+        -------
+        numpy_coordinates : numpy.ndarray (int or float)
+        &quot;&quot;&quot;
+        if isinstance(coordinates, Coordinate):
+            new = coordinates.coordinates[::-1]
+        elif isinstance(coordinates, np.ndarray):
+            if coordinates.dtype != bool:  # To avoid messing up masks
+                new = coordinates[::-1]
+            else:
+                new = coordinates
+        elif hasattr(coordinates, &#39;__len__&#39;):
+            new = coordinates[::-1]
+        else:
+            new = coordinates
+        return new</div>
+
+
+<div class="viewcode-block" id="FitsData.numpy_to_fits">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.numpy_to_fits">[docs]</a>
+    @classmethod
+    def numpy_to_fits(cls, coordinates):
+        &quot;&quot;&quot;
+        Convert numpy based (x, y) coordinates/indices to FITS coordinates.
+
+        Parameters
+        ----------
+        coordinates : numpy.ndarray or Coordinate or iterable
+
+        Returns
+        -------
+        numpy.ndarray
+        &quot;&quot;&quot;
+        return cls.fits_to_numpy(coordinates)</div>
+
+
+<div class="viewcode-block" id="FitsData.get_size_string">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.get_size_string">[docs]</a>
+    def get_size_string(self):
+        &quot;&quot;&quot;
+        Return the shape of the data array as a string.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if self.data is None:
+            return &#39;0&#39;
+        return &#39;x&#39;.join([str(x) for x in self.shape[::-1]])</div>
+
+
+<div class="viewcode-block" id="FitsData.set_data_shape">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.set_data_shape">[docs]</a>
+    def set_data_shape(self, shape):
+        &quot;&quot;&quot;
+        Set the shape of the data image array.
+
+        Note that array shapes should still be provided in Numpy (y, x) format.
+        In addition to settings the data shape, adds a new history message
+        indicating that this has been done.
+
+        Parameters
+        ----------
+        shape : tuple (int)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_data_shape(shape)
+        if self.log_new_data:
+            self.clear_history()
+        self.add_history(f&#39;new size {self.get_size_string()}&#39;)</div>
+
+
+<div class="viewcode-block" id="FitsData.set_data">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.set_data">[docs]</a>
+    def set_data(self, data, change_type=False):
+        &quot;&quot;&quot;
+        Set the data of the flagged array.
+
+        All flags are set to zero.
+
+        Parameters
+        ----------
+        data : numpy.ndarray or FlaggedArray
+        change_type : bool, optional
+            If `True`, change the data type to that of the data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if isinstance(data, FitsData):
+            if data.unit != self.unit:
+                self.unit = data.unit
+        super().set_data(data, change_type=change_type)</div>
+
+
+<div class="viewcode-block" id="FitsData.unit_to_quantity">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.unit_to_quantity">[docs]</a>
+    @staticmethod
+    def unit_to_quantity(unit):
+        &quot;&quot;&quot;
+        Return an astropy Quantity from a given unit.
+
+        If a string or astropy.units.Unit is supplied, the resultant output
+        will be a quantity with value 1.
+
+        Parameters
+        ----------
+        unit : astropy.units.Quantity or astropy.units.Unit or str
+            The unit to convert to a quantity.
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        if isinstance(unit, units.Quantity):
+            return unit
+        elif isinstance(unit, str):
+            return 1.0 * units.Unit(unit)
+        elif isinstance(
+                unit, (units.Unit, units.Quantity, units.IrreducibleUnit)):
+            return 1.0 * unit
+        elif isinstance(unit, units.UnitBase):  # dimensionless
+            return 1.0 * unit
+        else:
+            raise ValueError(
+                f&quot;Unit must be a {str}, {units.Unit}, or {units.Quantity}.&quot;)</div>
+
+
+<div class="viewcode-block" id="FitsData.add_local_unit">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.add_local_unit">[docs]</a>
+    def add_local_unit(self, unit, alternate_names=None):
+        &quot;&quot;&quot;
+        Add a unit to the dictionary of local units.
+
+        Parameters
+        ----------
+        unit : astropy.units.Quantity or units.Unit or str
+            The unit to add to the unit dictionary.  Should be a quantity
+            with both value and unit type.  If a simple unit is supplied, the
+            value is assumed to be 1.0.
+        alternate_names : list, optional
+            A list of alternate names for the unit.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        unit = self.unit_to_quantity(unit)
+        unit_key = unit.unit.to_string()
+        if not isinstance(self.local_units, dict):
+            self.local_units = {}
+        self.local_units[unit_key] = unit
+
+        if hasattr(unit.unit, &#39;names&#39;):
+            self.add_alternate_unit_names(unit_key, unit.unit.names)
+        else:
+            self.add_alternate_unit_names(unit_key, unit_key)
+
+        if alternate_names is not None:
+            self.add_alternate_unit_names(unit_key, alternate_names)</div>
+
+
+<div class="viewcode-block" id="FitsData.add_alternate_unit_names">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.add_alternate_unit_names">[docs]</a>
+    def add_alternate_unit_names(self, unit_name, alternate_names):
+        &quot;&quot;&quot;
+        Add alternative names for a unit.
+
+        Parameters
+        ----------
+        unit_name : str
+            The name of the unit.
+        alternate_names : str or list (str)
+            Alternate names for the unit.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not isinstance(self.alternate_unit_names, dict):
+            self.alternate_unit_names = {}
+        if isinstance(alternate_names, str):
+            alternate_names = [alternate_names]
+        for alternate_name in alternate_names:
+            self.alternate_unit_names[alternate_name] = unit_name
+        self.alternate_unit_names[unit_name] = unit_name</div>
+
+
+<div class="viewcode-block" id="FitsData.get_unit">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.get_unit">[docs]</a>
+    def get_unit(self, unit):
+        &quot;&quot;&quot;
+        Return the unit quantity for a given unit.
+
+        Parameters
+        ----------
+        unit : str or units.Unit or units.Quantity
+
+        Returns
+        -------
+        units.Quantity
+        &quot;&quot;&quot;
+        if isinstance(unit, units.Quantity):
+            unit_key = str(unit.unit)
+        else:
+            unit_key = str(unit)
+
+        if unit_key in self.local_units:
+            return self.local_units.get(unit_key)
+        elif unit_key in self.alternate_unit_names:
+            return self.local_units.get(
+                self.alternate_unit_names.get(unit_key))
+        else:
+            return self.unit_to_quantity(unit)</div>
+
+
+<div class="viewcode-block" id="FitsData.set_unit">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.set_unit">[docs]</a>
+    def set_unit(self, unit):
+        &quot;&quot;&quot;
+        Set the map data unit.
+
+        Parameters
+        ----------
+        unit : astropy.units.Quantity or str or astropy.units.Unit
+            The unit to set as the map data unit.  Should be a quantity
+            (value and unit type).  If a string or Unit is supplied, the
+            map data unit will be set to the value located in the local_units
+            dictionary.  If no such value exists, a KeyError will be raised.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        unit = self.unit_to_quantity(unit)
+        self.add_local_unit(unit)
+        self._unit = unit</div>
+
+
+<div class="viewcode-block" id="FitsData.set_default_unit">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.set_default_unit">[docs]</a>
+    def set_default_unit(self):
+        &quot;&quot;&quot;
+        Set the default unit for the map data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_unit(self.DEFAULT_UNIT)</div>
+
+
+<div class="viewcode-block" id="FitsData.clear_history">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.clear_history">[docs]</a>
+    def clear_history(self):
+        &quot;&quot;&quot;
+        Clear the history messages.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.history = []</div>
+
+
+<div class="viewcode-block" id="FitsData.add_history">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.add_history">[docs]</a>
+    def add_history(self, message):
+        &quot;&quot;&quot;
+        Add a history message.
+
+        Will also result in a log message if verbose is True.
+
+        Parameters
+        ----------
+        message : str or list(str)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if isinstance(message, str):
+            if self.verbose:
+                log.info(message)
+            if self.history is None:
+                self.history = []
+            self.history.append(message)
+        elif isinstance(message, list):
+            for msg in message:
+                self.add_history(msg)</div>
+
+
+<div class="viewcode-block" id="FitsData.set_history">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.set_history">[docs]</a>
+    def set_history(self, messages):
+        &quot;&quot;&quot;
+        Set the history to a given list of history messages.
+
+        Parameters
+        ----------
+        messages : str or list (str)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if isinstance(messages, str):
+            messages = [messages]
+        else:
+            messages = list(messages)
+        self.history = messages</div>
+
+
+<div class="viewcode-block" id="FitsData.add_history_to_header">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.add_history_to_header">[docs]</a>
+    def add_history_to_header(self, header):
+        &quot;&quot;&quot;
+        Add history messages to a FITS header.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.history is None:
+            return
+        for message in self.history:
+            header[&#39;HISTORY&#39;] = message</div>
+
+
+<div class="viewcode-block" id="FitsData.record_new_data">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.record_new_data">[docs]</a>
+    def record_new_data(self, detail=None):
+        &quot;&quot;&quot;
+        Start recording new data.
+
+        Parameters
+        ----------
+        detail : str, optional
+            An optional message to append to the start of the new data log.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.log_new_data:
+            self.log_new_data = True
+            return
+        self.clear_history()
+        message = f&quot;set new image {self.get_size_string()}&quot;
+        if isinstance(detail, str):
+            message += f&#39; {detail}&#39;
+        self.add_history(message)</div>
+
+
+<div class="viewcode-block" id="FitsData.set_parallel">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.set_parallel">[docs]</a>
+    def set_parallel(self, threads):
+        &quot;&quot;&quot;
+        Set the number of parallel threads.
+
+        Parameters
+        ----------
+        threads : int
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.parallelism = int(threads)</div>
+
+
+<div class="viewcode-block" id="FitsData.set_executor">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.set_executor">[docs]</a>
+    def set_executor(self, executor):
+        &quot;&quot;&quot;
+        Set the executor?
+
+        Parameters
+        ----------
+        executor : Executor
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.executor = executor</div>
+
+
+<div class="viewcode-block" id="FitsData.clear">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.clear">[docs]</a>
+    def clear(self, indices=None):
+        &quot;&quot;&quot;
+        Clear flags and set data to zero.  Clear history.
+
+        Parameters
+        ----------
+        indices : tuple (numpy.ndarray (int)) or numpy.ndarray (bool), optional
+            The indices to discard.  Either supplied as a boolean mask of
+            shape (self.data.shape).  Note that if an integer array or tuple
+            of integer arrays are supplied, they should be in (x, y) FITS
+            order.  Boolean masks should be of the same shape as the data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().clear(indices=self.fits_to_numpy(indices))
+        self.clear_history()
+        self.add_history(f&#39;clear {self.get_size_string()}&#39;)</div>
+
+
+<div class="viewcode-block" id="FitsData.destroy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.destroy">[docs]</a>
+    def destroy(self):
+        &quot;&quot;&quot;
+        Destroy the image data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().destroy()
+        self.clear_history()</div>
+
+
+<div class="viewcode-block" id="FitsData.fill">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.fill">[docs]</a>
+    def fill(self, value, indices=None):
+        &quot;&quot;&quot;
+        Fill the data array with a given value.
+
+        Parameters
+        ----------
+        value : int or float
+            The value to fill.
+        indices : tuple (numpy.ndarray (int)) or numpy.ndarray (bool), optional
+            The indices to discard.  Either supplied as a boolean mask of
+            shape (self.data.shape).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().fill(value, indices=self.fits_to_numpy(indices))
+        self.clear_history()
+        self.add_history(f&quot;fill {self.get_size_string()} with {value}&quot;)</div>
+
+
+<div class="viewcode-block" id="FitsData.add">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.add">[docs]</a>
+    def add(self, value, indices=None, factor=None):
+        &quot;&quot;&quot;
+        Add a value or FlaggedData to the data array.
+
+        Parameters
+        ----------
+        value : int or float or FlaggedArray
+            The value to add.
+        indices : tuple (numpy.ndarray (int)) or numpy.ndarray (bool), optional
+            The indices to discard.  Either supplied as a boolean mask of
+            shape (self.data.shape).
+        factor : int or float, optional
+            An optional factor to scale the data by.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().add(value, indices=self.fits_to_numpy(indices), factor=factor)
+        is_array = isinstance(value, FlaggedArray)
+
+        if is_array:
+            singular = False
+            value_str = value.__class__.__name__
+        elif isinstance(value, np.ndarray) and value.shape != ():
+            value_str = f&#39;{value.shape} array&#39;
+            singular = False
+        else:
+            singular = True
+            value_str = str(value)
+
+        if factor is None:
+            message = f&#39;added {value_str}&#39;
+        elif singular:
+            message = f&#39;added {value * factor}&#39;
+        else:
+            message = f&#39;added scaled {value_str} ({factor}x)&#39;
+
+        self.add_history(message)</div>
+
+
+<div class="viewcode-block" id="FitsData.scale">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.scale">[docs]</a>
+    def scale(self, factor, indices=None):
+        &quot;&quot;&quot;
+        Scale the data by a given factor.
+
+        Parameters
+        ----------
+        factor : int or float
+            The factor to scale by.
+        indices : tuple (np.ndarray) or np.ndarray (int or bool), optional
+            The indices to discard.  Either supplied as a boolean mask of
+            shape (self.data.shape).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        np_indices = self.fits_to_numpy(indices)
+        if isinstance(np_indices, np.ndarray) and np_indices.dtype != bool:
+            if 1 &lt; self.ndim == np_indices.shape[0]:
+                np_indices = tuple(np_indices)
+        super().scale(factor, indices=np_indices)
+        self.add_history(f&#39;scale by {factor}&#39;)</div>
+
+
+<div class="viewcode-block" id="FitsData.validate">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.validate">[docs]</a>
+    def validate(self, validator=None):
+        &quot;&quot;&quot;
+        Discard all invalid data.
+
+        Parameters
+        ----------
+        validator : Validator, optional
+            An optional object or function that can take FitsData as an
+            argument and perform the validation.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().validate(validator=validator)
+        if validator is None:
+            self.add_history(&#39;validate&#39;)
+        else:
+            self.add_history(f&#39;validate via {validator}&#39;)</div>
+
+
+<div class="viewcode-block" id="FitsData.paste">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.paste">[docs]</a>
+    def paste(self, source, report=True):
+        &quot;&quot;&quot;
+        Paste data from another MapData onto the data array.
+
+        Parameters
+        ----------
+        source : FitsData
+        report : bool, optional
+            If `True`, add a history message.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().paste(source)
+        if report:
+            self.add_history(f&quot;pasted new content: {source.get_size_string()}&quot;)</div>
+
+
+<div class="viewcode-block" id="FitsData.smooth">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.smooth">[docs]</a>
+    def smooth(self, beam_map, reference_index=None, weights=None):
+        &quot;&quot;&quot;
+        Smooth the map with a beam map kernel.
+
+        Parameters
+        ----------
+        beam_map : numpy.ndarray (float)
+            The beam map with which to smooth the map of shape (ny, nx, ...).
+        reference_index : numpy.ndarray (int) or Coordinate, optional
+            The index specifying the center pixel of the kernel.  Should be
+            provided in (x, y) ordering.  The default is the center of the
+            kernel.
+        weights : numpy.ndarray (float), optional
+            The map weights to apply.  Should be the same shape as the primary
+            map image.  The default is to apply no weighting.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().smooth(beam_map,
+                       reference_index=self.fits_to_numpy(reference_index),
+                       weights=weights)
+        self.add_history(&#39;smoothed&#39;)</div>
+
+
+<div class="viewcode-block" id="FitsData.get_smoothed">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.get_smoothed">[docs]</a>
+    def get_smoothed(self, beam_map, reference_index=None, weights=None):
+        &quot;&quot;&quot;
+        Return smoothed data and weights.
+
+        Parameters
+        ----------
+        beam_map : numpy.ndarray (float)
+            The kernel with which to smooth the map.  Should be of shape
+            (ny, nx).
+        reference_index : numpy.ndarray (float or int) or Coordinate, optional
+            The reference index specifying the center pixel of the beam map.
+            The default is the center pixel position, eg., (ny - 1) / 2.
+        weights : numpy.ndarray (float), optional
+            The weights to apply during smoothing.  Should be the same shape
+            as the primary map image.  The default is no weighting.
+
+        Returns
+        -------
+        smoothed_data, smoothed_weights : numpy.ndarray, numpy.ndarray
+        &quot;&quot;&quot;
+        return super().get_smoothed(
+            beam_map, reference_index=self.fits_to_numpy(reference_index),
+            weights=weights)</div>
+
+
+<div class="viewcode-block" id="FitsData.fast_smooth">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.fast_smooth">[docs]</a>
+    def fast_smooth(self, beam_map, steps, reference_index=None, weights=None):
+        &quot;&quot;&quot;
+        Smooth using the fast method.
+
+        Parameters
+        ----------
+        beam_map : numpy.ndarray (float)
+            The beam map image kernel with which to smooth the map of shape
+            (ky, kx).
+        steps : Index2D
+            The fast step skips in (x, y) FITS dimensional order.
+        reference_index : Coordinate2D, optional
+            The reference pixel index of the kernel in (x, y) FITS
+            dimensional order.  The default is the beam map center at
+            (kx-1)/2, (ky-1)/2.
+        weights : numpy.ndarray (float), optional
+            The map weights of shape (ny, nx).  The default is no weighting.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().fast_smooth(
+            beam_map,
+            self.fits_to_numpy(steps),
+            reference_index=self.fits_to_numpy(reference_index),
+            weights=weights)
+
+        self.add_history(&#39;smoothed (fast method)&#39;)</div>
+
+
+<div class="viewcode-block" id="FitsData.get_fast_smoothed">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.get_fast_smoothed">[docs]</a>
+    def get_fast_smoothed(self, beam_map, steps, reference_index=None,
+                          weights=None, get_weights=False):
+        &quot;&quot;&quot;
+        Return smoothed values using the fast method.
+
+        Parameters
+        ----------
+        beam_map : numpy.ndarray (float)
+            The kernel to convolve with.
+        steps : numpy.ndarray (float)
+            The size of the steps in each dimension.
+        reference_index : numpy.ndarray (float)
+            The reference index of the beam map center.  The default is
+            (beam_map.shape - 1) / 2.0.
+        weights : numpy.ndarray (float)
+            Weights the same shape as beam map.
+        get_weights : bool, optional
+            If `True`, calculate the smoothed weights in addition to the
+            smoothed data.
+
+        Returns
+        -------
+        smoothed_data, [smoothed_weights] : numpy.ndarray, [numpy.ndarray]
+            The smoothed data and weights.  Will only return smoothed data if
+            `get_weights` is `False`.
+        &quot;&quot;&quot;
+        return super().get_fast_smoothed(
+            beam_map,
+            self.fits_to_numpy(steps),
+            reference_index=self.fits_to_numpy(reference_index),
+            weights=weights,
+            get_weights=get_weights)</div>
+
+
+<div class="viewcode-block" id="FitsData.create_fits">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.create_fits">[docs]</a>
+    def create_fits(self):
+        &quot;&quot;&quot;
+        Create and return a FITS HDU list from data content.
+
+        Returns
+        -------
+        astropy.io.fits.HDUList
+        &quot;&quot;&quot;
+        hdu_list = fits.HDUList()
+        for hdu in self.get_hdus():
+            hdu_list.append(hdu)
+        return hdu_list</div>
+
+
+<div class="viewcode-block" id="FitsData.get_hdus">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.get_hdus">[docs]</a>
+    def get_hdus(self):
+        &quot;&quot;&quot;
+        Create and return a list if FITS HDUs.
+
+        Returns
+        -------
+        hdus: list (astropy.io.fits.hdu.base.ExtensionHDU)
+        &quot;&quot;&quot;
+        return [self.create_hdu()]</div>
+
+
+<div class="viewcode-block" id="FitsData.create_hdu">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.create_hdu">[docs]</a>
+    def create_hdu(self):
+        &quot;&quot;&quot;
+        Create a FITS HDU from map data content.
+
+        Returns
+        -------
+        astropy.io.fits.ImageHDU
+        &quot;&quot;&quot;
+        data = self.get_fits_data().copy()
+        data[~self.valid] = np.nan
+        hdu = fits.ImageHDU(data=data)
+        self.edit_header(hdu.header)
+        return hdu</div>
+
+
+<div class="viewcode-block" id="FitsData.get_fits_data">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.get_fits_data">[docs]</a>
+    def get_fits_data(self):
+        &quot;&quot;&quot;
+        Return the FITS data array.
+
+        Returns
+        -------
+        array
+        &quot;&quot;&quot;
+        return self.data</div>
+
+
+<div class="viewcode-block" id="FitsData.edit_header">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit a FITS header using information in the current map.
+
+        The information keywords added to the header are::
+
+          - DATAMIN: The lowest value in the data (float)
+          - DATAMAX: The highesst value in the data (float)
+          - BZERO: Zeroing level of the data (float)
+          - BSCALE: Scaling of the data (float)
+          - BUNIT: The data unit (str)
+
+        Note that BUNIT will default to &#39;count&#39; if no unit has been set.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        data_range = self.data_range
+        unit_value = 1.0 if self.unit is None else self.unit.value
+
+        if data_range.min &lt; data_range.max:
+
+            if np.isfinite(data_range.min):
+                header[&#39;DATAMIN&#39;] = (data_range.min / unit_value,
+                                     &#39;The lowest value in the image&#39;)
+            if np.isfinite(data_range.max):
+                header[&#39;DATAMAX&#39;] = (data_range.max / unit_value,
+                                     &#39;The highest value in the image&#39;)
+
+        header[&#39;BZERO&#39;] = 0.0, &#39;Zeroing level of the image data&#39;
+        header[&#39;BSCALE&#39;] = 1.0, &#39;Scaling of the image data&#39;
+
+        if (not isinstance(self.unit, units.Quantity)
+                or self.unit.unit == units.dimensionless_unscaled):
+            header[&#39;BUNIT&#39;] = (units.Unit(&quot;count&quot;).to_string(),
+                               &#39;Data unit specification.&#39;)
+        else:
+            header[&#39;BUNIT&#39;] = (self.unit.unit.to_string(),
+                               &#39;Data unit specification.&#39;)
+
+        self.add_history_to_header(header)</div>
+
+
+<div class="viewcode-block" id="FitsData.parse_header">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.parse_header">[docs]</a>
+    def parse_header(self, header):
+        &quot;&quot;&quot;
+        Parse and apply information from a FITS header.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if &#39;BUNIT&#39; in header:
+            self.set_unit(header[&#39;BUNIT&#39;])
+        else:
+            self.set_unit(units.dimensionless_unscaled)</div>
+
+
+<div class="viewcode-block" id="FitsData.parse_history">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.parse_history">[docs]</a>
+    def parse_history(self, header):
+        &quot;&quot;&quot;
+        Set the history from a FITS header.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        history = list(header[&#39;HISTORY&#39;]) if &#39;HISTORY&#39; in header else []
+        self.set_history(history)</div>
+
+
+<div class="viewcode-block" id="FitsData.get_indices">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.get_indices">[docs]</a>
+    def get_indices(self, indices):
+        &quot;&quot;&quot;
+        Return selected data for given indices.
+
+        Parameters
+        ----------
+        indices : list or int or numpy.ndarray (bool or int)
+            The indices to extract.
+
+        Raises
+        ------
+        NotImplementedError
+        &quot;&quot;&quot;
+        super().get_indices(indices)</div>
+
+
+<div class="viewcode-block" id="FitsData.delete_indices">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.delete_indices">[docs]</a>
+    def delete_indices(self, indices_or_mask):
+        &quot;&quot;&quot;
+        Completely deletes data elements.
+
+        Actual indices should be passed in.  To delete based on fixed index
+        values, please convert first using `find_fixed_indices`.
+
+        Parameters
+        ----------
+        indices_or_mask : int or list or numpy.ndarray of (bool or int)
+            The indices to delete, or a boolean mask where `True` marks an
+            element for deletion.
+
+        Raises
+        ------
+        NotImplementedError
+        &quot;&quot;&quot;
+        super().delete_indices(indices_or_mask)</div>
+
+
+<div class="viewcode-block" id="FitsData.insert_blanks">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.insert_blanks">[docs]</a>
+    def insert_blanks(self, insert_indices):
+        &quot;&quot;&quot;
+        Inserts blank frame data.
+
+        Actual indices should be passed in.  To delete based on fixed index
+        values, please convert first using `find_fixed_indices`.
+
+        Blank data are set to 0 in whatever unit is applicable.
+
+        Parameters
+        ----------
+        insert_indices : int or list or numpy.ndarray of (bool or int)
+            The index locations to insert.
+
+        Raises
+        ------
+        NotImplementedError
+        &quot;&quot;&quot;
+        super().insert_blanks(insert_indices)</div>
+
+
+<div class="viewcode-block" id="FitsData.merge">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.merge">[docs]</a>
+    def merge(self, data):
+        &quot;&quot;&quot;
+        Add additional data onto the end of this data.
+
+        Parameters
+        ----------
+        data : FlaggedData
+
+        Raises
+        ------
+        NotImplementedError
+        &quot;&quot;&quot;
+        super().merge(data)</div>
+
+
+<div class="viewcode-block" id="FitsData.resample_from">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.resample_from">[docs]</a>
+    def resample_from(self, image, to_indices, kernel=None,
+                      kernel_reference_index=None, weights=None):
+        &quot;&quot;&quot;
+        Resample an image onto given indices of this map.
+
+        Parameters
+        ----------
+        image : FlaggedArray or numpy.ndarray (float)
+            The image to resample of shape (shape,) and have n_dimensions.
+        to_indices : numpy.ndarray (float or int)
+            An array of shape (n_dimensions, self.shape or self.size)
+            specifying which image pixels belong to the resampled map.
+            Dimensions should be ordered using the FITS (x, y) convention.
+            For example, if pixel i is at (x, y) = (2, 3) then
+            `to_indices[:, i] = [2, 3]`.
+        kernel : numpy.ndarray (float), optional
+            The kernel used to perform the resampling.  If supplied, the result
+            will be smoothed accordingly.
+        kernel_reference_index : numpy.ndarray (int), optional
+            If a kernel is supplied, specifies the center pixel of the kernel
+            to be used during kernel convolution.  The default is
+            (kernel.shape - 1) / 2.  Should be an array of shape
+            (n_dimensions,) using FITS dimensional ordering (x, y).
+        weights : numpy.ndarray (int or float), optional
+            An optional weighting array used for kernel convolution.  Should
+            be an array of shape (shape,).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        # Reverse for FITS to numpy dimensional order.
+        if kernel_reference_index is not None:
+            kernel_reference_index = self.fits_to_numpy(kernel_reference_index)
+        indices = self.fits_to_numpy(to_indices)
+
+        super().resample_from(image, indices, kernel=kernel,
+                              kernel_reference_index=kernel_reference_index,
+                              weights=weights)
+
+        if isinstance(image, np.ndarray):
+            # Just to get the size string
+            image = self.__class__(data=image)
+
+        self.add_history(f&#39;resampled {self.get_size_string()} &#39;
+                         f&#39;from {image.get_size_string()}&#39;)</div>
+
+
+<div class="viewcode-block" id="FitsData.despike">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.despike">[docs]</a>
+    def despike(self, threshold, noise_weight=None):
+        &quot;&quot;&quot;
+        Discard spikes whose significance is above a given threshold.
+
+        Parameters
+        ----------
+        threshold : float
+        noise_weight : numpy.ndarray (float), optional
+            Optional noise weights.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().despike(threshold, noise_weight=noise_weight)
+        self.add_history(f&#39;despiked at {threshold:.3f}&#39;)</div>
+
+
+<div class="viewcode-block" id="FitsData.get_index_range">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.get_index_range">[docs]</a>
+    def get_index_range(self):
+        &quot;&quot;&quot;
+        Return the index ranges of valid points.
+
+        Returns
+        -------
+        ranges : numpy.ndarray (int) or Coordinate
+            A range for each dimension or shape (n_dimensions, 2) giving the
+            minimum and maximum range in each dimension.  Note that this is
+            FITS dimension ordering (x-range = ranges[0], y-range = ranges[1]).
+            Also note that the upper range is returned such that the real
+            upper index is included in any slice operation. i.e., max = real
+            max index + 1.
+        &quot;&quot;&quot;
+        return self.numpy_to_fits(super().get_index_range())</div>
+
+
+<div class="viewcode-block" id="FitsData.value_at">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.value_at">[docs]</a>
+    def value_at(self, index, degree=3, reduce_degrees=False):
+        &quot;&quot;&quot;
+        Return the data value at a given index.
+
+        Parameters
+        ----------
+        index : numpy.ndarray (int or float)
+            An array of shape (n_dimensions,).  Should be supplied in (x, y)
+            order (FITS).
+        degree : int, optional
+            The degree of spline to fit.
+        reduce_degrees : bool, optional
+            If `True`, allow the spline fit to reduce the number of degrees
+            in cases where there are not enough points available to perform
+            the spline fit of `degree`.  If `False`, a ValueError will be
+            raised if such a fit fails.
+
+        Returns
+        -------
+        float
+        &quot;&quot;&quot;
+        return super().value_at(
+            np.atleast_1d(self.fits_to_numpy(index)),
+            degree=degree, reduce_degrees=reduce_degrees)</div>
+
+
+<div class="viewcode-block" id="FitsData.index_of_max">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.index_of_max">[docs]</a>
+    def index_of_max(self, sign=1, data=None):
+        &quot;&quot;&quot;
+        Return the maximum value and index of maximum value.
+
+        Parameters
+        ----------
+        sign : int or float, optional
+            If positive, find the maximum value in the array.  If negative,
+            find the minimum value in the array.  If zero, find the maximum
+            magnitude in the array.
+        data : numpy.ndarray (float), optional
+            The data array to examine.  Default is self.data.
+
+        Returns
+        -------
+        maximum_value, maximum_index : float, numpy.ndarray or Coordinate
+        &quot;&quot;&quot;
+        value, index = super().index_of_max(sign=sign, data=data)
+        return value, self.numpy_to_fits(index)</div>
+
+
+<div class="viewcode-block" id="FitsData.get_refined_peak_index">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.get_refined_peak_index">[docs]</a>
+    def get_refined_peak_index(self, peak_index):
+        &quot;&quot;&quot;
+        Get the peak index given a local peak.
+
+        Basically performs a quadratic fit on local neighborhood to determine
+        the maximum.
+
+        Parameters
+        ----------
+        peak_index : tuple (int)
+            The peak index of the data array in (y, x) numpy format.
+
+        Returns
+        -------
+        refined_peak_index : numpy.ndarray or Coordinate
+        &quot;&quot;&quot;
+        return self.numpy_to_fits(super().get_refined_peak_index(
+            self.fits_to_numpy(peak_index)))</div>
+
+
+<div class="viewcode-block" id="FitsData.crop">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.fits_data.FitsData.html#sofia_redux.scan.source_models.maps.fits_data.FitsData.crop">[docs]</a>
+    def crop(self, ranges):
+        &quot;&quot;&quot;
+        Crop the array to the required dimensions.
+
+        Parameters
+        ----------
+        ranges : numpy.ndarray (int,)
+            The ranges to set crop the data to.  Should be of shape
+            (n_dimensions, 2) where ranges[0, 0] would give the minimum crop
+            limit for the first dimension and ranges[0, 1] would give the
+            maximum crop limit for the first dimension.  In this case, the
+            &#39;first&#39; dimension is in FITS format.  i.e., (x, y) for a 2-D array.
+            Also note that the upper crop limit is inclusive so a range
+            of (0, 3) includes indices [0, 1, 2, 3].
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().crop(self.fits_to_numpy(ranges))</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

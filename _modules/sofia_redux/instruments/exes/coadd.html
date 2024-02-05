@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.exes.coadd &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.exes.coadd</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import warnings
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.instruments.exes import utils, make_template
+from sofia_redux.toolkit.image.combine import combine_images
+
+__all__ = [&#39;coadd&#39;]
+
+
+<div class="viewcode-block" id="coadd">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.coadd.coadd.html#sofia_redux.instruments.exes.coadd.coadd">[docs]</a>
+def coadd(data, header, flat, variance,
+          illum=None, weights=None, good_frames=None,
+          weight_mode=None, std_wt=False, threshold=0):
+    &quot;&quot;&quot;
+    Combine individual frames to increase signal-to-noise.
+
+    First, a template of the spectrum is created from all frames,
+    averaging in the spectral direction. By default, all input frames
+    are weighted by their correlation with this spatial template,
+    so that if a frame is unusually noisy had some other error, it will
+    not contribute significantly to the coadded frame. If this is not
+    desired, an unweighted coadd can be performed, or the user can
+    directly specify the weights to use.
+
+    The weighted frames are then summed to effect a weighted mean of the
+    input data. If the threshold parameter is provided, outlier rejection
+    is additionally performed before the weighted mean. If provided, the
+    variance is propagated accordingly.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        3D data cube [nframe, ny, nx].  Input data is assumed to
+        be distortion corrected and rotated as needed to align the spectral
+        direction along the x-axis.
+    header : fits.Header
+        Header of FITS file. Will be updated in place.
+    flat : numpy.ndarray
+        2D processed flat, as produced by makeflat [ny, nx].
+    variance : numpy.ndarray
+        3D variance cube [nframe, ny, nx]. Will be updated in place.
+    illum : numpy.ndarray of int, optional
+        Indicates illuminated regions of the frame [ny, nx].
+        1=illuminated, 0=unilluminated, -1=pixel that does not
+        correspond to any region in the raw frame.
+    weights : array-like, optional
+        Array [nframe] of fractional weights to use for input frames. If
+        a weight is set to zero the frame will be skipped. Must add
+        up to 1.0. If not provided, weights will be calculated for all
+        frames.
+    good_frames : array-like, optional
+        Array of indices of good frames, max `nframe` length. If
+        provided, any frame not in `good_frames` will be skipped.
+    weight_mode : {&#39;unweighted&#39;, &#39;useweights&#39;, None}, optional
+        If &#39;unweighted&#39;, all good frames will be given equal weight.
+        If &#39;useweights&#39;, the `weights` array will be used to weight the
+        frames. Otherwise, weights will be calculated from a correlation
+        with the spatial template.
+    std_wt : bool, optional
+        If set, frames will be weighted by the square root of their
+        variance planes. Otherwise, they will be weighted by the flat.
+    threshold : float, optional
+        If &gt;0, will be used as an outlier rejection threshold in the
+        mean combination.
+
+    Returns
+    -------
+    coadded_data, coadded_variance : numpy.ndarray, numpy.ndarray
+        The coadded data and variance, both [ny,nx].
+    &quot;&quot;&quot;
+
+    params = _verify_inputs(data, header, flat, variance, illum=illum,
+                            weights=weights, good_frames=good_frames,
+                            weight_mode=weight_mode, std_wt=std_wt,
+                            threshold=threshold)
+    if params[&#39;nz&#39;] == 1:
+        log.info(&#39;Only 1 frame available; no coadd performed.&#39;)
+        return data[0], variance[0]
+
+    _determine_weighting_method(params)
+    _generate_template(params)
+
+    log.info(&#39;Coadding diffs&#39;)
+
+    _calculate_weights(params)
+    _combine_data(params)
+    _update_integration_time(params)
+
+    return params[&#39;coadded&#39;], params[&#39;coadded_var&#39;]</div>
+
+
+
+def _verify_inputs(data, header, flat, variance,
+                   illum, weights, good_frames, weight_mode,
+                   std_wt, threshold):
+    &quot;&quot;&quot;
+    Check input shape and values.
+
+    Later functions in this step take the output params dictionary as
+    input and add to it or update it as output.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+    header : fits.Header
+    flat : numpy.ndarray
+    variance : numpy.ndarray
+    illum : numpy.ndarray
+    weights : array-like of float
+    good_frames : array-like of int
+    weight_mode : str
+    std_wt : bool
+    threshold : float
+
+    Returns
+    -------
+    params : dict
+        Contains all input data, reformatted as needed.
+        Keys are:
+
+            - &#39;data&#39;: data array
+            - &#39;variance&#39;: variance array
+            - &#39;header&#39;: header object
+            - &#39;nx&#39;: data shape, x-direction
+            - &#39;ny&#39;: data shape, y-direction
+            - &#39;illum&#39;: illumination array
+            - &#39;weights&#39;: list of weights for frames
+            - &#39;good_frames&#39;: input list of good frame indices
+            - &#39;weight_mode&#39;: input weight mode
+            - &#39;std_wt&#39;: input standard deviation weight flag
+            - &#39;threshold&#39;: input robust threshold
+            - &#39;flat&#39;: flat array
+            - &#39;suball&#39;: list of good frames indices
+            - &#39;zwt_sum&#39;: sum of frame weights
+
+    &quot;&quot;&quot;
+    nx = header[&#39;NSPAT&#39;]
+    ny = header[&#39;NSPEC&#39;]
+
+    params = {&#39;data&#39;: data, &#39;variance&#39;: variance, &#39;header&#39;: header,
+              &#39;nx&#39;: nx, &#39;ny&#39;: ny, &#39;illum&#39;: illum, &#39;weights&#39;: weights,
+              &#39;good_frames&#39;: good_frames}
+    try:
+        nz = utils.check_data_dimensions(params=params)
+    except RuntimeError:
+        raise ValueError(f&#39;Data has wrong dimensions {data.shape}. &#39;
+                         f&#39;Not coadding images.&#39;) from None
+    params[&#39;nz&#39;] = nz
+
+    try:
+        utils.check_variance_dimensions(variance, nx, ny, nz)
+    except RuntimeError:
+        raise ValueError(f&#39;Variance has wrong dimensions {variance.shape}. &#39;
+                         f&#39;Not coadding images.&#39;) from None
+    if params[&#39;illum&#39;] is None:
+        params[&#39;illum&#39;] = np.ones((ny, nx))
+
+    # Check which frames are good
+    all_frames = np.arange(nz)
+    if params[&#39;good_frames&#39;] is None:
+        params[&#39;good_frames&#39;] = np.arange(nz)
+    _, suball, _ = np.intersect1d(all_frames, params[&#39;good_frames&#39;],
+                                  return_indices=True)
+    if len(suball) == 0:
+        raise ValueError(&#39;No good frames. Not coadding images.&#39;)
+
+    # Weight good frames equally if not provided
+    if params[&#39;weights&#39;] is None or len(params[&#39;weights&#39;]) != nz:
+        weights = np.zeros(nz)
+        weights[suball] = 1
+    else:
+        weights = params[&#39;weights&#39;]
+
+    zwt_sum = np.nansum(np.abs(weights))
+    if zwt_sum == 0:
+        raise ValueError(&#39;All weights are zero. Not coadding images.&#39;)
+
+    params.update({&#39;weight_mode&#39;: weight_mode, &#39;std_wt&#39;: std_wt,
+                   &#39;threshold&#39;: threshold, &#39;flat&#39;: flat,
+                   &#39;weights&#39;: weights, &#39;suball&#39;: suball,
+                   &#39;zwt_sum&#39;: zwt_sum})
+
+    return params
+
+
+def _determine_weighting_method(params):
+    &quot;&quot;&quot;Determine weighting method from input parameters.&quot;&quot;&quot;
+    unweighted = False
+    do_weights = True
+    if params[&#39;weight_mode&#39;] is not None:
+        if params[&#39;weight_mode&#39;].lower() in [&#39;unweighted&#39;]:
+            unweighted = True
+        elif params[&#39;weight_mode&#39;].lower() in [&#39;useweights&#39;, &#39;use_weights&#39;]:
+            do_weights = False
+        else:
+            pass
+    if unweighted or params[&#39;nz&#39;] &lt; 4:
+        log.info(&#39;Doing unweighted addition of pairs.&#39;)
+        unweighted = True
+
+    # Initially weight good frames equally if not provided
+    if params[&#39;weights&#39;] is None or len(params[&#39;weights&#39;]) != params[&#39;nz&#39;]:
+        params[&#39;weights&#39;] = np.zeros(params[&#39;nz&#39;])
+        params[&#39;weights&#39;][params[&#39;suball&#39;]] = 1
+        do_weights = True
+    zwt_sum = np.sum(np.abs(params[&#39;weights&#39;]))
+    if zwt_sum == 0:
+        raise ValueError(&#39;All weights are zero. &#39;
+                         &#39;Not coadding images.&#39;)
+    if not do_weights and not np.allclose(zwt_sum, 1):
+        raise ValueError(&#39;Weights do not add up to 1. &#39;
+                         &#39;Not coadding images.&#39;)
+    params[&#39;unweighted&#39;] = unweighted
+    params[&#39;do_weights&#39;] = do_weights
+    params[&#39;zwt_sum&#39;] = zwt_sum
+
+
+def _generate_template(params):
+    &quot;&quot;&quot;Make a spatial template from the input data.&quot;&quot;&quot;
+    if params[&#39;std_wt&#39;]:
+        weight_frame = np.sqrt(params[&#39;variance&#39;])
+    else:
+        weight_frame = params[&#39;flat&#39;]
+
+    if params[&#39;unweighted&#39;]:
+        template = None
+    else:
+        template = make_template.make_template(
+            params[&#39;data&#39;], params[&#39;header&#39;], weight_frame,
+            good_frames=params[&#39;good_frames&#39;], illum=params[&#39;illum&#39;])
+        if template is None:
+            log.error(&#39;Problem making template. Using unweighted coadd.&#39;)
+            params[&#39;unweighted&#39;] = True
+    params[&#39;template&#39;] = template
+    params[&#39;weight_frame&#39;] = weight_frame
+
+
+def _calculate_weights(params):
+    &quot;&quot;&quot;Calculate weights from correlation with spatial template.&quot;&quot;&quot;
+
+    # Weight in proportion to S/N in spectrum extracted by
+    # multiplying by template
+
+    # Get good data from illum
+    weights = params[&#39;weights&#39;]
+    if params[&#39;do_weights&#39;]:
+        gz = (params[&#39;illum&#39;] == 1) &amp; (params[&#39;flat&#39;] != 0)
+        params[&#39;gz&#39;] = gz
+        params[&#39;bz&#39;] = ~params[&#39;gz&#39;]
+        if np.sum(gz) == 0:
+            raise ValueError(&#39;No good data. Not coadding images.&#39;)
+
+        for i in range(params[&#39;nz&#39;]):
+
+            # Check if weights should be calculated or just used as is
+            if params[&#39;weights&#39;][i] == 0:
+                continue
+
+            # Check if frame should be multiplied by -1
+            if params[&#39;weights&#39;][i] &lt; 0:
+                sign = -1
+            else:
+                sign = 1
+
+            if params[&#39;unweighted&#39;]:
+                weights[i] = sign
+                continue
+
+            t = params[&#39;template&#39;][gz]
+            a = (params[&#39;data&#39;][i] * sign)[gz]
+
+            if params[&#39;std_wt&#39;]:
+                s2 = (params[&#39;weight_frame&#39;][i] ** 2)[gz]
+            else:
+                s2 = (params[&#39;weight_frame&#39;] ** 2)[gz]
+
+            sum1 = np.nansum(t * a / s2)
+            sum2 = np.nansum(t ** 2 / s2)
+            wti = sum1 / sum2
+
+            if wti == 0 or not np.isfinite(wti):
+                log.warning(f&#39;Correlation zero on pair {i + 1}&#39;)
+                wti = 0
+            elif wti &lt; 0.1:
+                log.warning(f&#39;Correlation negative on pair {i + 1}&#39;)
+                wti = 0
+            weights[i] = sign * wti
+
+    sum_wt = np.nansum(np.abs(weights))
+    sum_wt_sq = np.nansum(np.abs(weights) ** 2)
+    if (params[&#39;do_weights&#39;] or params[&#39;unweighted&#39;]) and sum_wt &gt; 0:
+        weights = weights / sum_wt
+    wt_max = np.nanmax(weights)
+
+    idx = weights == 0
+    if np.sum(idx) &gt; 0:
+        log.info(f&#39;{np.sum(idx)} pair(s) given zero weight&#39;)
+    if np.sum(idx) == params[&#39;nz&#39;]:
+        raise ValueError(&#39;All weights zero. Not coadding images.&#39;)
+    params[&#39;sum_wt&#39;] = sum_wt
+    params[&#39;sum_wt_sq&#39;] = sum_wt_sq
+    params[&#39;weights&#39;] = weights
+    params[&#39;wt_max&#39;] = wt_max
+
+
+def _combine_data(params):
+    &quot;&quot;&quot;Combine data with weighted mean.&quot;&quot;&quot;
+
+    # weights are by frame at this point: expand them to match data
+    log.info(f&#39;Weights: {params[&quot;weights&quot;]}&#39;)
+    weight_image = np.zeros_like(params[&#39;data&#39;])
+    with warnings.catch_warnings():
+        warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+        weight_image[:] = 1 / params[&#39;weights&#39;][:, None, None]
+
+    if params[&#39;threshold&#39;] &gt; 0:
+        robust = True
+        sigma = params[&#39;threshold&#39;]
+        log.info(f&#39;Performing robust mean with threshold {sigma}.&#39;)
+    else:
+        robust = False
+        sigma = None
+    coadded = combine_images(params[&#39;data&#39;], variance=weight_image,
+                             method=&#39;mean&#39;, weighted=True,
+                             robust=robust, returned=False, sigma=sigma)
+    _, coadded_var = combine_images(params[&#39;data&#39;],
+                                    variance=params[&#39;variance&#39;],
+                                    method=&#39;mean&#39;, weighted=True,
+                                    robust=robust, returned=True,
+                                    sigma=sigma)
+    params[&#39;coadded&#39;] = coadded
+    params[&#39;coadded_var&#39;] = coadded_var
+
+
+def _update_integration_time(params):
+    &quot;&quot;&quot;Update integration time for combined data.&quot;&quot;&quot;
+    int_time = (params[&#39;header&#39;][&#39;BEAMTIME&#39;] * params[&#39;nz&#39;]
+                * params[&#39;header&#39;][&#39;NINT&#39;])
+    instmode = str(params[&#39;header&#39;].get(&#39;INSTMODE&#39;, &#39;UNKNOWN&#39;)).strip().upper()
+    if instmode == &#39;NOD_ON_SLIT&#39;:
+        int_time *= 2
+
+    log.info(f&#39;Total on-source integration time: {int_time}&#39;)
+    params[&#39;header&#39;][&#39;EXPTIME&#39;] = int_time
+    params[&#39;header&#39;][&#39;NEXP&#39;] = params[&#39;nz&#39;] * params[&#39;header&#39;][&#39;NINT&#39;]
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.info.astrometry &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.info.astrometry</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log, units
+from astropy.time import Time
+import numpy as np
+
+from sofia_redux.scan.info.base import InfoBase
+from sofia_redux.scan.utilities.bracketed_values import BracketedValues
+from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
+    EquatorialCoordinates
+from sofia_redux.scan.coordinate_systems.horizontal_coordinates import \
+    HorizontalCoordinates
+from sofia_redux.scan.coordinate_systems.geodetic_coordinates import \
+    GeodeticCoordinates
+from sofia_redux.scan.coordinate_systems.epoch.epoch import (
+    JulianEpoch, Epoch, J2000)
+from sofia_redux.scan.coordinate_systems.epoch.precession import Precession
+from sofia_redux.scan.coordinate_systems.focal_plane_coordinates import \
+    FocalPlaneCoordinates
+
+__all__ = [&#39;AstrometryInfo&#39;]
+
+
+<div class="viewcode-block" id="AstrometryInfo">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.astrometry.AstrometryInfo.html#sofia_redux.scan.info.astrometry.AstrometryInfo">[docs]</a>
+class AstrometryInfo(InfoBase):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize the astrometry information.
+
+        The astrometry contains information on the overall astronomical
+        state of an observation such as the equatorial, apparent and horizontal
+        coordinates of the observed source, the location and time of the
+        observation, if the observation is non-sidereal or ground based,
+        and the pointing corrections.  Additionally, it contains precession
+        objects for the conversion of apparent coordinates to a defined epoch.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.mjd = np.nan
+        self.lst = np.nan * units.Unit(&#39;hour&#39;)
+        self.utc = BracketedValues()
+        self.time_stamp = None
+        self.date = None
+
+        self.object_name = None
+        self.object_coordinates = None
+        self.apparent = EquatorialCoordinates()
+        self.equatorial = EquatorialCoordinates()
+        self.horizontal = HorizontalCoordinates()
+        self.site = GeodeticCoordinates()
+        self.pointing_correction = None
+        self.epoch = None
+        self.apparent_epoch = None
+        self.from_apparent = None
+        self.to_apparent = None
+        self.is_nonsidereal = False
+        self.pointing = None
+        self.ground_based = True
+
+<div class="viewcode-block" id="AstrometryInfo.calculate_precessions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.astrometry.AstrometryInfo.html#sofia_redux.scan.info.astrometry.AstrometryInfo.calculate_precessions">[docs]</a>
+    def calculate_precessions(self, equinox):
+        &quot;&quot;&quot;
+        Given an equinox, update the epoch and apparent epoch.
+
+        Parameters
+        ----------
+        equinox : int or float or str or Epoch
+
+        Returns
+        -------
+
+        &quot;&quot;&quot;
+        t_apparent = Time(self.mjd, format=&#39;mjd&#39;)
+        self.epoch = Epoch(equinox=equinox)
+        self.apparent_epoch = JulianEpoch(equinox=t_apparent)
+        self.from_apparent = Precession(self.apparent_epoch, self.epoch)
+        self.to_apparent = Precession(self.epoch, self.apparent_epoch)</div>
+
+
+<div class="viewcode-block" id="AstrometryInfo.precess">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.astrometry.AstrometryInfo.html#sofia_redux.scan.info.astrometry.AstrometryInfo.precess">[docs]</a>
+    def precess(self, epoch, scan=None):
+        &quot;&quot;&quot;
+        Precess equatorial to a new epoch.
+
+        Parameters
+        ----------
+        epoch : BaseCoordinateFrame or int or float or str.
+        scan : Scan, optional
+            If provided, precess all integration data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        to_epoch = Precession(self.equatorial.epoch, Epoch(equinox=epoch))
+        to_epoch.precess(self.equatorial)
+        if scan is not None and scan.integrations is not None:
+            for integration in scan.integrations:
+                equatorial = integration.frames.equatorial
+                if equatorial is not None:
+                    to_epoch.precess(equatorial)
+
+        self.calculate_precessions(epoch)</div>
+
+
+<div class="viewcode-block" id="AstrometryInfo.calculate_equatorial">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.astrometry.AstrometryInfo.html#sofia_redux.scan.info.astrometry.AstrometryInfo.calculate_equatorial">[docs]</a>
+    def calculate_equatorial(self):
+        &quot;&quot;&quot;
+        Calculate equatorial coordinates from current horizontal coordinates.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.equatorial = self.horizontal.to_equatorial(
+            site=self.site, lst=self.lst)
+        self.equatorial.epoch = JulianEpoch(
+            equinox=Time(self.mjd, format=&#39;mjd&#39;))
+        if self.from_apparent is None:
+            self.calculate_precessions(J2000)
+        self.from_apparent.precess(self.equatorial)</div>
+
+
+<div class="viewcode-block" id="AstrometryInfo.calculate_apparent">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.astrometry.AstrometryInfo.html#sofia_redux.scan.info.astrometry.AstrometryInfo.calculate_apparent">[docs]</a>
+    def calculate_apparent(self):
+        &quot;&quot;&quot;
+        Calculate the apparent equatorial coordinates.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.apparent = self.equatorial.copy()
+        if self.to_apparent is None:
+            self.calculate_precessions(self.equatorial.epoch)
+        self.to_apparent.precess(self.apparent)</div>
+
+
+<div class="viewcode-block" id="AstrometryInfo.calculate_horizontal">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.astrometry.AstrometryInfo.html#sofia_redux.scan.info.astrometry.AstrometryInfo.calculate_horizontal">[docs]</a>
+    def calculate_horizontal(self):
+        &quot;&quot;&quot;
+        Calculate horizontal coordinates from apparent equatorial coordinates.
+
+        The apparent equatorial coordinates will be calculated from the
+        equatorial coordinates if not available.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.apparent is None:
+            self.calculate_apparent()
+        self.horizontal = self.apparent.to_horizontal(
+            site=self.site, lst=self.lst)</div>
+
+
+<div class="viewcode-block" id="AstrometryInfo.get_native_coordinates">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.astrometry.AstrometryInfo.html#sofia_redux.scan.info.astrometry.AstrometryInfo.get_native_coordinates">[docs]</a>
+    def get_native_coordinates(self):
+        &quot;&quot;&quot;
+        The native coordinates of the scan astrometry.
+
+        The native coordinates returned in this case are horizontal.
+
+        Returns
+        -------
+        coordinates : SkyCoord
+            The native coordinates.
+        &quot;&quot;&quot;
+        return self.horizontal</div>
+
+
+<div class="viewcode-block" id="AstrometryInfo.get_position_reference">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.astrometry.AstrometryInfo.html#sofia_redux.scan.info.astrometry.AstrometryInfo.get_position_reference">[docs]</a>
+    def get_position_reference(self, system=None):
+        &quot;&quot;&quot;
+        Return position reference in the defined coordinate frame.
+
+        By default, the equatorial coordinates are returned, but many other
+        frame systems may be specified.  All astropy coordinate frames may
+        be used but may raise conversion errors depending on the type.  If
+        an error is encountered during conversion, or the frame system is
+        unavailable, equatorial coordinates will be returned.
+
+        Parameters
+        ----------
+        system : str
+            Name of the coordinate frame.  Available values are:
+            {&#39;horizontal&#39;, &#39;native&#39;, &#39;focalplane&#39;} and all Astropy frame
+            type names.
+
+        Returns
+        -------
+        coordinates : SphericalCoordinates
+            Coordinates of the specified type.
+        &quot;&quot;&quot;
+        system = str(system).lower().strip()
+        if system == &#39;horizontal&#39;:
+            return self.horizontal
+        elif system == &#39;native&#39;:
+            return self.get_native_coordinates()
+        elif system == &#39;focalplane&#39;:
+            coordinates = FocalPlaneCoordinates()
+            coordinates.set([0, 0])  # Single zero coordinates
+            return coordinates
+        elif self.is_nonsidereal:
+            ra = self.configuration.get_float(&#39;reference.ra&#39;)
+            dec = self.configuration.get_float(&#39;reference.dec&#39;)
+            if np.isfinite(ra) and np.isfinite(dec):
+                equatorial = EquatorialCoordinates(epoch=self.equatorial.epoch)
+                equatorial.ra = ra * units.Unit(&#39;hourangle&#39;)
+                equatorial.dec = dec * units.Unit(&#39;degree&#39;)
+                return equatorial
+
+            elif np.isfinite(ra) or np.isfinite(dec):
+                log.warning(&quot;The reference.ra or reference.dec configuration &quot;
+                            &quot;was given without the other.  Defaulting to scan &quot;
+                            &quot;reference points.&quot;)
+                return self.equatorial
+            else:
+                return self.equatorial
+        elif system in [&#39;eliptic&#39;, &#39;galatic&#39;, &#39;supergalatic&#39;]:
+            raise NotImplementedError(f&quot;Have not built {system} coordinates.&quot;)
+        else:
+            return self.equatorial</div>
+
+
+<div class="viewcode-block" id="AstrometryInfo.apply_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.astrometry.AstrometryInfo.html#sofia_redux.scan.info.astrometry.AstrometryInfo.apply_scan">[docs]</a>
+    def apply_scan(self, scan):
+        &quot;&quot;&quot;
+        Apply parameters taken from a scan to the astrometry.
+
+        A check is performed to see if the configuration specifies that the
+        source is &#39;moving&#39; and if so, sets the information to reflect this
+        is a non-sidereal observation.
+
+        Parameters
+        ----------
+        scan : sofia_redux.scan.scan.scan.Scan
+            The scan to apply.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.is_nonsidereal |= self.configuration.get_bool(&#39;moving&#39;)</div>
+
+
+<div class="viewcode-block" id="AstrometryInfo.set_mjd">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.astrometry.AstrometryInfo.html#sofia_redux.scan.info.astrometry.AstrometryInfo.set_mjd">[docs]</a>
+    def set_mjd(self, mjd):
+        &quot;&quot;&quot;
+        Set the Modified Julian Date and apply any configuration options.
+
+        Parameters
+        ----------
+        mjd : float
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.mjd = float(mjd)
+        if self.configuration is not None:
+            self.configuration.set_date(self.mjd, validate=True)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

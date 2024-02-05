@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.exes.derasterize &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.exes.derasterize</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.instruments.exes.readraw import readraw
+from sofia_redux.toolkit.fitting.polynomial import polyfitnd
+from sofia_redux.toolkit.utilities.fits import set_log_level
+
+__all__ = [&#39;derasterize&#39;]
+
+
+<div class="viewcode-block" id="derasterize">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.derasterize.derasterize.html#sofia_redux.instruments.exes.derasterize.derasterize">[docs]</a>
+def derasterize(data, header, dark_data=None, dark_header=None, overlap=32,
+                fit_buffer=5):
+    &quot;&quot;&quot;
+    Read and recombine a rasterized flat file.
+
+    When background fluxes are high, raster flats are taken in subarray
+    chunks to avoid saturating the detector.  These chunks are stored in
+    a custom format in the raw FITS file and need special handling to
+    be reassembled into a full-frame flat for use with the science data.
+
+    The procedure is:
+
+       1. Divide the input cube into detector stripes.
+       2. Call `readraw` for each stripe to coadd raw readouts.
+       3. Use overlap regions to fit and correct for gain and offset
+          differences between stripes.
+       4. Assemble corrected stripes into a full 1024 x 1024 array.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        3D data cube [nframe, nspec, nspat].
+    header : fits.Header
+        Header of FITS file. May be updated in place.
+    dark_data : numpy.ndarray, optional
+        3D raw raster dark data [nframe, nspec, nspat].  Must match the
+        input data if provided.
+    dark_header : fits.Header, optional
+        Header of dark FITS file.
+    overlap : int, optional
+        The size of the overlap region in each detector stripe.
+
+    Returns
+    -------
+    deraster, variance, mask : 3-tuple of numpy.ndarray
+       The derasterized and coadded data, variance, and good data mask.
+       The deraster and variance arrays have shape (nframes, ny, nx).
+       The mask has shape (ny, nx) and Boolean data type, where True
+       indicates a good pixel; False indicates a bad pixel.
+    &quot;&quot;&quot;
+
+    # check for dark data
+    if dark_data is not None:
+        if dark_data.shape != data.shape:
+            message = f&#39;Dark data has wrong dimensions {dark_data.shape}&#39;
+            raise RuntimeError(message)
+        if dark_header is None:
+            message = &#39;Dark header must be provided with dark data&#39;
+            raise RuntimeError(message)
+
+    # nx is 1024 + 8 reference pix
+    # ny is subarray stripe + overlap pixels
+    # nz is number of stripes x nframes per pattern x npattern
+    nz, ny, nx = data.shape
+    full_size = 1024
+
+    # stripe size
+    ns = ny - overlap
+    nstripe = full_size // ns
+    nframe = nz // nstripe
+    if full_size % ns != 0:
+        message = (f&#39;Specified overlap of {overlap} rows &#39;
+                   f&#39;does not match data dimensions {data.shape}.&#39;)
+        raise RuntimeError(message)
+    if nz % nstripe != 0:
+        message = (f&#39;Number of stripes ({nstripe}) does not &#39;
+                   f&#39;match data dimensions {data.shape}.&#39;)
+        raise RuntimeError(message)
+
+    deraster = np.zeros((1, full_size, full_size))
+    variance = np.zeros_like(deraster)
+    lin_mask = np.full((full_size, full_size), True)
+
+    # some fudge values for subarray location and edge effects
+    # TODO: Clean up
+    # fit_buffer = 5
+    bottom_buffer = 2
+    offset_fudge = 2
+
+    last_overlap = None
+    for i in range(nstripe):
+        log.info(&#39;&#39;)
+        log.info(f&#39;Stripe {i + 1}&#39;)
+        log.info(&#39;&#39;)
+        zstart = i * nframe
+        zstop = zstart + nframe
+        raw_frames = data[zstart:zstop]
+
+        # 2nd and subsequent subarray seem to be offset by a couple
+        # pixels in y, and the bottom row or two look bad
+        if i == nstripe - 1:
+            # last stripe: use offset, clip the bottom,
+            # don&#39;t go beyond top row
+            fudge = offset_fudge
+            bottom = bottom_buffer
+            top = 0
+            raw_ystart = full_size - ns - overlap - fudge
+        elif i &gt; 0:
+            # middle stripes: use offset, clip the bottom,
+            # expand the top into the overlap
+            fudge = offset_fudge
+            bottom = bottom_buffer
+            top = bottom_buffer
+            raw_ystart = i * ns - fudge
+        else:
+            # first stripe: no offset, don&#39;t clip the bottom,
+            # expand the top into the overlap
+            fudge = 0
+            bottom = 0
+            top = bottom_buffer
+            raw_ystart = 0
+
+        # index into the full output array
+        ystart = i * ns - fudge + bottom
+        ystop = i * ns + ns - fudge + top
+
+        # set the ectpat to extract the correct region of the bad pixel mask
+        raw_header = header.copy()
+        raw_ystop = ns + overlap
+        ectpat = f&#39;0 1 {raw_ystart // 2} {raw_ystop // 2} 0 {nx}&#39;
+        raw_header[&#39;ECTPAT&#39;] = ectpat
+        raw_header[&#39;FRAMETIM&#39;] *= full_size / ny
+
+        # coadd frames with simple destructive mode, no linearity,
+        # tossing first 2 ints
+        log.info(&#39;Reading flat frames&#39;)
+        coadd, var, lin = readraw(raw_frames, raw_header, algorithm=0,
+                                  do_lincor=False, toss_nint=2)
+        coadd = np.squeeze(coadd)
+        var = np.squeeze(var)
+
+        # directly subtract dark if available
+        if dark_data is not None:
+            raw_dark = dark_data[zstart:zstop]
+            raw_header = dark_header.copy()
+            raw_header[&#39;ECTPAT&#39;] = ectpat
+            raw_header[&#39;FRAMETIM&#39;] *= full_size / ny
+            log.info(&#39;Subtracting dark frames&#39;)
+            with set_log_level(&#39;WARNING&#39;):
+                coadd_dark, _, _ = readraw(raw_dark, raw_header, algorithm=0,
+                                           do_lincor=False, toss_nint=2)
+            coadd -= np.squeeze(coadd_dark)
+
+        if i == 0:
+            # no correction for first stripe
+            corrected_coadd = coadd
+            last_overlap = corrected_coadd[
+                ns + fit_buffer:ns + overlap - fit_buffer,
+                fit_buffer:full_size - fit_buffer]
+        else:
+            # overlap with previous is at bottom of stripe array
+            if i != nstripe - 1:
+                overlap_section = coadd[
+                    fit_buffer:overlap - fit_buffer,
+                    fit_buffer:full_size - fit_buffer]
+            else:
+                # doubled for last stripe
+                overlap_section = coadd[
+                    fit_buffer + overlap: 2 * overlap - fit_buffer,
+                    fit_buffer:full_size - fit_buffer]
+
+            # derive fit gain/offset from overlap
+            diff = last_overlap - overlap_section
+            coeff = polyfitnd(overlap_section.ravel(), diff.ravel(),
+                              1, robust=6.0)
+
+            # correct new stripe to previous
+            correction = coadd * coeff[1] + coeff[0]
+            corrected_coadd = coadd + correction
+
+            # keep top section for overlap with next stripe
+            last_overlap = corrected_coadd[
+                ns + fit_buffer:ns + overlap - fit_buffer,
+                fit_buffer:full_size - fit_buffer]
+
+        # place stripe in output flat
+        if i &lt; nstripe - 1:
+            # all but last stripe: overlap is on top
+            deraster[0, ystart:ystop] = corrected_coadd[bottom:ns + top]
+            variance[0, ystart:ystop] = var[bottom:ns + top]
+            lin_mask[ystart:ystop] = lin[bottom:ns + top]
+        else:
+            # last stripe: overlap is on bottom
+            deraster[0, ystart:ystop] = corrected_coadd[overlap + bottom:]
+            variance[0, ystart:ystop] = var[overlap + bottom:]
+            lin_mask[ystart:ystop] = lin[overlap + bottom:]
+
+    # scale factor for subarray
+    deraster *= full_size / ny
+    variance *= (full_size / ny) ** 2
+
+    # set header keywords for future steps
+    header[&#39;DATASRC&#39;] = &#39;CALIBRATION&#39;
+    header[&#39;OBSTYPE&#39;] = &#39;FLAT&#39;
+    header[&#39;DETSEC&#39;] = &#39;[1:1024,1:1024]&#39;
+    header[&#39;NSPAT&#39;] = full_size
+    header[&#39;NSPEC&#39;] = full_size
+
+    return deraster, variance, lin_mask</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

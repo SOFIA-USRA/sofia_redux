@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.getcalpath &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.getcalpath</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from collections import OrderedDict
+import os
+
+from astropy import log
+import pandas
+
+import sofia_redux.instruments.forcast as drip
+from sofia_redux.instruments.forcast.getpar import getpar
+from sofia_redux.instruments.forcast.readmode import readmode
+
+__all__ = [&#39;getcalpath&#39;]
+
+
+<div class="viewcode-block" id="getcalpath">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.getcalpath.getcalpath.html#sofia_redux.instruments.forcast.getcalpath.getcalpath">[docs]</a>
+def getcalpath(header, pathcal=None):
+    &quot;&quot;&quot;
+    Return the path of the ancillary files used for the pipeline.
+
+    Looks up default calibration files and other reference data in
+    the calibration data path, based on the characteristics of the
+    observation, as recorded in the input header.
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+    pathcal : str, optional
+        File path to calibration data directory that contains the default
+        calibration files.  If not provided, the default data location
+        will be used (sofia_redux.instruments.forcast/data).
+
+    Returns
+    -------
+    collections.OrderedDict
+        name : str
+            Name of the config mode.
+        gmode : int
+            The grism mode to be used during the reduction.
+        cnmode : int
+            The chop/nod mode to be used during the reduction.
+        obstype : str
+            Observation type.
+        srctype : str
+            Source type.
+        spectel : str
+            Name of the spectral element used for the observation.
+        slit : str
+            Name of the slit used for the observation.
+        pathcal : str
+            Base file path for calibration data.
+        conffile : str
+            File path to the configuration file.
+        kwfile : str
+            File path to the keyword definition file.
+        badfile : str
+            File path to the bad pixel mask.
+        pinfile : str
+            File path to the pinhole mask locations.
+        pixshiftx : float
+            Shift to add to CRPIX1 to account for filter shifts.
+        pixshifty : float
+            Shift to add to CRPIX2 to account for filter shifts.
+        maskfile : str
+            File path to the grism order mask file.
+        wavefile : str
+            File path to the grism wavelength calibration file.
+        resolution : float
+            Spectral resolution for the grism mode
+        respfile : str
+            File path to the grism instrument response file.
+        slitfile : float
+            File path to the grism slit function file.
+        linefile : str
+            File path to a line list for wavelength calibration.
+        wmin : int
+            Approximate minimum wavelength for the instrument. Used
+            to identify matching ATRAN files.
+        wmax : int
+            Approximate maximum wavelength for the instrument. Used
+            to identify matching ATRAN files.
+        error : bool
+            True if there was an error retrieving the files.
+    &quot;&quot;&quot;
+    if isinstance(pathcal, str):
+        path = pathcal[:]
+    else:
+        path = os.path.join(os.path.dirname(drip.__file__), &#39;data&#39;)
+
+    result = OrderedDict(
+        ((&#39;name&#39;, &#39;&#39;), (&#39;gmode&#39;, -1), (&#39;cnmode&#39;, &#39;&#39;), (&#39;dateobs&#39;, 99999999),
+         (&#39;obstype&#39;, &#39;&#39;), (&#39;srctype&#39;, &#39;&#39;), (&#39;spectel&#39;, &#39;&#39;), (&#39;slit&#39;, &#39;&#39;),
+         (&#39;boresight&#39;, &#39;&#39;), (&#39;pathcal&#39;, &#39;&#39;), (&#39;conffile&#39;, &#39;&#39;),
+         (&#39;kwfile&#39;, &#39;&#39;), (&#39;badfile&#39;, &#39;&#39;), (&#39;pinfile&#39;, &#39;&#39;),
+         (&#39;pixshiftx&#39;, 0.), (&#39;pixshifty&#39;, 0.),
+         (&#39;maskfile&#39;, &#39;&#39;), (&#39;wavefile&#39;, &#39;&#39;), (&#39;resolution&#39;, 0.),
+         (&#39;respfile&#39;, &#39;&#39;), (&#39;slitfile&#39;, &#39;&#39;), (&#39;linefile&#39;, &#39;&#39;),
+         (&#39;wmin&#39;, 4), (&#39;wmax&#39;, 50),
+         (&#39;error&#39;, False)))
+
+    detchan = getpar(header, &#39;DETCHAN&#39;, update_header=False, dripconf=False)
+    camera = &#39;LWC&#39; if detchan == &#39;LW&#39; else &#39;SWC&#39;
+
+    spectel = [None, None]
+    for idx, key in enumerate([&#39;SPECTEL1&#39;, &#39;SPECTEL2&#39;]):
+        value = header.get(key)
+        if value is None or str(value).strip().upper() == &#39;0&#39;:
+            msg = (&#39;getcalpath - Problem reading SPECTEL%i&#39; % (idx + 1))
+            msg += &#39;\nRoutine failed. Returning default dict&#39;
+            log.warning(msg)
+            result[&#39;error&#39;] = True
+            return result
+        spectel[idx] = value
+
+    result[&#39;spectel&#39;] = spectel[0] if camera == &#39;SWC&#39; else spectel[1]
+    result[&#39;slit&#39;] = header.get(&#39;SLIT&#39;, &#39;&#39;).upper().strip()
+    result[&#39;boresight&#39;] = header.get(&#39;BORESITE&#39;, &#39;&#39;).upper().strip()
+
+    date = header.get(&#39;DATE-OBS&#39;, &#39;&#39;).replace(&#39;T&#39;, &#39; &#39;).replace(&#39;-&#39;, &#39; &#39;)
+    date = date.split()
+    dateobs = 99999999
+    if len(date) &gt;= 3:
+        try:
+            dateobs = int(&#39;&#39;.join(date[0:3]))
+        except ValueError:
+            pass
+    result[&#39;dateobs&#39;] = dateobs
+
+    gmode_name = {&#39;FOR_G063&#39;: (2, &#39;G063&#39;),
+                  &#39;FOR_G111&#39;: (3, &#39;G111&#39;),
+                  &#39;FOR_G227&#39;: (4, &#39;G227&#39;),
+                  &#39;FOR_G329&#39;: (5, &#39;G329&#39;)}
+    result[&#39;gmode&#39;], result[&#39;name&#39;] = gmode_name.get(
+        result[&#39;spectel&#39;], (-1, &#39;IMG_%s&#39; % camera))
+
+    # also read and store the sky mode, obstype, and srctype
+    # from the header
+    result[&#39;cnmode&#39;] = readmode(header)
+    obstype = getpar(header, &#39;OBSTYPE&#39;, default=&#39;OBJECT&#39;,
+                     update_header=False, dripconf=False)
+    result[&#39;obstype&#39;] = obstype.strip().upper()
+    srctype = getpar(header, &#39;SRCTYPE&#39;, default=&#39;UNKNOWN&#39;,
+                     update_header=False, dripconf=False)
+    result[&#39;srctype&#39;] = srctype.strip().upper()
+
+    result[&#39;pathcal&#39;] = os.path.join(path, &#39;&#39;)
+    calfile_default = os.path.join(path, &#39;caldefault.txt&#39;)
+    if not os.path.isfile(calfile_default):
+        msg = &quot;getcalpath - Problem reading default file %s&quot; % calfile_default
+        msg += &quot;\nRoutine failed. Returning default dict&quot;
+        log.warning(msg)
+        result[&#39;error&#39;] = True
+        return result
+
+    calcols = [&#39;name&#39;, &#39;conffile&#39;, &#39;kwfile&#39;, &#39;badfile&#39;, &#39;pinfile&#39;]
+    df = pandas.read_csv(calfile_default, delim_whitespace=True,
+                         comment=&#39;#&#39;, names=calcols, index_col=0)
+    table = df[(df.index &gt;= dateobs) &amp; (df[&#39;name&#39;] == result[&#39;name&#39;])]
+    if len(table) == 0:
+        msg = &#39;getcalpath - Problem reading defaults for %s &#39; % result[&#39;name&#39;]
+        msg += &#39;on date %s from %s&#39; % (dateobs, calfile_default)
+        log.warning(msg + &#39;\nRoutine failed. Returning default dict&#39;)
+        result[&#39;error&#39;] = True
+        return result
+    # take the first applicable date
+    row = table[table.index == table.index.min()].sort_index().iloc[0]
+    for f in calcols:
+        if f.endswith(&#39;file&#39;) and f in row and row[f] != &#39;.&#39;:
+            result[f] = os.path.join(path, row[f])
+
+    # Read the filter shift_image table
+    # This file lists the shift_image values that should be applied to CRPIX1
+    # and CRPIX2 to compensate for shifts in the pixel position of a
+    # source relative to the 11.1um filter, cause by optical effects
+    # that vary for different filters.
+    dual = header.get(&#39;INSTCFG&#39;, &#39;&#39;).upper().strip() == &#39;IMAGING_DUAL&#39;
+    filter_file_default = os.path.join(path, &#39;filtershift.txt&#39;)
+    filtcols = [&#39;spectel&#39;, &#39;dichroic&#39;, &#39;shiftx&#39;, &#39;shifty&#39;]
+    df = pandas.read_csv(filter_file_default, delim_whitespace=True,
+                         comment=&#39;#&#39;, names=filtcols, index_col=0)
+    table = df[(df.index &gt; dateobs)
+               &amp; (df[&#39;spectel&#39;] == result[&#39;spectel&#39;])
+               &amp; (df[&#39;dichroic&#39;] == dual)].sort_index()
+    if len(table) != 0:
+        row = table[
+            table.index == table.index.min()].sort_index().iloc[0].fillna(0.)
+        result[&#39;pixshiftx&#39;] = row[&#39;shiftx&#39;]
+        result[&#39;pixshifty&#39;] = row[&#39;shifty&#39;]
+
+    # Read additional grism defaults into result
+    if result[&#39;gmode&#39;] &gt; 0:
+        _get_grism_cal(path, result)
+
+    return result</div>
+
+
+
+def _get_grism_cal(pathcal, result):
+    &quot;&quot;&quot;
+    Return the path of the ancillary files used for the grism pipeline.
+
+    Looks up additional default calibration files and other reference data
+    needed for grism observations.  The input parameters are assumed to be
+    passed from the getcalpath function: they should already be formatted
+    as necessary.
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+    pathcal : str
+        Absolute file path to calibration data directory that contains
+        the default calibration files.
+    result : collections.OrderedDict
+        The configuration structure to update with grism values.
+    &quot;&quot;&quot;
+    spectel = result[&#39;spectel&#39;]
+    slit = result[&#39;slit&#39;]
+    dateobs = result[&#39;dateobs&#39;]
+
+    pathcal = os.path.join(pathcal, &#39;grism&#39;)
+    calfile_default = os.path.join(pathcal, &#39;caldefault.txt&#39;)
+    if not os.path.isfile(calfile_default):
+        msg = &quot;getcalpath - Problem reading default file %s&quot; % calfile_default
+        msg += &quot;\nRoutine failed. Returning default dict.&quot;
+        log.warning(msg)
+        result[&#39;error&#39;] = True
+        return
+
+    calcols = [&#39;spectel&#39;, &#39;slit&#39;, &#39;maskfile&#39;, &#39;wavefile&#39;,
+               &#39;resolution&#39;, &#39;respfile&#39;, &#39;slitfile&#39;, &#39;linefile&#39;]
+    df = pandas.read_csv(calfile_default, delim_whitespace=True,
+                         comment=&#39;#&#39;, names=calcols, index_col=0)
+    table = df[(df.index &gt;= dateobs)
+               &amp; (df[&#39;spectel&#39;] == spectel)
+               &amp; (df[&#39;slit&#39;] == slit)]
+    if len(table) == 0:
+        msg = &#39;getcalpath - Problem reading defaults &#39; \
+              &#39;for %s, %s &#39; % (spectel, slit)
+        msg += &#39;on date %s from %s&#39; % (dateobs, calfile_default)
+        log.warning(msg + &#39;\nRoutine failed. Returning default dict&#39;)
+        result[&#39;error&#39;] = True
+        return
+
+    # take the first applicable date
+    row = table[table.index == table.index.min()].sort_index().iloc[0]
+    for f in calcols:
+        if f.endswith(&#39;file&#39;) and f in row and row[f] != &#39;.&#39;:
+            result[f] = os.path.join(pathcal, row[f])
+        elif f == &#39;resolution&#39; and f in row and row[f] != &#39;.&#39;:
+            try:
+                result[f] = float(row[f])
+            except ValueError:
+                msg = &#39;getcalpath - Problem reading resolution &#39; \
+                      &#39;for %s, %s &#39; % (spectel, slit)
+                msg += &#39;on date %s from %s&#39; % (dateobs, calfile_default)
+                log.warning(msg)
+                result[&#39;error&#39;] = True
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

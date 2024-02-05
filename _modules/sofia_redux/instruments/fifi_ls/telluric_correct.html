@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.fifi_ls.telluric_correct &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.fifi_ls.telluric_correct</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import os
+
+from astropy import log
+from astropy.io import fits
+import numba as nb
+import numpy as np
+
+from sofia_redux.instruments.fifi_ls.get_atran \
+    import get_atran, clear_atran_cache
+from sofia_redux.instruments.fifi_ls.get_resolution \
+    import get_resolution, clear_resolution_cache
+from sofia_redux.toolkit.utilities \
+    import (gethdul, write_hdul, hdinsert, multitask)
+
+__all__ = [&#39;apply_atran&#39;, &#39;telluric_correct&#39;, &#39;wrap_telluric_correct&#39;]
+
+
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def apply_atran_correction(wave, data, var, atran, cutoff):  # pragma: no cover
+    &quot;&quot;&quot;
+    Apply an atmospheric transmission correction to the flux data.
+
+    Parameters
+    ----------
+    wave : array of float
+        nwave elements
+    data : array of float
+        ndata x nwave
+    var : array of float
+        ndata x nwave
+    atran : array of float
+        ATRAN wavelengths and transmission values. 2 x natran
+    cutoff : float
+        Below this transmission value, set the corrected data to NaN.
+
+    Returns
+    -------
+    tel_corr, var_corr, atran_store : array, array, array
+        The corrected flux, corrected variance, and correction
+        values applied.
+    &quot;&quot;&quot;
+
+    aw = atran[0]
+    at = atran[1]
+    na = atran.shape[1]
+    shape = data.shape
+    ndata = shape[0]
+    nwave = shape[1]
+
+    tel_corr = np.empty(shape, dtype=nb.float64)
+    var_corr = np.empty(shape, dtype=nb.float64)
+    atran_store = np.empty(shape, dtype=nb.float64)
+
+    # find range of atran to interpolate
+    minw, maxw = np.nanmin(wave), np.nanmax(wave)
+    buffer = 0.1 * (maxw - minw)
+    low_atran = minw - buffer
+    high_atran = maxw + buffer
+    found = False
+    a0 = 0
+    a1 = na
+    for ai in range(na):
+        w = aw[ai]
+        if found and w &gt; high_atran:
+            a1 = ai
+            break
+        if not found and w &gt;= low_atran:
+            a0 = ai
+            found = True
+
+    for n in range(ndata):
+        for i in range(25):
+            x = wave[:, i]
+            y = data[n, :, i]
+            v = var[n, :, i]
+
+            itrans = np.interp(x, aw[a0:a1], at[a0:a1])
+            for k in range(nwave):
+                transmission = itrans[k]
+                atran_store[n, k, i] = transmission
+                if transmission &gt;= cutoff:
+                    tel_corr[n, k, i] = y[k] / transmission
+                    var_corr[n, k, i] = v[k] / transmission / transmission
+                else:
+                    tel_corr[n, k, i] = np.nan
+                    var_corr[n, k, i] = np.nan
+
+    return tel_corr, var_corr, atran_store
+
+
+<div class="viewcode-block" id="apply_atran">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.telluric_correct.apply_atran.html#sofia_redux.instruments.fifi_ls.telluric_correct.apply_atran">[docs]</a>
+def apply_atran(hdul, atran, cutoff=0.6, skip_corr=False, unsmoothed=None):
+    &quot;&quot;&quot;
+    Apply transmission data to data in an HDUList.
+
+    Parameters
+    ----------
+    hdul : fits.HDUList
+    atran : numpy.ndarray
+        (2, nwave) where [0, :] = wavelength and [1, :] = transmission
+    cutoff : float, optional
+        Used as the fractional transmission below which data will
+        be set to NaN. Set to 0 to keep all data.
+    skip_corr : bool, optional
+        If set, telluric correction will not be applied, but ATRAN
+        spectra will still be attached to the output file.
+    unsmoothed : numpy.ndarray, optional
+        Unsmoothed transmission to attach to output file.
+        (2, nwave) where [0, :] = wavelength and [1, :] = transmission
+
+    Returns
+    -------
+    fits.HDUList
+    &quot;&quot;&quot;
+    wave = np.asarray(hdul[&#39;LAMBDA&#39;].data, dtype=float)
+    var = np.asarray(hdul[&#39;STDDEV&#39;].data, dtype=float) ** 2
+    data = np.asarray(hdul[&#39;FLUX&#39;].data, dtype=float)
+
+    if data.ndim &lt; 3:
+        data = data.reshape((1, *data.shape))
+        var = var.reshape((1, *var.shape))
+        do_reshape = True
+    else:
+        do_reshape = False
+
+    tel_corr, var_corr, atran_store = apply_atran_correction(
+        wave, data, var, atran, cutoff)
+
+    primehead = hdul[0].header.copy()
+    outname = os.path.basename(
+        primehead.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;).replace(&#39;SCM&#39;, &#39;TEL&#39;))
+    hdinsert(primehead, &#39;FILENAME&#39;, outname)
+    hdinsert(primehead, &#39;PRODTYPE&#39;, &#39;telluric_corrected&#39;)
+
+    result = fits.HDUList(fits.PrimaryHDU(header=primehead))
+    exthdr = hdul[&#39;FLUX&#39;].header
+    if skip_corr:
+        result[0].header[&#39;HISTORY&#39;] = &#39;Telluric spectrum attached&#39;
+        result.append(hdul[&#39;FLUX&#39;].copy())
+        result.append(hdul[&#39;STDDEV&#39;].copy())
+    else:
+        result[0].header[&#39;HISTORY&#39;] = &#39;Telluric corrected&#39;
+        if do_reshape:
+            # standard: 2D data, take first plane
+            result.append(fits.ImageHDU(tel_corr[0], header=exthdr,
+                                        name=&#39;FLUX&#39;))
+            result.append(fits.ImageHDU(np.sqrt(var_corr[0]), header=exthdr,
+                                        name=&#39;STDDEV&#39;))
+        else:
+            # OTF: 3D data, use all planes
+            result.append(fits.ImageHDU(tel_corr, header=exthdr, name=&#39;FLUX&#39;))
+            result.append(fits.ImageHDU(np.sqrt(var_corr), header=exthdr,
+                                        name=&#39;STDDEV&#39;))
+        result.append(fits.ImageHDU(hdul[&#39;FLUX&#39;].data.copy(), header=exthdr,
+                                    name=&#39;UNCORRECTED_FLUX&#39;))
+        result.append(fits.ImageHDU(hdul[&#39;STDDEV&#39;].data.copy(), header=exthdr,
+                                    name=&#39;UNCORRECTED_STDDEV&#39;))
+    result.append(hdul[&#39;LAMBDA&#39;].copy())
+    result.append(hdul[&#39;XS&#39;].copy())
+    result.append(hdul[&#39;YS&#39;].copy())
+    result.append(hdul[&#39;RA&#39;].copy())
+    result.append(hdul[&#39;DEC&#39;].copy())
+    exthdr[&#39;BUNIT&#39;] = &#39;&#39;
+    result.append(fits.ImageHDU(atran_store[0], header=exthdr,
+                                name=&#39;ATRAN&#39;))
+    if unsmoothed is not None:
+        # trim unsmoothed data for unused wavelengths, by channel
+        channel = primehead.get(&#39;CHANNEL&#39;, &#39;UNKNOWN&#39;)
+        if channel == &#39;BLUE&#39;:
+            keep = (unsmoothed[0] &lt; 130.)
+            unsmoothed = unsmoothed[:, keep]
+        elif channel == &#39;RED&#39;:
+            keep = (unsmoothed[0] &gt; 90.)
+            unsmoothed = unsmoothed[:, keep]
+        result.append(fits.ImageHDU(unsmoothed, header=exthdr,
+                                    name=&#39;UNSMOOTHED_ATRAN&#39;))
+
+    return result</div>
+
+
+
+<div class="viewcode-block" id="telluric_correct">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.telluric_correct.telluric_correct.html#sofia_redux.instruments.fifi_ls.telluric_correct.telluric_correct">[docs]</a>
+def telluric_correct(filename, atran_dir=None, cutoff=0.6, use_wv=False,
+                     skip_corr=False, write=False, outdir=None):
+    &quot;&quot;&quot;
+    Correct spectra for atmospheric absorption features.
+
+    The procedure is:
+
+        1. Identify ATRAN file to use.  Smooth it to the spectral
+           resolution of the input file.
+        2. Interpolate the atmospheric transmission data onto the wavelength
+           value of each spexel. Divide the data at each point by the
+           transmission value.
+        3. Create FITS file and (optionally) write results to disk.
+
+    The output FITS file contains FLUX, STDDEV, LAMBDA, XS, YS, RA, and DEC
+    arrays in the same dimensions as the input. Additionally,
+    UNCORRECTED_FLUX and UNCORRECTED_STDDEV image extensions are appended,
+    containing a copy of the input FLUX and STDDEV arrays. An interpolated
+    ATRAN extension is also appended, matching the dimensions of LAMBDA.
+    The full unsmoothed transmission data is also appended as an image
+    extension, in a n_atran x 2 array, for reference.
+
+    Parameters
+    ----------
+    filename : str
+        FITS file to be telluric corrected.  Should have been
+        generated by fifi_ls.combine_grating_scans.
+    atran_dir : str, optional
+        Path to a directory containing ATRAN reference FITS files.
+        If not provided, the default set of files packaged with the
+        pipeline will be used.
+    cutoff : float, optional
+        Used as the fractional transmission below which data will
+        be set to NaN. Set to 0 to keep all data.
+    use_wv : bool, optional
+        If set, water vapor values from the header will be used
+        to select the correct ATRAN file.
+    skip_corr : bool, optional
+        If set, telluric correction will not be applied, but ATRAN
+        spectra will still be attached to the output file.
+    write : bool, optional
+        If True, write to disk and return the path to the output
+        file.  If False, return the HDUL.  The output filename is
+        created from the input filename, with the suffix &#39;SCM&#39;
+        replaced with &#39;TEL&#39;.
+    outdir : str, optional
+        Directory path to write output.  If None, output files
+        will be written to the same directory as the input files.
+
+    Returns
+    -------
+    fits.HDUList or str
+        Either the HDU (if write is False) or the filename of the output file
+        (if write is True)
+    &quot;&quot;&quot;
+    if isinstance(outdir, str):
+        if not os.path.isdir(outdir):
+            log.error(&quot;Output directory %s does not exist&quot; % outdir)
+            return
+
+    hdul = gethdul(filename, verbose=True)
+    if hdul is None:
+        return
+    if not isinstance(filename, str):
+        filename = hdul[0].header[&#39;FILENAME&#39;]
+    if not isinstance(outdir, str):
+        outdir = os.path.dirname(filename)
+
+    log.info(&#39;&#39;)
+    log.info(filename)
+
+    # Get spectral resolution (RESFILE keyword is added to primehead)
+    resolution = get_resolution(hdul[0].header)
+    if resolution is None:
+        log.error(&quot;Unable to determine spectral resolution&quot;)
+        return
+
+    # Get ATRAN data from unput file or default on disk, smoothed to
+    # current resolution
+    atran_data = get_atran(hdul[0].header, resolution=resolution,
+                           atran_dir=atran_dir, use_wv=use_wv,
+                           get_unsmoothed=True)
+    if atran_data is None or atran_data[0] is None:
+        log.error(&quot;Unable to get ATRAN data&quot;)
+        return
+    atran, unsmoothed = atran_data
+
+    result = apply_atran(hdul, atran, cutoff=cutoff, skip_corr=skip_corr,
+                         unsmoothed=unsmoothed)
+    if result is None:
+        log.error(&#39;Unable to apply ATRAN correction&#39;)
+        return
+
+    if not write:
+        return result
+    else:
+        return write_hdul(result, outdir=outdir, overwrite=True)</div>
+
+
+
+def telluric_correct_wrap_helper(_, kwargs, filename):
+    return telluric_correct(filename, **kwargs)
+
+
+<div class="viewcode-block" id="wrap_telluric_correct">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.telluric_correct.wrap_telluric_correct.html#sofia_redux.instruments.fifi_ls.telluric_correct.wrap_telluric_correct">[docs]</a>
+def wrap_telluric_correct(files, outdir=None, allow_errors=False,
+                          atran_dir=None, cutoff=0.6, use_wv=False,
+                          skip_corr=False, write=False,
+                          jobs=None):
+    &quot;&quot;&quot;
+    Wrapper for telluric_correct over multiple files.
+
+    See `telluric_correct` for full description of reduction
+    on a single file.
+
+    Parameters
+    ----------
+    files : array_like of str
+        paths to files to be telluric corrected
+    outdir : str, optional
+        Directory path to write output.  If None, output files
+        will be written to the same directory as the input files.
+    allow_errors : bool, optional
+        If True, return all created files on error.  Otherwise, return None
+    atran_dir : str, optional
+        Path to a directory containing ATRAN reference FITS files.
+        If not provided, the default set of files packaged with the
+        pipeline will be used.
+    cutoff : float, optional
+        Used as the fractional transmission below which data will
+        be set to NaN. Set to 0 to keep all data.
+    use_wv : bool, optional
+        If set, water vapor values from the header will be used
+        to select the correct ATRAN file.
+    skip_corr : bool, optional
+        If set, telluric correction will not be applied, but ATRAN
+        spectra will still be attached to the output file.
+    write : bool, optional
+        If True, write output files to disk.
+    jobs : int, optional
+        Specifies the maximum number of concurrently running jobs.
+        Values of 0 or 1 will result in serial processing.  A negative
+        value sets jobs to `n_cpus + 1 + jobs` such that -1 would use
+        all cpus, and -2 would use all but one cpu.
+
+    Returns
+    -------
+    tuple of str
+        output filenames written to disk
+    &quot;&quot;&quot;
+    if isinstance(files, str):
+        files = [files]
+    if not hasattr(files, &#39;__len__&#39;):
+        log.error(&quot;Invalid input files type (%s)&quot; % repr(files))
+        return
+
+    clear_resolution_cache()
+    clear_atran_cache()
+
+    kwargs = {&#39;outdir&#39;: outdir, &#39;write&#39;: write, &#39;atran_dir&#39;: atran_dir,
+              &#39;cutoff&#39;: cutoff, &#39;use_wv&#39;: use_wv, &#39;skip_corr&#39;: skip_corr}
+
+    output = multitask(telluric_correct_wrap_helper, files, None, kwargs,
+                       jobs=jobs)
+
+    failure = False
+    result = []
+    for x in output:
+        if x is None:
+            failure = True
+        else:
+            result.append(x)
+    if failure:
+        if len(result) &gt; 0:
+            if not allow_errors:
+                log.error(&quot;Errors were encountered but the following &quot;
+                          &quot;files were created:\n%s&quot; % &#39;\n&#39;.join(result))
+                return
+
+    clear_resolution_cache()
+    clear_atran_cache()
+
+    return tuple(result)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

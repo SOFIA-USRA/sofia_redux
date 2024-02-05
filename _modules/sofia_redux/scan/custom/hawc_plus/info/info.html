@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.hawc_plus.info.info &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.hawc_plus.info.info</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log, units
+from astropy.io import fits
+import numpy as np
+import os
+
+from sofia_redux.scan.custom.hawc_plus.info.astrometry import (
+    HawcPlusAstrometryInfo)
+from sofia_redux.scan.custom.hawc_plus.info.chopping import (
+    HawcPlusChoppingInfo)
+from sofia_redux.scan.custom.hawc_plus.info.detector_array import (
+    HawcPlusDetectorArrayInfo)
+from sofia_redux.scan.custom.hawc_plus.info.instrument import (
+    HawcPlusInstrumentInfo)
+from sofia_redux.scan.custom.hawc_plus.info.telescope import (
+    HawcPlusTelescopeInfo)
+from sofia_redux.scan.custom.hawc_plus.info.observation import (
+    HawcPlusObservationInfo)
+from sofia_redux.scan.custom.sofia.info.info import SofiaInfo
+from sofia_redux.scan.custom.sofia.info.gyro_drifts import SofiaGyroDriftsInfo
+from sofia_redux.scan.custom.sofia.info.extended_scanning import (
+    SofiaExtendedScanningInfo)
+from sofia_redux.scan.utilities.utils import (
+    insert_info_in_header, to_header_float)
+
+from sofia_redux.toolkit.utilities import multiprocessing
+
+__all__ = [&#39;HawcPlusInfo&#39;]
+
+
+<div class="viewcode-block" id="HawcPlusInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.html#sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo">[docs]</a>
+class HawcPlusInfo(SofiaInfo):
+
+    def __init__(self, configuration_path=None):
+        &quot;&quot;&quot;
+        Initialize a HawcPlusInfo object.
+
+        The HAWC+ information contains metadata on various parts of an
+        observation that are specific to observations with the instrument.
+
+        Parameters
+        ----------
+        configuration_path : str, optional
+            An alternate directory path to the configuration tree to be
+            used during the reduction.  The default is
+            &lt;package&gt;/data/configurations.
+        &quot;&quot;&quot;
+        super().__init__(configuration_path=configuration_path)
+        self.name = &#39;hawc_plus&#39;
+        self.astrometry = HawcPlusAstrometryInfo()
+        self.gyro_drifts = SofiaGyroDriftsInfo()
+        self.chopping = HawcPlusChoppingInfo()
+        self.detector_array = HawcPlusDetectorArrayInfo()
+        self.instrument = HawcPlusInstrumentInfo()
+        self.spectroscopy = None
+        self.telescope = HawcPlusTelescopeInfo()
+        self.observation = HawcPlusObservationInfo()
+        self.scanning = SofiaExtendedScanningInfo()
+        self.hwp_grouping_angle = 2 * units.Unit(&#39;degree&#39;)
+
+<div class="viewcode-block" id="HawcPlusInfo.get_file_id">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.html#sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.get_file_id">[docs]</a>
+    @classmethod
+    def get_file_id(cls):
+        &quot;&quot;&quot;
+        Return the file ID.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;HAW&#39;</div>
+
+
+<div class="viewcode-block" id="HawcPlusInfo.edit_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.html#sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().edit_header(header)
+        self.detector_array.edit_header(header)
+
+        freq = (1.0 / self.sampling_interval).to(&#39;Hz&#39;).value
+        info = [(&#39;COMMENT&#39;, &quot;&lt;------ HAWC+ Header Keys ------&gt;&quot;),
+                (&#39;SMPLFREQ&#39;, to_header_float(freq),
+                 &quot;(Hz) Detector readout rate.&quot;)]
+
+        requested_subarrays = self.detector_array.subarrays_requested
+        if requested_subarrays not in [&#39;&#39;, None]:
+            info.append((&#39;SUBARRAY&#39;, requested_subarrays,
+                         &#39;Subarrays in image.&#39;))
+
+        if self.detector_array.hwp_angle not in [None, -1]:
+            info.append(
+                (&#39;DETHWPAG&#39;, to_header_float(self.detector_array.hwp_angle),
+                 &quot;The determine half wave plate angle from the file group&quot;))
+        insert_info_in_header(header, info, delete_special=True)</div>
+
+
+<div class="viewcode-block" id="HawcPlusInfo.validate_scans">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.html#sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.validate_scans">[docs]</a>
+    def validate_scans(self, scans):
+        &quot;&quot;&quot;
+        Validate a list of scans specific to the instrument.
+
+        Parameters
+        ----------
+        scans : list (HawcPlusScan)
+            A list of scans.  Scans are culled in-place if they do not meet
+            certain criteria.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if scans is None or len(scans) &lt; 2 or scans[0] is None:
+            super().validate_scans(scans)
+            return
+
+        n_scans = len(scans)
+
+        first_scan = scans[0]
+        wavelength = first_scan.info.instrument.wavelength
+        instrument_config = first_scan.info.instrument.instrument_config
+        keep_scans = np.full(n_scans, True)
+
+        for i in range(1, n_scans):
+            scan = scans[i]
+            if scan.info.instrument.wavelength != wavelength:
+                log.warning(f&quot;Scan {scan.get_id()} in a different band. &quot;
+                            f&quot;Removing from set.&quot;)
+                keep_scans[i] = False
+            elif scan.info.instrument.instrument_config != instrument_config:
+                log.warning(f&quot;Scan {scan.get_id()} is in a different &quot;
+                            f&quot;instrument configuration. Removing from set.&quot;)
+                keep_scans[i] = False
+            else:
+                limit = scan.configuration.get_float(
+                    &#39;gyrocorrect.max&#39;, default=np.nan) * units.Unit(&#39;arcsec&#39;)
+                if np.isnan(limit):
+                    continue
+
+                if scan.info.gyro_drifts.get_max() &gt; limit:
+                    log.warning(f&quot;Scan {scan.get_id()} has too large gyro &quot;
+                                f&quot;drifts. Removing from set.&quot;)
+                    keep_scans[i] = False
+
+        for i in range(n_scans - 1, 0, -1):
+            if not keep_scans[i]:
+                del scans[i]
+
+        super().validate_scans(scans)</div>
+
+
+<div class="viewcode-block" id="HawcPlusInfo.max_pixels">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.html#sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.max_pixels">[docs]</a>
+    def max_pixels(self):
+        &quot;&quot;&quot;
+        Return the maximum number of pixels.
+
+        Returns
+        -------
+        count : int
+        &quot;&quot;&quot;
+        return self.instrument.n_store_channels</div>
+
+
+<div class="viewcode-block" id="HawcPlusInfo.get_si_pixel_size">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.html#sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.get_si_pixel_size">[docs]</a>
+    def get_si_pixel_size(self):
+        &quot;&quot;&quot;
+        Get the science instrument pixel size.
+
+        Returns
+        -------
+        size : Coordinate2D
+            The (x, y) pixel sizes, each of which is a units.Quantity.
+        &quot;&quot;&quot;
+        return self.detector_array.pixel_sizes</div>
+
+
+<div class="viewcode-block" id="HawcPlusInfo.perform_reduction">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.html#sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.perform_reduction">[docs]</a>
+    def perform_reduction(self, reduction, filenames):
+        &quot;&quot;&quot;
+        Fully reduce a given reduction and set of files.
+
+        While it is possible for the reduction object to fully reduce a set of
+        files, certain special considerations may be required for certain
+        instruments.  Therefore, the instrument specific Info object is given
+        control of how a reduction should progress.
+
+        HAWC+ requires special processing for scan polarimetry data.  When
+        multiple files are provided, files will be grouped by half-wave-plate
+        (HWP) angle and each group will then be reduced for the R0 and T0
+        subarrays.  Note that a standard reduction will be performed if
+        multiple HWP angles are not detected.
+
+        Parameters
+        ----------
+        reduction : Reduction
+            The reduction object.
+        filenames : str or list (str)
+            A single file (str) or list of files to be included in the
+            reduction.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if isinstance(filenames, str) or len(filenames) &lt;= 1:
+            super().perform_reduction(reduction, filenames)
+            return
+
+        reduction.update_parallel_config(reset=True)
+        file_groups = self.group_files_by_hwp(
+            filenames, jobs=reduction.parallel_read, force_threading=True)
+        if len(file_groups) &lt;= 1:
+            super().perform_reduction(reduction, filenames)
+            return
+
+        self.split_reduction(reduction, file_groups)
+
+        reduction.read_scans()
+        reduction.validate()
+
+        # Can now add the default name in if necessary
+        base_name = reduction.configuration.get_string(&#39;name&#39;, default=None)
+        if base_name is None:
+            for sub_reduction in reduction.sub_reductions:
+                config = sub_reduction.configuration
+                suffix = config.get_string(&#39;name&#39;)
+                default_name = sub_reduction.source.get_default_core_name()
+                if default_name.endswith(&#39;.fits&#39;):
+                    default_name = default_name[:-5]
+
+                config.put(&#39;name&#39;, f&#39;{default_name}_{suffix}&#39;)
+
+        reduction.reduce()</div>
+
+
+<div class="viewcode-block" id="HawcPlusInfo.group_files_by_hwp">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.html#sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.group_files_by_hwp">[docs]</a>
+    def group_files_by_hwp(self, filenames, jobs=1, force_threading=False):
+        &quot;&quot;&quot;
+        Group HAWC+ files by HWP angle.
+
+        Parameters
+        ----------
+        filenames : list (str)
+            A list of HAWC+ FITS files to group.
+        jobs : int
+            The number of parallel jobs used to determine the grouping.
+        force_threading : bool
+            If `True`, force parallel processing using threads.
+
+        Returns
+        -------
+        file_groups : dict
+            The files grouped by HWP angle {angle : [files]}
+        &quot;&quot;&quot;
+        if isinstance(filenames, str):
+            filenames = [filenames]
+        n_files = len(filenames)
+        read_jobs = int(np.clip(n_files, 1, jobs))
+
+        msg = f&quot;Grouping {n_files} HAWC_PLUS files by HWP angles&quot;
+        if jobs &gt; 1:  # pragma: no cover
+            msg += f&quot; using {read_jobs} parallel threads.&quot;
+        log.debug(msg)
+        file_groups = {}
+
+        da = self.hwp_grouping_angle
+        hwp_step = self.instrument.hwp_step
+
+        args = filenames, hwp_step
+        kwargs = None
+        hwp_angles = multiprocessing.multitask(
+            self.parallel_safe_determine_hwp_angle, range(n_files), args,
+            kwargs, jobs=read_jobs, max_nbytes=None,
+            force_threading=force_threading, logger=log)
+
+        for filename, hwp_angle in zip(filenames, hwp_angles):
+            if np.isnan(hwp_angle):
+                if None not in file_groups:
+                    file_groups[None] = [filename]
+                else:
+                    file_groups[None].append(filename)
+                continue
+
+            for angle, angle_files in file_groups.items():
+                if (angle - da) &lt;= hwp_angle &lt;= (angle + da):
+                    angle_files.append(filename)
+                    break
+            else:
+                file_groups[hwp_angle] = [filename]
+
+        log.info(f&quot;{len(file_groups)} HWP groups will be reduced.&quot;)
+        return file_groups</div>
+
+
+<div class="viewcode-block" id="HawcPlusInfo.parallel_safe_determine_hwp_angle">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.html#sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.parallel_safe_determine_hwp_angle">[docs]</a>
+    @classmethod
+    def parallel_safe_determine_hwp_angle(cls, args, file_index):
+        &quot;&quot;&quot;
+        Return the HWP (half-wave-plate) angle for a single file.
+
+        This function is safe for multiprocessing using
+        :func:`multiprocessing.multitask`.
+
+        Parameters
+        ----------
+        args : 2-tuple
+            args[0] : list (str)
+                A list of FITS file names.
+            args[1] : units.Quantity
+                The HWP step used to convert HWP counts to a HWP angle.
+        file_index : int
+            The index of the file in args[0] for which to determine the HWP
+            angle.
+
+        Returns
+        -------
+        hwp_angle: units.Quantity
+        &quot;&quot;&quot;
+        filenames, hwp_step = args
+        filename = filenames[file_index]
+        return cls.determine_hwp_angle(filename, hwp_step)</div>
+
+
+<div class="viewcode-block" id="HawcPlusInfo.determine_hwp_angle">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.html#sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.determine_hwp_angle">[docs]</a>
+    @classmethod
+    def determine_hwp_angle(cls, filename, hwp_step):
+        &quot;&quot;&quot;
+        Determine the mean HWP angle in the given file.
+
+        Parameters
+        ----------
+        filename : str
+            The FITS file to search.
+        hwp_step : units.Quantity
+            The HWP step size for each HWP count.
+
+        Returns
+        -------
+        hwp_angle : units.Quantity
+            The average HWP angle in the file.
+        &quot;&quot;&quot;
+        if not os.path.isfile(filename):
+            log.error(f&quot;Could not locate file: {filename}&quot;)
+            return np.nan * units.Unit(&#39;degree&#39;)
+
+        hdul = fits.open(filename)
+        hwp_counts = np.empty(0, dtype=int)
+        for hdu in hdul:
+            if isinstance(hdu, fits.BinTableHDU):
+                extname = hdu.header.get(&#39;EXTNAME&#39;)
+                if extname is None or extname.lower().strip() != &#39;timestream&#39;:
+                    continue
+                if &#39;hwpCounts&#39; not in hdu.columns.names:
+                    continue
+                hwp_counts = np.concatenate(
+                    (hwp_counts, hdu.data[&#39;hwpCounts&#39;].ravel()))
+
+        hdul.close()
+
+        if hwp_counts.size == 0:
+            log.warning(f&quot;Could not find HWP angles for file: {filename}&quot;)
+            return np.nan * units.Unit(&#39;degree&#39;)
+
+        return np.nanmean(hwp_counts) * hwp_step</div>
+
+
+<div class="viewcode-block" id="HawcPlusInfo.split_reduction">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.html#sofia_redux.scan.custom.hawc_plus.info.info.HawcPlusInfo.split_reduction">[docs]</a>
+    @staticmethod
+    def split_reduction(reduction, file_groups):
+        &quot;&quot;&quot;
+        Split the reduction based on files grouped by HWP angle.
+
+        Parameters
+        ----------
+        reduction : Reduction
+        file_groups : dict
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        base_config = reduction.configuration
+        base_name = base_config.get_string(&#39;name&#39;, default=None)
+        base_subarray = base_config.get_string_list(
+            &#39;subarray&#39;, delimiter=&#39;,&#39;, default=None)
+        reductions = []
+
+        for angle, file_group in file_groups.items():
+            if isinstance(angle, units.Quantity):
+                angle = angle.to(&#39;degree&#39;).value
+            angle_string = f&#39;{angle:.2f}&#39;
+
+            r0 = reduction.blank_copy()
+            t0 = reduction.blank_copy()
+
+            for subarray, configuration in zip(
+                    [&#39;R0&#39;, &#39;T0&#39;], [r0.configuration, t0.configuration]):
+
+                configuration.recall(&#39;name&#39;)  # in case it was disabled
+                new_name = f&#39;{angle_string}{subarray}.fits&#39;
+                if base_name is not None:
+                    new_name = f&#39;{base_name}.{new_name}&#39;
+                configuration.put(&#39;name&#39;, new_name)
+
+                configuration.recall(&#39;subarray&#39;)
+                if base_subarray is None:
+                    configuration.put(&#39;subarray&#39;, subarray)
+                    configuration.lock(&#39;subarray&#39;)
+                else:
+                    subarrays = &#39;,&#39;.join(np.unique(base_subarray + [subarray]))
+                    configuration.put(&#39;subarray&#39;, subarrays)
+
+                configuration.recall(&#39;hwp&#39;)
+                configuration.put(&#39;hwp&#39;, angle_string)
+
+            reductions.append((r0, file_group))
+            reductions.append((t0, file_group))
+
+        reduction.sub_reductions = []
+        for i, (sub_reduction, file_group) in enumerate(reductions):
+            reduction.sub_reductions.append(sub_reduction)
+            sub_reduction.parent_reduction = reduction
+            sub_reduction.reduction_files = file_group
+            sub_reduction.reduction_number = i + 1</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

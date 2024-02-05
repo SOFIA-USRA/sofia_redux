@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.flitecam.mkflat &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.flitecam.mkflat</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy.convolution import Gaussian2DKernel, convolve
+from astropy.io import fits
+from astropy.stats import gaussian_fwhm_to_sigma
+import numpy as np
+from photutils import detect_sources
+from photutils import detect_threshold
+
+from sofia_redux.instruments.forcast.hdmerge import hdmerge
+from sofia_redux.toolkit.image.combine import combine_images
+from sofia_redux.toolkit.utilities.fits import hdinsert, set_log_level
+
+__all__ = [&#39;mkflat&#39;]
+
+
+<div class="viewcode-block" id="mkflat">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.flitecam.mkflat.mkflat.html#sofia_redux.instruments.flitecam.mkflat.mkflat">[docs]</a>
+def mkflat(infiles, method=&#39;median&#39;, weighted=True, robust=True,
+           sigma=5, maxiters=None, psf_fwhm=6.0, obj_sigma=2.0):
+    &quot;&quot;&quot;
+    Make a flat from dithered sky images.
+
+    The process is:
+
+    - Directly combine all images into a draft flat.
+    - Divide input images by the draft flat.
+    - Use the resulting gain-corrected images to identify and
+      mask any sources.
+    - Scale all images to the median value of all the masked data.
+    - Combine scaled, masked images into a final flat, propagating
+      errors.
+
+    Parameters
+    ----------
+    infiles : list of fits.HDUList
+        Input data.  Should have FLUX, ERROR, and BADMASK extensions.
+    method : {&#39;mean&#39;, &#39;median&#39;, &#39;sum&#39;}, optional
+        Combination function to use.
+    weighted : bool, optional
+        If True and method is &#39;mean&#39;, the input variance will be used
+        to weight the mean combination.  Ignored if variance is not
+        provided.
+    robust : bool, optional
+        If True, the threshold and maxiters parameters will be used
+        to reject outliers before combination.  Outlier rejection is
+        performed via `astropy.stats.sigma_clip`.
+    sigma : float, optional
+        The number of standard deviations for clipping; passed to
+        sigma_clip.
+    maxiters : int or None, optional
+        The maximum number of clipping iterations to perform; passed to
+        sigma_clip
+    psf_fwhm : float, optional
+        Expected FWHM of sources for masking. Used to smooth the image
+        before detecting objects.
+    obj_sigma : float, optional
+        The number of standard deviations above the background, used
+         in detecting sources.
+
+    Returns
+    -------
+    fits.HDUList
+        Normalized flat field correction image, with FLAT, FLAT_ERROR, and
+        FLAT_BADMASK extensions.  Array dimensions match input.
+    &quot;&quot;&quot;
+    shape = infiles[0][0].data.shape
+    flat_mask = np.zeros(shape, dtype=int)
+
+    data_list, var_list, header_list = list(), list(), list()
+    for hdul in infiles:
+        data_list.append(hdul[&#39;FLUX&#39;].data.copy())
+        var_list.append(hdul[&#39;ERROR&#39;].data.copy() ** 2)
+        header_list.append(hdul[0].header)
+
+    # combine images for a draft flat, with high robust rejection
+    if len(data_list) == 1:
+        # just directly use the data as a flat
+        flat_data, flat_var = data_list[0], var_list[0]
+    else:
+        draft_method = &#39;median&#39;
+        draft_flat, draft_flat_var = combine_images(
+            data_list, variance=var_list,
+            method=draft_method, weighted=weighted,
+            robust=robust, sigma=obj_sigma, maxiters=maxiters)
+        draft_flat /= np.nanmedian(draft_flat)
+
+        # get kernel to smooth image by the beam
+        gsigma = psf_fwhm * gaussian_fwhm_to_sigma
+        gsize = int(gsigma * 2)
+        kernel = Gaussian2DKernel(gsigma, x_size=gsize, y_size=gsize)
+        kernel.normalize()
+
+        # draft correct and mask sources in all images
+        masked_data = []
+        masked_var = []
+        scale_to = None
+        for i, data in enumerate(data_list):
+            # draft gain correction
+            with np.errstate(invalid=&#39;ignore&#39;):
+                gain_corr = data / draft_flat
+
+            # replace any NaNs with nearby non-NaN,
+            # for smoother source detection
+            nanval = np.isnan(gain_corr)
+            idx = np.where(~nanval, np.arange(nanval.shape[1]), 0)
+            np.maximum.accumulate(idx, axis=1, out=idx)
+            gain_corr = gain_corr[np.arange(idx.shape[0])[:, None], idx]
+
+            # clipped background threshold image with low
+            # detection threshold
+            with set_log_level(&#39;CRITICAL&#39;):
+                threshold = detect_threshold(gain_corr, nsigma=obj_sigma)
+
+                # detect any 5 connected pixels above the threshold
+                convolved_data = convolve(gain_corr, kernel)
+                segmented = detect_sources(convolved_data, threshold,
+                                           npixels=5)
+            if segmented is not None:
+                obj_mask = (segmented.data != 0)
+            else:
+                obj_mask = np.full(flat_mask.shape, False)
+
+            # add objects to mask
+            if np.any(obj_mask):
+                flat_mask[obj_mask] += 1
+
+            # masked the data
+            mdata = data_list[i].copy()
+            mvar = var_list[i].copy()
+            if np.any(obj_mask):
+                mdata[obj_mask] = np.nan
+                mvar[obj_mask] = np.nan
+
+            masked_data.append(mdata)
+            masked_var.append(mvar)
+
+        # scale data to masked median value
+        scale_to = np.nanmedian(masked_data)
+        for d, v in zip(masked_data, masked_var):
+            scale_from = np.nanmedian(d)
+            d *= scale_to / scale_from
+            v *= (scale_to / scale_from) ** 2
+
+        # make flat from masked, scaled data
+        flat_data, flat_var = combine_images(
+            masked_data, variance=masked_var, method=method, weighted=weighted,
+            robust=robust, sigma=sigma, maxiters=maxiters)
+
+    # normalize flat
+    norm = np.nanmedian(flat_data)
+    if np.allclose(norm, 0) or not np.isfinite(norm):
+        raise ValueError(&#39;No valid flat data&#39;)
+
+    flat_data /= norm
+    flat_err = np.sqrt(flat_var) / norm
+
+    flat_header = hdmerge(header_list)
+    hdinsert(flat_header, &#39;EXTNAME&#39;, &#39;FLAT&#39;, comment=&#39;Extension name&#39;)
+    hdinsert(flat_header, &#39;PRODTYPE&#39;, &#39;normalized_gain&#39;,
+             comment=&#39;Product type&#39;)
+    hdinsert(flat_header, &#39;FLATNORM&#39;, norm,
+             comment=&#39;Flat normalization value&#39;)
+    flat = fits.HDUList([fits.PrimaryHDU(data=flat_data, header=flat_header),
+                         fits.ImageHDU(data=flat_err, name=&#39;FLAT_ERROR&#39;),
+                         fits.ImageHDU(data=flat_mask, name=&#39;FLAT_BADMASK&#39;)])
+
+    return flat</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

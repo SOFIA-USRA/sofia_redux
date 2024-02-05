@@ -1,0 +1,2219 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.fifi_ls.resample &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.fifi_ls.resample</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import gc
+import os
+
+from astropy import log, units
+from astropy.coordinates import Angle
+from astropy.io import fits
+from astropy.time import Time
+from astropy.wcs import WCS
+import cloudpickle
+import numpy as np
+import psutil
+from scipy.interpolate import Rbf
+from scipy.spatial import ConvexHull
+import shutil
+import tempfile
+
+from sofia_redux.instruments.fifi_ls.get_resolution \
+    import get_resolution, clear_resolution_cache
+from sofia_redux.instruments.fifi_ls.get_response \
+    import get_response, clear_response_cache
+from sofia_redux.instruments.fifi_ls.make_header \
+    import make_header
+from sofia_redux.toolkit.utilities \
+    import gethdul, hdinsert, write_hdul
+from sofia_redux.toolkit.resampling.resample import Resample
+from sofia_redux.spectroscopy.smoothres import smoothres
+
+
+__all__ = [&#39;combine_files&#39;, &#39;get_grid_info&#39;, &#39;generate_exposure_map&#39;,
+           &#39;rbf_mean_combine&#39;, &#39;local_surface_fit&#39;, &#39;make_hdul&#39;,
+           &#39;resample&#39;, &#39;perform_scan_reduction&#39;, &#39;cleanup_scan_reduction&#39;]
+
+
+def extract_info_from_file(filename, get_atran=True):
+    &quot;&quot;&quot;
+    Extract all necessary resampling data from a single file.
+
+    Parameters
+    ----------
+    filename : str or fits.HDUList
+        The file or HDUList to examine.
+    get_atran : bool, optional
+        If `True`, attempt to extract the ATRAN data when present and
+        include in the result.
+
+    Returns
+    -------
+    file_info : dict
+    &quot;&quot;&quot;
+    hdul = gethdul(filename, verbose=True)
+    if hdul is None:
+        msg = f&#39;Could not read file: {filename}&#39;
+        log.error(msg)
+        raise ValueError(msg)
+
+    header = hdul[0].header.copy()
+    obsra = header.get(&#39;OBSRA&#39;, 0) * 15  # hourangle to degree
+    obsdec = header.get(&#39;OBSDEC&#39;, 0)
+    sky_angle = header.get(&#39;SKY_ANGL&#39;, 0)
+    dbet_map = header.get(&#39;DBET_MAP&#39;, 0) / 3600  # arcsec to degree
+    dlam_map = header.get(&#39;DLAM_MAP&#39;, 0) / 3600  # arcsec to degree
+    obs_lam = header.get(&#39;OBSLAM&#39;, 0)
+    obs_bet = header.get(&#39;OBSBET&#39;, 0)
+
+    flux = hdul[&#39;FLUX&#39;].data.copy()
+    otf_mode = flux.ndim &gt; 2
+    ra = hdul[&#39;RA&#39;].data.copy()
+    dec = hdul[&#39;DEC&#39;].data.copy()
+    xs = hdul[&#39;XS&#39;].data.copy()
+    ys = hdul[&#39;YS&#39;].data.copy()
+    if otf_mode:
+        wave = np.empty(flux.shape, dtype=float)
+        wave[:] = hdul[&#39;LAMBDA&#39;].data
+    else:
+        wave = hdul[&#39;LAMBDA&#39;].data.copy()
+    error = hdul[&#39;STDDEV&#39;].data.copy()
+
+    if &#39;UNCORRECTED_FLUX&#39; in hdul:
+        u_flux = hdul[&#39;UNCORRECTED_FLUX&#39;].data.copy()
+        u_error = hdul[&#39;UNCORRECTED_STDDEV&#39;].data.copy()
+    else:
+        u_flux = None
+        u_error = None
+
+    if &#39;UNCORRECTED_LAMBDA&#39; in hdul:
+        if otf_mode:
+            u_wave = np.empty(flux.shape, dtype=float)
+            u_wave[:] = hdul[&#39;UNCORRECTED_LAMBDA&#39;].data
+        else:
+            u_wave = hdul[&#39;UNCORRECTED_LAMBDA&#39;].data.copy()
+    else:
+        u_wave = None
+
+    if get_atran and &#39;UNSMOOTHED_ATRAN&#39; in hdul:
+        atran = hdul[&#39;UNSMOOTHED_ATRAN&#39;].data
+    else:
+        atran = None
+
+    hdul.close()
+
+    # Now convert XS/YS to RA/DEC
+    if &#39;DATE-OBS&#39; in header:
+        flip_sign = Time(header[&#39;DATE-OBS&#39;]) &lt; Time(&#39;2015-05-01&#39;)
+    else:
+        flip_sign = False
+
+    result = {
+        &#39;header&#39;: header,
+        &#39;obsra&#39;: obsra,
+        &#39;obsdec&#39;: obsdec,
+        &#39;obs_lam&#39;: obs_lam,
+        &#39;obs_bet&#39;: obs_bet,
+        &#39;dlam_map&#39;: dlam_map,
+        &#39;dbet_map&#39;: dbet_map,
+        &#39;flux&#39;: flux,
+        &#39;u_flux&#39;: u_flux,
+        &#39;error&#39;: error,
+        &#39;u_error&#39;: u_error,
+        &#39;wave&#39;: wave,
+        &#39;u_wave&#39;: u_wave,
+        &#39;ra&#39;: ra,
+        &#39;dec&#39;: dec,
+        &#39;xs&#39;: xs,
+        &#39;ys&#39;: ys,
+        &#39;sky_angle&#39;: sky_angle,
+        &#39;flip_sign&#39;: flip_sign,
+        &#39;atran&#39;: atran}
+    return result
+
+
+def analyze_input_files(filenames, naif_id_key=&#39;NAIF_ID&#39;):
+    &quot;&quot;&quot;
+    Extract necessary reduction information on the input files.
+
+    Parameters
+    ----------
+    filenames : str or list (str)
+    naif_id_key : str, optional
+        The name of the NAIF ID keyword.  If present in the header, should
+        indicate the associated file contains a nonsidereal observation.
+
+    Returns
+    -------
+    file_info : dict
+    &quot;&quot;&quot;
+    atran = None
+    otf_mode = False
+    nonsidereal_values = True
+    definite_nonsidereal = False
+    interpolate = True
+    uncorrected = False
+    if isinstance(filenames, str):
+        filenames = [x.strip() for x in filenames.split(&#39;,&#39;)]
+    elif isinstance(filenames, fits.HDUList) or not isinstance(
+            filenames, list):
+        filenames = [filenames]  # Don&#39;t want to iterate on HDUs
+
+    for filename in filenames:
+        hdul = gethdul(filename, verbose=True)
+        if hdul is None:
+            msg = f&#39;Could not read file: {filename}&#39;
+            log.error(msg)
+            raise ValueError(msg)
+
+        if not otf_mode:
+            if &#39;FLUX&#39; in hdul and hdul[&#39;FLUX&#39;].data.ndim &gt; 2:
+                otf_mode = True
+
+        if not uncorrected and &#39;UNCORRECTED_FLUX&#39; in hdul:
+            uncorrected = True
+
+        h = hdul[0].header
+        if not definite_nonsidereal and naif_id_key in h:
+            definite_nonsidereal = True
+
+        if nonsidereal_values:
+            obs_lam, obs_bet = h.get(&#39;OBSLAM&#39;, 0), h.get(&#39;OBSBET&#39;, 0)
+            if obs_lam != 0 or obs_bet != 0:
+                nonsidereal_values = False
+
+        if interpolate:
+            d_lam, d_bet = h.get(&#39;DLAM_MAP&#39;, 0), h.get(&#39;DBET_MAP&#39;, 0)
+            if d_lam != 0 or d_bet != 0:
+                interpolate = False
+
+        if atran is None and &#39;UNSMOOTHED_ATRAN&#39; in hdul:
+            atran = hdul[&#39;UNSMOOTHED_ATRAN&#39;].data
+
+        if not isinstance(filename, fits.HDUList):
+            hdul.close()
+
+        if (otf_mode and atran is not None and uncorrected
+                and not (interpolate
+                         or nonsidereal_values)):  # pragma: no cover
+            # don&#39;t need to continue
+            break
+
+    if not (len(filenames) &gt; 1 or otf_mode):
+        interpolate = True
+
+    file_info = {&#39;otf&#39;: otf_mode,
+                 &#39;nonsidereal_values&#39;: nonsidereal_values,
+                 &#39;definite_nonsidereal&#39;: definite_nonsidereal,
+                 &#39;can_interpolate&#39;: interpolate,
+                 &#39;uncorrected&#39;: uncorrected,
+                 &#39;atran&#39;: atran}
+    return file_info
+
+
+def normalize_spherical_coordinates(info):
+    &quot;&quot;&quot;
+    Normalize all detector coordinates/header to be relative to first file.
+
+    Will insert the normalized detector coordinates into the information as
+    longitude/latitude (lon/lat) key values.
+
+    Parameters
+    ----------
+    info : dict
+
+    Returns
+    -------
+    None
+    &quot;&quot;&quot;
+    a = -np.radians([d[&#39;sky_angle&#39;] for d in info.values()])
+    beta = np.asarray([d[&#39;obs_bet&#39;] for d in info.values()])
+    lam = np.asarray([d[&#39;obs_lam&#39;] for d in info.values()])
+    da = a - a[0]
+    cos_beta = np.cos(beta[0])
+    beta_off = 3600.0 * (beta - beta[0])
+    lam_off = 3600.0 * cos_beta * (lam[0] - lam)
+    header_list = [d[&#39;header&#39;] for d in info.values()]  # referenced
+
+    # update headers
+    for update in np.where(beta_off != 0)[0]:
+        hdinsert(header_list[update], &#39;DBET_MAP&#39;,
+                 header_list[update].get(&#39;DBET_MAP&#39;, 0) + beta_off[update])
+
+    for update in np.where(lam_off != 0)[0]:
+        hdinsert(header_list[update], &#39;DLAM_MAP&#39;,
+                 header_list[update].get(&#39;DLAM_MAP&#39;, 0) - lam_off[update])
+
+    idx = abs(a) &gt; 1e-6
+    dx = lam_off[idx] * np.cos(a[idx]) - beta_off[idx] * np.sin(a[idx])
+    dy = lam_off[idx] * np.sin(a[idx]) + beta_off[idx] * np.cos(a[idx])
+    lam_off[idx] = dx
+    beta_off[idx] = dy
+
+    for i, d in enumerate(info.values()):
+        d[&#39;lon&#39;], d[&#39;lat&#39;] = d[&#39;xs&#39;].copy(), d[&#39;ys&#39;].copy()
+        if i == 0:
+            continue
+        lon, lat = d[&#39;lon&#39;], d[&#39;lat&#39;]
+        dx, dy, delta_a = lam_off[i], beta_off[i], da[i]
+        lon += dx
+        lat += dy
+        if abs(delta_a) &lt;= 1e-6:
+            continue
+
+        cda, sda = np.cos(delta_a), np.sin(delta_a)
+        xr = lon * cda - lat * sda
+        ry = lon * sda + lat * cda
+        lon[:] = xr
+        lat[:] = ry
+
+    # update to the angle of the first header
+    first_angle = info[list(info.keys())[0]][&#39;sky_angle&#39;]
+    for update in np.where(idx)[0]:
+        hdinsert(header_list[update], &#39;SKY_ANGL&#39;, first_angle)
+
+
+<div class="viewcode-block" id="combine_files">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.resample.combine_files.html#sofia_redux.instruments.fifi_ls.resample.combine_files">[docs]</a>
+def combine_files(filenames, naif_id_key=&#39;NAIF_ID&#39;,
+                  scan_reduction=False, save_scan=False, scan_kwargs=None,
+                  skip_uncorrected=False, insert_source=True):
+    &quot;&quot;&quot;
+    Combine all files into a single dataset.
+
+    For OTF mode, the input data for each file contains
+    multiple samples, each with their own X and Y coordinates.
+    Each sample is handled separately, as if it came from a
+    different input file.
+
+    Parameters
+    ----------
+    filenames : array_like of str
+        File paths to FITS data to be resampled.
+    naif_id_key : str, optional
+        The header key which if present, indicates that an observation is
+        nonsidereal.
+    scan_reduction: bool, optional
+        If `True`, indicates the user wished to perform a scan reduction on
+        the files.  This will only be possible if the files contain OTF data.
+    save_scan : bool, optional
+        If `True`, the output from the scan algorithm, prior to resampling,
+        will be saved to disk.
+    scan_kwargs : dict, optional
+        Optional parameters for a scan reduction if performed.
+    skip_uncorrected : bool, optional
+        If `True`, skip reduction of the uncorrected flux values.
+    insert_source : bool, optional
+        If `True`, will perform a full scan reduction (if applicable) and
+        reinsert the source after.  Otherwise, the reduction is used to
+        calculate gains, offsets, and correlations which will then be
+        applied to the original data. If `True`, note that timestream
+        filtering will not be applied to the correction and should therefore
+        be excluded from the scan reduction runtime parameters in order to
+        reduce processing pressure.
+
+    Returns
+    -------
+    dict
+    &quot;&quot;&quot;
+    log.info(f&#39;Reading {len(filenames)} files&#39;)
+    info = analyze_input_files(filenames, naif_id_key=naif_id_key)
+    combined = {&#39;OTF&#39;: info[&#39;otf&#39;],
+                &#39;definite_nonsidereal&#39;: info[&#39;definite_nonsidereal&#39;],
+                &#39;nonsidereal_values&#39;: info[&#39;nonsidereal_values&#39;]}
+    do_uncorrected = info[&#39;uncorrected&#39;] and not skip_uncorrected
+    atran = info.get(&#39;atran&#39;)
+    if atran is not None:
+        combined[&#39;UNSMOOTHED_TRANSMISSION&#39;] = atran
+
+    scan_reduction &amp;= info[&#39;otf&#39;]  # Scan reduction must use OTF data
+    if scan_reduction:  # pragma: no cover
+        combined[&#39;scan_reduction&#39;] = True
+        combined.update(perform_scan_reduction(
+            filenames, save_scan=save_scan, scan_kwargs=scan_kwargs,
+            reduce_uncorrected=do_uncorrected, insert_source=insert_source))
+    else:
+        combined[&#39;scan_reduction&#39;] = False
+        files_info = {}
+        for filename in filenames:
+            file_info = extract_info_from_file(filename, get_atran=False)
+            if not isinstance(filename, str):
+                fname = file_info[&#39;header&#39;].get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;)
+            else:
+                fname = filename
+            files_info[fname] = file_info
+
+        normalize_spherical_coordinates(files_info)
+        header_list = [d[&#39;header&#39;] for d in files_info.values()]
+        combined[&#39;PRIMEHEAD&#39;] = make_header(header_list)
+        if info[&#39;can_interpolate&#39;]:
+            combined[&#39;method&#39;] = &#39;interpolate&#39;
+        else:
+            combined[&#39;method&#39;] = &#39;resample&#39;
+
+        ra, dec, xs, ys, wave, flux, error, samples = (
+            [], [], [], [], [], [], [], [])
+
+        if info[&#39;otf&#39;]:
+            for d in files_info.values():
+                x_ra, x_dec, x_xs, x_ys = d[&#39;ra&#39;], d[&#39;dec&#39;], d[&#39;lon&#39;], d[&#39;lat&#39;]
+                x_wave, x_flux, x_error = d[&#39;wave&#39;], d[&#39;flux&#39;], d[&#39;error&#39;]
+                samples.append(x_flux.size)
+                frames = x_flux.shape[0]
+
+                for frame in range(frames):
+                    flux.append(x_flux[frame])
+                    error.append(x_error[frame])
+                    wave.append(x_wave[frame] if x_wave.ndim == 3 else x_wave)
+                    ra.append(x_ra[frame] if x_ra.ndim == 3 else x_ra)
+                    dec.append(x_dec[frame] if x_dec.ndim == 3 else x_dec)
+                    xs.append(x_xs[frame] if x_xs.ndim == 3 else x_xs)
+                    ys.append(x_ys[frame] if x_ys.ndim == 3 else x_ys)
+
+        else:
+            for d in files_info.values():
+                ra.append(d[&#39;ra&#39;])
+                dec.append(d[&#39;dec&#39;])
+                xs.append(d[&#39;lon&#39;])
+                ys.append(d[&#39;lat&#39;])
+                wave.append(d[&#39;wave&#39;])
+                flux.append(d[&#39;flux&#39;])
+                error.append(d[&#39;error&#39;])
+                samples.append(d[&#39;flux&#39;].size)
+
+        combined.update({
+            &#39;RA&#39;: ra, &#39;DEC&#39;: dec, &#39;XS&#39;: xs, &#39;YS&#39;: ys, &#39;WAVE&#39;: wave,
+            &#39;FLUX&#39;: flux, &#39;ERROR&#39;: error, &#39;SAMPLES&#39;: samples})
+
+        if not do_uncorrected:
+            return combined
+
+        u_flux, u_error, u_wave = [], [], []
+        for d in files_info.values():
+            uf = d.get(&#39;u_flux&#39;)
+            ue = d.get(&#39;u_error&#39;)
+
+            if uf is None or ue is None:
+                do_uncorrected = False
+                break
+
+            uw = d.get(&#39;u_wave&#39;)
+            if uw is None:
+                uw = d.get(&#39;wave&#39;)
+
+            if info[&#39;otf&#39;]:
+                for frame in range(uf.shape[0]):
+                    u_flux.append(uf[frame])
+                    u_error.append(ue[frame])
+                    u_wave.append(uw[frame])
+            else:
+                u_flux.append(uf)
+                u_error.append(ue)
+                u_wave.append(uw)
+        else:
+            do_uncorrected = True
+
+        if do_uncorrected:
+            combined[&#39;UNCORRECTED_FLUX&#39;] = u_flux
+            combined[&#39;UNCORRECTED_ERROR&#39;] = u_error
+            combined[&#39;UNCORRECTED_WAVE&#39;] = u_wave
+
+    return combined</div>
+
+
+
+def combine_scan_reductions(reduction, uncorrected_reduction=None
+                            ):  # pragma: no cover
+    &quot;&quot;&quot;
+    Extract necessary resampling information from scan reductions.
+
+    Parameters
+    ----------
+    reduction : str or Reduction
+    uncorrected_reduction : str or Reduction, optional
+
+    Returns
+    -------
+    combined : dict
+    &quot;&quot;&quot;
+    if isinstance(reduction, str):
+        delete = True
+        with open(reduction, &#39;rb&#39;) as f:
+            reduction = cloudpickle.load(f)
+    else:
+        delete = False
+
+    info = reduction.info.combine_reduction_scans_for_resampler(reduction)
+    combined = {
+        &#39;PRIMEHEAD&#39;: make_header(info[&#39;headers&#39;]),
+        &#39;method&#39;: &#39;resample&#39;,
+        &#39;RA&#39;: info[&#39;coordinates&#39;][0],
+        &#39;DEC&#39;: info[&#39;coordinates&#39;][1],
+        &#39;WAVE&#39;: info[&#39;coordinates&#39;][2],
+        &#39;XS&#39;: info[&#39;xy_coordinates&#39;][0],
+        &#39;YS&#39;: info[&#39;xy_coordinates&#39;][1],
+        &#39;FLUX&#39;: info[&#39;flux&#39;],
+        &#39;ERROR&#39;: info[&#39;error&#39;],
+        &#39;SAMPLES&#39;: info[&#39;samples&#39;],
+        &#39;CORNERS&#39;: info[&#39;corners&#39;],
+        &#39;XY_CORNERS&#39;: info[&#39;xy_corners&#39;],
+        &#39;scan_reduction&#39;: True}
+
+    if delete:
+        del reduction
+    gc.collect()
+
+    if uncorrected_reduction is None:
+        return combined
+
+    if isinstance(uncorrected_reduction, str):
+        delete = True
+        with open(uncorrected_reduction, &#39;rb&#39;) as f:
+            uncorrected_reduction = cloudpickle.load(f)
+    else:
+        delete = False
+
+    info = uncorrected_reduction.info.combine_reduction_scans_for_resampler(
+        uncorrected_reduction)
+    combined[&#39;UNCORRECTED_RA&#39;] = info[&#39;coordinates&#39;][0]
+    combined[&#39;UNCORRECTED_DEC&#39;] = info[&#39;coordinates&#39;][1]
+    combined[&#39;UNCORRECTED_WAVE&#39;] = info[&#39;coordinates&#39;][2]
+    combined[&#39;UNCORRECTED_XS&#39;] = info[&#39;xy_coordinates&#39;][0]
+    combined[&#39;UNCORRECTED_YS&#39;] = info[&#39;xy_coordinates&#39;][1]
+    combined[&#39;UNCORRECTED_FLUX&#39;] = info[&#39;flux&#39;]
+    combined[&#39;UNCORRECTED_ERROR&#39;] = info[&#39;error&#39;]
+    combined[&#39;UNCORRECTED_SAMPLES&#39;] = info[&#39;samples&#39;]
+    combined[&#39;UNCORRECTED_CORNERS&#39;] = info[&#39;corners&#39;]
+    combined[&#39;UNCORRECTED_XY_CORNERS&#39;] = info[&#39;xy_corners&#39;]
+
+    if delete:
+        del uncorrected_reduction
+    gc.collect()
+    return combined
+
+
+<div class="viewcode-block" id="get_grid_info">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.resample.get_grid_info.html#sofia_redux.instruments.fifi_ls.resample.get_grid_info">[docs]</a>
+def get_grid_info(combined, oversample=None,
+                  spatial_size=None, spectral_size=None,
+                  target_x=None, target_y=None, target_wave=None,
+                  ctype1=&#39;RA---TAN&#39;, ctype2=&#39;DEC--TAN&#39;, ctype3=&#39;WAVE&#39;,
+                  detector_coordinates=False):
+    &quot;&quot;&quot;
+    Get output coordinate system and useful parameters.
+
+    Parameters
+    ----------
+    combined : dict
+        Dictionary containing combined data
+    oversample : array_like of int or float, optional
+        Number of pixels to sample mean FWHM with, in the (spatial, spectral)
+        dimensions. Default is (5.0, 8.0).
+    spatial_size : float, optional
+        Output pixel size, in the spatial dimensions.
+        Units are arcsec.  If specified, the corresponding oversample
+        parameter will be ignored.
+    spectral_size : float, optional
+        Output pixel size, in the spectral dimension.
+        Units are um.  If specified, the corresponding oversample
+        parameter will be ignored.
+    target_x : float, optional
+        The target right ascension (hourangle) or map center along the x-axis
+        (arcsec).  The default is the mid-point of all values in the
+        combined data.
+    target_y : float, optional
+        The target declination (degree) or map center along the y-axis
+        (arcsec).  The default is the mid-point of all values in the
+        combined data.
+    target_wave : float, optional
+        The center wavelength (um).  The default is the mid-point of all
+    ctype1 : str, optional
+        The coordinate frame for the x spatial axis using FITS standards.
+    ctype2 : str, optional
+        The coordinate frame for the y spatial axis using FITS standards.
+    ctype3 : str, optional
+        The coordinate frame for the w spectral axis using FITS standards.
+    detector_coordinates : bool, optional
+        If `True`, reduce using detector native coordinates, otherwise
+        project using the CTYPE* keys on RA/DEC.
+
+    Returns
+    -------
+    dict
+    &quot;&quot;&quot;
+    prime_header = combined[&#39;PRIMEHEAD&#39;]
+
+    east_to_west = not detector_coordinates
+
+    if detector_coordinates:
+        wcs_dict = {
+            &#39;CUNIT1&#39;: &#39;arcsec&#39;,
+            &#39;CUNIT2&#39;: &#39;arcsec&#39;,
+            &#39;CUNIT3&#39;: &#39;um&#39;
+        }
+        x_key, y_key = &#39;XS&#39;, &#39;YS&#39;
+    else:
+        # If not rotated at spatial calibration, resampling should
+        # be done at sky angle
+        sky_angl = prime_header.get(&#39;SKY_ANGL&#39;, 0)
+
+        wcs_dict = {
+            &#39;CTYPE1&#39;: ctype1.upper(), &#39;CUNIT1&#39;: &#39;deg&#39;,
+            &#39;CTYPE2&#39;: ctype2.upper(), &#39;CUNIT2&#39;: &#39;deg&#39;,
+            &#39;CTYPE3&#39;: ctype3.upper(), &#39;CUNIT3&#39;: &#39;um&#39;,
+            &#39;CROTA2&#39;: -sky_angl
+        }
+        x_key, y_key = &#39;RA&#39;, &#39;DEC&#39;
+
+    scan_reduction = combined.get(&#39;scan_reduction&#39;, False)
+
+    if scan_reduction:  # pragma: no cover
+        ux_key, uy_key = f&#39;UNCORRECTED_{x_key}&#39;, f&#39;UNCORRECTED_{y_key}&#39;
+        wave = combined[&#39;WAVE&#39;].copy()
+        x = combined[x_key].copy()
+        y = combined[y_key].copy()
+    else:
+        ux_key, uy_key = x_key, y_key
+        wave = np.hstack([n.ravel() for n in combined[&#39;WAVE&#39;]])
+        x = np.hstack([n.ravel() for n in combined[x_key]])
+        y = np.hstack([n.ravel() for n in combined[y_key]])
+
+    if not detector_coordinates:
+        x *= 15  # hourangle to degrees
+
+    u_wave = combined.get(&#39;UNCORRECTED_WAVE&#39;)
+
+    if u_wave is not None:
+        for uw in u_wave:
+            if uw is None:  # pragma: no cover
+                # unreachable under normal circumstances
+                do_uncorrected = False
+                break
+        else:
+            do_uncorrected = True
+    else:
+        do_uncorrected = False
+
+    if do_uncorrected:
+        if scan_reduction:  # pragma: no cover
+            ux = combined[ux_key].copy()
+            uy = combined[uy_key].copy()
+            u_wave = u_wave.copy()
+            if not detector_coordinates:
+                ux *= 15  # hourangle to degrees
+        else:
+            ux, uy = x, y
+            u_wave = np.hstack([w.ravel() for w in u_wave])
+    else:
+        ux, uy, u_wave = x, y, wave
+
+    min_x, max_x = np.nanmin(x), np.nanmax(x)
+    min_y, max_y = np.nanmin(y), np.nanmax(y)
+    min_w, max_w = np.nanmin(wave), np.nanmax(wave)
+
+    if do_uncorrected:
+        min_w = min(min_w, np.nanmin(u_wave))
+        max_w = max(max_w, np.nanmax(u_wave))
+        if x is not ux:  # pragma: no cover
+            min_x = min(min_x, np.nanmin(ux))
+            max_x = max(max_x, np.nanmax(ux))
+            min_y = min(min_y, np.nanmin(uy))
+            max_y = max(max_y, np.nanmax(uy))
+
+    x_range = [min_x, max_x]
+    y_range = [min_y, max_y]
+    wave_range = [min_w, max_w]
+
+    if target_x is None:
+        target_x = 0.0 if detector_coordinates else sum(x_range) / 2
+    elif not detector_coordinates:
+        target_x *= 15
+
+    if target_y is None:
+        target_y = 0.0 if detector_coordinates else sum(y_range) / 2
+
+    mid_wave = sum(wave_range) / 2
+    if target_wave is None:
+        target_wave = mid_wave
+
+    # get oversample parameter
+    if oversample is None:
+        xy_oversample, w_oversample = 5.0, 8.0
+    else:
+        xy_oversample, w_oversample = oversample
+
+    log.info(f&#39;Overall w range: &#39;
+             f&#39;{wave_range[0]:.5f} -&gt; {wave_range[1]:.5f} (um)&#39;)
+
+    if detector_coordinates:
+        x_str = f&#39;{x_range[0]:.5f} -&gt; {x_range[1]:.5f} (arcsec)&#39;
+        y_str = f&#39;{y_range[0]:.5f} -&gt; {y_range[1]:.5f} (arcsec)&#39;
+    else:
+        x_str = &#39; -&gt; &#39;.join(
+            Angle(x_range * units.Unit(&#39;degree&#39;)).to(&#39;hourangle&#39;).to_string(
+                sep=&#39;:&#39;))
+        x_str += &#39; (hourangle)&#39;
+        y_str = &#39; -&gt; &#39;.join(
+            Angle(y_range * units.Unit(&#39;degree&#39;)).to_string(sep=&#39;:&#39;))
+        y_str += &#39; (degree)&#39;
+
+    log.info(f&#39;Overall x range: {x_str}&#39;)
+    log.info(f&#39;Overall y range: {y_str}&#39;)
+
+    # Begin with spectral scalings
+    resolution = get_resolution(prime_header, wmean=mid_wave)
+    wave_fwhm = mid_wave / resolution
+    if spectral_size is not None:
+        delta_wave = spectral_size
+        w_oversample = wave_fwhm / delta_wave
+    else:
+        delta_wave = wave_fwhm / w_oversample
+
+    log.info(f&#39;Average spectral FWHM: {wave_fwhm:.5f} um&#39;)
+    log.info(f&#39;Output spectral pixel scale: {delta_wave:.5f} um&#39;)
+    log.info(f&#39;Spectral oversample: {w_oversample:.2f} pixels&#39;)
+
+    # Spatial scalings
+    xy_fwhm = get_resolution(
+        prime_header, spatial=True,
+        wmean=float(np.nanmean(wave)))  # in arcseconds
+    if not detector_coordinates:
+        xy_fwhm /= 3600  # to degrees
+
+    # pixel size
+    if str(prime_header[&#39;CHANNEL&#39;]).upper() == &#39;RED&#39;:
+        pix_size = 3.0 * prime_header[&#39;PLATSCAL&#39;]
+    else:
+        pix_size = 1.5 * prime_header[&#39;PLATSCAL&#39;]
+
+    if spatial_size is not None:
+        if not detector_coordinates:
+            delta_xy = spatial_size / 3600  # to degrees
+        else:
+            delta_xy = spatial_size  # arcsec
+        xy_oversample = xy_fwhm / delta_xy
+    else:
+        delta_xy = xy_fwhm / xy_oversample
+
+    log.info(f&#39;Pixel size for channel: {pix_size:.2f} arcsec&#39;)
+
+    fac = 1 if detector_coordinates else 3600
+    log.info(f&#39;Average spatial FWHM for channel: {xy_fwhm * fac:.2f} arcsec&#39;)
+    log.info(f&#39;Output spatial pixel scale: {delta_xy * fac:.2f} arcsec/pix&#39;)
+    log.info(f&#39;Spatial oversample: {xy_oversample:.2f} pixels&#39;)
+
+    # Figure out the map dimensions in RA/DEC
+    wcs_dict[&#39;CRPIX1&#39;] = 0
+    wcs_dict[&#39;CRPIX2&#39;] = 0
+    wcs_dict[&#39;CRPIX3&#39;] = 0
+    wcs_dict[&#39;CRVAL1&#39;] = target_x
+    wcs_dict[&#39;CRVAL2&#39;] = target_y
+    wcs_dict[&#39;CRVAL3&#39;] = target_wave
+    if east_to_west:
+        wcs_dict[&#39;CDELT1&#39;] = -delta_xy
+    else:
+        wcs_dict[&#39;CDELT1&#39;] = delta_xy
+    wcs_dict[&#39;CDELT2&#39;] = delta_xy
+    wcs_dict[&#39;CDELT3&#39;] = delta_wave
+
+    wcs = WCS(wcs_dict)
+
+    # Convert coordinates to the correct units (degrees, meters)
+    if not detector_coordinates:
+        wave *= 1e-6  # um to m
+        if do_uncorrected:
+            u_wave *= 1e-6
+
+    # Calculate the input coordinates as pixels about origin 0
+    pix_xyw = np.asarray(wcs.wcs_world2pix(x, y, wave, 0))
+    n_xyw = np.round(np.ptp(pix_xyw, axis=1)).astype(int) + 1
+    n_xyw += (n_xyw % 2) == 0  # center on pixel
+    min_pixel = np.floor(np.nanmin(pix_xyw, axis=1)).astype(int)
+    wcs_dict[&#39;CRPIX1&#39;] -= min_pixel[0]
+    wcs_dict[&#39;CRPIX2&#39;] -= min_pixel[1]
+    wcs_dict[&#39;CRPIX3&#39;] -= min_pixel[2]
+    wcs = WCS(wcs_dict)
+
+    # This centers the reference pixel on the target coordinates
+    pix_xyw = np.asarray(wcs.wcs_world2pix(x, y, wave, 0))
+    n_pix = np.round(np.nanmax(pix_xyw, axis=1)).astype(int) + 1
+    ni = x.size
+
+    log.info(&#39;&#39;)
+    log.info(f&#39;Output grid size (nw, ny, nx): &#39;
+             f&#39;{n_pix[2]} x {n_pix[1]} x {n_pix[0]}&#39;)
+    if (n_pix[:2] &gt; 2048).any():
+        log.error(&#39;Spatial range too large.&#39;)
+        return
+
+    if do_uncorrected:
+        u_pix_xyw = np.asarray(
+            wcs.wcs_world2pix(ux, uy, u_wave, 0))
+    else:
+        u_pix_xyw = None
+
+    x_out = np.arange(n_pix[0], dtype=float)
+    y_out = np.arange(n_pix[1], dtype=float)
+    w_out = np.arange(n_pix[2], dtype=float)
+
+    grid = x_out, y_out, w_out
+
+    x_max, x_min = np.nanmax(pix_xyw[0]), np.nanmin(pix_xyw[0])
+    y_max, y_min = np.nanmax(pix_xyw[1]), np.nanmin(pix_xyw[1])
+    w_max, w_min = np.nanmax(pix_xyw[2]), np.nanmin(pix_xyw[2])
+    x_range, y_range, w_range = x_max - x_min, y_max - y_min, w_max - w_min
+
+    um = units.Unit(&#39;um&#39;)
+    arcsec = units.Unit(&#39;arcsec&#39;)
+    degree = units.Unit(&#39;degree&#39;)
+    xy_unit = arcsec if detector_coordinates else degree
+
+    if east_to_west:
+        delta = (delta_wave * um, delta_xy * xy_unit, -delta_xy * xy_unit)
+    else:
+        delta = (delta_wave * um, delta_xy * xy_unit, delta_xy * xy_unit)
+
+    return {
+        &#39;wcs&#39;: wcs,
+        &#39;shape&#39;: (ni, n_pix[2], n_pix[1], n_pix[0]),
+        &#39;w_out&#39;: w_out, &#39;x_out&#39;: x_out, &#39;y_out&#39;: y_out,
+        &#39;x_min&#39;: x_min, &#39;y_min&#39;: y_min, &#39;w_min&#39;: w_min,
+        &#39;x_max&#39;: x_min, &#39;y_max&#39;: y_min, &#39;w_max&#39;: w_min,
+        &#39;x_range&#39;: x_range, &#39;y_range&#39;: y_range, &#39;w_range&#39;: w_range,
+        &#39;delta&#39;: delta,
+        &#39;oversample&#39;: (w_oversample, xy_oversample, xy_oversample),
+        &#39;wave_fwhm&#39;: wave_fwhm * um, &#39;xy_fwhm&#39;: xy_fwhm * 3600 * arcsec,
+        &#39;resolution&#39;: resolution,
+        &#39;pix_size&#39;: pix_size * arcsec,
+        &#39;coordinates&#39;: pix_xyw,
+        &#39;uncorrected_coordinates&#39;: u_pix_xyw,
+        &#39;grid&#39;: grid}</div>
+
+
+
+<div class="viewcode-block" id="generate_exposure_map">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.resample.generate_exposure_map.html#sofia_redux.instruments.fifi_ls.resample.generate_exposure_map">[docs]</a>
+def generate_exposure_map(combined, grid_info, get_good=False):
+    &quot;&quot;&quot;
+    Create the exposure map from combined files.
+
+    Parameters
+    ----------
+    combined : dict
+        Dictionary containing combined data
+    grid_info : dict
+        Dictionary containing output grid coordinates and other necessary
+        information.
+    get_good : bool, optional
+        If set, a list of good pixel arrays will be returned
+        instead of an exposure map
+
+    Returns
+    -------
+    numpy.ndarray or list of numpy.ndarray
+        3D exposure map array, by default.  If get_good is set,
+        a list of boolean arrays is returned instead, representing
+        the good pixel mask for each input file.
+    &quot;&quot;&quot;
+    nw, ny, nx = grid_info[&#39;shape&#39;][1:]
+
+    # loop over files to get exposure for each one
+    if get_good:
+        exposure = []
+    else:
+        exposure = np.zeros((nw, ny, nx), dtype=int)
+
+    xy_pix_size = (grid_info[&#39;pix_size&#39;] / grid_info[&#39;delta&#39;][1]
+                   ).decompose().value / 2
+    dr = np.sqrt(2) * xy_pix_size
+
+    if not combined.get(&#39;scan_reduction&#39;, False):
+        x, y, w, = [], [], []
+        start = 0
+        c = grid_info[&#39;coordinates&#39;]
+        for i in range(len(combined[&#39;FLUX&#39;])):
+            flux = combined[&#39;FLUX&#39;][i]
+            end = start + flux.size
+            x.append(c[0, start:end].reshape(flux.shape))
+            y.append(c[1, start:end].reshape(flux.shape))
+            w.append(c[2, start:end].reshape(flux.shape))
+            start = end
+
+    else:  # pragma: no cover
+        wcs = grid_info[&#39;wcs&#39;]
+        if &#39;CTYPE1&#39; in wcs.to_header():
+            corners = combined[&#39;CORNERS&#39;]
+            detector_coordinates = False
+        else:
+            corners = combined[&#39;XY_CORNERS&#39;]
+            detector_coordinates = True
+
+        n_scans = len(corners)
+        n_frames = np.asarray([len(corners[i][0]) for i in range(n_scans)])
+        total_frames = n_frames.sum()
+        min_wave = np.zeros(total_frames)
+        max_wave = np.zeros(total_frames)
+        xc = np.concatenate([corners[i][0] for i in range(n_scans)], axis=0)
+        yc = np.concatenate([corners[i][1] for i in range(n_scans)], axis=0)
+        if not detector_coordinates:
+            xc *= 15  # hourangle to degrees for RA/DEC coordinates
+
+        start_frame = 0
+        i0 = 0
+        for (frame_count, samples) in zip(n_frames, combined[&#39;SAMPLES&#39;]):
+            end_frame = start_frame + frame_count
+            i1 = i0 + samples
+            wave = combined[&#39;WAVE&#39;][i0:i1]
+            min_wave[start_frame:end_frame] = wave.min()
+            max_wave[start_frame:end_frame] = wave.max()
+            start_frame, i0 = end_frame, i1
+
+        wave = np.stack([min_wave, min_wave, max_wave, max_wave], axis=1)
+
+        if detector_coordinates:
+            # degrees to arcseconds
+            x, y, w = wcs.wcs_world2pix(xc, yc, wave, 0)
+        else:
+            # um to m (it&#39;s strange, I know)
+            x, y, w = wcs.wcs_world2pix(xc, yc, wave * 1e-6, 0)
+
+    for i in range(len(x)):  # loop through files or frames
+        # Find the min and max coordinates at each point
+        wi, yi, xi = w[i], y[i], x[i]
+        min_w, max_w = wi.min(), wi.max()
+        max_x = xi.max()
+
+        # Since the coordinates are already rotated, we need to determine
+        # the corners of the detector footprint, then store them in clockwise
+        # order
+        points = np.stack([xi.ravel(), yi.ravel()], axis=1)
+        hull = np.array([points[index] for index in
+                         ConvexHull(points).vertices])
+        angles = np.arctan2(hull[:, 1] - yi.mean(),
+                            hull[:, 0] - xi.mean())
+        hull = hull[np.argsort(angles)[::-1]]
+        # calculate the relative angles between each vertex and add 45 deg
+        # to calculate diagonal offset
+        #  n-1-&gt;0, 0-&gt;1, 1-&gt;2, 2-&gt;3 ... n-2-&gt;n-1
+
+        angles = np.asarray(
+            [np.arctan2(hull[v, 1] - hull[v - 1, 1],
+                        hull[v, 0] - hull[v - 1, 0])
+             for v in range(hull.shape[0])]) + np.deg2rad(45)
+        for v, angle in enumerate(angles):
+            hull[v, 0] += np.cos(angle) * dr
+            hull[v, 1] += np.sin(angle) * dr
+
+        xl, yl = np.clip((np.min(hull, axis=0)).astype(int), 0, None)
+        xh, yh = np.clip((np.ceil(np.max(hull, axis=0))).astype(int) + 1,
+                         None, [nx, ny])
+        wl = np.clip(int(min_w - 0.5), 0, None)
+        wh = np.clip(int(np.ceil(max_w + 0.5)) + 1, None, nw)
+
+        # Make a square large enough to contain the FOV
+        square = np.zeros((yh - yl, xh - xl), dtype=int)
+
+        # set values for FOV between corner vertices
+        fov = np.full(square.shape, True)
+        fov_y, fov_x = np.indices(square.shape)
+
+        for j, (p2x, p2y) in enumerate(hull):
+            p1x, p1y = hull[j - 1]
+            x1, y1, x2, y2 = p1x - xl, p1y - yl, p2x - xl, p2y - yl
+
+            # Check for vertical line
+            if x1 == x2:
+                # Mark data to the correct side of line
+                sign = np.sign(y2 - y1)
+                fov &amp;= (fov_x * sign) &gt;= (max_x * sign)
+            else:
+                # otherwise: mark area under the line between previous
+                # vertex and current (or above, as appropriate)
+                m = (y2 - y1) / (x2 - x1)
+                max_y = m * (fov_x - x1) + y1
+                sign = np.sign(x2 - x1)
+                fov &amp;= (fov_y * sign) &lt;= (max_y * sign)
+
+        square[fov] = 1
+
+        if get_good:
+            exposure.append((square.astype(bool), (xl, xh), (yl, yh)))
+        else:
+            exposure[wl:wh, yl:yh, xl:xh] += square[None, :, :]
+
+    # For accounting purposes, multiply the exposure map by 2 for NMC
+    if not get_good:
+        nodstyle = combined[&#39;PRIMEHEAD&#39;].get(
+            &#39;NODSTYLE&#39;, &#39;UNK&#39;).upper().strip()
+        if nodstyle in [&#39;SYMMETRIC&#39;, &#39;NMC&#39;]:
+            exposure *= 2
+
+    return exposure</div>
+
+
+
+<div class="viewcode-block" id="rbf_mean_combine">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.resample.rbf_mean_combine.html#sofia_redux.instruments.fifi_ls.resample.rbf_mean_combine">[docs]</a>
+def rbf_mean_combine(combined, grid_info, window=None,
+                     error_weighting=True, smoothing=None,
+                     order=0, robust=None, neg_threshold=None,
+                     fit_threshold=None, edge_threshold=None,
+                     skip_uncorrected=False, **kwargs):
+    &quot;&quot;&quot;
+    Combines multiple datasets using radial basis functions and mean combine.
+
+    The combined data is stored in the combined dictionary, in the
+    GRID_FLUX, GRID_ERROR, and GRID_COUNTS keys.
+
+    Parameters
+    ----------
+    combined : dict
+        Dictionary containing combined data
+    grid_info : dict
+        Dictionary containing output grid coordinates and other necessary
+        information.
+    window : float or array_like of float, optional
+        Region to consider for local polynomial fits, given as a factor
+        of the mean FWHM, in the wavelength dimension. If three elements
+        are passed, the third will be used.  Default is
+        0.5.
+    error_weighting : bool, optional
+        If True (default), weight polynomial fitting by the `error` values
+        of each sample.
+    smoothing : float or array_like of float, optional
+        Radius over which to smooth the input data, given as a factor of
+        the mean FWHM, in the wavelength dimension. If three elements are
+        passed, the third will be used. Default is 0.25.
+    order : int or array_like of int, optional
+        Maximum order of local polynomial fits.
+    robust : float, optional
+        Rejection threshold for input data to local fits, given as a
+        factor of the standard deviation.
+    neg_threshold : float, optional
+        First-pass rejection threshold for negative input data, given
+        as a factor of the standard deviation; if None or &lt;= 0,
+        first-pass rejection will not be performed.
+    fit_threshold : float, optional
+        Rejection threshold for output fit values, given as a factor
+        of the standard deviation in the input data.  If exceeded,
+        weighted mean value is used in place of fit.
+    edge_threshold : float or array_like or float
+        If set to a value &gt; 0 and &lt; 1, edges of the fit will be masked out
+        according to `edge_algorithm`. Values close to zero will result in
+        a high degree of edge clipping, while values close to 1 ckip edges
+        to a lesser extent. The clipping threshold is a fraction of window.
+        An array may be used to specify values for each dimension.
+    skip_uncorrected: bool, optional
+        If set, the uncorrected flux cube will not be computed, even
+        if present in the input data.  This option is primarily intended
+        for testing or quicklook, when the full data product is not needed.
+    kwargs : dict, optional
+        Optional keyword arguments to pass into `scipy.interpolate.Rbf`.
+        Please see the options here.  By default, the weighting function
+        is a multi-quadratic sqrt(r/epsilon)**2 + 1) rather than the
+        previous version inverse distance weighting scheme.
+    &quot;&quot;&quot;
+    log.info(&#39;&#39;)
+    log.info(&#39;Resampling wavelengths with polynomial fits.&#39;)
+    log.info(&#39;Interpolating spatial coordinates with radial basis functions.&#39;)
+
+    shape = grid_info[&#39;shape&#39;][1:]
+    flux = np.zeros(shape)
+    std = np.zeros(shape)
+    counts = np.zeros(shape)
+
+    do_uncor = &#39;UNCORRECTED_FLUX&#39; in combined and not skip_uncorrected
+
+    if do_uncor:
+        log.debug(&#39;Resampling uncorrected cube alongside corrected cube&#39;)
+        uflux = np.zeros(shape)
+        ustd = np.zeros(shape)
+        ucounts = np.zeros(shape)
+    else:
+        uflux = ustd = ucounts = None
+
+    # check parameters -- may be passed with all three coordinates.
+    # If so, assume wavelength is the last one
+    if hasattr(window, &#39;__len__&#39;) and len(window) == 3:
+        window = window[2]
+    if hasattr(smoothing, &#39;__len__&#39;) and len(smoothing) == 3:
+        smoothing = smoothing[2]
+    if hasattr(order, &#39;__len__&#39;) and len(order) == 3:
+        order = order[2]
+
+    if order != 0:
+        log.warning(&#39;Setting wavelength order to 0 for stability.&#39;)
+        order = 0
+
+    if window is None:
+        window = 0.5
+    if smoothing is None:
+        smoothing = 0.25
+    if edge_threshold is None:
+        edge_threshold = 0.0
+
+    log.info(f&#39;Fit window: {grid_info[&quot;wave_fwhm&quot;] * window:.5f}&#39;)
+    log.info(f&#39;Gaussian width of smoothing function: &#39;
+             f&#39;{smoothing * grid_info[&quot;wave_fwhm&quot;]:.5f}&#39;)
+
+    fit_wdw = window * grid_info[&#39;oversample&#39;][0]
+    smoothing_wdw = smoothing * grid_info[&#39;oversample&#39;][0]
+
+    # minimum points in a wavelength slice to attempt to interpolate
+    min_points = 10
+
+    # output grid
+    xg, yg, w_out = grid_info[&#39;grid&#39;]
+    nx = xg.size
+    ny = yg.size
+    nw = w_out.size
+    x_grid = np.resize(xg, (ny, nx))
+    y_grid = np.resize(yg, (nx, ny)).T
+
+    # exposure map for grid counts
+    good_grid = generate_exposure_map(combined, grid_info, get_good=True)
+    n_spax = combined[&#39;FLUX&#39;][0].shape[-1]
+
+    f, e = combined[&#39;FLUX&#39;], combined[&#39;ERROR&#39;]
+    x, y, w = grid_info[&#39;coordinates&#39;]
+
+    if do_uncor:
+        uf = combined[&#39;UNCORRECTED_FLUX&#39;]
+        ue = combined[&#39;UNCORRECTED_ERROR&#39;]
+        uw = grid_info.get(&#39;uncorrected_coordinates&#39;)
+        uw = w if uw is None else uw[2]  # .reshape(f.shape)
+    else:
+        uf, ue, uw = f, e, w
+
+    # Create some work arrays
+    temp_shape = (nw, n_spax)
+    iflux, istd = np.empty(temp_shape), np.empty(temp_shape)
+    if do_uncor:
+        iuflux, iustd = np.empty(temp_shape), np.empty(temp_shape)
+    else:
+        iuflux, iustd = None, None
+
+    start = 0
+    for file_idx, (square, xr, yr) in enumerate(good_grid):
+
+        file_flux = f[file_idx]
+        end = start + file_flux.size
+
+        if not square.any():
+            log.debug(f&#39;No good values in file {file_idx}&#39;)
+            start = end
+            continue
+
+        file_wave = w[start:end].reshape(file_flux.shape)
+        file_x = x[start:end].reshape(file_flux.shape)
+        file_y = y[start:end].reshape(file_flux.shape)
+        file_error = e[file_idx]
+        if do_uncor:
+            file_u_flux = uf[file_idx]
+            file_u_wave = uw[start:end].reshape(file_u_flux.shape)
+            file_u_error = ue[file_idx]
+        else:
+            file_u_flux = file_flux
+            file_u_wave = file_wave
+            file_u_error = file_error
+
+        x_out = x_grid[yr[0]:yr[1], xr[0]:xr[1]][square]
+        y_out = y_grid[yr[0]:yr[1], xr[0]:xr[1]][square]
+
+        # loop over spaxels to resample spexels
+        for spaxel in range(n_spax):
+            # all wavelengths, y=i, x=j
+            s = slice(None), spaxel
+
+            try:
+                resampler = Resample(
+                    file_wave[s], file_flux[s], error=file_error[s],
+                    window=fit_wdw, order=order,
+                    robust=robust, negthresh=neg_threshold)
+
+                iflux[:, spaxel], istd[:, spaxel] = resampler(
+                    w_out, smoothing=smoothing_wdw,
+                    fit_threshold=fit_threshold,
+                    edge_threshold=edge_threshold,
+                    edge_algorithm=&#39;distribution&#39;,
+                    get_error=True, error_weighting=error_weighting)
+            except (RuntimeError, ValueError, np.linalg.LinAlgError):
+                log.debug(f&#39;Math error in resampler at &#39;
+                          f&#39;spaxel {spaxel} for file {file_idx}&#39;)
+                iflux[:, spaxel], istd[:, spaxel] = np.nan, np.nan
+
+            if do_uncor:
+                try:
+                    resampler = Resample(
+                        file_u_wave[s], file_u_flux[s], error=file_u_error[s],
+                        window=fit_wdw, order=order, robust=robust,
+                        negthresh=neg_threshold)
+                    iuflux[:, spaxel], iustd[:, spaxel] = resampler(
+                        w_out, smoothing=smoothing_wdw,
+                        fit_threshold=fit_threshold,
+                        edge_threshold=edge_threshold,
+                        edge_algorithm=&#39;distribution&#39;,
+                        get_error=True, error_weighting=error_weighting)
+                except (RuntimeError, ValueError, np.linalg.LinAlgError):
+                    log.debug(f&#39;Math error in resampler at &#39;
+                              f&#39;spaxel {spaxel} for file {file_idx}&#39;)
+                    iuflux[:, spaxel], iustd[:, spaxel] = np.nan, np.nan
+
+        # x and y coordinates for resampled fluxes -- take from first spexel
+        xi, yi = file_x[0], file_y[0]
+
+        # check for useful data
+        valid = np.isfinite(iflux) &amp; np.isfinite(istd)
+        wave_ok = np.sum(valid, axis=1) &gt; min_points
+        if do_uncor:
+            u_valid = np.isfinite(iuflux) &amp; np.isfinite(iustd)
+            u_wave_ok = np.sum(u_valid, axis=1) &gt; min_points
+        else:
+            u_valid = None
+            u_wave_ok = np.full_like(wave_ok, False)
+
+        for wave_i in range(nw):
+            if wave_ok[wave_i]:
+                idx = valid[wave_i]
+                rbf = Rbf(xi[idx], yi[idx], iflux[wave_i][idx], **kwargs)
+                new_flux = np.zeros(square.shape)
+                new_flux[square] = rbf(x_out, y_out)
+                flux[wave_i, yr[0]:yr[1], xr[0]:xr[1]] += new_flux
+
+                rbf = Rbf(xi[idx], yi[idx], istd[wave_i][idx], **kwargs)
+                new_std = np.zeros(square.shape)
+                new_std[square] = rbf(x_out, y_out) ** 2
+                std[wave_i, yr[0]:yr[1], xr[0]:xr[1]] += new_std
+
+                counts[wave_i, yr[0]:yr[1], xr[0]:xr[1]] += square
+
+            if do_uncor:
+                if u_wave_ok[wave_i]:
+                    idx = u_valid[wave_i]
+
+                    rbf = Rbf(xi[idx], yi[idx], iuflux[wave_i][idx], **kwargs)
+                    new_flux = np.zeros(square.shape)
+                    new_flux[square] = rbf(x_out, y_out)
+                    uflux[wave_i, yr[0]:yr[1], xr[0]:xr[1]] += new_flux
+
+                    rbf = Rbf(xi[idx], yi[idx], iustd[wave_i][idx], **kwargs)
+                    new_std = np.zeros(square.shape)
+                    new_std[square] = rbf(x_out, y_out) ** 2
+                    ustd[wave_i, yr[0]:yr[1], xr[0]:xr[1]] += new_std
+
+                    ucounts[wave_i, yr[0]:yr[1], xr[0]:xr[1]] += square
+
+        start = end
+
+    # average, set zero counts to nan
+    log.info(&#39;Mean-combining all resampled cubes&#39;)
+    exposure = ucounts.copy() if do_uncor else counts.copy()
+
+    # For accounting purposes, multiply the exposure map by 2 for NMC
+    nodstyle = combined[&#39;PRIMEHEAD&#39;].get(&#39;NODSTYLE&#39;, &#39;UNK&#39;).upper().strip()
+    if nodstyle in [&#39;SYMMETRIC&#39;, &#39;NMC&#39;]:
+        exposure *= 2
+
+    nzi = counts &gt; 0
+    flux[nzi] /= counts[nzi]
+    std[nzi] = np.sqrt(std[nzi]) / counts[nzi]
+    flux[~nzi] = np.nan
+    std[~nzi] = np.nan
+
+    # correct flux for pixel size change
+    factor = (grid_info[&#39;delta&#39;][1] / grid_info[&#39;pix_size&#39;]
+              ).decompose().value ** 2
+    log.info(f&#39;Flux correction factor: {factor:.5f}&#39;)
+    correction = factor
+
+    combined[&#39;GRID_FLUX&#39;] = flux * correction
+    combined[&#39;GRID_ERROR&#39;] = std * correction
+    combined[&#39;GRID_COUNTS&#39;] = exposure
+
+    # warn if all NaN
+    if np.all(np.isnan(flux)):
+        log.warning(&#39;Primary flux cube contains only NaN values.&#39;)
+
+    if do_uncor:
+        nzi = ucounts &gt; 0
+        uflux[nzi] /= ucounts[nzi]
+        ustd[nzi] = np.sqrt(ustd[nzi]) / ucounts[nzi]
+        uflux[~nzi] = np.nan
+        ustd[~nzi] = np.nan
+        combined[&#39;GRID_UNCORRECTED_FLUX&#39;] = uflux * correction
+        combined[&#39;GRID_UNCORRECTED_ERROR&#39;] = ustd * correction
+        if np.all(np.isnan(uflux)):
+            log.warning(&#39;Uncorrected flux cube contains only NaN values.&#39;)
+
+    # Update header
+    unit_fit_wdw = (grid_info[&quot;wave_fwhm&quot;] * window).to(&#39;um&#39;).value
+    unit_smooth_wdw = (grid_info[&quot;wave_fwhm&quot;] * smoothing).to(&#39;um&#39;).value
+
+    hdinsert(combined[&#39;PRIMEHEAD&#39;], &#39;WVFITWDW&#39;, str(unit_fit_wdw),
+             comment=&#39;Wave resample fit window (um)&#39;)
+    hdinsert(combined[&#39;PRIMEHEAD&#39;], &#39;WVFITORD&#39;, str(order),
+             comment=&#39;Wave resample fit order&#39;)
+    hdinsert(combined[&#39;PRIMEHEAD&#39;], &#39;WVFITSMR&#39;, str(unit_smooth_wdw),
+             comment=&#39;Wave resample smooth radius (um)&#39;)
+    hdinsert(combined[&#39;PRIMEHEAD&#39;], &#39;XYRSMPAL&#39;,
+             &#39;radial basis function interpolation&#39;,
+             comment=&#39;XY resampling algorithm&#39;)
+    return</div>
+
+
+
+<div class="viewcode-block" id="local_surface_fit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.resample.local_surface_fit.html#sofia_redux.instruments.fifi_ls.resample.local_surface_fit">[docs]</a>
+def local_surface_fit(combined, grid_info, window=None,
+                      adaptive_threshold=None,
+                      adaptive_algorithm=&#39;scaled&#39;,
+                      error_weighting=True, smoothing=None,
+                      order=2, robust=None, neg_threshold=None,
+                      fit_threshold=None, edge_threshold=None,
+                      skip_uncorrected=False, jobs=None,
+                      check_memory=True):
+    &quot;&quot;&quot;
+    Resamples combined data on regular grid using local polynomial fitting.
+
+    Parameters
+    ----------
+    combined : dict
+        Dictionary containing combined data. Returned from `combine_files`.
+    grid_info : dict
+        Dictionary containing output grid coordinates and other necessary
+        information.  Returned from `get_grid_info`.
+    window : array_like of float, optional
+        Region to consider for local polynomial fits, given as a factor
+        of the mean FWHM, in the (x, y, w) dimensions. Default is
+        (3.0, 3.0, 0.5).
+    adaptive_threshold : array_like of float, optional
+        If &gt; 0, determines how the adaptive smoothing algorithm
+        will attempt to fit data.  The optimal value is 1.  Will
+        automatically enable both distance and error weighting.  For
+        dimensions that have adaptive smoothing enabled, `smoothing`
+        should be set to the Gaussian width of the data in units of `window`.
+        For other dimensions not using adaptive smoothing, `smoothing`
+        has the usual definition. Adaptive smoothing is disabled by
+        default: (0.0, 0.0, 0.0).
+    adaptive_algorithm : {&#39;scaled&#39;, &#39;shaped&#39;}, optional
+        Determines the type of variation allowed for the adaptive kernel.
+        If &#39;scaled&#39;, only the kernel size is allowed to vary.  If &#39;shaped&#39;,
+        kernel shape may also vary.
+    error_weighting : bool, optional
+        If True, errors will be used to weight the flux fits.
+    smoothing : array_like of float, optional
+        Distance over which to smooth the data, given as a factor of the
+        mean FWHM, in the (x, y, w) dimensions.  If `adaptive_threshold` is
+        set for a certain dimension, smoothing should be set to 1.0 for that
+        dimension. Default is (1.75, 1.75, 0.25).
+    order : int or array of int, optional
+        Maximum order of local polynomial fits, in the (x, y, w)
+        dimensions.
+    robust : float, optional
+        Rejection threshold for input data to local fits, given as a
+        factor of the standard deviation.
+    neg_threshold : float, optional
+        First-pass rejection threshold for negative input data, given
+        as a factor of the standard deviation; if None or &lt;= 0,
+        first-pass rejection will not be performed.
+    fit_threshold : float, optional
+        Rejection threshold for output fit values, given as a factor
+        of the standard deviation in the input data.  If exceeded,
+        weighted mean value is used in place of fit.
+    edge_threshold : array_like of float, optional
+        Threshold for edge marking for (x, y, w) dimensions. Values
+        should be between 0 and 1; higher values mean more edge pixels
+        marked. Default is (0.7, 0.7, 0.5).
+    skip_uncorrected: bool, optional
+        If set, the uncorrected flux cube will not be computed, even
+        if present in the input data.  This option is primarily intended
+        for testing or quicklook, when the full data product is not needed.
+    jobs : int, optional
+        Specifies the maximum number of concurrently running jobs.
+        Values of 0 or 1 will result in serial processing.  A negative
+        value sets jobs to `n_cpus + 1 + jobs` such that -1 would use
+        all cpus, and -2 would use all but one cpu.
+    check_memory : bool, optional
+        If set, expected memory use will be checked and used to limit
+        the number of jobs if necessary.
+    &quot;&quot;&quot;
+    log.info(&#39;&#39;)
+    log.info(&#39;Resampling using local polynomial fits&#39;)
+
+    # Fit window for FWHM
+    if window is None:
+        window = (3.0, 3.0, 0.5)
+    if smoothing is None:
+        smoothing = (2.0, 2.0, 0.25)
+    if edge_threshold is None:
+        edge_threshold = (0.7, 0.7, 0.5)
+
+    # In pixel units
+    xy_fwhm = grid_info[&#39;oversample&#39;][1]
+    w_fwhm = grid_info[&#39;oversample&#39;][0]
+
+    fit_wdw = (window[0] * xy_fwhm,
+               window[1] * xy_fwhm,
+               window[2] * w_fwhm)
+
+    smth_wdw = (smoothing[0] * xy_fwhm,
+                smoothing[1] * xy_fwhm,
+                smoothing[2] * w_fwhm)
+
+    log.info(f&#39;Fit window (x, y, w): &#39;
+             f&#39;{(fit_wdw[0] * abs(grid_info[&quot;delta&quot;][2]).to(&quot;arcsec&quot;)):.2f} &#39;
+             f&#39;{(fit_wdw[1] * abs(grid_info[&quot;delta&quot;][1]).to(&quot;arcsec&quot;)):.2f} &#39;
+             f&#39;{(fit_wdw[2] * abs(grid_info[&quot;delta&quot;][0]).to(&quot;um&quot;)):.5f}&#39;)
+
+    log.info(f&#39;Gaussian width of smoothing function (x, y, w): &#39;
+             f&#39;{(smth_wdw[0] * abs(grid_info[&quot;delta&quot;][2]).to(&quot;arcsec&quot;)):.2f} &#39;
+             f&#39;{(smth_wdw[1] * abs(grid_info[&quot;delta&quot;][1]).to(&quot;arcsec&quot;)):.2f} &#39;
+             f&#39;{(smth_wdw[2] * abs(grid_info[&quot;delta&quot;][0]).to(&quot;um&quot;)):.5f}&#39;)
+
+    if adaptive_threshold is not None:
+        log.info(f&#39;Adaptive algorithm: {adaptive_algorithm}&#39;)
+        log.info(f&#39;Adaptive smoothing threshold (x, y, w): &#39;
+                 f&#39;{adaptive_threshold[0]:.2f}, {adaptive_threshold[1]:.2f}, &#39;
+                 f&#39;{adaptive_threshold[2]:.2f}&#39;)
+    else:
+        adaptive_threshold = 0
+        adaptive_algorithm = None
+
+    scan_reduction = combined.get(&#39;scan_reduction&#39;, False)
+    if scan_reduction:  # pragma: no cover
+        flxvals = combined[&#39;FLUX&#39;]
+        errvals = combined[&#39;ERROR&#39;]
+    else:
+        flxvals = np.hstack([f.ravel() for f in combined[&#39;FLUX&#39;]])
+        errvals = np.hstack([e.ravel() for e in combined[&#39;ERROR&#39;]])
+
+    # check whether data fits in memory
+    log.info(&#39;&#39;)
+    max_bytes = Resample.estimate_max_bytes(grid_info[&#39;coordinates&#39;],
+                                            fit_wdw, order=order)
+    max_avail = psutil.virtual_memory().total
+
+    max_size = max_bytes
+    for unit in [&#39;B&#39;, &#39;kB&#39;, &#39;MB&#39;, &#39;GB&#39;, &#39;TB&#39;, &#39;PB&#39;]:
+        if max_size &lt; 1024 or unit == &#39;PB&#39;:
+            break
+        max_size /= 1024.0
+    log.debug(f&#39;Maximum expected memory needed: {max_size:.2f} {unit}&#39;)
+
+    if check_memory:
+        # let the resampler handle it - it has more sophisticated checks
+        large_data = None
+    else:
+        # with check_memory false, set large data if the reduction is
+        # likely to take up a significant percentage of memory, to give
+        # it a chance to succeed
+        if max_bytes &gt;= max_avail / 10:
+            log.debug(&#39;Splitting data tree into blocks.&#39;)
+            large_data = True
+        else:
+            large_data = False
+
+    if np.all(np.isnan(flxvals)):
+        log.warning(&#39;Primary flux cube contains only NaN values.&#39;)
+        flux = np.full(grid_info[&#39;shape&#39;][1:], np.nan)
+        std = np.full(grid_info[&#39;shape&#39;][1:], np.nan)
+        weights = np.full(grid_info[&#39;shape&#39;][1:], 0.0)
+    else:
+        resampler = Resample(
+            grid_info[&#39;coordinates&#39;].copy(), flxvals, error=errvals,
+            window=fit_wdw, order=order, robust=robust,
+            negthresh=neg_threshold, large_data=large_data,
+            check_memory=check_memory)
+
+        flux, std, weights = resampler(
+            *grid_info[&#39;grid&#39;], smoothing=smth_wdw,
+            adaptive_algorithm=adaptive_algorithm,
+            adaptive_threshold=adaptive_threshold,
+            fit_threshold=fit_threshold, edge_threshold=edge_threshold,
+            edge_algorithm=&#39;distribution&#39;, get_error=True,
+            get_distance_weights=True,
+            error_weighting=error_weighting, jobs=jobs)
+
+    do_uncor = &#39;UNCORRECTED_FLUX&#39; in combined and not skip_uncorrected
+
+    if do_uncor:
+        log.info(&#39;&#39;)
+        log.info(&#39;Now resampling uncorrected cube.&#39;)
+
+        if grid_info[&#39;uncorrected_coordinates&#39;] is None:  # pragma: no cover
+            coord = grid_info[&#39;coordinates&#39;].copy()
+        else:
+            coord = grid_info[&#39;uncorrected_coordinates&#39;].copy()
+        flxvals = np.hstack([f.ravel() for f in combined[&#39;UNCORRECTED_FLUX&#39;]])
+        errvals = np.hstack([e.ravel() for e in combined[&#39;UNCORRECTED_ERROR&#39;]])
+
+        if np.all(np.isnan(flxvals)):
+            log.warning(&#39;Uncorrected flux cube contains only NaN values.&#39;)
+            uflux = np.full(grid_info[&#39;shape&#39;][1:], np.nan)
+            ustd = np.full(grid_info[&#39;shape&#39;][1:], np.nan)
+            uweights = np.full(grid_info[&#39;shape&#39;][1:], 0.0)
+        else:
+            resampler = Resample(
+                coord, flxvals, error=errvals,
+                window=fit_wdw, order=order, robust=robust,
+                negthresh=neg_threshold, large_data=large_data,
+                check_memory=check_memory)
+            uflux, ustd, uweights = resampler(
+                *grid_info[&#39;grid&#39;], smoothing=smth_wdw,
+                adaptive_algorithm=adaptive_algorithm,
+                adaptive_threshold=adaptive_threshold,
+                fit_threshold=fit_threshold, edge_threshold=edge_threshold,
+                edge_algorithm=&#39;distribution&#39;, get_error=True,
+                get_distance_weights=True,
+                error_weighting=error_weighting, jobs=jobs)
+    else:
+        uflux, ustd, uweights = None, None, None
+
+    # make exposure map
+    log.info(&#39;&#39;)
+    log.info(&#39;Making the exposure map.&#39;)
+    exposure = generate_exposure_map(combined, grid_info)
+    combined[&#39;GRID_COUNTS&#39;] = exposure
+
+    # store distance weights
+    combined[&#39;GRID_WEIGHTS&#39;] = weights
+
+    # correct flux for spatial pixel size change and extrapolation
+    factor = (grid_info[&#39;delta&#39;][1] / grid_info[&#39;pix_size&#39;]
+              ).decompose().value ** 2
+    log.info(f&#39;Flux correction factor: {factor}&#39;)
+
+    correction = np.full(flux.shape, factor)
+    correction[exposure == 0] = np.nan
+    combined[&#39;GRID_FLUX&#39;] = flux * correction
+    combined[&#39;GRID_ERROR&#39;] = std * correction
+    if do_uncor:
+        combined[&#39;GRID_UNCORRECTED_FLUX&#39;] = uflux * correction
+        combined[&#39;GRID_UNCORRECTED_ERROR&#39;] = ustd * correction
+        combined[&#39;GRID_UNCORRECTED_WEIGHTS&#39;] = uweights
+
+    # Update header
+    hdinsert(combined[&#39;PRIMEHEAD&#39;], &#39;XYFITWD&#39;, str(fit_wdw),
+             comment=&#39;WXY Resample fit window (arcsec,arcsec,um)&#39;)
+    hdinsert(combined[&#39;PRIMEHEAD&#39;], &#39;XYFITORD&#39;, str(order),
+             comment=&#39;WXY Resample fit order&#39;)
+    hdinsert(combined[&#39;PRIMEHEAD&#39;], &#39;XYFITWTS&#39;, &#39;error and distance&#39;,
+             comment=&#39;WXY Resample weights&#39;)
+    hdinsert(combined[&#39;PRIMEHEAD&#39;], &#39;XYFITSMR&#39;, str(smth_wdw),
+             comment=&#39;WXY Resample smooth radius (arcsec,arcsec,um)&#39;)
+    hdinsert(combined[&#39;PRIMEHEAD&#39;], &#39;XYRSMPAL&#39;,
+             &#39;local polynomial surface fits&#39;,
+             comment=&#39;WXY resampling algorithm&#39;)
+    return</div>
+
+
+
+<div class="viewcode-block" id="make_hdul">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.resample.make_hdul.html#sofia_redux.instruments.fifi_ls.resample.make_hdul">[docs]</a>
+def make_hdul(combined, grid_info, append_weights=False):
+    &quot;&quot;&quot;
+    Create final HDU List from combined data and gridding info.
+
+    Parameters
+    ----------
+    combined : dict
+    grid_info : dict
+    append_weights : bool, optional
+        If set, distance weights will be appended as an additional
+        extension.
+
+    Returns
+    -------
+    fits.HDUList
+    &quot;&quot;&quot;
+    primehead = combined[&#39;PRIMEHEAD&#39;]
+    outname = os.path.basename(primehead.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;))
+    outname, _ = os.path.splitext(outname)
+    for repl in [&#39;SCM&#39;, &#39;TEL&#39;, &#39;CAL&#39;, &#39;WSH&#39;]:
+        outname = outname.replace(repl, &#39;WXY&#39;)
+    outname = f&quot;{&#39;_&#39;.join(outname.split(&#39;_&#39;)[:-1])}_&quot; \
+              f&quot;{primehead.get(&#39;FILENUM&#39;, &#39;UNK&#39;)}.fits&quot;
+    hdinsert(primehead, &#39;FILENAME&#39;, outname)
+    hdinsert(primehead, &#39;NAXIS&#39;, 0)
+    hdinsert(primehead, &#39;PRODTYPE&#39;, &#39;resampled&#39;)
+    primehead[&#39;HISTORY&#39;] = &#39;Resampled to regular grid&#39;
+    hdinsert(primehead, &#39;PIXSCAL&#39;, grid_info[&#39;delta&#39;][1].to(&#39;arcsec&#39;).value)
+    hdinsert(primehead, &#39;XYOVRSMP&#39;, str(grid_info[&#39;oversample&#39;]),
+             comment=&#39;WXY Oversampling (pix per mean FWHM)&#39;)
+
+    obsbet = primehead[&#39;OBSDEC&#39;] - (primehead[&#39;DBET_MAP&#39;] / 3600)
+    obslam = (primehead[&#39;OBSRA&#39;] * 15)
+    obslam -= primehead[&#39;DLAM_MAP&#39;] / (3600 * np.cos(np.radians(obsbet)))
+
+    wcs = grid_info[&#39;wcs&#39;]
+    wcs_info = wcs.to_header()
+
+    # Save reference value in TELRA/TELDEC, since those are archive-
+    # searchable values
+    hdinsert(primehead, &#39;TELRA&#39;, obslam / 15)
+    hdinsert(primehead, &#39;TELDEC&#39;, obsbet)
+    procstat = str(primehead.get(&#39;PROCSTAT&#39;)).upper()
+    imagehdu = fits.ImageHDU(combined[&#39;GRID_FLUX&#39;])
+
+    exthdr = imagehdu.header.copy()
+    exthdr_1d = imagehdu.header.copy()
+    hdinsert(exthdr, &#39;DATE-OBS&#39;, primehead[&#39;DATE-OBS&#39;],
+             comment=&#39;Observation date&#39;)
+    hdinsert(exthdr_1d, &#39;DATE-OBS&#39;, primehead[&#39;DATE-OBS&#39;],
+             comment=&#39;Observation date&#39;)
+
+    if procstat == &#39;LEVEL_3&#39;:
+        hdinsert(exthdr, &#39;BUNIT&#39;, &#39;Jy/pixel&#39;, comment=&#39;Data units&#39;)
+        # New convention:: always set calibrated WXY to LEVEL_4
+        # even if it contains data from one mission only
+        hdinsert(primehead, &#39;PROCSTAT&#39;, &#39;LEVEL_4&#39;)
+    else:
+        hdinsert(exthdr, &#39;BUNIT&#39;, &#39;ADU/(s Hz)&#39;,
+                 comment=&#39;Data units&#39;)
+
+    # Add WCS keywords to primary header and ext header
+    for h in [primehead, exthdr]:
+        if &#39;CTYPE1&#39; in wcs_info:
+            detector_coordinates = False
+            hdinsert(h, &#39;EQUINOX&#39;, 2000.0, comment=&#39;Coordinate equinox&#39;)
+            hdinsert(h, &#39;CTYPE1&#39;, wcs_info[&#39;CTYPE1&#39;],
+                     comment=&#39;Axis 1 type and projection&#39;)
+            hdinsert(h, &#39;CTYPE2&#39;, wcs_info[&#39;CTYPE2&#39;],
+                     comment=&#39;Axis 2 type and projection&#39;)
+            hdinsert(h, &#39;CTYPE3&#39;, wcs_info[&#39;CTYPE3&#39;],
+                     comment=&#39;Axis 3 type and projection&#39;)
+            hdinsert(h, &#39;CUNIT1&#39;, &#39;deg&#39;, comment=&#39;Axis 1 units&#39;)
+            hdinsert(h, &#39;CUNIT2&#39;, &#39;deg&#39;, comment=&#39;Axis 2 units&#39;)
+            hdinsert(h, &#39;CUNIT3&#39;, &#39;um&#39;, comment=&#39;Axis 3 units&#39;)
+            hdinsert(h, &#39;CRVAL1&#39;, wcs_info[&#39;CRVAL1&#39;],
+                     comment=&#39;RA (deg) at CRPIX1,2&#39;)
+            hdinsert(h, &#39;CRVAL2&#39;, wcs_info[&#39;CRVAL2&#39;],
+                     comment=&#39;Dec (deg) at CRPIX1,2&#39;)
+            hdinsert(h, &#39;CRVAL3&#39;, wcs_info[&#39;CRVAL3&#39;] * 1e6,
+                     comment=&#39;Wavelength (um) at CRPIX3&#39;)
+            hdinsert(h, &#39;CDELT1&#39;, wcs_info[&#39;CDELT1&#39;],
+                     comment=&#39;RA pixel scale (deg/pix)&#39;)
+            hdinsert(h, &#39;CDELT2&#39;, wcs_info[&#39;CDELT2&#39;],
+                     comment=&#39;Dec pixel scale (deg/pix)&#39;)
+            hdinsert(h, &#39;CDELT3&#39;, wcs_info[&#39;CDELT3&#39;] * 1e6,
+                     comment=&#39;Wavelength pixel scale (um/pix)&#39;)
+        else:
+            detector_coordinates = True
+            hdinsert(h, &#39;CTYPE1&#39;, &#39;X&#39;,
+                     comment=&#39;Axis 1 type and projection&#39;)
+            hdinsert(h, &#39;CTYPE2&#39;, &#39;Y&#39;,
+                     comment=&#39;Axis 2 type and projection&#39;)
+            hdinsert(h, &#39;CTYPE3&#39;, &#39;WAVE&#39;,
+                     comment=&#39;Axis 3 type and projection&#39;)
+            hdinsert(h, &#39;CUNIT1&#39;, &#39;arcsec&#39;, comment=&#39;Axis 1 units&#39;)
+            hdinsert(h, &#39;CUNIT2&#39;, &#39;arcsec&#39;, comment=&#39;Axis 2 units&#39;)
+            hdinsert(h, &#39;CUNIT3&#39;, &#39;um&#39;, comment=&#39;Axis 3 units&#39;)
+            hdinsert(h, &#39;CRVAL1&#39;, wcs_info[&#39;CRVAL1&#39;],
+                     comment=&#39;X (arcsec) at CRPIX1,2&#39;)
+            hdinsert(h, &#39;CRVAL2&#39;, wcs_info[&#39;CRVAL2&#39;],
+                     comment=&#39;Y (arcsec) at CRPIX1,2&#39;)
+            hdinsert(h, &#39;CRVAL3&#39;, wcs_info[&#39;CRVAL3&#39;],
+                     comment=&#39;Wavelength (um) at CRPIX3&#39;)
+            hdinsert(h, &#39;CDELT1&#39;, wcs_info[&#39;CDELT1&#39;],
+                     comment=&#39;RA pixel scale (arcsec/pix)&#39;)
+            hdinsert(h, &#39;CDELT2&#39;, wcs_info[&#39;CDELT2&#39;],
+                     comment=&#39;Dec pixel scale (arcsec/pix)&#39;)
+            hdinsert(h, &#39;CDELT3&#39;, wcs_info[&#39;CDELT3&#39;],
+                     comment=&#39;Wavelength pixel scale (um/pix)&#39;)
+
+        hdinsert(h, &#39;CRPIX1&#39;, wcs_info[&#39;CRPIX1&#39;],
+                 comment=&#39;Reference pixel (x)&#39;)
+        hdinsert(h, &#39;CRPIX2&#39;, wcs_info[&#39;CRPIX2&#39;],
+                 comment=&#39;Reference pixel (y)&#39;)
+        hdinsert(h, &#39;CRPIX3&#39;, wcs_info[&#39;CRPIX3&#39;],
+                 comment=&#39;Reference pixel (z)&#39;)
+
+        hdinsert(h, &#39;CROTA2&#39;, -primehead.get(&#39;SKY_ANGL&#39;, 0.0),
+                 comment=&#39;Rotation angle (deg)&#39;)
+        hdinsert(h, &#39;SPECSYS&#39;, &#39;BARYCENT&#39;,
+                 comment=&#39;Spectral reference frame&#39;)
+        # add beam keywords
+        hdinsert(h, &#39;BMAJ&#39;, grid_info[&#39;xy_fwhm&#39;].to(&#39;degree&#39;).value,
+                 comment=&#39;Beam major axis (deg)&#39;)
+        hdinsert(h, &#39;BMIN&#39;, grid_info[&#39;xy_fwhm&#39;].to(&#39;degree&#39;).value,
+                 comment=&#39;Beam minor axis (deg)&#39;)
+        hdinsert(h, &#39;BPA&#39;, 0.0, comment=&#39;Beam position angle (deg)&#39;)
+
+    # interpolate smoothed ATRAN and response data onto new grid for
+    # reference
+    resolution = grid_info[&#39;resolution&#39;]
+    dw = (grid_info[&#39;delta&#39;][0] / 2).to(&#39;um&#39;).value
+
+    gx, gy, gw = grid_info[&#39;grid&#39;]
+
+    x_out = wcs.wcs_pix2world(gx, [0], [0], 0)[0]
+    y_out = wcs.wcs_pix2world([0], gy, [0], 0)[1]
+    w_out = wcs.wcs_pix2world([0], [0], gw, 0)[2]
+    if not detector_coordinates:
+        w_out *= 1e6
+
+    wmin = w_out.min()
+    wmax = w_out.max()
+    if &#39;UNSMOOTHED_TRANSMISSION&#39; in combined:
+
+        unsmoothed_atran = combined[&#39;UNSMOOTHED_TRANSMISSION&#39;]
+        try:
+            smoothed = smoothres(unsmoothed_atran[0], unsmoothed_atran[1],
+                                 resolution)
+
+            # Interpolate transmission to new wavelengths
+            w = unsmoothed_atran[0]
+            atran = np.interp(w_out, w, smoothed, left=np.nan, right=np.nan)
+
+            # Keep unsmoothed data as is, but cut to wavelength range
+            keep = (w &gt;= (wmin - dw)) &amp; (w &lt;= (wmax + dw))
+            unsmoothed_atran = unsmoothed_atran[:, keep]
+        except (ValueError, TypeError, IndexError):
+            log.error(&#39;Problem in interpolation.  &#39;
+                      &#39;Setting TRANSMISSION to 1.0.&#39;)
+            atran = np.full(w_out.shape, 1.0)
+    else:
+        atran = np.full(w_out.shape, 1.0)
+        unsmoothed_atran = None
+
+    response = get_response(primehead)
+    try:
+        resp = np.interp(w_out, response[0], response[1],
+                         left=np.nan, right=np.nan)
+    except (ValueError, TypeError, IndexError):
+        log.error(&#39;Problem in interpolation.  &#39;
+                  &#39;Setting RESPONSE to 1.0.&#39;)
+        resp = np.full(w_out.shape, 1.0)
+
+    # Add the spectral keys to primehead
+    hdinsert(primehead, &#39;RESOLUN&#39;, resolution)
+    hdinsert(primehead, &#39;SPEXLWID&#39;, grid_info[&#39;delta&#39;][0].to(&#39;um&#39;).value)
+
+    # make HDUList
+    hdul = fits.HDUList(fits.PrimaryHDU(header=primehead))
+    hdul.append(fits.ImageHDU(data=combined[&#39;GRID_FLUX&#39;],
+                              name=&#39;FLUX&#39;, header=exthdr))
+    hdul.append(fits.ImageHDU(data=combined[&#39;GRID_ERROR&#39;],
+                              name=&#39;ERROR&#39;, header=exthdr))
+
+    if &#39;GRID_UNCORRECTED_FLUX&#39; in combined:
+        hdul.append(fits.ImageHDU(data=combined[&#39;GRID_UNCORRECTED_FLUX&#39;],
+                                  name=&#39;UNCORRECTED_FLUX&#39;, header=exthdr))
+        hdul.append(fits.ImageHDU(data=combined[&#39;GRID_UNCORRECTED_ERROR&#39;],
+                                  name=&#39;UNCORRECTED_ERROR&#39;, header=exthdr))
+
+    hdinsert(exthdr_1d, &#39;BUNIT&#39;, &#39;um&#39;, comment=&#39;Data units&#39;)
+    hdul.append(fits.ImageHDU(data=w_out, name=&#39;WAVELENGTH&#39;,
+                              header=exthdr_1d))
+    if detector_coordinates:
+        exthdr_1d[&#39;BUNIT&#39;] = &#39;arcsec&#39;
+        hdul.append(fits.ImageHDU(data=x_out, name=&#39;XS&#39;, header=exthdr_1d))
+        hdul.append(fits.ImageHDU(data=y_out, name=&#39;YS&#39;, header=exthdr_1d))
+    else:
+        exthdr_1d[&#39;BUNIT&#39;] = &#39;degree&#39;
+        hdul.append(fits.ImageHDU(data=x_out, name=wcs_info[&#39;CTYPE1&#39;],
+                                  header=exthdr_1d))
+        hdul.append(fits.ImageHDU(data=y_out, name=wcs_info[&#39;CTYPE2&#39;],
+                                  header=exthdr_1d))
+
+    exthdr_1d[&#39;BUNIT&#39;] = &#39;&#39;
+    hdul.append(fits.ImageHDU(data=atran, name=&#39;TRANSMISSION&#39;,
+                              header=exthdr_1d))
+    exthdr_1d[&#39;BUNIT&#39;] = &#39;adu/(s Hz Jy)&#39;
+    hdul.append(fits.ImageHDU(data=resp, name=&#39;RESPONSE&#39;,
+                              header=exthdr_1d))
+
+    exthdr[&#39;BUNIT&#39;] = &#39;&#39;
+    hdul.append(fits.ImageHDU(data=combined[&#39;GRID_COUNTS&#39;],
+                              name=&#39;EXPOSURE_MAP&#39;, header=exthdr))
+    exthdr_1d[&#39;BUNIT&#39;] = &#39;&#39;
+    hdul.append(fits.ImageHDU(data=unsmoothed_atran,
+                              name=&#39;UNSMOOTHED_TRANSMISSION&#39;,
+                              header=exthdr_1d))
+    if append_weights and &#39;GRID_WEIGHTS&#39; in combined:
+        hdul.append(fits.ImageHDU(data=combined[&#39;GRID_WEIGHTS&#39;],
+                                  name=&#39;IMAGE_WEIGHTS&#39;, header=exthdr))
+        if &#39;GRID_UNCORRECTED_WEIGHTS&#39; in combined:
+            hdul.append(
+                fits.ImageHDU(data=combined[&#39;GRID_UNCORRECTED_WEIGHTS&#39;],
+                              name=&#39;UNCORRECTED_IMAGE_WEIGHTS&#39;,
+                              header=exthdr))
+
+    return hdul</div>
+
+
+
+<div class="viewcode-block" id="perform_scan_reduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.resample.perform_scan_reduction.html#sofia_redux.instruments.fifi_ls.resample.perform_scan_reduction">[docs]</a>
+def perform_scan_reduction(filenames, scan_kwargs=None,
+                           reduce_uncorrected=True,
+                           save_scan=False,
+                           insert_source=True):  # pragma: no cover
+    &quot;&quot;&quot;
+    Reduce the files using a scan reduction.
+
+    Parameters
+    ----------
+    filenames : list (str)
+        A list of FIFI-LS WSH FITS files to reduce.
+    scan_kwargs : dict, optional
+        Keyword arguments to pass into the scan reduction.
+    reduce_uncorrected : bool, optional
+        If `True`, reduce the uncorrected flux values as well.
+    save_scan : bool, optional
+        If `True`, files produced by the scan reduction will be saved to disk.
+    insert_source : bool, optional
+        If `True`, will perform a full scan reduction and reinsert the source
+        after.  Otherwise, the reduction is used to calculate gains, offsets,
+        and correlations which will then be applied to the original data.
+        If `True`, note that timestream filtering will not be applied to the
+        correction and should therefore be excluded from the scan reduction
+        runtime parameters in order to reduce processing pressure.
+
+    Returns
+    -------
+    combined : dict
+    &quot;&quot;&quot;
+    # lazy import, in case scan is not installed
+    from sofia_redux.scan.reduction.reduction import Reduction
+
+    if scan_kwargs is None:
+        scan_kwargs = {}
+
+    if &#39;grid&#39; not in scan_kwargs:
+        hdul = gethdul(filenames[0])
+        header = hdul[0].header
+
+        w_mid = (hdul[&#39;LAMBDA&#39;].data.max() + hdul[&#39;LAMBDA&#39;].data.min()) / 2
+        if not isinstance(filenames[0], fits.HDUList):
+            hdul.close()
+
+        # Begin with spectral scalings
+        resolution = get_resolution(header, wmean=w_mid)
+        spectral_fwhm = w_mid / resolution
+        spatial_fwhm = get_resolution(header, spatial=True, wmean=w_mid)
+        scan_kwargs[&#39;grid&#39;] = f&#39;{spatial_fwhm / 3},{spectral_fwhm / 3}&#39;
+
+    # save intermediate files if desired
+    if save_scan:
+        scan_kwargs[&#39;write&#39;] = {&#39;source&#39;: True}
+    else:
+        scan_kwargs[&#39;write&#39;] = {&#39;source&#39;: False}
+
+    scan_kwargs.update({&#39;fifi_ls&#39;: {&#39;resample&#39;: &#39;True&#39;,
+                                    &#39;insert_source&#39;: insert_source}})
+
+    reduction = Reduction(&#39;fifi_ls&#39;)
+    reduction.run(filenames, **scan_kwargs)
+
+    temporary_directory = tempfile.mkdtemp(&#39;fifi_resample_scan_reductions&#39;)
+    reduction_file = os.path.join(temporary_directory, &#39;reduction.p&#39;)
+
+    with open(reduction_file, &#39;wb&#39;) as f:
+        cloudpickle.dump(reduction, f)
+
+    # Save to disk for now to free up memory
+    del reduction
+    gc.collect()
+
+    # &quot;fifi_ls.uncorrected&quot; is the toggle to perform a SOFSCAN reduction on
+    # the uncorrected data values
+    if reduce_uncorrected:
+        u_reduction = Reduction(&#39;fifi_ls&#39;)
+        scan_kwargs[&#39;fifi_ls&#39;][&#39;uncorrected&#39;] = True
+        u_reduction.run(filenames, **scan_kwargs)
+        u_reduction_file = os.path.join(temporary_directory, &#39;u_reduction.p&#39;)
+        with open(u_reduction_file, &#39;wb&#39;) as f:
+            cloudpickle.dump(u_reduction, f)
+        del u_reduction
+        gc.collect()
+    else:
+        u_reduction_file = None
+
+    combined = combine_scan_reductions(
+        reduction_file, uncorrected_reduction=u_reduction_file)
+
+    combined[&#39;reduction_file&#39;] = reduction_file
+    combined[&#39;uncorrected_reduction_file&#39;] = u_reduction_file
+    return combined</div>
+
+
+
+<div class="viewcode-block" id="resample">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.resample.resample.html#sofia_redux.instruments.fifi_ls.resample.resample">[docs]</a>
+def resample(filenames, target_x=None, target_y=None, target_wave=None,
+             ctype1=&#39;RA---TAN&#39;, ctype2=&#39;DEC--TAN&#39;, ctype3=&#39;WAVE&#39;,
+             interp=False, oversample=None, spatial_size=None,
+             spectral_size=None, window=None,
+             adaptive_threshold=None, adaptive_algorithm=None,
+             error_weighting=True, smoothing=None, order=2,
+             robust=None, neg_threshold=None, fit_threshold=None,
+             edge_threshold=None, append_weights=False,
+             skip_uncorrected=False, write=False, outdir=None,
+             jobs=None, check_memory=True, scan_reduction=False,
+             scan_kwargs=None, save_scan=False, detector_coordinates=None,
+             naif_id_key=&#39;NAIF_ID&#39;, insert_source=True):
+    &quot;&quot;&quot;
+    Resample unevenly spaced FIFI-LS pixels to regular grid.
+
+    Spatial and spectral pixels from all dither positions are
+    resampled onto a regular grid.
+
+    The procedure is:
+
+        1. Read input files
+        2. Define output grid based on input parameter values or values from
+           file data.
+        3. Resample data: perform local polynomial fits at each
+           output grid point.
+        4. Correct flux for change to pixel size.  Factor is new pixel area
+           (dx^2) / input pixel size (12&quot; red, 6&quot; blue).
+        5. Update header for new WCS, from OBSRA/OBSDEC and offsets, Update
+           PROCSTAT to LEVEL_4 if input data comes from multiple missions.
+        6. Create FITS file and write results to disk.
+
+    Parameters
+    ----------
+    filenames : array_like of str
+        File paths to FITS data to be resampled.
+    target_x : float, optional
+        The target right ascension (hourangle).  The default is the mid-point
+        of all RA values in the combined data.
+    target_y : float, optional
+        The target declination (degree).  The default is the mid-point of all
+        DEC values in the combined data.
+    target_wave : float, optional
+        The center wavelength (um).  The default is the mid-point of all
+        wavelength values in the combined data.
+    ctype1 : str, optional
+        The coordinate frame for the x spatial axis using FITS standards.
+    ctype2 : str, optional
+        The coordinate frame for the y spatial axis using FITS standards.
+    ctype3 : str, optional
+        The coordinate frame for the w spectral axis using FITS standards.
+    interp : bool, optional
+        If True, alternate algorithm will be used for spatial resampling
+        (interpolation / mean combine, rather than local polynomial fits).
+    oversample : array_like of int or float, optional
+        Number of pixels to sample mean FWHM with, in the
+        (spatial, spectral) dimensions.
+        Default is (5.0, 8.0).
+    spatial_size : float, optional
+        Output pixel size, in the spatial dimensions.
+        Units are arcsec.  If specified, the corresponding oversample
+        parameter will be ignored.
+    spectral_size : float, optional
+        Output pixel size, in the spectral dimension.
+        Units are um.  If specified, the corresponding oversample
+        parameter will be ignored.
+    window : array_like of float, optional
+        Region to consider for local polynomial fits, given as a factor
+        of the mean FWHM, in the (x, y, w) dimensions. Default is
+        (3.0, 3.0, 0.5).
+    adaptive_threshold : array_like of float, optional
+        If &gt; 0, determines how the adaptive smoothing algorithm
+        will attempt to fit data.  The optimal value is 1.  Will
+        automatically enable both distance and error weighting.  For
+        dimensions that have adaptive smoothing enabled, `smoothing`
+        should be set to the Gaussian width of the data in units of `window`.
+        For other dimensions not using adaptive smoothing, `smoothing`
+        has the usual definition. Adaptive smoothing is disabled by
+        default: (0.0, 0.0, 0.0).
+    adaptive_algorithm : {&#39;scaled&#39;, &#39;shaped&#39;}, optional
+        Determines the type of variation allowed for the adaptive kernel.
+        If &#39;scaled&#39;, only the kernel size is allowed to vary.  If &#39;shaped&#39;,
+        kernel shape may also vary.
+    error_weighting : bool, optional
+        If True, errors will be used to weight the flux fits.
+    smoothing : array_like of float, optional
+        Radius over which to smooth the input data, specified as a
+        factor of the mean FWHM, if distance weights are being used.
+        Default is (2.0, 2.0, 0.25).
+    order : array_like or int, optional
+        (nfeatures,) array of single integer value specifying the
+        polynomial fit order for each dimension (x, y, w).
+    robust : float, optional
+        Rejection threshold for input data to local fits, given as a
+        factor of the standard deviation.
+    neg_threshold : float, optional
+        First-pass rejection threshold for negative input data, given
+        as a factor of the standard deviation; if None or &lt;= 0,
+        first-pass rejection will not be performed.
+    fit_threshold : float, optional
+        Rejection threshold for output fit values, given as a factor
+        of the standard deviation in the input data.  If exceeded,
+        weighted mean value is used in place of fit.
+    edge_threshold : float or array_like or float
+        If set to a value &gt; 0 and &lt; 1, edges of the fit will be masked out
+        according to `edge_algorithm`. Values close to zero will result in
+        a high degree of edge clipping, while values close to 1 ckip edges
+        to a lesser extent. The clipping threshold is a fraction of window.
+        An array may be used to specify values for each dimension.
+    append_weights: bool, optional
+        If set, distance weights will be appended as an additional
+        extension.
+    skip_uncorrected: bool, optional
+        If set, the uncorrected flux cube will not be computed, even
+        if present in the input data.  This option is primarily intended
+        for testing or quicklook, when the full data product is not needed.
+    write : bool, optional
+        If True, write to disk and return the path to the output
+        file.  The output filename is created from the input filename,
+        with the product type suffix replaced with &#39;WXY&#39;.
+    outdir : str, optional
+        Directory path to write output.  If None, output files
+        will be written to the same directory as the input files.
+    jobs : int, optional
+        Specifies the maximum number of concurrently running jobs.
+        Values of 0 or 1 will result in serial processing.  A negative
+        value sets jobs to `n_cpus + 1 + jobs` such that -1 would use
+        all cpus, and -2 would use all but one cpu.
+    check_memory : bool, optional
+        If set, expected memory use will be checked and used to limit
+        the number of jobs if necessary.
+    scan_reduction : bool, optional
+        If `True`, run a scan reduction first before performing the resampling
+        step.  This may be a very time consuming operation, but may also remove
+        many correlated noise signals from the data.
+    save_scan : bool, optional
+        If `True`, the output from the scan algorithm, prior to resampling,
+        will be saved to disk.
+    scan_kwargs : dict, optional
+        Optional keyword arguments to pass into the scan reduction.
+    detector_coordinates : bool, optional
+        If `True`, reduce using detector coordinates instead of RA/DEC.  if
+        `None`, will attempt to auto-detect based on OBSLAM/OBSDEC header
+        values (`True` if all OBSLAM/DEC = 0, `False` otherwise).
+    naif_id_key : str, optional
+        The name of the NAIF ID keyword.  If present in the header, should
+        indicate the associated file contains a nonsidereal observation.
+    insert_source : bool, optional
+        If `True`, will perform a full scan reduction (if applicable) and
+        reinsert the source after.  Otherwise, the reduction is used to
+        calculate gains, offsets, and correlations which will then be
+        applied to the original data. If `True`, note that timestream
+        filtering will not be applied to the correction and should therefore
+        be excluded from the scan reduction runtime parameters in order to
+        reduce processing pressure.
+
+    Returns
+    -------
+    fits.HDUList or str
+        Either the HDU (if write is False) or the filename of the output
+        file (if write is True).  The output contains the following
+        extensions: FLUX, ERROR, WAVELENGTH, X, Y, RA, DEC,
+        TRANSMISSION, RESPONSE, EXPOSURE_MAP.  The following extensions
+        will be appended if possible: UNCORRECTED_FLUX, UNCORRECTED_ERROR,
+        UNSMOOTHED_TRANSMISSION.
+    &quot;&quot;&quot;
+    clear_resolution_cache()
+    clear_response_cache()
+
+    if isinstance(filenames, str):
+        filenames = [filenames]
+    if not hasattr(filenames, &#39;__len__&#39;):
+        log.error(f&#39;Invalid input files type ({repr(filenames)})&#39;)
+        return
+
+    if isinstance(outdir, str):
+        if not os.path.isdir(outdir):
+            log.error(f&#39;Output directory {outdir} does not exist&#39;)
+            return
+    else:
+        if isinstance(filenames[0], str):
+            outdir = os.path.dirname(filenames[0])
+
+    combined = combine_files(filenames, naif_id_key=naif_id_key,
+                             scan_reduction=scan_reduction,
+                             save_scan=save_scan,
+                             scan_kwargs=scan_kwargs,
+                             skip_uncorrected=skip_uncorrected,
+                             insert_source=insert_source)
+
+    interp |= combined[&#39;method&#39;] == &#39;interpolate&#39;
+    if detector_coordinates is None:
+        if combined[&#39;definite_nonsidereal&#39;]:
+            log.info(&#39;Resampling using detector coordinates: nonsidereal&#39;)
+            detector_coordinates = True
+        elif combined[&#39;nonsidereal_values&#39;]:
+            log.info(&#39;Resampling using detector coordinates: &#39;
+                     &#39;possible non-sidereal observation&#39;)
+            detector_coordinates = True
+        else:
+            log.info(&#39;Resampling using equatorial coordinates&#39;)
+            detector_coordinates = False
+
+    grid_info = get_grid_info(combined, oversample=oversample,
+                              spatial_size=spatial_size,
+                              spectral_size=spectral_size,
+                              target_x=target_x,
+                              target_y=target_y,
+                              target_wave=target_wave,
+                              ctype1=ctype1,
+                              ctype2=ctype2,
+                              ctype3=ctype3,
+                              detector_coordinates=detector_coordinates)
+
+    if grid_info is None:
+        log.error(&#39;Problem in grid calculation&#39;)
+        cleanup_scan_reduction(combined)
+        return
+
+    if interp:
+        try:
+            rbf_mean_combine(combined, grid_info, window=window,
+                             error_weighting=error_weighting,
+                             smoothing=smoothing, order=order,
+                             robust=robust, neg_threshold=neg_threshold,
+                             fit_threshold=fit_threshold,
+                             skip_uncorrected=skip_uncorrected)
+        except Exception as err:
+            log.error(err, exc_info=True)
+            return None
+        finally:
+            cleanup_scan_reduction(combined)
+    else:
+        try:
+            local_surface_fit(combined, grid_info, window=window,
+                              adaptive_threshold=adaptive_threshold,
+                              adaptive_algorithm=adaptive_algorithm,
+                              error_weighting=error_weighting,
+                              smoothing=smoothing, order=order,
+                              robust=robust, neg_threshold=neg_threshold,
+                              fit_threshold=fit_threshold,
+                              edge_threshold=edge_threshold,
+                              skip_uncorrected=skip_uncorrected,
+                              jobs=jobs, check_memory=check_memory)
+        except Exception as err:
+            log.error(err, exc_info=True)
+            return None
+        finally:
+            cleanup_scan_reduction(combined)
+
+    result = make_hdul(combined, grid_info, append_weights=append_weights)
+
+    if not write:
+        return result
+    else:
+        return write_hdul(result, outdir=outdir, overwrite=True)</div>
+
+
+
+<div class="viewcode-block" id="cleanup_scan_reduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.resample.cleanup_scan_reduction.html#sofia_redux.instruments.fifi_ls.resample.cleanup_scan_reduction">[docs]</a>
+def cleanup_scan_reduction(combined):
+    &quot;&quot;&quot;
+    Remove all temporary files created during a scan reduction.
+
+    Parameters
+    ----------
+    combined : dict
+        The combined data set.  The &#39;reduction_file&#39; and
+        &#39;uncorrected_reduction_file&#39; keys should have string values pointing
+        to the pickle file on disk.  Their parent directory will also be
+        deleted.
+
+    Returns
+    -------
+    None
+    &quot;&quot;&quot;
+    try:
+        delete_dir = None
+        for key in [&#39;reduction_file&#39;, &#39;uncorrected_reduction_file&#39;]:
+            filename = combined.get(key)
+            if filename is not None and os.path.isfile(filename):
+                os.remove(filename)
+                if delete_dir is None:
+                    delete_dir = os.path.dirname(filename)
+        if delete_dir is not None and os.path.isdir(delete_dir):
+            shutil.rmtree(delete_dir)
+    except Exception as err:  # pragma: no cover
+        log.error(f&quot;Problem cleaning scan reduction temporary files: {err}&quot;)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

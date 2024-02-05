@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.gui.qad.qad_app &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.gui.qad.qad_app</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Standalone front-end for QAD display tool.&quot;&quot;&quot;
+
+import argparse
+import logging
+import sys
+import warnings
+
+from astropy import log
+
+from sofia_redux.pipeline.interface import Interface
+from sofia_redux.pipeline.gui.qad.qad_main_panel import QADMainWindow
+
+try:
+    from PyQt5 import QtWidgets, QtCore
+except ImportError:
+    HAS_PYQT5 = False
+    QtCore, QtGui = None, None
+else:
+    HAS_PYQT5 = True
+
+__all__ = [&#39;main&#39;]
+
+
+<div class="viewcode-block" id="main">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_app.main.html#sofia_redux.pipeline.gui.qad.qad_app.main">[docs]</a>
+def main():
+    &quot;&quot;&quot;
+    Quality Analysis and Display tool (QAD).
+
+    Start the QAD front end as a standalone tool with the command::
+
+        qad
+
+    From the GUI window, files may be selected for display in DS9
+    (for FITS images or region files), the Eye of SOFIA (for FITS spectra),
+    or the system default application (all other files).  Highlight
+    the desired files and double-click or press enter to select
+    them.
+
+    The starting directory may be modified via the File menu,
+    or by clicking the Home button.  The enclosing directory may be
+    reached by clicking the up arrow; the last visited directory by
+    clicking the down arrow.
+
+    Display and photometry parameters may be set and saved from the
+    Settings menu.
+
+    Clicking the ImExam button (scissors icon) launches an event loop
+    in DS9.  After launching it, bring the DS9 window forward, then
+    type &#39;a&#39; over a source in the image to perform photometry at that
+    location.  Typing &#39;c&#39; will clear any previous results and &#39;q&#39; will
+    quit the ImExam loop.
+
+    Clicking the Header button (magnifying glass icon) opens a new
+    window that displays headers from selected FITS files in text form.
+    The extensions displayed depends on the Extension setting selected
+    (in Settings -&gt; Display Settings).  If a particular extension is
+    selected, only that header will be displayed.  If all extensions
+    are selected (either for cube or multi-frame display), all extension
+    headers will be displayed.  The buttons at the bottom of the window
+    may be used to find or filter the header text, or generate a table
+    of header keywords.  For filter or table display, a comma-separated
+    list of keys may be entered in the text box.
+    &quot;&quot;&quot;
+    if not HAS_PYQT5:  # pragma: no cover
+        raise ImportError(&#39;PyQt5 package is required for QAD.&#39;)
+
+    # suppress all runtime warnings
+    if not sys.warnoptions:
+        warnings.simplefilter(&quot;ignore&quot;)
+
+    parser = argparse.ArgumentParser(
+        description=&#39;Interactively display FITS data.&#39;)
+    parser.add_argument(&#39;-l&#39;, &#39;--loglevel&#39;, dest=&#39;loglevel&#39;, type=str,
+                        action=&#39;store&#39;, default=&#39;INFO&#39;,
+                        help=&#39;Log level.&#39;)
+    parser.add_argument(&#39;-o&#39;, &#39;--logfile&#39;, dest=&#39;logfile&#39;, type=str,
+                        action=&#39;store&#39;, default=None,
+                        help=&#39;Log file name.&#39;)
+    parser.add_argument(&#39;-f&#39;, &#39;--logformat&#39;, dest=&#39;logformat&#39;, type=str,
+                        action=&#39;store&#39;, default=None,
+                        help=&quot;Log format. Default is &#39;%%(message)s&#39; for &quot;
+                             &quot;INFO level, &#39;%%(asctime)s - %%(origin)s - &quot;
+                             &quot;%%(levelname)s - %%(message)s&#39; for any other &quot;
+                             &quot;level.&quot;)
+
+    args = parser.parse_args()
+
+    # format the log for pretty-printing to the terminal
+    log_level = args.loglevel.upper()
+    Interface.tidy_log(log_level)
+
+    # add a file handler if desired
+    if args.logfile is not None:
+        fhand = logging.FileHandler(args.logfile, &#39;at&#39;)
+        fhand.setLevel(log_level)
+
+        # set default log format by level
+        log_format = args.logformat
+        if log_format is None:
+            if log_level == &#39;INFO&#39;:
+                log_format = &#39;%(message)s&#39;
+            else:
+                log_format = &#39;%(asctime)s - %(origin)s - &#39; \
+                             &#39;%(levelname)s - %(message)s&#39;
+
+        fhand.setFormatter(logging.Formatter(log_format))
+        log.addHandler(fhand)
+
+        # log the file name
+        log.info(&quot;Log file: {}&quot;.format(args.logfile))
+
+    # start application
+    app = QtWidgets.QApplication(sys.argv)
+
+    # start a timer to allow the python interpreter to run occasionally
+    # (without this, ctrl-c is swallowed by the event loop)
+    timer = QtCore.QTimer()
+    timer.start(200)
+    timer.timeout.connect(lambda: None)
+
+    # start up the main window and event loop
+    mw = QADMainWindow()
+    mw.show()
+    mw.raise_()
+    sys.exit(app.exec_())</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

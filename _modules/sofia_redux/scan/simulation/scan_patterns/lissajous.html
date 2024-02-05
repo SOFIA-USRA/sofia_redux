@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.simulation.scan_patterns.lissajous &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.simulation.scan_patterns.lissajous</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units
+import numpy as np
+
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.equatorial_coordinates import (
+    EquatorialCoordinates)
+from sofia_redux.scan.simulation.scan_patterns.constant_speed import (
+    to_constant_speed)
+
+__all__ = [&#39;lissajous_offset&#39;, &#39;lissajous_pattern_equatorial&#39;]
+
+
+<div class="viewcode-block" id="lissajous_offset">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.simulation.scan_patterns.lissajous.lissajous_offset.html#sofia_redux.scan.simulation.scan_patterns.lissajous.lissajous_offset">[docs]</a>
+def lissajous_offset(width, height, t_interval, ratio=np.sqrt(2),
+                     delta=np.pi * units.Unit(&#39;radian&#39;) / 2,
+                     n_oscillations=20,
+                     oscillation_period=10 * units.Unit(&#39;second&#39;),
+                     constant_speed=False):
+    &quot;&quot;&quot;
+    Create a Lissajous scan pattern in offset coordinates.
+
+    The two-dimensions Lissajous pattern is of the following form::
+
+      x = width.sin(a + delta)
+      y = height.sin(b + delta)
+      a = 2.pi.t/oscillation_period
+      b = 2.pi.ratio.t/oscillation_period
+
+    The distance between samples (speed) is maximal at the origin and minimal
+    near the edges of the box, which also means the map is under-sampled
+    near the center.  An approximation of the pattern using a constant speed
+    for all samples can be achieved by setting `constant_speed` to `True`.
+
+    Parameters
+    ----------
+    width : units.Quantity
+        The angular spatial width of the scan.
+    height : units.Quantity
+        The angular spatial height of the scan.
+    t_interval : units.Quantity
+        The time interval between sampling points.
+    ratio : float, optional
+        Determines the number of &quot;lobes&quot; in the lissajous curves relating to
+        width/height.  For example 5/4 produces a curve with 5 lobes in the
+        x-direction, and 4 in the y-direction.  Irrational numbers result in
+        perfect coverage over a long time span.
+    delta : units.Quantity, optional
+        The angular value giving the apparent rotation as if viewed from a
+        third axis.  Any non-zero value results in curve rotated to the
+        left-right or up-down depending on `ratio`.
+    n_oscillations : int or float, optional
+        The number of curve oscillations.
+    oscillation_period : units.Quantity, optional
+        The time for the curve to complete a single oscillation.  Note that the
+        scan length (time) will be `n_oscillations` * `oscillation_period`.
+    constant_speed : bool, optional
+        If `True`, return a pattern where the speed between each sample point
+        is equal.
+
+    Returns
+    -------
+    pattern : Coordinate2D
+        The elevation/cross-elevation scan pattern sampled at `t_interval`.
+    &quot;&quot;&quot;
+    fx = 1.0
+    fy = ratio * fx
+
+    period_distance = 2 * np.pi * units.Unit(&#39;radian&#39;)
+    scan_time = n_oscillations * oscillation_period
+    nt = int(np.ceil((scan_time / t_interval).decompose().value))
+    t = np.arange(nt) * t_interval
+
+    rt = period_distance / oscillation_period
+    ax = rt * fx * t
+    ay = rt * fy * t
+    x = width * np.sin(ax + delta) / 2
+    y = height * np.sin(ay + delta) / 2
+    pattern = Coordinate2D(np.stack([x, y]))
+    if constant_speed:
+        pattern = to_constant_speed(pattern)
+
+    return pattern</div>
+
+
+
+<div class="viewcode-block" id="lissajous_pattern_equatorial">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.simulation.scan_patterns.lissajous.lissajous_pattern_equatorial.html#sofia_redux.scan.simulation.scan_patterns.lissajous.lissajous_pattern_equatorial">[docs]</a>
+def lissajous_pattern_equatorial(center, t_interval, **kwargs):
+    &quot;&quot;&quot;
+    Create a Lissajous scan pattern in equatorial coordinates.
+
+    Please see :func:`lissajous_offset` for a description of the available
+    Lissajous parameters.
+
+    Parameters
+    ----------
+    center : units.Quantity or EquatorialCoordinates
+        The center of the pattern in equatorial coordinates.
+    t_interval : units.Quantity
+        The sampling interval between output points.
+    kwargs : dict, optional
+        A list of optional keyword arguments to pass into
+        :func:`lissajous_offset`.
+
+    Returns
+    -------
+    pattern : EquatorialCoordinates
+        The equatorial scan pattern sampled at `t_interval`.
+    &quot;&quot;&quot;
+    if &#39;width&#39; in kwargs:
+        width = kwargs[&#39;width&#39;]
+    else:
+        width = 2 * units.Unit(&#39;arcmin&#39;)
+    if &#39;height&#39; in kwargs:
+        height = kwargs[&#39;height&#39;]
+    else:
+        height = 2 * units.Unit(&#39;arcmin&#39;)
+    if &#39;delta&#39; in kwargs:
+        delta = kwargs[&#39;delta&#39;]
+    else:
+        delta = np.pi * units.Unit(&#39;radian&#39;) / 2
+    if &#39;ratio&#39; in kwargs:
+        ratio = kwargs[&#39;ratio&#39;]
+    else:
+        ratio = np.sqrt(2)
+    if &#39;n_oscillations&#39; in kwargs:
+        n_oscillations = kwargs[&#39;n_oscillations&#39;]
+    else:
+        n_oscillations = 20
+    if &#39;oscillation_period&#39; in kwargs:
+        oscillation_period = kwargs[&#39;oscillation_period&#39;]
+    else:
+        oscillation_period = 10 * units.Unit(&#39;second&#39;)
+    if &#39;constant_speed&#39; in kwargs:
+        constant_speed = kwargs[&#39;constant_speed&#39;]
+    else:
+        constant_speed = False
+
+    equatorial_offset = lissajous_offset(width, height, t_interval,
+                                         ratio=ratio,
+                                         delta=delta,
+                                         n_oscillations=n_oscillations,
+                                         oscillation_period=oscillation_period,
+                                         constant_speed=constant_speed)
+    equatorial = EquatorialCoordinates(center)
+    equatorial.add(equatorial_offset)
+    return equatorial</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

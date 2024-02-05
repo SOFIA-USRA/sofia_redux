@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.adjustguesspos &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.adjustguesspos</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+from sofia_redux.toolkit.fitting.polynomial import poly1d
+
+__all__ = [&#39;adjustguesspos&#39;]
+
+
+<div class="viewcode-block" id="adjustguesspos">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.adjustguesspos.adjustguesspos.html#sofia_redux.spectroscopy.adjustguesspos.adjustguesspos">[docs]</a>
+def adjustguesspos(edgecoeffs, xranges, flat, ordermask, orders=None,
+                   cor_order=None, ybuffer=0, default=False):
+    &quot;&quot;&quot;
+    Adjust the guess positions via cross-correlation
+
+    Performs a vertical cross-correlation between the order mask and
+    the raw flat field of a single order to identify the shift between
+    the two.  This shift is subtracted from the guess positions.  The
+    xranges are then checked to ensure the order range does not fall
+    off the array.
+
+    Notes
+    -----
+    If the range falls off the array, this will be marked by
+    xrange = [-1, -1] for the affected order.
+
+    Parameters
+    ----------
+    edgecoeffs : array_like of float (norders, 2, order+1)
+        Polynomial coefficients which define the edges of the orders.
+        edgecoeffs[0, 0, :] are the coefficients of the bottom edge of
+        the first order and edgecoeffs[0, 1, :] are the coefficients
+        of the top edge of the first order.
+    xranges : array_like of float (norders, 2)
+        Column numbers between which the orders are completely on the array.
+    flat : array_like of float (nrow, ncol)
+        Raw flat field
+    ordermask : array_like of int (nrow, ncol)
+        Array where each pixel is set to its order number.  Interorder
+        pixels are set to zero.
+    orders : array_like of int (norders,), optional
+        Order numbers to process.  Set to all by default.
+    cor_order : int, optional
+        The order with which o do the cross-correlation.  Will default
+        to the first order in `orders`.
+    ybuffer : int, optional
+        The number of pixels to buffer from the top and bottom of the
+        array.
+    default : bool, optional
+        If True, return the default guess positions and xranges.
+
+    Returns
+    -------
+    guess, xranges : numpy.ndarray, numpy.ndarray
+        The adjusted guess positions and xranges.  Both of type int
+        and size (norders, 2).  guess[:, 0] = y-guess and
+        guess[:, 1] = x-guess.
+
+    &quot;&quot;&quot;
+    edgecoeffs = np.array(edgecoeffs).astype(float)
+    if edgecoeffs.ndim != 3 or edgecoeffs.shape[1] != 2:
+        log.error(&quot;Invalid edgecoeffs shape&quot;)
+        return
+    xranges = np.array(xranges).astype(int)
+    if xranges.ndim != 2 or xranges.shape[1] != 2:
+        log.error(&quot;Invalid xranges shape&quot;)
+        return
+    if xranges.shape[0] != edgecoeffs.shape[0]:
+        log.error(&quot;Edgecoeffs and xranges order size shape mismatch&quot;)
+        return
+    flat = np.array(flat).astype(float)
+    if flat.ndim != 2:
+        log.error(&quot;Invalid flat shape&quot;)
+        return
+    shape = flat.shape
+    ordermask = np.array(ordermask).astype(int)
+    if ordermask.shape != shape:
+        log.error(&quot;Flat and ordermask shape mismatch&quot;)
+        return
+    if orders is None:
+        orders = np.unique(ordermask[ordermask != 0]).astype(int)
+    else:
+        orders = np.unique(orders).astype(int)
+    norders = orders.size
+    if cor_order is None:
+        cor_order = orders[0]
+
+    # Compute the guess positions
+    guess = np.zeros((norders, 2), dtype=int)
+
+    for orderi in range(norders):
+        xcenter = np.mean(xranges[orderi])
+        botedge = poly1d(xcenter, edgecoeffs[orderi, 0])
+        topedge = poly1d(xcenter, edgecoeffs[orderi, 1])
+        ycenter = np.mean([botedge, topedge])
+        guess[orderi] = np.round([ycenter, xcenter])
+
+    if default:
+        return guess, xranges
+
+    # Begin cross-correlation
+    omask = np.array(ordermask == cor_order)
+    orderi = np.argmax(orders == cor_order)
+
+    x = np.arange(xranges[orderi, 0], xranges[orderi, 1] + 1)
+    botedge = poly1d(x, edgecoeffs[orderi, 0])
+    topedge = poly1d(x, edgecoeffs[orderi, 1])
+    slith_pix = int(np.ceil(np.max(topedge - botedge)))
+
+    # Determine the top and bottom row of the subimage to clip out
+    y0 = np.clip(int(np.round(np.min(botedge) - slith_pix)), 0, shape[0])
+    y1 = np.clip(int(np.round(np.max(topedge) + slith_pix)), 0, shape[0]) + 1
+    subflat, subomask = flat[y0:y1], omask[y0:y1]
+
+    # shifts are in the y-direction only
+    subshape = subflat.shape
+    nshifts = slith_pix * 2 + 1
+    shifts = np.arange(nshifts) - slith_pix
+    corr = np.zeros(nshifts)
+
+    for i, s in enumerate(shifts):
+        hbot = np.clip(-s, 0, subshape[0])
+        htop = np.clip(subshape[0] - s, 0, subshape[0])
+        mbot = np.clip(s, 0, subshape[0])
+        mtop = np.clip(subshape[0] + s, 0, subshape[0])
+        corr[i] = np.sum(subflat[hbot:htop] * subomask[mbot:mtop])
+
+    offset = shifts[np.argmax(corr)]
+    guess[:, 0] -= offset
+
+    # now check xranges
+    dy = ybuffer - 1
+    for orderi in range(norders):
+        xrange = xranges[orderi]
+        x = np.arange(xrange[1] - xrange[0] + 1) + xrange[0]
+        botedge = poly1d(x, edgecoeffs[orderi, 0]) - offset
+        topedge = poly1d(x, edgecoeffs[orderi, 1]) - offset
+        idx = (botedge &gt; dy) &amp; (topedge &lt; (shape[0] - dy))
+        if not idx.any():
+            log.warning(&quot;Order %i shifted past y-buffer&quot; % orders[orderi])
+            xrange[:] = -1, -1
+        else:
+            xrange[:] = np.min(x[idx]), np.max(x[idx])
+
+    return guess, xranges</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

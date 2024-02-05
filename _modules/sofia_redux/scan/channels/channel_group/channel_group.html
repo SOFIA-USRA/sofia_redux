@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.channels.channel_group.channel_group &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.channels.channel_group.channel_group</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import abstractmethod
+
+from sofia_redux.scan.flags.flagged_data_group import FlaggedDataGroup
+from sofia_redux.scan.channels.channel_data.channel_data import ChannelData
+
+__all__ = [&#39;ChannelGroup&#39;]
+
+
+<div class="viewcode-block" id="ChannelGroup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.html#sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup">[docs]</a>
+class ChannelGroup(FlaggedDataGroup, ChannelData):
+
+    def __init__(self, channel_data, indices=None, name=None):
+        &quot;&quot;&quot;
+        Create a channel group from channel data.
+
+        A channel group is a subset of channels from the original channel data.
+        The ChannelGroup object is a wrapper around the ChannelData class,
+        accessing only certain channel indices and may be used to access or
+        modify those elements of the original channel data.  However, due to
+        the nature of indexing in numpy arrays, for value writing operations,
+        the entire field must be modified at one.  For example
+        self.gain[0]=1.234 will not result in any values being set.  To modify
+        values, use self.gain=&lt;new_array&gt; or self.gain = &lt;value&gt; where &lt;value&gt;
+        can be broadcast to the parent array.
+
+        Parameters
+        ----------
+        channel_data : ChannelData or ChannelGroup or object
+            The channel data to reference.  If an object is supplied, it&#39;s
+            &#39;data&#39; attribute must contain ChannelData or ChannelGroup.
+        indices : numpy.ndarray (int), optional
+            The indices of ChannelData that will belong to the ChannelGroup.
+            If no indices are supplied, the entire ChannelData will be
+            referenced.
+        name : str, optional
+            The name of the ChannelGroup.
+        &quot;&quot;&quot;
+        super().__init__(channel_data, indices=indices, name=name)
+
+    def __getattr__(self, attribute):
+        &quot;&quot;&quot;
+        Retrieves selected indices of the parent attribute.
+
+        Provides additional handling for the &quot;overlaps&quot; field.
+
+        Parameters
+        ----------
+        attribute : str
+            Name of the data field.
+
+        Returns
+        -------
+        numpy.ndarray
+        &quot;&quot;&quot;
+        if attribute not in self.special_fields:
+            return super().__getattr__(attribute)
+
+        if attribute == &#39;overlaps&#39;:
+            value = getattr(self.data, attribute, None)
+            if value is None:
+                return None
+            elif self.indices is None:
+                return None
+            else:
+                return value[self.indices[:, None], self.indices[None]]
+        else:
+            return super().__getattr__(attribute)
+
+    def __setattr__(self, attribute, value):
+        &quot;&quot;&quot;
+        Sets selected indices of the parent data.
+
+        Provides additional handling for the &quot;overlaps&quot; field.
+
+        Parameters
+        ----------
+        attribute : str
+            Name of the data field.
+        value : numpy.ndarray
+            Value to set.  value.shape[0] must be equal to the size of the
+            group data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if attribute not in self.special_fields:
+            super().__setattr__(attribute, value)
+            return
+
+        parent_value = getattr(self.data, attribute, None)
+        if parent_value is None:
+            return
+
+        if value is None:
+            super().__setattr__(attribute, value)
+            return
+
+        # special attributes other than overlaps should not be
+        # set by the group: they should have specific handling coded
+        # in the child class
+        if attribute == &#39;overlaps&#39;:
+            parent_value[self.indices[:, None], self.indices[None]] = value
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the channel group.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return f&quot;{self.__class__.__name__} ({self.name}): {self.size} channels&quot;
+
+<div class="viewcode-block" id="ChannelGroup.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.html#sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the channel group.
+
+        Returns
+        -------
+        ChannelGroup
+        &quot;&quot;&quot;
+        return self.__class__(self.data, indices=self.indices, name=self.name)</div>
+
+
+<div class="viewcode-block" id="ChannelGroup.set_channel_data">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.html#sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.set_channel_data">[docs]</a>
+    def set_channel_data(self, index, channel_info):
+        &quot;&quot;&quot;
+        Set the channel info for a selected index.
+
+        Parameters
+        ----------
+        index : int
+            The channel index for which to set new data.
+        channel_info : dict
+            A dictionary of the form {field: value} where.  The attribute
+            field at &#39;index&#39; will be set to value.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if channel_info is None:
+            return
+
+        for attribute in [&#39;gain&#39;, &#39;weight&#39;, &#39;flag&#39;]:
+            values = getattr(self, attribute)
+            values[index] = channel_info[attribute]
+            setattr(self, attribute, values)</div>
+
+
+<div class="viewcode-block" id="ChannelGroup.add_dependents">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.html#sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.add_dependents">[docs]</a>
+    def add_dependents(self, values):
+        &quot;&quot;&quot;
+        Add dependent values for given indices.
+
+        Parameters
+        ----------
+        values : numpy.ndarray (float)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.dependents += values</div>
+
+
+<div class="viewcode-block" id="ChannelGroup.remove_dependents">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.html#sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.remove_dependents">[docs]</a>
+    def remove_dependents(self, values):
+        &quot;&quot;&quot;
+        Subtract dependent values for given indices.
+
+        Parameters
+        ----------
+        values : numpy.ndarray (float)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.dependents -= values</div>
+
+
+<div class="viewcode-block" id="ChannelGroup.set_flag_defaults">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.html#sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.set_flag_defaults">[docs]</a>
+    def set_flag_defaults(self):
+        &quot;&quot;&quot;
+        Sets data values based on currently set flags.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        mask = self.is_flagged(self.flagspace.flags.DEAD
+                               | self.flagspace.flags.DISCARD)
+        for attribute in [&#39;coupling&#39;, &#39;gain&#39;, &#39;weight&#39;, &#39;variance&#39;]:
+            values = getattr(self, attribute)
+            values[mask] = 0.0
+            if attribute == &#39;coupling&#39;:
+                values[self.is_flagged(self.flagspace.flags.BLIND)] = 0.0
+            setattr(self, attribute, values)</div>
+
+
+<div class="viewcode-block" id="ChannelGroup.read_pixel_data">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.html#sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.read_pixel_data">[docs]</a>
+    def read_pixel_data(self, filename):
+        &quot;&quot;&quot;
+        Read a pixel data file and apply the results.
+
+        Parameters
+        ----------
+        filename : str
+            File path to the pixel data file.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        raise NotImplementedError(
+            f&quot;Not implemented for {self.__class__} class.&quot;)</div>
+
+
+<div class="viewcode-block" id="ChannelGroup.validate_pixel_data">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.html#sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.validate_pixel_data">[docs]</a>
+    def validate_pixel_data(self):
+        &quot;&quot;&quot;
+        Validates data read from the pixel data file.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        raise NotImplementedError(
+            f&quot;Not implemented for {self.__class__} class.&quot;)</div>
+
+
+<div class="viewcode-block" id="ChannelGroup.validate_weights">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.html#sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.validate_weights">[docs]</a>
+    def validate_weights(self):
+        &quot;&quot;&quot;
+        Validates weight data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        raise NotImplementedError(
+            f&quot;Not implemented for {self.__class__} class.&quot;)</div>
+
+
+<div class="viewcode-block" id="ChannelGroup.read_channel_data_file">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.html#sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.read_channel_data_file">[docs]</a>
+    @abstractmethod
+    def read_channel_data_file(self, filename):  # pragma: no cover
+        &quot;&quot;&quot;
+        Read a channel data file and return the information within.
+
+        Note that this should be defined in the parent ChannelData class, not
+        in one of the ChannelGroup classes.  Since the groups inherit from the
+        data classes, this method is only here to avoid abstract method
+        warnings.
+
+        Parameters
+        ----------
+        filename : str
+            The path to a channel data file.
+
+        Returns
+        -------
+        channel_info : pandas.DataFrame
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="ChannelGroup.create_group">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.html#sofia_redux.scan.channels.channel_group.channel_group.ChannelGroup.create_group">[docs]</a>
+    def create_group(self, indices=None, name=None, keep_flag=None,
+                     discard_flag=None, match_flag=None):
+        &quot;&quot;&quot;
+        Creates and returns a channel group.
+
+        A channel group is a referenced subset of the channel data.  Operations
+        performed on a channel group will be applied to the original channel
+        data.
+
+        Parameters
+        ----------
+        indices : numpy.ndarray (int), optional
+            The indices to reference.  If not supplied, defaults to all
+            channels.
+        name : str, optional
+            The name of the channel group.  If not supplied, defaults to the
+            name of the channel data.
+        discard_flag : int or str or ChannelFlagTypes, optional
+            Flags to discard_flag from the new group.
+        keep_flag : int or str or ChannelFlagTypes, optional
+            Keep channels with these matching flags.
+        match_flag : int or str or ChannelFlagTypes, optional
+            Keep only channels with a flag exactly matching this flag.
+
+        Returns
+        -------
+        ChannelGroup
+            A newly created channel group.
+        &quot;&quot;&quot;
+        return super().create_data_group(
+            indices=indices, name=name, keep_flag=keep_flag,
+            discard_flag=discard_flag, match_flag=match_flag)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

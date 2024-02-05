@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.coordinate_systems.celestial_coordinates &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.coordinate_systems.celestial_coordinates</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import abstractmethod
+from astropy import log, units
+import numpy as np
+
+from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
+    SphericalCoordinates
+from sofia_redux.scan.coordinate_systems.epoch.epoch import J2000
+
+__all__ = [&#39;CelestialCoordinates&#39;]
+
+
+<div class="viewcode-block" id="CelestialCoordinates">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.html#sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates">[docs]</a>
+class CelestialCoordinates(SphericalCoordinates):
+
+    def __init__(self, coordinates=None, unit=&#39;degree&#39;, copy=True):
+        &quot;&quot;&quot;
+        Initialize a CelestialCoordinates object.
+
+        Celestial coordinates are used to represent spherical coordinates
+        on the sky with respect to a given pole.  The functionality implemented
+        here allows for transformations between spherical coordinates with
+        differing poles or zero-longitude definitions.
+
+        Parameters
+        ----------
+        coordinates : list or tuple or array-like or units.Quantity, optional
+            The coordinates used to populate the object during initialization.
+            The first (0) value or index should represent longitudinal
+            coordinates, and the second should represent latitude.
+        unit : units.Unit or str, optional
+            The angular unit for the spherical coordinates.  The default is
+            &#39;degree&#39;.
+        copy : bool, optional
+            Whether to explicitly perform a copy operation on the input
+            coordinates when storing them into these coordinates.  Note that it
+            is extremely unlikely for the original coordinates to be passed in
+            as a reference due to the significant checks performed on them.
+        &quot;&quot;&quot;
+        if isinstance(coordinates, CelestialCoordinates):
+            super().__init__(unit=unit)
+            self.convert(coordinates, self)
+        else:
+            super().__init__(coordinates=coordinates, unit=unit, copy=copy)
+
+<div class="viewcode-block" id="CelestialCoordinates.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.html#sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the celestial coordinates.
+
+        Returns
+        -------
+        CelestialCoordinates
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+    def __getitem__(self, indices):
+        &quot;&quot;&quot;
+        Return a section of the coordinates
+
+        Parameters
+        ----------
+        indices : int or numpy.ndarray or slice
+
+        Returns
+        -------
+        CelestialCoordinates
+        &quot;&quot;&quot;
+        return super().__getitem__(indices)
+
+<div class="viewcode-block" id="CelestialCoordinates.get_equatorial_pole">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.html#sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.get_equatorial_pole">[docs]</a>
+    @abstractmethod
+    def get_equatorial_pole(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the equatorial pole coordinates.
+
+        Returns
+        -------
+        EquatorialCoordinates
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="CelestialCoordinates.get_zero_longitude">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.html#sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.get_zero_longitude">[docs]</a>
+    @abstractmethod
+    def get_zero_longitude(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the zero longitude value.
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="CelestialCoordinates.get_pole">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.html#sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.get_pole">[docs]</a>
+    @classmethod
+    def get_pole(cls, inclination, rising_ra, reference=None):
+        &quot;&quot;&quot;
+        Get the pole from inclination and rising RA angles.
+
+        Parameters
+        ----------
+        inclination : astropy.units.Quantity
+            The inclination angle.
+        rising_ra : astropy.units.Quantity
+            The rising Right Ascension.
+        reference : CelestialCoordinates, optional
+            If supplied sets the coordinates in the reference system and
+            converts it to equatorial coordinates.
+
+        Returns
+        -------
+        pole : EquatorialCoordinates
+        &quot;&quot;&quot;
+        ra = rising_ra - cls.right_angle
+        dec = cls.right_angle - inclination
+        coords = np.stack((ra, dec))
+
+        if reference is None:
+            return cls.get_equatorial_class()(coords)
+        else:
+            reference.set(coords, copy=False)
+            reference.to_equatorial()
+            return reference</div>
+
+
+<div class="viewcode-block" id="CelestialCoordinates.get_zero_longitude_from">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.html#sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.get_zero_longitude_from">[docs]</a>
+    @classmethod
+    def get_zero_longitude_from(cls, from_coordinates, to_coordinates):
+        &quot;&quot;&quot;
+        Return the zero longitude of one coordinates system in another.
+
+        Parameters
+        ----------
+        from_coordinates : EquatorialCoordinates
+            The coordinates from which to determine zero longitude.
+        to_coordinates : CelestialCoordinates
+            The coordinate system in which to return the zero longitude.
+
+        Returns
+        -------
+        zero_longitude : astropy.units.Quantity
+            The zero longitude angle.
+        &quot;&quot;&quot;
+        equatorial_zero = from_coordinates.to_equatorial()
+        to_coordinates.from_equatorial(equatorial_zero)
+        return to_coordinates.native_longitude</div>
+
+
+<div class="viewcode-block" id="CelestialCoordinates.get_equatorial_class">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.html#sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.get_equatorial_class">[docs]</a>
+    @classmethod
+    def get_equatorial_class(cls):
+        &quot;&quot;&quot;
+        Return the equatorial class.
+
+        Returns
+        -------
+        EquatorialCoordinates
+        &quot;&quot;&quot;
+        return cls.get_class(&#39;equatorial&#39;)</div>
+
+
+<div class="viewcode-block" id="CelestialCoordinates.get_equatorial_position_angle">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.html#sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.get_equatorial_position_angle">[docs]</a>
+    def get_equatorial_position_angle(self):
+        &quot;&quot;&quot;
+        Return the equatorial position angle of the celestial coordinates.
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        pole = self.get_equatorial_pole()
+        y = -pole.cos_lat * np.sin(self.x).value
+        x = (pole.sin_lat * self.cos_lat)
+        x -= (pole.cos_lat * self.sin_lat * np.cos(self.x).value)
+        angle = np.arctan2(y, x) * units.Unit(&#39;radian&#39;)
+        return angle</div>
+
+
+<div class="viewcode-block" id="CelestialCoordinates.get_equatorial">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.html#sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.get_equatorial">[docs]</a>
+    def get_equatorial(self):
+        &quot;&quot;&quot;
+        Return an equatorial representation of the celestial coordinates.
+
+        Returns
+        -------
+        EquatorialCoordinates
+        &quot;&quot;&quot;
+        equatorial_class = self.get_equatorial_class()
+        equatorial = equatorial_class()
+        self.to_equatorial(equatorial)
+        return equatorial</div>
+
+
+<div class="viewcode-block" id="CelestialCoordinates.to_equatorial">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.html#sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.to_equatorial">[docs]</a>
+    def to_equatorial(self, equatorial=None):
+        &quot;&quot;&quot;
+        Convert these celestial coordinates to equatorial coordinates.
+
+        Parameters
+        ----------
+        equatorial : EquatorialCoordinates, optional
+            The equatorial coordinates that will hold these coordinates.  If
+
+        Returns
+        -------
+        equatorial : EquatorialCoordinates
+        &quot;&quot;&quot;
+        if equatorial is None:
+            equatorial = self.get_instance(&#39;equatorial&#39;)
+
+        if equatorial.epoch is None:
+            equatorial.epoch = J2000
+        pole = self.get_equatorial_pole()
+        phi0 = self.get_zero_longitude()
+        self.inverse_transform(pole, phi0, from_coordinates=self,
+                               to_coordinates=equatorial)
+
+        if equatorial.epoch != pole.epoch:
+            epoch = equatorial.epoch
+            equatorial.epoch = pole.epoch
+            try:
+                equatorial.precess(epoch)
+            except Exception as err:  # pragma: no cover
+                log.warning(f&quot;Could not precess: {err}&quot;)
+
+        return equatorial</div>
+
+
+<div class="viewcode-block" id="CelestialCoordinates.from_equatorial">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.html#sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.from_equatorial">[docs]</a>
+    def from_equatorial(self, equatorial):
+        &quot;&quot;&quot;
+        Set the celestial coordinates from those given.
+
+        Parameters
+        ----------
+        equatorial : EquatorialCoordinates
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pole = self.get_equatorial_pole()
+        if equatorial.epoch != pole.epoch:
+            equatorial = equatorial.copy()
+            try:
+                equatorial.precess(pole.epoch)
+            except Exception as err:  # pragma: no cover
+                log.warning(f&quot;Could not precess: {err}&quot;)
+
+        phi0 = self.get_zero_longitude()
+        self.transform(pole, phi0, from_coordinates=equatorial,
+                       to_coordinates=self)</div>
+
+
+<div class="viewcode-block" id="CelestialCoordinates.convert_from">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.html#sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.convert_from">[docs]</a>
+    def convert_from(self, coordinates):
+        &quot;&quot;&quot;
+        Convert coordinates from another (or same) system to these coordinates.
+
+        Parameters
+        ----------
+        coordinates : CelestialCoordinates or Coordinate2D
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not isinstance(coordinates, CelestialCoordinates):
+            super().convert_from(coordinates)
+        else:
+            self.convert_from_celestial(coordinates)</div>
+
+
+<div class="viewcode-block" id="CelestialCoordinates.convert_to">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.html#sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.convert_to">[docs]</a>
+    def convert_to(self, coordinates):
+        &quot;&quot;&quot;
+        Convert coordinates to another system.
+
+        Parameters
+        ----------
+        coordinates : CelestialCoordinates or Coordinate2D
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not isinstance(coordinates, CelestialCoordinates):
+            super().convert_to(coordinates)
+        else:
+            self.convert_to_celestial(coordinates)</div>
+
+
+<div class="viewcode-block" id="CelestialCoordinates.convert_from_celestial">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.html#sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.convert_from_celestial">[docs]</a>
+    def convert_from_celestial(self, celestial):
+        &quot;&quot;&quot;
+        Convert coordinates from another celestial frame onto this one.
+
+        Parameters
+        ----------
+        celestial : CelestialCoordinates
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.convert(celestial, self)</div>
+
+
+<div class="viewcode-block" id="CelestialCoordinates.convert_to_celestial">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.html#sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.convert_to_celestial">[docs]</a>
+    def convert_to_celestial(self, celestial):
+        &quot;&quot;&quot;
+        Convert these coordinates to another celestial system.
+
+        Parameters
+        ----------
+        celestial : CelestialCoordinates
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.convert(self, celestial)</div>
+
+
+<div class="viewcode-block" id="CelestialCoordinates.convert">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.html#sofia_redux.scan.coordinate_systems.celestial_coordinates.CelestialCoordinates.convert">[docs]</a>
+    def convert(self, from_coordinates, to_coordinates):
+        &quot;&quot;&quot;
+        Convert one type of coordinates to another.
+
+        The `to_coordinates` will be updated in-place.
+
+        Parameters
+        ----------
+        from_coordinates : CelestialCoordinates
+        to_coordinates : CelestialCoordinates
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        to_coordinates.copy_coordinates(from_coordinates)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

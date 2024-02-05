@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.source_models.pixel_map &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.source_models.pixel_map</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log, units
+import os
+import numpy as np
+
+from sofia_redux.scan.source_models.astro_model_2d import AstroModel2D
+from sofia_redux.scan.source_models.astro_intensity_map import \
+    AstroIntensityMap
+from sofia_redux.scan.coordinate_systems.index_2d import Index2D
+from sofia_redux.scan.coordinate_systems.projector.astro_projector import \
+    AstroProjector
+from sofia_redux.scan.source_models import source_numba_functions as snf
+from sofia_redux.scan.utilities import numba_functions
+from sofia_redux.scan.utilities.utils import round_values
+from sofia_redux.toolkit.utilities import multiprocessing
+
+__all__ = [&#39;PixelMap&#39;]
+
+
+<div class="viewcode-block" id="PixelMap">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap">[docs]</a>
+class PixelMap(AstroModel2D):
+
+    def __init__(self, info, reduction=None):
+        &quot;&quot;&quot;
+        Initialize a PixelMap source model.
+
+        The pixel map source model consists of a collection of
+        :class:`AstroIntensityMap` models, each containing a astronomical map
+        generated from a single pixel of the observing instrument.  They are
+        primarily designed to measure pixel offsets from a known source.
+
+        Parameters
+        ----------
+        info : sofia_redux.scan.info.info.Info
+            The Info object which should belong to this source model.
+        reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
+            The reduction for which this source model should be applied.
+        &quot;&quot;&quot;
+        super().__init__(info, reduction=reduction)
+        self.pixel_maps = {}
+        self.template = AstroIntensityMap(info, reduction=reduction)
+
+<div class="viewcode-block" id="PixelMap.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.copy">[docs]</a>
+    def copy(self, with_contents=True):
+        &quot;&quot;&quot;
+        Return a copy of the pixel map.
+
+        Parameters
+        ----------
+        with_contents : bool, optional
+            If `True`, include all pixel maps in the copy.
+
+        Returns
+        -------
+        PixelMap
+        &quot;&quot;&quot;
+        new = super().copy()
+        pixel_maps = {}
+        if with_contents:
+            for pixel, pixel_map in self.pixel_maps.items():
+                if isinstance(pixel_map, AstroIntensityMap):
+                    pixel_maps[pixel] = pixel_map.copy()
+        new.pixel_maps = pixel_maps
+        return new</div>
+
+
+<div class="viewcode-block" id="PixelMap.clear_all_memory">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.clear_all_memory">[docs]</a>
+    def clear_all_memory(self):
+        &quot;&quot;&quot;
+        Clear all memory references prior to deletion.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().clear_all_memory()
+        self.pixel_maps = {}
+        self.template = None</div>
+
+
+    @property
+    def referenced_attributes(self):
+        &quot;&quot;&quot;
+        Return attributes that are referenced with a standard copy operation.
+
+        Returns
+        -------
+        set (str)
+        &quot;&quot;&quot;
+        attributes = super().referenced_attributes
+        attributes.add(&#39;pixel_maps&#39;)
+        return attributes
+
+    @property
+    def shape(self):
+        &quot;&quot;&quot;
+        Return the shape of the map.
+
+        Note that this is in numpy (y, x) order.
+
+        Returns
+        -------
+        tuple of int
+        &quot;&quot;&quot;
+        if self.template is None:
+            return ()
+        return self.template.shape
+
+    @shape.setter
+    def shape(self, new_shape):
+        &quot;&quot;&quot;
+        Set the shape of the map.
+
+        Parameters
+        ----------
+        new_shape : tuple of int
+            The shape should be supplied in numpy format (y, x).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.template.shape = new_shape
+
+<div class="viewcode-block" id="PixelMap.is_adding_to_master">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.is_adding_to_master">[docs]</a>
+    def is_adding_to_master(self):
+        &quot;&quot;&quot;
+        Return whether this map is adding to a master map during accumulation.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return True</div>
+
+
+<div class="viewcode-block" id="PixelMap.clear_process_brief">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.clear_process_brief">[docs]</a>
+    def clear_process_brief(self):
+        &quot;&quot;&quot;
+        Remove all process brief information.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().clear_process_brief()
+        for pixel_map in self.pixel_maps.values():
+            if isinstance(pixel_map, AstroIntensityMap):
+                pixel_map.clear_process_brief()</div>
+
+
+<div class="viewcode-block" id="PixelMap.create_from">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.create_from">[docs]</a>
+    def create_from(self, scans, assign_scans=True):
+        &quot;&quot;&quot;
+        Initialize model from scans.
+
+        Sets the model scans to those provided, and the source model for each
+        scan as this.  All integration gains are normalized to the first scan.
+        If the first scan is non-sidereal, the system will be forced to an
+        equatorial frame.
+
+        Parameters
+        ----------
+        scans : list (Scan)
+            A list of scans from which to create the model.
+        assign_scans : bool, optional
+            If `True`, assign the scans to this source model.  Otherwise,
+            there will be no hard link between the scans and source model.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        log.info(&quot;Initializing pixel maps.&quot;)
+
+        # Clear all channel position data and set all channels as independent.
+        for scan in scans:
+            for integration in scan.integrations:
+                skip = integration.channels.flagspace.sourceless_flags()
+                pixels = integration.channels.get_mapping_pixels(
+                    discard_flag=skip)
+                # This is a data group, so we need to overwrite references
+                position = pixels.position
+                position.zero()
+                pixels.position = position
+                independent = pixels.independent
+                independent[:] = True
+                pixels.independent = independent
+
+        self.template = AstroIntensityMap(self.info, reduction=self.reduction)
+        self.template.create_from(scans, assign_scans=False)
+        self.pixel_maps = {}
+        super().create_from(scans, assign_scans=assign_scans)</div>
+
+
+<div class="viewcode-block" id="PixelMap.reset_processing">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.reset_processing">[docs]</a>
+    def reset_processing(self):
+        &quot;&quot;&quot;
+        Reset the source processing.
+
+        Reset the source processing for the full source model and all
+        individual pixel maps.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().reset_processing()
+        for pixel_map in self.pixel_maps.values():
+            if isinstance(pixel_map, AstroIntensityMap):
+                pixel_map.reset_processing()</div>
+
+
+<div class="viewcode-block" id="PixelMap.clear_content">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.clear_content">[docs]</a>
+    def clear_content(self):
+        &quot;&quot;&quot;
+        Clear the data in all pixel maps.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for pixel_map in self.pixel_maps.values():
+            if isinstance(pixel_map, AstroIntensityMap):
+                pixel_map.clear_content()</div>
+
+
+<div class="viewcode-block" id="PixelMap.create_lookup">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.create_lookup">[docs]</a>
+    def create_lookup(self, integration):
+        &quot;&quot;&quot;
+        Create the source indices for integration frames.
+
+        The source indices contain 1-D lookup values for the pixel indices
+        of a sample on the source model.  The map indices are stored in the
+        integration frames as the 1-D `source_index` attribute, and the
+        2-D `map_index` attribute.
+
+        Unlike other types of source maps, the PixelMap does not take pixel
+        positions into account, so we are solely dealing with timestream
+        positions relative to a (0, 0) pixel position for all channels.  This
+        means we only need to calculate positions for a single channel with
+        position (0, 0)
+
+        Parameters
+        ----------
+        integration : Integration
+            The integration for which to create source indices.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        log.debug(&quot;pixel map: lookup for single pixel at (0, 0)&quot;)
+        self.index_shift_x = numba_functions.log2ceil(self.size_y)
+        self.index_mask_y = (1 &lt;&lt; self.index_shift_x) - 1
+
+        frames = integration.frames
+
+        if frames.source_index is None:
+            frames.source_index = np.full((frames.size, 1), -1)
+        else:
+            frames.source_index.fill(-1)
+
+        if frames.map_index is None:
+            frames.map_index = Index2D(
+                np.full((2, frames.size, 1), -1))
+        else:
+            frames.map_index.coordinates.fill(-1)
+
+        projector = AstroProjector(self.projection)
+        central_position = integration.channels.data.position[0:1].copy()
+        central_position.zero()
+        offsets = frames.project(central_position, projector)
+
+        map_indices = self.grid.offset_to_index(offsets)
+        map_indices.coordinates = round_values(map_indices.coordinates)
+        frames.map_index.coordinates = map_indices.coordinates
+        frames.source_index = self.pixel_index_to_source_index(
+            map_indices.coordinates)
+
+        bad_samples = snf.validate_pixel_indices(
+            indices=map_indices.coordinates,
+            x_size=self.size_x,
+            y_size=self.size_y,
+            valid_frame=frames.valid)
+
+        if bad_samples &gt; 0:
+            log.warning(f&quot;{bad_samples} frames have bad map indices&quot;)</div>
+
+
+<div class="viewcode-block" id="PixelMap.add_model_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.add_model_data">[docs]</a>
+    def add_model_data(self, other, weight=1.0):
+        &quot;&quot;&quot;
+        Add an increment source model data onto the current model.
+
+        Parameters
+        ----------
+        other : PixelMap
+            The source model increment.
+        weight : float, optional
+            The weight of the source model increment.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not isinstance(other, PixelMap):
+            raise ValueError(f&quot;Cannot add {other} to {self}.&quot;)
+
+        for pixel, pixel_map in other.pixel_maps.items():
+            if not isinstance(pixel_map, AstroIntensityMap):
+                continue
+            this_map = self.pixel_maps.get(pixel)
+            if this_map is None:
+                self.pixel_maps[pixel] = pixel_map
+            elif not isinstance(this_map, AstroIntensityMap):
+                continue
+            else:
+                this_map.add_model_data(pixel_map, weight=weight)</div>
+
+
+<div class="viewcode-block" id="PixelMap.add_points">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.add_points">[docs]</a>
+    def add_points(self, frames, pixels, frame_gains, source_gains):
+        &quot;&quot;&quot;
+        Add points to the pixel maps.
+
+        This may be an extremely time consuming and memory intensive endeavour.
+        A map is created and stored for each mapping pixel in the detector
+        channels.
+
+        Parameters
+        ----------
+        frames : Frames
+            The frames to add to the source model.
+        pixels : ChannelGroup
+            The channels (pixels) to add to the source model.
+        frame_gains : numpy.ndarray (float)
+            The gain values for all frames of shape (n_frames,).
+        source_gains : numpy.ndarray (float)
+            The channel source gains for all channels of shape (all_channels,).
+
+        Returns
+        -------
+        mapping_frames : int
+            The number of valid mapping frames added for the model.
+        &quot;&quot;&quot;
+        dt = pixels.info.instrument.sampling_interval
+        if isinstance(dt, units.Quantity):
+            dt = dt.to(&#39;second&#39;).value
+        else:
+            dt = float(dt)
+
+        n, frame_data, sample_gains, sample_weights, sample_indices = (
+            self.get_sample_points(frames, pixels, frame_gains, source_gains))
+
+        n_pixels = pixels.size
+
+        msg = f&quot;Updating {n_pixels} pixel maps&quot;
+        jobs = self.reduction.available_reduction_jobs
+        if jobs &gt; 1:  # pragma: no cover
+            msg += f&quot; in parallel using {jobs} threads&quot;
+        msg += &#39; (This may take a while).&#39;
+        log.debug(msg)
+
+        args = (self.template, self.pixel_maps, pixels.fixed_index, frame_data,
+                sample_gains, sample_weights, dt, sample_indices)
+        kwargs = None
+
+        pixel_maps = multiprocessing.multitask(
+            self.parallel_safe_add_points, range(n_pixels), args, kwargs,
+            jobs=jobs, logger=log, force_threading=True)
+
+        for (fixed_index, pixel_map) in pixel_maps:
+            self.pixel_maps[fixed_index] = pixel_map
+
+        return n</div>
+
+
+<div class="viewcode-block" id="PixelMap.parallel_safe_add_points">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.parallel_safe_add_points">[docs]</a>
+    @classmethod
+    def parallel_safe_add_points(cls, args, pixel_number):
+        &quot;&quot;&quot;
+        Add points for a single pixel map.
+
+        This function is safe for :func:`multitask`.
+
+        Parameters
+        ----------
+        args : 7-tuple
+            A tuple of arguments where:
+                args[0] - template (AstroIntensityMap)
+                args[1] - pixel_maps (dict)
+                args[2] - fixed_indices (array) (n_pixels,)
+                args[2] - frame_data (array) (n_frames, n_pixels)
+                args[3] - sample_gains (array) (n_frames, n_pixels)
+                args[4] - sample_weights (array) (n_frames, n_pixels)
+                args[5] - dt (float)
+                args[6] - sample_indices (array) (2, n_frames, n_pixels)
+        pixel_number : int
+            The pixel index for the pixel map.
+
+        Returns
+        -------
+        pixel_maps : 2-tuple
+            A tuple of the form (fixed_index, pixel_map).
+        &quot;&quot;&quot;
+        (template, pixel_maps, fixed_indices, frame_data, sample_gains,
+         sample_weights, dt, sample_indices) = args
+
+        i = pixel_number
+        fixed_index = fixed_indices[i]
+
+        pixel_map = pixel_maps.get(fixed_index)
+        if pixel_map is None:
+            pixel_map = template.copy(with_contents=False)
+            pixel_map.id = f&#39;{fixed_index}&#39;
+            pixel_map.set_data_shape(template.shape)
+
+        pixel_map.map.accumulate_at(
+            image=frame_data[:, i:i + 1],
+            gains=sample_gains[:, i:i + 1],
+            weights=sample_weights[:, i:i + 1],
+            times=dt,
+            indices=sample_indices[..., i:i + 1])
+
+        return fixed_index, pixel_map</div>
+
+
+<div class="viewcode-block" id="PixelMap.calculate_coupling">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.calculate_coupling">[docs]</a>
+    def calculate_coupling(self, integration, pixels, source_gains,
+                           sync_gains):
+        &quot;&quot;&quot;Not implemented for pixel maps&quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="PixelMap.count_points">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.count_points">[docs]</a>
+    def count_points(self):
+        &quot;&quot;&quot;
+        Return the number of points in the model.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        points = 0
+        for pixel_map in self.pixel_maps.values():
+            if isinstance(pixel_map, AstroIntensityMap):
+                points += pixel_map.count_points()
+        return points</div>
+
+
+<div class="viewcode-block" id="PixelMap.covariant_points">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.covariant_points">[docs]</a>
+    def covariant_points(self):
+        &quot;&quot;&quot;
+        Return the number of points in the smoothing beam of all maps.
+
+        Returns
+        -------
+        float
+        &quot;&quot;&quot;
+        for pixel_map in self.pixel_maps.values():
+            if isinstance(pixel_map, AstroIntensityMap):
+                return pixel_map.covariant_points()
+        return 1.0</div>
+
+
+<div class="viewcode-block" id="PixelMap.get_pixel_footprint">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.get_pixel_footprint">[docs]</a>
+    def get_pixel_footprint(self):
+        &quot;&quot;&quot;
+        Returns the Number of bytes per pixel over all pixel maps.
+
+        This is probably no longer relevant and just copies CRUSH.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        return len(self.pixel_maps) * self.template.get_pixel_footprint()</div>
+
+
+<div class="viewcode-block" id="PixelMap.base_footprint">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.base_footprint">[docs]</a>
+    def base_footprint(self, pixels):
+        &quot;&quot;&quot;
+        Returns the base footprint over all pixel maps.
+
+        Parameters
+        ----------
+        pixels : int
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        return len(self.pixel_maps) * self.template.base_footprint(pixels)</div>
+
+
+<div class="viewcode-block" id="PixelMap.set_data_shape">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.set_data_shape">[docs]</a>
+    def set_data_shape(self, shape):
+        &quot;&quot;&quot;
+        Set the shape of the map.
+
+        Parameters
+        ----------
+        shape : tuple (int)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.template.set_data_shape(shape)
+        for pixel_map in self.pixel_maps.values():
+            if isinstance(pixel_map, AstroIntensityMap):
+                pixel_map.set_data_shape(shape)</div>
+
+
+<div class="viewcode-block" id="PixelMap.sync_source_gains">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.sync_source_gains">[docs]</a>
+    def sync_source_gains(self, frames, pixels, frame_gains, source_gains,
+                          sync_gains):
+        &quot;&quot;&quot;
+        Remove the map source from frame data for all pixel maps.
+
+        In addition to source removal, samples are also flagged if the map
+        is masked at that location.
+
+        For a given sample at frame i and channel j, frame data d_{i,j} will be
+        decremented by dg where:
+
+        dg = fg * ( (gain(source) * map[index]) - (gain(sync) * base[index]) )
+
+        Here, fg is the frame gain and index is the index on the map of sample
+        (i,j).
+
+        Any masked map value will result in matching samples being flagged.
+
+        Parameters
+        ----------
+        frames : Frames
+            The frames for which to remove the source gains.
+        pixels : Channels or ChannelGroup
+            The channels for which to remove the source gains.
+        frame_gains : numpy.ndarray (float)
+            An array of frame gains of shape (n_frames,).
+        source_gains : numpy.ndarray (float)
+            An array of channel source gains for all channels of shape
+            (all_channels,).
+        sync_gains : numpy.ndarray (float)
+            an array of channel sync gains for all channels of shape
+            (all_channels,).  The sync gains should contain the prior source
+            gain.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        n_pixels = pixels.size
+        msg = f&quot;Syncing gains in {n_pixels} pixel maps&quot;
+        jobs = self.reduction.available_reduction_jobs
+        if jobs &gt; 1:  # pragma: no cover
+            msg += f&quot; in parallel using {jobs} threads&quot;  # pragma: no cover
+        msg += &#39; (This may take a while).&#39;
+        log.debug(msg)
+
+        args = (self.pixel_maps, frames, pixels, frame_gains, source_gains,
+                sync_gains)
+        kwargs = None
+
+        frame_data = multiprocessing.multitask(
+            self.parallel_safe_sync_source_gains, range(n_pixels),
+            args, kwargs, jobs=jobs, logger=log, force_threading=True)
+        for channel, data in enumerate(frame_data):
+            frames.data[:, channel] = data</div>
+
+
+<div class="viewcode-block" id="PixelMap.parallel_safe_sync_source_gains">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.parallel_safe_sync_source_gains">[docs]</a>
+    @classmethod
+    def parallel_safe_sync_source_gains(cls, args, pixel_number):
+        &quot;&quot;&quot;
+        Remove the source from all pixel maps.
+
+        This function is safe for :func:`multitask`.
+
+        Parameters
+        ----------
+        args : 6-tuple
+            A tuple of arguments where:
+                args[0] - pixel_maps (dict)
+                args[1] - frames (Frames)
+                args[2] - pixels (ChannelGroup)
+                args[3] - frame_gains (array) (n_frames,)
+                args[4] - source_gains (array) (all_channels,)
+                args[5] - sync_gains (array) (all_channels,)
+        pixel_number : int
+            The pixel index for the pixel map.
+
+        Returns
+        -------
+        channel_frame_data : numpy.ndarray (float)
+            The synced frame data for `pixel_number` of shape (n_frames,).
+        &quot;&quot;&quot;
+        (pixel_maps, frames, pixels, frame_gains,
+         source_gains, sync_gains) = args
+        fixed_index = pixels.fixed_index[pixel_number]
+        pixel_map = pixel_maps[fixed_index]
+        channel_indices = np.full(1, pixel_number)
+        snf.sync_map_samples(
+            frame_data=frames.data,
+            frame_valid=frames.valid,
+            frame_gains=frame_gains,
+            channel_indices=channel_indices,
+            map_values=pixel_map.map.data,
+            map_valid=pixel_map.map.valid,
+            map_masked=pixel_map.is_masked(),
+            map_indices=frames.map_index.coordinates,
+            base_values=pixel_map.base.data,
+            base_valid=pixel_map.base.valid,
+            source_gains=source_gains,
+            sync_gains=sync_gains,
+            sample_flags=frames.sample_flag,
+            sample_blank_flag=frames.flagspace.convert_flag(
+                &#39;SAMPLE_SOURCE_BLANK&#39;).value)
+        return frames.data[:, pixel_number]</div>
+
+
+<div class="viewcode-block" id="PixelMap.set_base">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.set_base">[docs]</a>
+    def set_base(self):
+        &quot;&quot;&quot;
+        Set the base to the map (copy of).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for pixel_map in self.pixel_maps.values():
+            if isinstance(pixel_map, AstroIntensityMap):
+                pixel_map.set_base()</div>
+
+
+<div class="viewcode-block" id="PixelMap.process_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.process_scan">[docs]</a>
+    def process_scan(self, scan):
+        &quot;&quot;&quot;
+        Process a scan.
+
+        Parameters
+        ----------
+        scan : Scan
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for pixel_map in self.pixel_maps.values():
+            if isinstance(pixel_map, AstroIntensityMap):
+                pixel_map.process_scan(scan)</div>
+
+
+<div class="viewcode-block" id="PixelMap.write">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.write">[docs]</a>
+    def write(self, path):
+        &quot;&quot;&quot;
+        Write the source to file.
+
+        Parameters
+        ----------
+        path : str
+            The directory in which to write the output products.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        fits_properties = self.template.map.fits_properties
+        if self.has_option(&#39;pixelmap.writemaps&#39;):
+            try:
+                pixels = self.configuration.get_int_list(&#39;pixelmap.writemaps&#39;)
+            except ValueError:  # pragma: no cover
+                pixels = None
+            if pixels is None:
+                if self.configuration.get_bool(&#39;pixelmap.writemaps&#39;):
+                    pixels = list(self.pixel_maps.keys())
+            if pixels is not None:
+                for pixel in pixels:
+                    pixel_map = self.pixel_maps.get(pixel)
+                    if isinstance(pixel_map, AstroIntensityMap):
+                        pixel_map.map.fits_properties = fits_properties
+                        pixel_map.write(path)
+        self.calculate_pixel_data(smooth=False)
+        self.write_pixel_data(path=path)</div>
+
+
+<div class="viewcode-block" id="PixelMap.write_fits">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.write_fits">[docs]</a>
+    def write_fits(self, filename):
+        &quot;&quot;&quot;
+        Write the results to a FITS file.
+
+        Not implemented for the single PixelMap.
+
+        Parameters
+        ----------
+        filename : str
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        return</div>
+
+
+<div class="viewcode-block" id="PixelMap.process">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.process">[docs]</a>
+    def process(self):
+        &quot;&quot;&quot;
+        Process the source model.
+
+        Processes each pixel map separately.  If &#39;pixelmap.process&#39; is True
+        in the configuration, each pixel map will be fully processed.
+        Otherwise, the results are only accumulated.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        process = self.configuration.get_bool(&#39;pixelmap.process&#39;)
+        for pixel_map in self.pixel_maps.values():
+            if isinstance(pixel_map, AstroIntensityMap):
+                if process:
+                    pixel_map.process()
+                else:
+                    pixel_map.map.end_accumulation()
+                    self.next_generation()</div>
+
+
+<div class="viewcode-block" id="PixelMap.calculate_pixel_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.calculate_pixel_data">[docs]</a>
+    def calculate_pixel_data(self, smooth=False):
+        &quot;&quot;&quot;
+        Calculate pixel position offsets and couplings.
+
+        Pixel positions and couplings will be stored in the channel data of the
+        first scan in the source model.  Fits to the peak are calculated using
+        :func:`AstroIntensityMap.get_peak_source` to determine the x and y
+        position of the peak as well as the amplitude.  The couplings are
+        determined as::
+
+            coupling = peak.amplitude / median(peak.amplitude)
+
+        taking the median over all available instrument pixels.
+
+        Parameters
+        ----------
+        smooth : bool, optional
+            If `True`, smooth the map to the instrument peak resolution before
+            fitting.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        mapping_pixels = self.get_first_scan().channels.get_mapping_pixels(
+            keep_flag=0)
+
+        n_pixels = len(self.pixel_maps)
+        msg = f&quot;Fitting {n_pixels} pixel positions to source map&quot;
+        jobs = self.reduction.available_reduction_jobs
+        if jobs &gt; 1:  # pragma: no cover
+            msg += f&quot; in parallel using {jobs} threads&quot;
+        msg += &#39;.&#39;
+        log.debug(msg)
+
+        point_size = self.info.instrument.get_point_size()
+        degree = self.configuration.get_int(&#39;pointing.degree&#39;, default=3)
+        reduce_degrees = self.configuration.get_bool(&#39;pointing.reduce_degrees&#39;)
+        args = self.pixel_maps, smooth, point_size, degree, reduce_degrees
+        kwargs = None
+
+        peaks = multiprocessing.multitask(
+            self.parallel_safe_calculate_pixel_data,
+            mapping_pixels.fixed_index, args, kwargs,
+            jobs=jobs, logger=log, force_threading=True)
+
+        peak_values = {}
+        pixel_positions = mapping_pixels.position
+
+        for pixel_index, fixed_index in enumerate(mapping_pixels.fixed_index):
+            peak = peaks[pixel_index]
+            if peak is None:
+                continue
+            position = self.projection.project(peak.coordinates)
+            position.invert()
+            pixel_positions[pixel_index] = position
+            peak_values[pixel_index] = peak.peak
+
+        if len(peak_values) == 0:
+            return
+
+        mapping_pixels.position = pixel_positions
+        mean_peak = np.median(list(peak_values.values()))
+
+        couplings = mapping_pixels.coupling
+        for pixel_index, peak in peak_values.items():
+            couplings[pixel_index] *= peak / mean_peak
+        mapping_pixels.coupling = couplings</div>
+
+
+<div class="viewcode-block" id="PixelMap.parallel_safe_calculate_pixel_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.parallel_safe_calculate_pixel_data">[docs]</a>
+    @classmethod
+    def parallel_safe_calculate_pixel_data(cls, args, pixel_number):
+        &quot;&quot;&quot;
+        Fit a peak to a single pixel.
+
+        This function is safe for :func:`multitask`.  The peak for any single
+        pixel is determined using :func:`AstroIntensityMap.get_peak_source`.
+
+        Parameters
+        ----------
+        args : 7-tuple
+            A tuple of arguments where:
+                args[0] - pixel_maps (dict)
+                args[1] - smooth (bool)
+                args[2] - point_size (units.Quantity)
+                args[3] - degree (int)
+                args[4] - reduce_degrees (bool)
+        pixel_number : int
+            The pixel fixed index for the pixel map.
+
+        Returns
+        -------
+        gaussian_model : EllipticalSource or None
+        &quot;&quot;&quot;
+        pixel_maps, smooth, point_size, degree, reduce_degrees = args
+
+        beam_map = pixel_maps.get(pixel_number)
+        if beam_map is None or not beam_map.is_valid():
+            return None
+        obs_map = beam_map.map
+        if smooth:
+            obs_map.smooth_to(point_size)
+        source = beam_map.get_peak_source(
+            degree=degree, reduce_degrees=reduce_degrees)
+        return source</div>
+
+
+<div class="viewcode-block" id="PixelMap.write_pixel_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.write_pixel_data">[docs]</a>
+    def write_pixel_data(self, path=None):
+        &quot;&quot;&quot;
+        Write the pixel data to file.
+
+        Parameters
+        ----------
+        path : str, optional
+            The directory in which to write the pixel data.  The default is
+            the reduction work path.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if path is None:
+            path = self.reduction.work_path
+        channels = self.get_first_scan().channels
+        source_gain = channels.get_source_gains(filter_corrected=False)
+        filename = os.path.join(path, f&#39;{self.get_default_core_name()}.rcp&#39;)
+        channels.data.coupling = source_gain / channels.data.gain
+
+        hdr = self.get_first_scan().get_first_integration().get_ascii_header()
+        file_contents = channels.print_pixel_rcp(header=hdr)
+
+        with open(filename, &#39;w&#39;) as f:
+            f.write(file_contents)
+        log.info(f&quot;Written RCP contents to {filename}.&quot;)</div>
+
+
+<div class="viewcode-block" id="PixelMap.set_parallel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.set_parallel">[docs]</a>
+    def set_parallel(self, threads):
+        &quot;&quot;&quot;
+        Set the number of parallel operations for the pixel map.
+
+        Not applicable for the SkyDip model.
+
+        Parameters
+        ----------
+        threads : int
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for pixel_map in self.pixel_maps.values():
+            if pixel_map is not None:
+                pixel_map.set_parallel(threads)</div>
+
+
+<div class="viewcode-block" id="PixelMap.no_parallel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.no_parallel">[docs]</a>
+    def no_parallel(self):
+        &quot;&quot;&quot;
+        Disable parallel processing for each pixel map.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for pixel_map in self.pixel_maps.values():
+            if pixel_map is not None:
+                pixel_map.no_parallel()</div>
+
+
+<div class="viewcode-block" id="PixelMap.get_parallel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.get_parallel">[docs]</a>
+    def get_parallel(self):
+        &quot;&quot;&quot;
+        Return the number of parallel threads for the pixel maps.
+
+        Returns
+        -------
+        threads : int
+        &quot;&quot;&quot;
+        for pixel_map in self.pixel_maps.values():
+            if pixel_map is not None:
+                return pixel_map.get_parallel()
+        return 1</div>
+
+
+<div class="viewcode-block" id="PixelMap.merge_accumulate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.merge_accumulate">[docs]</a>
+    def merge_accumulate(self, other):
+        &quot;&quot;&quot;
+        Merge another pixel map with this one.
+
+        Parameters
+        ----------
+        other : PixelMap
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not isinstance(other, PixelMap):
+            raise ValueError(f&quot;Cannot add {other} to {self}.&quot;)
+
+        args = self.pixel_maps, other.pixel_maps
+        kwargs = None
+        jobs = self.reduction.available_reduction_jobs
+
+        fixed_indices = list(self.pixel_maps.keys())
+
+        updated = multiprocessing.multitask(
+            self.parallel_safe_merge_accumulate,
+            fixed_indices, args, kwargs,
+            jobs=jobs, logger=log, force_threading=True)
+
+        for fixed_index, pixel_map in updated:
+            self.pixel_maps[fixed_index] = pixel_map</div>
+
+
+<div class="viewcode-block" id="PixelMap.parallel_safe_merge_accumulate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.parallel_safe_merge_accumulate">[docs]</a>
+    @classmethod
+    def parallel_safe_merge_accumulate(cls, args, pixel_index):
+        &quot;&quot;&quot;
+        Merge a single pixel map onto another.
+
+        This function is safe for :func:`multitask`.
+
+        Parameters
+        ----------
+        args : 2-tuple
+            A tuple of arguments where:
+                args[0] - pixel_maps (dict)
+                args[1] - other_maps (dict)
+        pixel_index : int
+            The pixel fixed index for the pixel map to merge
+
+        Returns
+        -------
+        fixed_index, pixel_map : int, AstroIntensityMap
+            The fixed pixel index and merged pixel map.
+        &quot;&quot;&quot;
+        pixel_maps, other_maps = args
+        pixel_map = pixel_maps.get(pixel_index)
+        other_map = other_maps.get(pixel_index)
+
+        if not isinstance(pixel_map, AstroIntensityMap) or not isinstance(
+                other_map, AstroIntensityMap):
+            return pixel_index, pixel_map
+        pixel_map.merge_accumulate(other_map)
+        return pixel_index, pixel_map</div>
+
+
+<div class="viewcode-block" id="PixelMap.get_source_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.get_source_name">[docs]</a>
+    def get_source_name(self):
+        &quot;&quot;&quot;
+        Return the source name for the pixel map.
+
+        Returns
+        -------
+        name : str
+        &quot;&quot;&quot;
+        return self.template.get_source_name()</div>
+
+
+<div class="viewcode-block" id="PixelMap.get_unit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.get_unit">[docs]</a>
+    def get_unit(self):
+        &quot;&quot;&quot;
+        Return the map data unit.
+
+        Returns
+        -------
+        units.Quantity or units.Unit
+            If a Quantity is returned, the value represents a scaling factor.
+        &quot;&quot;&quot;
+        return self.template.get_unit()</div>
+
+
+<div class="viewcode-block" id="PixelMap.is_empty">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.is_empty">[docs]</a>
+    def is_empty(self):
+        &quot;&quot;&quot;
+        Return whether this pixel map has no data.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        if len(self.pixel_maps) == 0:
+            return True
+        for pixel_map in self.pixel_maps.values():
+            if isinstance(pixel_map, AstroIntensityMap):
+                return False
+        else:
+            return True</div>
+
+
+<div class="viewcode-block" id="PixelMap.process_final">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.process_final">[docs]</a>
+    def process_final(self):
+        &quot;&quot;&quot;
+        Perform the final processing steps for each pixel map.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        updated = multiprocessing.multitask(
+            self.parallel_safe_process_final, list(self.pixel_maps.keys()),
+            (self.pixel_maps,), None,
+            jobs=self.reduction.available_reduction_jobs,
+            logger=log,
+            force_threading=True)
+
+        for fixed_index, pixel_map in updated:
+            self.pixel_maps[fixed_index] = pixel_map</div>
+
+
+<div class="viewcode-block" id="PixelMap.parallel_safe_process_final">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.parallel_safe_process_final">[docs]</a>
+    @classmethod
+    def parallel_safe_process_final(cls, args, pixel_index):
+        &quot;&quot;&quot;
+        Perform the final processing steps for a single pixel map.
+
+        Parameters
+        ----------
+        args : 1-tuple
+            A tuple of arguments where:
+                args[0] - pixel_maps (dict)
+        pixel_index : int
+            The pixel fixed index for the pixel map to merge
+
+        Returns
+        -------
+        pixel_index, pixel_map : int, AstroIntensityMap
+            The pixel index and updated pixel map.
+        &quot;&quot;&quot;
+        pixel_maps = args[0]
+        pixel_map = pixel_maps.get(pixel_index)
+        if not isinstance(pixel_map, AstroIntensityMap):
+            return pixel_index, pixel_map
+        pixel_map.process_final()
+        return pixel_index, pixel_map</div>
+
+
+<div class="viewcode-block" id="PixelMap.get_map_2d">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.pixel_map.PixelMap.html#sofia_redux.scan.source_models.pixel_map.PixelMap.get_map_2d">[docs]</a>
+    def get_map_2d(self):
+        &quot;&quot;&quot;
+        Return the 2D map.
+
+        This is not valid for a pixel map.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        return None</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

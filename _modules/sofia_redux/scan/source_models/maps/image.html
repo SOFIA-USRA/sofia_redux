@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.source_models.maps.image &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.source_models.maps.image</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units
+import numpy as np
+
+from sofia_redux.scan.source_models.maps.fits_data import FitsData
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.source_models.beams.asymmetry_2d import Asymmetry2D
+
+__all__ = [&#39;Image&#39;]
+
+
+<div class="viewcode-block" id="Image">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image">[docs]</a>
+class Image(FitsData):
+
+    def __init__(self, data=None, blanking_value=None, dtype=float,
+                 shape=None, unit=None):
+        &quot;&quot;&quot;
+        Creates an Image instance.
+
+        This class is an extension of the :class:`FitsData` class and is used
+        to provide additional handling for FITS image HDUs.
+
+        Parameters
+        ----------
+        data : numpy.ndarray, optional
+            Data to initialize the flagged array with.  If supplied, sets the
+            shape of the array.  Note that the data type will be set to that
+            defined by the `dtype` parameter.
+        blanking_value : int or float, optional
+            The blanking value defines invalid values in the data array.  This
+            is the equivalent of defining a NaN value.
+        dtype : type, optional
+            The data type of the data array.
+        shape : tuple (int), optional
+            The shape of the data array.  This will only be relevant if
+            `data` is not defined.
+        unit : str or units.Unit or units.Quantity, optional
+            The data unit.
+        &quot;&quot;&quot;
+        self.id = &#39;&#39;
+        super().__init__(data=data, blanking_value=blanking_value, dtype=dtype,
+                         shape=shape, unit=unit)
+
+<div class="viewcode-block" id="Image.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.copy">[docs]</a>
+    def copy(self, with_contents=True):
+        &quot;&quot;&quot;
+        Return a copy of the image.
+
+        Parameters
+        ----------
+        with_contents : bool, optional
+            If `True`, paste the contents of this image onto the new one.
+
+        Returns
+        -------
+        Image
+        &quot;&quot;&quot;
+        new = super().copy()
+        if with_contents and self.size &gt; 0:
+            new.paste(self, report=True)
+            return new
+        elif not with_contents:
+            new.shape = self.shape
+        return new</div>
+
+
+    def __eq__(self, other):
+        &quot;&quot;&quot;
+        Check whether this image is equal to another.
+
+        Parameters
+        ----------
+        other : Image
+
+        Returns
+        -------
+        equal : bool
+        &quot;&quot;&quot;
+        if other is self:
+            return True
+        if self.__class__ != other.__class__:
+            return False
+        if self.id != other.id:
+            return False
+        return super().__eq__(other)
+
+<div class="viewcode-block" id="Image.new_image">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.new_image">[docs]</a>
+    def new_image(self):
+        &quot;&quot;&quot;
+        Return a new image.
+
+        Returns
+        -------
+        image : Image
+        &quot;&quot;&quot;
+        return self.copy(with_contents=False)</div>
+
+
+<div class="viewcode-block" id="Image.set_id">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.set_id">[docs]</a>
+    def set_id(self, image_id):
+        &quot;&quot;&quot;
+        Set the image ID.
+
+        Parameters
+        ----------
+        image_id : str
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.id = str(image_id)</div>
+
+
+<div class="viewcode-block" id="Image.get_id">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.get_id">[docs]</a>
+    def get_id(self):
+        &quot;&quot;&quot;
+        Return the image ID.
+
+        Returns
+        -------
+        image_id : str
+        &quot;&quot;&quot;
+        return self.id</div>
+
+
+<div class="viewcode-block" id="Image.destroy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.destroy">[docs]</a>
+    def destroy(self):
+        &quot;&quot;&quot;
+        Destroy the image data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().destroy()
+        self.clear_history()</div>
+
+
+<div class="viewcode-block" id="Image.renew">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.renew">[docs]</a>
+    def renew(self):
+        &quot;&quot;&quot;
+        Renew the image by clearing all data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.clear()</div>
+
+
+<div class="viewcode-block" id="Image.set_data">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.set_data">[docs]</a>
+    def set_data(self, data, change_type=False):
+        &quot;&quot;&quot;
+        Set the image data array.
+
+        Parameters
+        ----------
+        data : numpy.ndarray or FlaggedArray
+            A 2-dimensional image array.
+        change_type : bool, optional
+            If `True`, change the data type to that of the data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_data(data, change_type=change_type)
+        self.record_new_data(detail=f&#39;{self.ndim}D {self.dtype}&#39;)</div>
+
+
+<div class="viewcode-block" id="Image.transpose">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.transpose">[docs]</a>
+    def transpose(self):
+        &quot;&quot;&quot;
+        Transpose the data array.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.data is None:
+            return
+        self.data = self.data.T
+        self.add_history(&#39;transposed&#39;)</div>
+
+
+<div class="viewcode-block" id="Image.get_image">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.get_image">[docs]</a>
+    def get_image(self, dtype=None, blanking_value=None):
+        &quot;&quot;&quot;
+        Return an image copy, optionally changing type and blanking value.
+
+        Parameters
+        ----------
+        dtype : type, optional
+            The image data type.
+        blanking_value : int or float, optional
+            The new image blanking value.
+
+        Returns
+        -------
+        image : Image
+        &quot;&quot;&quot;
+        change_type = not ((dtype is None) or (dtype == self.dtype))
+        change_level = not ((blanking_value is None)
+                            or (blanking_value is self.blanking_value))
+
+        image = self.copy(with_contents=True)
+
+        if not change_type and not change_level:
+            return image
+
+        if change_type:
+            image.dtype = dtype
+            image.data = image.data.astype(dtype)
+
+        if change_level:
+            image.blanking_value = blanking_value
+            image.paste(self, report=True)
+
+        return image</div>
+
+
+<div class="viewcode-block" id="Image.get_valid_data">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.get_valid_data">[docs]</a>
+    def get_valid_data(self, default=None):
+        &quot;&quot;&quot;
+        Return a copy of the image data, optionally replacing invalid points.
+
+        Parameters
+        ----------
+        default : int or float, optional
+            The value to replace blanked values with.
+
+        Returns
+        -------
+        numpy.ndarray or None
+        &quot;&quot;&quot;
+        if self.data is None:
+            return None
+        data = self.data.copy()
+        if default is None:
+            return data
+        data[~self.valid] = default
+        return data</div>
+
+
+<div class="viewcode-block" id="Image.crop">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.crop">[docs]</a>
+    def crop(self, ranges):
+        &quot;&quot;&quot;
+        Crop the image to the required dimensions.
+
+        Parameters
+        ----------
+        ranges : numpy.ndarray (int,)
+            The ranges to set crop the data to.  Should be of shape
+            (n_dimensions, 2) where ranges[0, 0] would give the minimum crop
+            limit for the first dimension and ranges[0, 1] would give the
+            maximum crop limit for the first dimension.  In this case, the
+            &#39;first&#39; dimension is in numpy format.  i.e., (y, x) for a
+            2-D array. Also note that the upper crop limit is inclusive
+            so a range of (0, 3) includes indices [0, 1, 2, 3].
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.data is None:
+            return
+        if (not isinstance(ranges, np.ndarray)
+                or ranges.shape != (self.ndim, 2)):
+            raise ValueError(f&quot;The crop range should be of shape &quot;
+                             f&quot;({self.ndim}, 2). Received {ranges}&quot;)
+        self.add_history(f&quot;Cropped {ranges[:, 0]} : {ranges[:, 1]}&quot;)
+        super().crop(ranges)</div>
+
+
+<div class="viewcode-block" id="Image.auto_crop">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.auto_crop">[docs]</a>
+    def auto_crop(self):
+        &quot;&quot;&quot;
+        Auto crop the image data.
+
+        The data is cropped to the extent of valid data point indices.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.data is None:
+            return
+        ranges = self.get_index_range()
+        if (ranges.shape != (self.ndim, 2)
+                or None in ranges):  # pragma: no cover
+            # Cannot reach during normal operation
+            return  # invalid ranges
+        elif (ranges[:, 0] == 0).all() and np.allclose(
+                ranges[:, 1], self.shape[::-1]):  # ::-1 because FITS to numpy
+            return  # no change
+
+        self.crop(ranges)</div>
+
+
+<div class="viewcode-block" id="Image.edit_header">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit a FITS header using information in the current map.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.get_id() not in [&#39;&#39;, None]:
+            header[&#39;EXTNAME&#39;] = self.get_id(), &#39;Content identifier.&#39;
+        super().edit_header(header)</div>
+
+
+<div class="viewcode-block" id="Image.parse_header">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.parse_header">[docs]</a>
+    def parse_header(self, header):
+        &quot;&quot;&quot;
+        Parse a FITS header and apply to the image.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The FITS header to parse.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_id(header.get(&#39;EXTNAME&#39;, &#39;&#39;))
+        if &#39;BUNIT&#39; in header:
+            self.set_unit(header[&#39;BUNIT&#39;])
+        self.parse_history(header)</div>
+
+
+<div class="viewcode-block" id="Image.read_hdu">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.read_hdu">[docs]</a>
+    def read_hdu(self, image_hdu):
+        &quot;&quot;&quot;
+        Read and apply an HDU.
+
+        Parameters
+        ----------
+        image_hdu : astropy.io.fits.hdu.image.ImageHDU
+            The image HDU to read and apply.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.parse_header(image_hdu.header)
+        self.set_data(image_hdu.data)
+        self.data *= self.unit.value</div>
+
+
+<div class="viewcode-block" id="Image.read_hdul">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.read_hdul">[docs]</a>
+    @classmethod
+    def read_hdul(cls, hdul, hdu_index):
+        &quot;&quot;&quot;
+        Read a specific HDU image from an HDU list, and return an image.
+
+        Parameters
+        ----------
+        hdul : astropy.io.fits.hdu.hdulist.HDUList
+            The HDU list to read.
+        hdu_index : int
+            The index of the HDU in the provided `hdul` to read.
+
+        Returns
+        -------
+        image : Image
+        &quot;&quot;&quot;
+        hdu = hdul[hdu_index]
+        image = Image(dtype=hdu.data.dtype)
+        image.read_hdu(hdu)
+        return image</div>
+
+
+<div class="viewcode-block" id="Image.get_asymmetry">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.get_asymmetry">[docs]</a>
+    def get_asymmetry(self, grid, center_index, angle, radial_range):
+        &quot;&quot;&quot;
+        Return the Asymmetry.
+
+        The asymmetry and rms are calculated via::
+
+            asymmetry = sum(d * c) / sum(|d|)
+            rms = sum(|c|) / sum(|d|)
+
+        where::
+
+            c = cos(arctan2(dy, dx) - angle)
+            dx = x - x_0
+            dy = y - y_0
+
+        The sum occurs over all points within the provided `radial_range`
+        about the `center_index`.  The coordinates (x, y) are the projected
+        coordinates of the image map indices onto the grid, and (x_0, y_0) is
+        the `center_index` projected onto the same grid.  The data values d
+        are the image data values.
+
+        Parameters
+        ----------
+        grid : Grid2D
+            The grid used to convert image pixel locations to the coordinate
+            system in which to calculate the asymmetry.
+        center_index : Coordinate2D
+            The center index on the image (x_pix, y_pix) from which to
+            calculate the asymmetry.
+        angle : units.Quantity
+            The rotation of the image with respect to the asymmetry,
+        radial_range : Range
+            The range (in `grid` units) about `center_index` on which to base
+            the asymmetry calculation.
+
+        Returns
+        -------
+        asymmetry, asymmetry_rms : float, float
+            The asymmetry and asymmetry RMS.
+        &quot;&quot;&quot;
+        return self.get_data_asymmetry(self.data, self.valid, grid,
+                                       center_index, angle, radial_range)</div>
+
+
+<div class="viewcode-block" id="Image.get_data_asymmetry">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.get_data_asymmetry">[docs]</a>
+    @staticmethod
+    def get_data_asymmetry(data, valid, grid, center_index, angle,
+                           radial_range):
+        &quot;&quot;&quot;
+        Return the asymmetry for the given data.
+
+        Parameters
+        ----------
+        data : numpy.ndarray (float)
+            The 2-D data for which to calculate the asymmetry of shape (ny, nx)
+        valid : numpy.ndarray (bool)
+            A mask for the data of shape (ny, nx) where `False` excludes any
+            given element from inclusion in the calculation.
+        grid : Grid2D
+            The grid used to convert image pixel locations to the coordinate
+            system in which to calculate the asymmetry.
+        center_index : Coordinate2D
+            The center index on the image (x_pix, y_pix) from which to
+            calculate the asymmetry.
+        angle : units.Quantity
+            The rotation of the image with respect to the asymmetry,
+        radial_range : Range
+            The range (in `grid` units) about `center_index` on which to base
+            the asymmetry calculation.
+
+        Returns
+        -------
+        asymmetry, asymmetry_rms : float, float
+            The asymmetry and asymmetry RMS.
+        &quot;&quot;&quot;
+        j, i = np.nonzero(valid)
+        data = data[j, i]
+        center_offset = grid.index_to_offset(center_index)
+        indices = Coordinate2D([i, j])
+        grid_offsets = grid.index_to_offset(indices)
+        grid_offsets.subtract(center_offset)
+        r = grid_offsets.length
+
+        in_range = r &lt;= radial_range.max
+        m0 = np.nansum(np.abs(data[in_range]))
+
+        in_range &amp;= r &gt;= radial_range.min
+
+        d = data[in_range]
+        c = np.cos(grid_offsets[in_range].angle() - angle)
+
+        mc = np.sum(d * c)
+        c2 = np.sum(c * c)
+
+        if m0 &gt; 0:
+            value = mc / m0
+            rms = np.sqrt(c2) / m0
+        else:
+            value = 0.0
+            rms = 0.0
+
+        if isinstance(value, units.Quantity):
+            value = value.value
+            rms = rms.value
+
+        return value, rms</div>
+
+
+<div class="viewcode-block" id="Image.get_asymmetry_2d">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.image.Image.html#sofia_redux.scan.source_models.maps.image.Image.get_asymmetry_2d">[docs]</a>
+    def get_asymmetry_2d(self, grid, center_index, angle, radial_range):
+        &quot;&quot;&quot;
+        Return the 2-D asymmetry.
+
+        Calculates the asymmetry in both the x and y directions.  The y
+        asymmetry values are calculated by applying an addition rotation of
+        90 degrees to supplied angle during the asymmetry derivation.
+
+        Parameters
+        ----------
+        grid : Grid2D
+            The grid used to convert image pixel locations to the coordinate
+            system in which to calculate the asymmetry.
+        center_index : Coordinate2D
+            The center index on the image (x_pix, y_pix) from which to
+            calculate the asymmetry.
+        angle : units.Quantity
+            The rotation of the image with respect to the asymmetry,
+        radial_range : Range
+            The range (in `grid` units) about `center_index` on which to base
+            the asymmetry calculation.
+
+        Returns
+        -------
+        asymmetry : Asymmetry2D
+        &quot;&quot;&quot;
+        right_angle = 90 * units.Unit(&#39;degree&#39;)
+        asymmetry_x, x_rms = self.get_asymmetry(
+            grid, center_index, angle, radial_range)
+        asymmetry_y, y_rms = self.get_asymmetry(
+            grid, center_index, angle + right_angle, radial_range)
+
+        x_weight = np.inf if x_rms == 0 else (1 / x_rms) ** 2
+        y_weight = np.inf if y_rms == 0 else (1 / y_rms) ** 2
+
+        return Asymmetry2D(x=asymmetry_x, y=asymmetry_y,
+                           x_weight=x_weight, y_weight=y_weight)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

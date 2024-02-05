@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.info.info &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.info.info</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC
+from astropy import log, units
+from copy import deepcopy
+import os
+
+from sofia_redux.scan.utilities.class_provider import (
+    channel_class_for,
+    channel_data_class_for,
+    channel_group_class_for,
+    get_scan_class)
+from sofia_redux.scan.info.base import InfoBase
+from sofia_redux.scan.info.instrument import InstrumentInfo
+from sofia_redux.scan.info.astrometry import AstrometryInfo
+from sofia_redux.scan.info.origination import OriginationInfo
+from sofia_redux.scan.configuration.configuration import Configuration
+from sofia_redux.scan.utilities.class_provider import \
+    info_class_for
+from sofia_redux.scan.info.observation import ObservationInfo
+from sofia_redux.scan.info.telescope import TelescopeInfo
+from sofia_redux.scan.source_models.astro_intensity_map import \
+    AstroIntensityMap
+from sofia_redux.scan.source_models.spectral_cube import SpectralCube
+from sofia_redux.scan.source_models.sky_dip import SkyDip
+
+__all__ = [&#39;Info&#39;]
+
+
+<div class="viewcode-block" id="Info">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info">[docs]</a>
+class Info(ABC):
+
+    def __init__(self, configuration_path=None):
+        &quot;&quot;&quot;
+        Initialize an Info object.
+
+        The information object contains multiple :class:`InfoBase` objects
+        pertaining to specific types of information.  It is one of the most
+        high-level classes in the reduction, containing all the necessary
+        configuration options and information from scans, and should
+        therefore be used to direct the reduction process.
+
+        Parameters
+        ----------
+        configuration_path : str, optional
+            An alternate directory path to the configuration tree to be
+            used during the reduction.  The default is
+            &lt;package&gt;/data/configurations.
+        &quot;&quot;&quot;
+        self.name = None
+        self.scan = None
+        self.parallelism = None
+        self.parent = None
+        self.configuration = Configuration(
+            configuration_path=configuration_path)
+        self.instrument = InstrumentInfo()
+        self.astrometry = AstrometryInfo()
+        self.observation = ObservationInfo()
+        self.origin = OriginationInfo()
+        self.telescope = TelescopeInfo()
+
+    @property
+    def referenced_attributes(self):
+        &quot;&quot;&quot;
+        Return a set of attribute names that should be referenced during copy.
+
+        Returns
+        -------
+        set (str)
+        &quot;&quot;&quot;
+        return {&#39;configuration&#39;, &#39;scan&#39;, &#39;parent&#39;}
+
+<div class="viewcode-block" id="Info.set_parent">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.set_parent">[docs]</a>
+    def set_parent(self, owner):
+        &quot;&quot;&quot;
+        Set the owner of the information.
+
+        Parameters
+        ----------
+        owner : object
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.parent = owner</div>
+
+
+<div class="viewcode-block" id="Info.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Create and return a copy of the Info object.
+
+        The &#39;applied_scan&#39; and &#39;configuration&#39; attributes are referenced.  All
+        other attributes are copied using their `copy` method, or deepcopy.
+
+        Returns
+        -------
+        Info
+        &quot;&quot;&quot;
+        new = self.__class__()
+        referenced_only = self.referenced_attributes
+        for attribute, value in self.__dict__.items():
+            if attribute in referenced_only:
+                setattr(new, attribute, value)
+            elif hasattr(value, &#39;copy&#39;):
+                setattr(new, attribute, value.copy())
+            else:
+                setattr(new, attribute, deepcopy(value))
+
+        # So that info configurations reference new.configuration
+        for info_value in new.available_info.values():
+            info_value.configuration = new.configuration
+
+        return new</div>
+
+
+<div class="viewcode-block" id="Info.unlink_configuration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.unlink_configuration">[docs]</a>
+    def unlink_configuration(self):
+        &quot;&quot;&quot;
+        Create and set a separate copy of the configuration.
+
+        Ensures that the configuration is not referenced so that any changes
+        that occur do not impact other reduction objects unintentionally.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.configuration = self.configuration.copy()
+        for info in self.available_info.values():
+            info.configuration = self.configuration</div>
+
+
+<div class="viewcode-block" id="Info.unlink_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.unlink_scan">[docs]</a>
+    def unlink_scan(self):
+        &quot;&quot;&quot;
+        Create and set a separate copy of the scan.
+
+        Ensures that the scan associated with this information is not
+        referenced by any other reduction object in cases where we do not
+        want any updates to occur outside of the info scope.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.scan = deepcopy(self.scan)</div>
+
+
+    @property
+    def available_info(self):
+        &quot;&quot;&quot;
+        Return all available specialized information.
+
+        Returns all contained :class:`InfoBase` objects and their name as a
+        dictionary of the form {name (`str`): info (`InfoBase`)}.
+
+        Returns
+        -------
+        dict
+        &quot;&quot;&quot;
+        result = {}
+        for key, value in self.__dict__.items():
+            if isinstance(value, InfoBase):
+                result[key] = value
+        return result
+
+    @property
+    def config_path(self):
+        &quot;&quot;&quot;
+        Return the configuration path for this information.
+
+        Returns
+        -------
+        file_path : str
+        &quot;&quot;&quot;
+        if self.name is None:
+            return self.configuration.config_path
+        else:
+            return os.path.join(self.configuration.config_path, self.name)
+
+<div class="viewcode-block" id="Info.instance_from_instrument_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.instance_from_instrument_name">[docs]</a>
+    @classmethod
+    def instance_from_instrument_name(cls, name, configuration_path=None):
+        &quot;&quot;&quot;
+        Return an Info instance given an instrument name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the instrument
+        configuration_path : str, optional
+            An alternate directory path to the configuration tree to be
+            used during the reduction.  The default is
+            &lt;package&gt;/data/configurations.
+
+        Returns
+        -------
+        Info
+        &quot;&quot;&quot;
+        return info_class_for(name)(
+            configuration_path=configuration_path)</div>
+
+
+    @property
+    def size_unit(self):
+        &quot;&quot;&quot;
+        Return the size unit for the instrument.
+
+        Returns
+        -------
+        astropy.units.Unit
+        &quot;&quot;&quot;
+        return self.instrument.get_size_unit()
+
+    @property
+    def frequency(self):
+        &quot;&quot;&quot;
+        Return the instrument frequency.
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        return self.instrument.frequency
+
+    @property
+    def integration_time(self):
+        &quot;&quot;&quot;
+        Return the instrument integration time.
+
+        Returns
+        -------
+        astropy.units.Quantity
+            The instrument integration time in seconds.
+        &quot;&quot;&quot;
+        return self.instrument.integration_time
+
+    @integration_time.setter
+    def integration_time(self, value):
+        &quot;&quot;&quot;
+        Set the instrument integration time.
+
+        Parameters
+        ----------
+        value : units.Quantity
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not isinstance(value, units.Quantity):
+            raise ValueError(f&quot;Integration time must be {units.Quantity}.&quot;)
+        self.instrument.integration_time = value.copy()
+
+    @property
+    def resolution(self):
+        &quot;&quot;&quot;
+        Return the instrument resolution (spatial size)
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        return self.instrument.resolution
+
+    @resolution.setter
+    def resolution(self, value):
+        &quot;&quot;&quot;
+        Set the instrument resolution (spatial size).
+
+        Parameters
+        ----------
+        value : astropy.units.Quantity
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        unit = self.size_unit
+        if isinstance(value, units.Quantity):
+            self.instrument.resolution = value.to(unit)
+        else:
+            self.instrument.resolution = value * unit
+
+    @property
+    def sampling_interval(self):
+        &quot;&quot;&quot;
+        Return the instrument sampling interval (time).
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        return self.instrument.sampling_interval
+
+    @sampling_interval.setter
+    def sampling_interval(self, value):
+        &quot;&quot;&quot;
+        Set the instrument sampling interval (time).
+
+        Parameters
+        ----------
+        value : units.Quantity
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not isinstance(value, units.Quantity):
+            raise ValueError(f&quot;Sampling interval must be {units.Quantity}.&quot;)
+        self.instrument.sampling_interval = value.copy()
+
+    @property
+    def gain(self):
+        &quot;&quot;&quot;
+        Return the overall instrument gain.
+
+        Returns
+        -------
+        float
+        &quot;&quot;&quot;
+        return self.instrument.gain
+
+    @gain.setter
+    def gain(self, value):
+        &quot;&quot;&quot;
+        Set the overall instrument gain.
+
+        Parameters
+        ----------
+        value : float
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.instrument.gain = value
+
+    @property
+    def telescope_name(self):
+        &quot;&quot;&quot;
+        Return the name of the telescope.
+
+        Returns
+        -------
+        name : str
+        &quot;&quot;&quot;
+        return self.telescope.get_telescope_name()
+
+    @property
+    def jansky_per_beam(self):
+        &quot;&quot;&quot;
+        Return the Jansky&#39;s per beam.
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        return self.instrument.jansky_per_beam()
+
+    @property
+    def data_unit(self):
+        &quot;&quot;&quot;
+        Return the data unit of the channel data.
+
+        Returns
+        -------
+        astropy.units.Unit
+        &quot;&quot;&quot;
+        return self.instrument.get_data_unit()
+
+    @property
+    def kelvin(self):
+        &quot;&quot;&quot;
+        Return the instrument temperature in Kelvin.
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        return self.instrument.kelvin()
+
+    @property
+    def point_size(self):
+        &quot;&quot;&quot;
+        Return the point size of the instrument.
+
+        Returns
+        -------
+        units.Quantity
+        &quot;&quot;&quot;
+        return self.instrument.get_point_size()
+
+    @property
+    def source_size(self):
+        &quot;&quot;&quot;
+        Return the source size of the observation.
+
+        Returns
+        -------
+        units.Quantity
+        &quot;&quot;&quot;
+        return self.instrument.get_source_size()
+
+<div class="viewcode-block" id="Info.get_channel_class">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.get_channel_class">[docs]</a>
+    def get_channel_class(self):
+        &quot;&quot;&quot;
+        Returns a Channels instance for a given instrument.
+
+        Returns
+        -------
+        Channels
+        &quot;&quot;&quot;
+        return channel_class_for(self.instrument.name)</div>
+
+
+<div class="viewcode-block" id="Info.get_channel_data_class">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.get_channel_data_class">[docs]</a>
+    def get_channel_data_class(self):
+        &quot;&quot;&quot;
+        Return the appropriate ChannelData class for a given instrument.
+
+        Returns
+        -------
+        channel_data : class (ChannelData)
+        &quot;&quot;&quot;
+        return channel_data_class_for(self.instrument.name)</div>
+
+
+<div class="viewcode-block" id="Info.get_channel_group_class">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.get_channel_group_class">[docs]</a>
+    def get_channel_group_class(self):
+        &quot;&quot;&quot;
+        Returns the appropriate ChannelGroup class for a given instrument.
+
+        Returns
+        -------
+        class (ChannelGroup)
+        &quot;&quot;&quot;
+        return channel_group_class_for(self.instrument.name)</div>
+
+
+<div class="viewcode-block" id="Info.get_scan_class">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.get_scan_class">[docs]</a>
+    def get_scan_class(self):
+        &quot;&quot;&quot;
+        Returns the appropriate Scan class for a given instrument.
+
+        Returns
+        -------
+        class (ChannelGroup)
+        &quot;&quot;&quot;
+        return get_scan_class(self.instrument.name)</div>
+
+
+<div class="viewcode-block" id="Info.get_channels_instance">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.get_channels_instance">[docs]</a>
+    def get_channels_instance(self):
+        &quot;&quot;&quot;
+        Return a Channels instance for this information.
+
+        Returns
+        -------
+        Channels
+        &quot;&quot;&quot;
+        channel_class = self.get_channel_class()
+        return channel_class(info=self)</div>
+
+
+<div class="viewcode-block" id="Info.get_source_model_instance">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.get_source_model_instance">[docs]</a>
+    def get_source_model_instance(self, scans, reduction=None):
+        &quot;&quot;&quot;
+        Return the source model applicable to the channel type.
+
+        Parameters
+        ----------
+        scans : list (Scan)
+            A list of scans for which to create the source model.
+        reduction : Reduction, optional
+            The reduction to which the model will belong.
+
+        Returns
+        -------
+        Map
+        &quot;&quot;&quot;
+        source_type = self.configuration.get_string(&#39;source.type&#39;)
+        if source_type is None:
+            return None
+        if source_type == &#39;skydip&#39;:
+            return SkyDip(info=self, reduction=reduction)
+        elif source_type == &#39;map&#39;:
+            return AstroIntensityMap(info=self, reduction=reduction)
+        elif source_type == &#39;cube&#39;:
+            return SpectralCube(info=self, reduction=reduction)
+        elif source_type == &#39;null&#39;:
+            return None
+        else:
+            return None</div>
+
+
+<div class="viewcode-block" id="Info.validate_configuration_registration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.validate_configuration_registration">[docs]</a>
+    def validate_configuration_registration(self):
+        &quot;&quot;&quot;
+        Ensure that all configuration files are registered.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        config_files = self.configuration.config_files
+        if config_files is not None:
+            for config_file in config_files:
+                self.register_config_file(config_file)</div>
+
+
+<div class="viewcode-block" id="Info.register_config_file">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.register_config_file">[docs]</a>
+    def register_config_file(self, filename):  # pragma: no cover
+        &quot;&quot;&quot;
+        Register that a configuration file has been read.
+
+        Parameters
+        ----------
+        filename : str
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="Info.set_date_options">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.set_date_options">[docs]</a>
+    def set_date_options(self, mjd):
+        &quot;&quot;&quot;
+        Set the configuration options for a given date (in MJD).
+
+        Parameters
+        ----------
+        mjd : float
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.configuration.set_date(float(mjd), validate=True)</div>
+
+
+<div class="viewcode-block" id="Info.set_mjd_options">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.set_mjd_options">[docs]</a>
+    def set_mjd_options(self, mjd):
+        &quot;&quot;&quot;
+        Set the configuration options for a given date (in MJD).
+
+        Parameters
+        ----------
+        mjd : float
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_date_options(mjd)</div>
+
+
+<div class="viewcode-block" id="Info.set_serial_options">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.set_serial_options">[docs]</a>
+    def set_serial_options(self, serial):
+        &quot;&quot;&quot;
+        Set the configuration options for a given serial number.
+
+        Parameters
+        ----------
+        serial : int or str
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.configuration.set_serial(serial, validate=True)</div>
+
+
+<div class="viewcode-block" id="Info.set_object_options">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.set_object_options">[docs]</a>
+    def set_object_options(self, source_name):
+        &quot;&quot;&quot;
+        Set the configuration object options for a given source.
+
+        Parameters
+        ----------
+        source_name : str
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.configuration.set_object(source_name, validate=True)</div>
+
+
+<div class="viewcode-block" id="Info.parse_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.parse_header">[docs]</a>
+    def parse_header(self, header):
+        &quot;&quot;&quot;
+        Parse and apply a FITS header to the instrument information.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_fits_header_options(header)
+        self.apply_configuration()</div>
+
+
+<div class="viewcode-block" id="Info.set_fits_header_options">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.set_fits_header_options">[docs]</a>
+    def set_fits_header_options(self, header, extension=0):
+        &quot;&quot;&quot;
+        Set the configuration FITS options from a FITS header.
+
+        Parameters
+        ----------
+        header : fits.Header
+        extension : int, optional
+            The HDUL extension of the header.  This is only stored for
+            reference and is not used.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.configuration.read_fits(header, extension=extension,
+                                     validate=True)</div>
+
+
+<div class="viewcode-block" id="Info.read_configuration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.read_configuration">[docs]</a>
+    def read_configuration(self, configuration_file=&#39;default.cfg&#39;,
+                           validate=True):
+        &quot;&quot;&quot;
+        Read and apply a configuration file.
+
+        Parameters
+        ----------
+        configuration_file : str, optional
+            Path to, or name of, a configuration file.
+        validate : bool, optional
+            If `True` (default), validate information read from the
+            configuration file.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.configuration.instrument_name is None:
+            self.configuration.set_instrument(self.name)
+        self.configuration.read_configuration(
+            configuration_file, validate=validate)
+        self.register_config_file(configuration_file)
+        self.validate_configuration_registration()</div>
+
+
+<div class="viewcode-block" id="Info.apply_configuration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Apply a configuration to the information.
+
+        This should be once the FITS information from a scan file has been
+        applied to the information via `parse_header`.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not isinstance(self.configuration, Configuration):
+            raise ValueError(f&quot;Configuration must be a &quot;
+                             f&quot;{Configuration} instance.&quot;)
+        if self.configuration.instrument_name is None:
+            self.configuration.set_instrument(self.name)
+        for info in self.available_info.values():
+            info.set_configuration(self.configuration)</div>
+
+
+<div class="viewcode-block" id="Info.validate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.validate">[docs]</a>
+    def validate(self):
+        &quot;&quot;&quot;
+        Validate all information following a read of scans/integrations.
+
+        At this point the astrometry can be verified.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for info in self.available_info.values():
+            info.validate()</div>
+
+
+<div class="viewcode-block" id="Info.validate_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.validate_scan">[docs]</a>
+    def validate_scan(self, scan):
+        &quot;&quot;&quot;
+        Validate a scan.
+
+        Parameters
+        ----------
+        scan : Scan
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for info in self.available_info.values():
+            info.validate_scan(scan)</div>
+
+
+<div class="viewcode-block" id="Info.parse_image_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.parse_image_header">[docs]</a>
+    def parse_image_header(self, header):
+        &quot;&quot;&quot;
+        Parse an image header and apply a new header.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for info in self.available_info.values():
+            info.parse_image_header(header)</div>
+
+
+<div class="viewcode-block" id="Info.edit_image_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.edit_image_header">[docs]</a>
+    def edit_image_header(self, header, scans=None):
+        &quot;&quot;&quot;
+        Add or edit image information in a FITS header.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The FITS header to edit.
+        scans : list (Scan), optional
+            A list of scans to use during editing.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for info in self.available_info.values():
+            info.edit_image_header(header, scans=scans)</div>
+
+
+<div class="viewcode-block" id="Info.edit_scan_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.edit_scan_header">[docs]</a>
+    def edit_scan_header(self, header, scans=None):
+        &quot;&quot;&quot;
+        Add or edit scan information in a FITS header.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The FITS header to edit.
+        scans : list (Scan), optional
+            A list of scans to use during editing.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for info in self.available_info.values():
+            info.edit_scan_header(header, scans=scans)</div>
+
+
+<div class="viewcode-block" id="Info.add_history">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.add_history">[docs]</a>
+    def add_history(self, header, scans=None):  # pragma: no cover
+        &quot;&quot;&quot;
+        Add HISTORY messages to a FITS header.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The header to update with HISTORY messages.
+        scans : list (Scan), optional
+            A list of scans to add HISTORY messages from if necessary.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="Info.validate_scans">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.validate_scans">[docs]</a>
+    def validate_scans(self, scans):
+        &quot;&quot;&quot;
+        Validate a list of scans specific to the instrument
+
+        Parameters
+        ----------
+        scans : list (Scan)
+            A list of scans.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if scans is None:
+            return
+
+        for i, scan in enumerate(scans):
+            if scan is None:
+                continue
+
+            if not scan.is_valid():
+                continue
+
+            if self.configuration.get_bool(&#39;jackknife.alternate&#39;):
+                log.info(&quot;JACKKNIFE: Alternating scans.&quot;)
+                if scan.size == 0:
+                    return
+                if i % 2 == 0:
+                    for integration in scan.integrations:
+                        integration.gain *= -1.0</div>
+
+
+<div class="viewcode-block" id="Info.get_focus_string">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.get_focus_string">[docs]</a>
+    @classmethod
+    def get_focus_string(cls, focus):
+        &quot;&quot;&quot;
+        Return a string representing the focus.
+
+        Parameters
+        ----------
+        focus : InstantFocus
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if focus is None:
+            return &#39; No instant focus.&#39;
+        msg = &#39;&#39;
+        if focus.x is not None:
+            msg += f&quot;\n  Focus.dX --&gt; {focus.x.to(&#39;mm&#39;)}&quot;
+        if focus.y is not None:
+            msg += f&quot;\n  Focus.dY --&gt; {focus.y.to(&#39;mm&#39;)}&quot;
+        if focus.z is not None:
+            msg += f&quot;\n  Focus.dZ --&gt; {focus.z.to(&#39;mm&#39;)}&quot;
+        return msg</div>
+
+
+<div class="viewcode-block" id="Info.get_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.get_name">[docs]</a>
+    def get_name(self):
+        &quot;&quot;&quot;
+        Return the name of the information.
+
+        Returns
+        -------
+        name : str
+        &quot;&quot;&quot;
+        if self.name is None:
+            return &#39;&#39;
+        return self.name</div>
+
+
+<div class="viewcode-block" id="Info.set_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.set_name">[docs]</a>
+    def set_name(self, name):
+        &quot;&quot;&quot;
+        Set the name for the information.
+
+        Parameters
+        ----------
+        name : str
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.name = str(name)</div>
+
+
+<div class="viewcode-block" id="Info.set_outpath">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.set_outpath">[docs]</a>
+    def set_outpath(self):
+        &quot;&quot;&quot;
+        Set the output directory based on the configuration.
+
+        If the configuration path does not exist, it will be created if the
+        &#39;outpath.create&#39; option is set.  Otherwise, an error will be raised.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.configuration.set_outpath()</div>
+
+
+<div class="viewcode-block" id="Info.perform_reduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.info.Info.html#sofia_redux.scan.info.info.Info.perform_reduction">[docs]</a>
+    def perform_reduction(self, reduction, filenames):
+        &quot;&quot;&quot;
+        Fully reduce a given reduction and set of files.
+
+        While it is possible for the reduction object to fully reduce a set of
+        files, certain special considerations may be required for certain
+        instruments.  Therefore, the instrument specific Info object is given
+        control of how a reduction should progress.
+
+        Parameters
+        ----------
+        reduction : Reduction
+            The reduction object.
+        filenames : str or list (str)
+            A single file (str) or list of files to be included in the
+            reduction.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        reduction.read_scans(filenames)
+        reduction.validate()
+        reduction.reduce()</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

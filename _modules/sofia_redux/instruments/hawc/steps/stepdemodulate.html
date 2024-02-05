@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepdemodulate &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepdemodulate</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Chop demodulation pipeline step.&quot;&quot;&quot;
+
+import math
+import os
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+from scipy.signal import fftconvolve as convolve
+
+from sofia_redux.instruments.hawc.datafits import DataFits
+from sofia_redux.instruments.hawc.stepparent import StepParent
+from sofia_redux.instruments.hawc.steps.basehawc import clipped_mean
+from sofia_redux.instruments.hawc.steps import basehawc
+
+__all__ = [&#39;StepDemodulate&#39;]
+
+
+<div class="viewcode-block" id="StepDemodulate">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.html#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate">[docs]</a>
+class StepDemodulate(StepParent):
+    &quot;&quot;&quot;
+    Demodulate chops for chopped and nodded data.
+
+    This step subtracts low chops from high chops by weighting
+    all chopped data with a sine wave, then summing. A phase correction
+    is computed from the real and imaginary parts of the chop offset
+    and is applied after the demodulation. Incomplete first
+    and last chops are excluded. Data exceeding defined tolerances,
+    and data for which the HWP was moving, are flagged for later
+    removal in the Chop Mask column. Variances on the flux are also
+    computed during demodulation, and propagated throughout all pipeline
+    steps.
+
+    The input data expected is a DataFits containing one table with
+    columns for R Array, T array, Chop Offset (arcsec), Nod Offset (arcsec),
+    HWP Angle (degrees), Azimuth (degrees), Elevation (degrees),
+    Azimuth Error (arcsec), Elevation Error (arcsec), and Array VPA
+    (degrees). In addition, the Primary HDU header must contain the
+    following keywords: NHWP, SMPLFREQ, CHPFREQ, NODDING, NODPATT.
+
+    This input is typically produced by the
+    `sofia_redux.instruments.hawc.steps.StepPrepare` pipeline step,
+    from raw HAWC data.
+
+    This step outputs one table containing the demodulated data. The
+    columns are the same as for input data, with some additional columns.
+    Each row in the table corresponds to the value for that demodulated
+    chop cycle.
+
+    The additional columns are:
+
+    - Samples: number of raw samples that make up a chop cycle
+    - R array VAR: variance on the demodulated data for the R array
+    - T array VAR: variance on the demodulated data for the T array
+    - R array Imag: imaginary part of the demodulated data for the R array
+    - T array Imag: imaginary part the demodulated data for the T array
+    - R array Imag VAR: variance on the imaginary part of the
+      demodulated data for the R array
+    - T array Imag VAR: variance on the imaginary part of the
+      demodulated data for the T array
+    - Nod Index : integer-valued (0, 1, 2 for L, R, L)
+    - HWP Index : integer-valued (0, 1, 2, 3)
+    - Chop Mask : integer-valued, with bits for each flag type
+
+    The flag bits for the Chop Mask column are:
+
+    - bit 0: incomplete chop
+    - bit 1: check on azelstate
+    - bit 2: HWP moving
+    - bit 3: check on nodstate
+    - bit 4: spare
+    - bit 5: spare
+    - bit 6: LOS rewind
+    - bit 7: tracking errors too high
+    - bit 8: CentroidExpMsec below threshold
+    - bit 9: extra samples before and after tracking tolerance violation
+
+    The EXPTIME keyword in the primary header is updated to account only
+    for the on-source time, rejecting samples that
+    were excluded by the algorithm (when the HWP or telescope are
+    moving). If chopping on-chip (header keyword CHPONFPA = True), then
+    EXPTIME is multiplied by 2.
+
+    The Configuration HDU present in raw data will be propagated to
+    the demodulated file, but will not be carried along in subsequent
+    steps.
+
+    Depending on results from tracking tolerance, the keyword
+    “TRCKSTAT” will be added to the header with one of the following
+    values: ‘NONE - TrackErrAoi3 and 4 not found’, ‘GOOD - less than 1/3
+    of samples removed’, ‘BAD - more than 1/3 of samples removed’, or
+    ‘NONE - tracking tolerance is deactivated’.
+    &quot;&quot;&quot;
+    def __init__(self):
+        # placeholders for additional useful attributes
+        self.column_names = []
+        self.extracols = []
+        self.praw = {}
+        self.pdemod = {}
+        self.format_names = []
+        self.dim_names = []
+        self.unit_names = []
+
+        # call the parent init: will call setup
+        super().__init__()
+
+<div class="viewcode-block" id="StepDemodulate.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.html#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;demodulate&#39;, and are named with
+        the step abbreviation &#39;DMD&#39;.
+
+        Parameters defined for this step are:
+
+        chop_tol : float
+            Chop tolerance in arcsec. Used in determining high/low state.
+        nod_tol : float
+            Nod tolerance in arcsec. Used in determining high/low state.
+        hwp_tol : float
+            HWP tolerance in degrees. Used in determining angle
+            and moving state.
+        az_tol : float
+            Azimuth error tolerance in arcsec.
+        el_tol : float
+            Elevation error tolerance in arcsec.
+        track_tol : float or str
+            Tracking error tolerance in arcsec, as recorded by AOI 3
+            or AOI 4. Set negative to turn off flagging for tracking
+            errors. Set to the string &#39;beam&#39; to use a default beam-size
+            value appropriate to the observed filter band. Set to
+            &#39;centroidexp&#39; to use the the CentroidExpMsec column to
+            flag bad data instead of TrackErrAoi3 and TrackErrAoi4.
+        track_extra : list of float
+            Extra samples removed (in seconds) before and
+            after samples flagged by track_tol. Set to [0, 0] to
+            disable.
+        chopphase : bool
+            If not set, chop phases are not corrected.
+        checkhwp : bool
+            If set, the NHWP keyword is not corrected from the number
+            of angles actually found in the data, and a warning is
+            issued. If not set, NHWP is corrected to the actual number
+            of HWP angles.
+        phasefile : str or float
+            If a string, this should be set to a path to a file containing
+            phase corrections for each pixel. If a float, then the value
+            assigned is applied as the phase correction to every pixel. The
+            value should be the phase delay in seconds.
+        phaseoffset : float
+            Phase offset to apply in addition to the per-pixel offsets
+            assigned by the phasefile. This is specified in degrees, and
+            may be determined from the plots produced by the
+            StepDmdPlot pipeline step for CALMODE = INT_CAL files. Not
+            applied if the phasefile parameter is not a file.
+        l0method : {&#39;RE&#39;, &#39;IM&#39;, &#39;ABS&#39;}
+            Method to normalize data: real component only, imaginary
+            component only, or absolute value.
+        boxfilter : float
+            Time constant for a box filter to convolve with the data
+            before demodulation. Set to -1 to use 1/CHPFREQ. Set to
+            0 to disable.
+        chopavg : bool
+            If set, R and T arrays before demodulation will be averaged
+            over the chop period and stored in &#39;R array AVG&#39; and
+            &#39;T array AVG&#39; columns in the output table.
+        tracksampcut : float
+            If the fraction of all samples removed due to tracking
+            is larger than this number, then tracking status
+            (TRCKSTAT) is set to BAD.
+        data_sigma : float
+            Value for sigma-clipping of detector data, used in determining
+            variance values for the demodulated flux.
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;demodulate&#39;
+        self.description = &#39;Demodulate All Chops&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;dmd&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+
+        # Column names in output table used for demodulation.
+        # Additional columns in the input file are kept
+        # track of in self.extracols[]
+        # and treated by regular averaging
+        self.column_names = [&#39;Samples&#39;, &#39;R array&#39;, &#39;T array&#39;,
+                             &#39;Chop Offset&#39;, &#39;Nod Offset&#39;, &#39;HWP Angle&#39;,
+                             &#39;Azimuth&#39;, &#39;Azimuth Error&#39;, &#39;Elevation&#39;,
+                             &#39;Elevation Error&#39;, &#39;Array VPA&#39;,
+                             &#39;Nod Index&#39;, &#39;HWP Index&#39;]
+
+        # List of columns not used by demodulation
+        self.extracols = []
+
+        # A dictionary with raw input data columns
+        self.praw = {}
+
+        # Append parameters
+        self.paramlist.append([&#39;chop_tol&#39;, 4.0,
+                               &#39;chopper tolerance in &#39;
+                               &#39;arcseconds&#39;])
+        self.paramlist.append([&#39;nod_tol&#39;, 2.0,
+                               &#39;nod tolerance in arcseconds&#39;])
+        self.paramlist.append([&#39;hwp_tol&#39;, 2.0,
+                               &#39;hwp angle tolerance in degrees&#39;])
+        self.paramlist.append([&#39;az_tol&#39;, 5.0,
+                               &#39;Azimuth error tolerance in arcseconds&#39;])
+        self.paramlist.append([&#39;el_tol&#39;, 5.0,
+                               &#39;Elevation error tolerance in arcseconds&#39;])
+        self.paramlist.append([&#39;track_tol&#39;, &#39;beam&#39;,
+                               &#39;Track error tolerance in &#39;
+                               &#39;arcseconds (AOIs 3 and 4) - &#39;
+                               &#39;set negative to deactivate&#39;])
+        self.paramlist.append([&#39;track_extra&#39;, [0., 0.],
+                               &#39;Extra samples removed (in seconds) before &#39;
+                               &#39;and after samples flagged by track_tol&#39;])
+        self.paramlist.append([&#39;chopphase&#39;, True,
+                               &#39;Flag requiring chop phase correction&#39;])
+        self.paramlist.append([&#39;checkhwp&#39;, True,
+                               &#39;Set to FALSE to avoid checking the expected &#39;
+                               &#39;number of HWP angles&#39;])
+        self.paramlist.append([&#39;phasefile&#39;, &#39;0.0&#39;,
+                               &#39;Phase file information file&#39;])
+        self.paramlist.append([&#39;phaseoffset&#39;, 0.0,
+                               &#39;Phase offset to apply to phasefile (degrees)&#39;])
+        self.paramlist.append([&#39;l0method&#39;, &#39;RE&#39;,
+                               &#39;Method to normalize data: REal, &#39;
+                               &#39;IMag, and ABSolute&#39;])
+        self.paramlist.append([&#39;boxfilter&#39;, 0.0,
+                               &#39;Time constant for box hipass filter &#39;
+                               &#39;(0.0=no filter, -1 for 1/CHPFREQ)&#39;])
+        self.paramlist.append([&#39;chopavg&#39;, False,
+                               &#39;Flag to save chop averaged raw data&#39;])
+        self.paramlist.append([&#39;tracksampcut&#39;, 0.333,
+                               &#39;If fraction of all samples removed due &#39;
+                               &#39;to tracking is larger than this number, &#39;
+                               &#39;then tracking status is BAD&#39;])
+        self.paramlist.append([&#39;data_sigma&#39;, 5.0,
+                               &#39;Value for sigma-clipping of detector data&#39;])</div>
+
+
+<div class="viewcode-block" id="StepDemodulate.read_beam">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.html#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.read_beam">[docs]</a>
+    def read_beam(self):
+        &quot;&quot;&quot;
+        Read the beam size for the observed filter.
+
+        Returns
+        -------
+        beam : float
+            The beam size.
+        waveband : str
+            The filter band name.
+        &quot;&quot;&quot;
+        beam = [5.0, 5.5, 9.0, 14.0, 19.0]
+        waveband = self.datain.getheadval(&#39;spectel1&#39;)
+        bands = [&#39;A&#39;, &#39;B&#39;, &#39;C&#39;, &#39;D&#39;, &#39;E&#39;]
+        try:
+            idx = bands.index(waveband[-1])
+        except (ValueError, IndexError):
+            # waveband not in list
+            msg = &#39;Cannot parse waveband: %s&#39; % waveband
+            log.error(msg)
+            raise ValueError(msg)
+
+        beam = beam[idx]
+        return beam, waveband[-1]</div>
+
+
+<div class="viewcode-block" id="StepDemodulate.makedemod">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.html#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.makedemod">[docs]</a>
+    def makedemod(self, nchop):
+        &quot;&quot;&quot;
+        Construct arrays to hold demodulated data.
+
+        Arrays are stored in self.pdemod, a dictionary with keys
+        as specified by self.column_names.
+
+        Parameters
+        ----------
+        nchop : int
+            Number of chop cycles.
+        &quot;&quot;&quot;
+        self.pdemod = {}
+
+        for c in self.column_names:
+            if c in [&#39;R array&#39;, &#39;T array&#39;]:
+                self.pdemod[c] = np.zeros(
+                    (nchop, self.praw[&#39;nrow&#39;], self.praw[&#39;ncol&#39;]),
+                    dtype=np.float64)
+                for name in [&#39; Imag&#39;, &#39; VAR&#39;, &#39; Imag VAR&#39;]:
+                    cstr = c + name
+                    self.pdemod[cstr] = np.zeros((nchop,
+                                                  self.praw[&#39;nrow&#39;],
+                                                  self.praw[&#39;ncol&#39;]),
+                                                 dtype=np.float64)
+            elif c in [&#39;Samples&#39;, &#39;Nod Index&#39;, &#39;HWP Index&#39;]:
+                self.pdemod[c] = np.zeros(nchop, dtype=np.int32)
+            else:
+                self.pdemod[c] = np.zeros(nchop, dtype=np.float64)
+        self.pdemod[&#39;Chop Offset Imag&#39;] = np.zeros(nchop, dtype=np.float64)
+
+        self.pdemod[&#39;nsamp&#39;] = nchop
+        self.pdemod[&#39;nrow&#39;] = self.praw[&#39;nrow&#39;]
+        self.pdemod[&#39;ncol&#39;] = self.praw[&#39;ncol&#39;]</div>
+
+
+<div class="viewcode-block" id="StepDemodulate.readdata">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.html#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.readdata">[docs]</a>
+    def readdata(self):
+        &quot;&quot;&quot;
+        Read raw data into memory.
+
+        Data is stored in the self.praw dictionary, with keys set
+        by self.column_names.
+        &quot;&quot;&quot;
+        self.praw = {}
+
+        # The following three are filled from the raw data, each index will
+        # correspond to the name in column_names
+        self.format_names = []
+        self.dim_names = []
+        self.unit_names = []
+        rawnames = self.datain.table.names
+
+        # Fill the format_ dim_ unit_names lists,
+        # fill raw data into self.praw
+
+        # Read raw table columns
+        for colnam in self.column_names:
+            if colnam in [&#39;Samples&#39;, &#39;Nod Index&#39;, &#39;HWP Index&#39;]:
+                # only exist in output data
+                self.format_names.append(&#39;1J&#39;)
+                self.dim_names.append(None)
+                self.unit_names.append(&#39;integer&#39;)
+            else:
+                try:
+                    idx = rawnames.index(colnam)
+                    self.praw[colnam] = \
+                        self.datain.table.field(colnam).astype(np.float64)
+                    self.format_names.append(
+                        self.datain.table.columns[idx].format)
+                    self.dim_names.append(self.datain.table.columns[idx].dim)
+                    self.unit_names.append(self.datain.table.columns[idx].unit)
+                except ValueError:
+                    msg = &quot;Column &#39;%s&#39; not found in raw data!&quot; % colnam
+                    log.error(msg)
+                    raise ValueError(msg)
+
+        # add columns in raw data not used for demodulation.
+        for ind, colnam in enumerate(rawnames):
+            if colnam in self.column_names:
+                # skip column names that already exist
+                continue
+            self.praw[colnam] = \
+                self.datain.table.field(colnam).astype(np.float64)
+            col = self.datain.table.columns[ind]
+            self.extracols.append(colnam)
+            self.column_names.append(colnam)
+            self.format_names.append(col.format)
+            self.dim_names.append(col.dim)
+            self.unit_names.append(col.unit)
+
+        # Add additional info to praw
+        rarr = self.praw[&#39;R array&#39;]
+        nsamp, nrow, ncol = rarr.shape
+        self.praw[&#39;nsamp&#39;] = nsamp
+        self.praw[&#39;nrow&#39;] = nrow
+        self.praw[&#39;ncol&#39;] = ncol
+        self.praw[&#39;Samples&#39;] = np.ones(nsamp, dtype=np.int32)
+        self.praw[&#39;Nod Index&#39;] = np.zeros(nsamp, dtype=np.int32)
+        self.praw[&#39;HWP Index&#39;] = np.zeros(nsamp, dtype=np.int32)</div>
+
+
+<div class="viewcode-block" id="StepDemodulate.make_chop_phase_tags">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.html#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.make_chop_phase_tags">[docs]</a>
+    def make_chop_phase_tags(self, chopstate, chopsamp, hwpstate, nodstate):
+        &quot;&quot;&quot;
+        Create the choptag and phasetag arrays from chopstate.
+
+        This function is intended for sine-wave demodulation and the
+        outputs are to be used by avgdemodsin.
+
+        Parameters
+        ----------
+        chopstate: array-like
+            Array of -1, 0, +1 derived from chop signal.
+        chopsamp: int
+            Number of samples per chop.
+        hwpstate: array-like
+            Array of 0 (HWP moving), 1 (HWP stable) from HWP Angle.
+        nodstate: array-like
+            Array of -1, 0, +1 derived from Nod Offset signal.
+
+        Returns
+        -------
+        nchops: int
+            Number of chops.
+        choptag: array-like
+            Array of chop tags which number the chops.
+        phasetag: array-like
+            Array of integer phase, numbering samples within a chop.
+
+        &quot;&quot;&quot;
+        ntot = len(chopstate)
+        nchops = ntot // chopsamp
+
+        chopcheck = np.where(chopstate == 0)[0]
+        if len(chopcheck &gt; 0):
+            first_zero = chopcheck[0]
+        else:
+            zcheck = np.where((nodstate == 0) | (hwpstate == 0))[0]
+            if len(zcheck) &gt; 0:
+                first_zero = zcheck[0]
+            else:
+                first_zero = 0
+                nchops += 1
+        first_one = np.where(chopstate[first_zero:] == 1)[0][0] + first_zero
+
+        log.debug(&#39;initial nchops=%d, n_praw=%d&#39; % (nchops, ntot))
+
+        choptag = np.concatenate([i * np.ones(chopsamp, dtype=np.int32)
+                                  for i in range(nchops + 1)])
+        choptag = np.concatenate([-1 * np.ones(first_one, dtype=np.int32),
+                                  choptag])
+        choptag = choptag[:ntot]
+
+        phasetag = np.concatenate([np.arange(chopsamp, dtype=np.int32)
+                                   for _ in range(nchops + 1)])
+        phasetag = np.concatenate([-1 * np.ones(first_one, dtype=np.int32),
+                                   phasetag])
+        phasetag = phasetag[:ntot]
+
+        # Find where hwpstate transitions
+        hwp_on = np.where(hwpstate == 1)[0][0]
+        nod_on = np.where(nodstate != 0)[0][0]
+        nodlast = nodstate[nod_on]
+        nodval = -1
+        pos = max(hwp_on, nod_on)
+        self.praw[&#39;Nod Index&#39;][:pos] = 0
+        while pos &lt; (ntot - 1):
+            nodcheck = np.where(nodstate[pos:] == 0)[0]
+            if len(nodcheck &gt; 0):
+                nod_off = nodcheck[0] + pos
+            else:
+                nod_off = ntot - 1
+            hwpcheck = np.where(hwpstate[pos:] == 0)[0]
+            if len(hwpcheck &gt; 0):
+                hwp_off = hwpcheck[0] + pos
+            else:
+                hwp_off = ntot - 1
+            nodnext = np.where(nodstate[nod_off:] == -nodlast)[0]
+            if len(nodnext &gt; 0):
+                next_nod = nodnext[0] + nod_off
+            else:
+                next_nod = ntot - 1
+            hwpnext = np.where(hwpstate[hwp_off:] == 1)[0]
+            if len(hwpnext &gt; 0):
+                next_hwp = hwpnext[0] + hwp_off
+            else:
+                next_hwp = ntot - 1
+            if next_nod &lt; next_hwp:
+                nodval += 1
+                nodlast = -1 * nodlast
+                self.praw[&#39;Nod Index&#39;][pos:next_nod] = nodval
+                pos = next_nod
+                log.debug(
+                    &#39;pos={}, nodval incre, nodval={}, &#39;
+                    &#39;nodlast={}, next_nod={}, next_hwp={}&#39;.format(
+                        pos, nodval, nodlast, next_nod, next_hwp))
+            else:
+                nodval += 1
+                self.praw[&#39;Nod Index&#39;][pos:next_hwp] = nodval
+                pos = next_hwp
+                nodval = -1
+                log.debug(
+                    &#39;pos={}, nodval reset, nodval={}, &#39;
+                    &#39;nodlast={}, next_nod={}, next_hwp={}&#39;.format(
+                        pos, nodval, nodlast, next_nod, next_hwp))
+
+        # Set nod index to -1 where nodstate or hwpstate indicate not settled
+        self.praw[&#39;Nod Index&#39;][(nodstate == 0) | (hwpstate == 0)] = -1
+
+        lastphase = phasetag[-1]
+        if lastphase != chopsamp - 1:
+            # incomplete last chop
+            choptag[-(lastphase + 1):] = -1
+            phasetag[-(lastphase + 1):] = -1
+            nchops = choptag[-(lastphase + 2)] + 1
+            log.debug(&#39;incomplete last chop for %d samples, &#39;
+                      &#39;nchops is %d&#39; % (-(lastphase + 1), nchops))
+        else:
+            nchops = choptag[-1]
+            log.debug(&#39;complete last chop, lastphase=%d, &#39;
+                      &#39;nchops=%d&#39; % (lastphase, nchops))
+
+        # Make sure the arrays are contiguous
+        choptag = np.ascontiguousarray(choptag, dtype=np.int32)
+        phasetag = np.ascontiguousarray(phasetag, dtype=np.int32)
+        self.praw[&#39;Nod Index&#39;] = np.ascontiguousarray(self.praw[&#39;Nod Index&#39;])
+        self.praw[&#39;HWP Index&#39;] = np.ascontiguousarray(self.praw[&#39;HWP Index&#39;])
+
+        return nchops, choptag, phasetag</div>
+
+
+<div class="viewcode-block" id="StepDemodulate.avgdemodsin">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.html#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.avgdemodsin">[docs]</a>
+    def avgdemodsin(self, choptag, phasetag, chopsamp, nchop, data_sigma):
+        &quot;&quot;&quot;
+        Average data with sine-wave demodulation.
+
+        Demodulated data is stored in self.pdemod.
+
+        Parameters
+        ----------
+        choptag : array-like
+             Array values specifying which chop each sample belongs to.
+        phasetag : array-like
+             Array of values specifying sample number in
+             current nod and hwp angle.
+        chopsamp : array-like
+             Number of samples per chop cycle.
+        nchop : int
+             Number of chops.
+        data_sigma : float
+             Value for sigma-clipping of detector data, used in determining
+             variance values for the demodulated flux.
+        &quot;&quot;&quot;
+
+        # get raw data
+        r_real = self.praw[&#39;R array&#39;].astype(np.float64)
+        t_real = self.praw[&#39;T array&#39;].astype(np.float64)
+
+        # first group by phasetag, nod index, and hwp index
+        # for variance across chop position
+        nodtag = self.praw[&quot;Nod Index&quot;]
+        hwptag = self.praw[&quot;HWP Index&quot;]
+
+        # get all unique phase values and the indices
+        # to them in the phasetag array
+        phase_vals, full_idx = \
+            np.unique(np.array(list(zip(nodtag, hwptag, phasetag))),
+                      axis=0, return_inverse=True)
+
+        # invert the index for each phase value
+        phase_idx = [[] for _ in range(max(full_idx) + 1)]
+        for i, k in enumerate(full_idx):
+            phase_idx[k].append(i)
+        phase_idx = [np.array(idx) for idx in phase_idx]
+
+        # average over each chop phase value within a
+        # nod and HWP position
+        rvar = np.zeros_like(r_real)
+        tvar = np.zeros_like(t_real)
+        for i, phase in enumerate(phase_vals):
+            mask = np.zeros_like(r_real[phase_idx[i], :, :], dtype=np.uint8)
+            rmeans, _ = clipped_mean(r_real[phase_idx[i], :, :],
+                                     mask, data_sigma)
+            tmeans, _ = clipped_mean(t_real[phase_idx[i], :, :],
+                                     mask, data_sigma)
+
+            rvar[phase_idx[i], :, :] = (r_real[phase_idx[i], :, :]
+                                        - rmeans[None, :, :])**2
+            tvar[phase_idx[i], :, :] = (t_real[phase_idx[i], :, :]
+                                        - tmeans[None, :, :])**2
+
+        # now demodulate with sine wave
+
+        freq = 2 * np.pi / float(chopsamp)
+        w_real = np.cos(phasetag * freq)
+        w_imag = np.sin(phasetag * freq)
+
+        # multiply data by sin and cosine weights with chop frequency
+        r_imag = w_imag[:, None, None] * r_real
+        r_real *= w_real[:, None, None]
+        t_imag = w_imag[:, None, None] * t_real
+        t_real *= w_real[:, None, None]
+
+        # do the same for the variance arrays
+        rivar = w_imag[:, None, None]**2 * rvar
+        rvar *= w_real[:, None, None]**2
+        tivar = w_imag[:, None, None]**2 * tvar
+        tvar *= w_real[:, None, None]**2
+
+        # group by choptag
+
+        # get all unique chop values and the indices
+        # to them in the choptag array, as well as the
+        # count for each chop cycle
+        chop_vals, full_idx, chop_cts = \
+            np.unique(choptag, return_inverse=True, return_counts=True)
+
+        # invert the index for each chop value
+        chop_idx = [[] for _ in range(max(full_idx) + 1)]
+        for i, k in enumerate(full_idx):
+            chop_idx[k].append(i)
+        chop_idx = [np.array(idx) for idx in chop_idx]
+
+        # columns to directly chop average
+        colnames = [&#39;Nod Offset&#39;, &#39;HWP Angle&#39;, &#39;Azimuth&#39;,
+                    &#39;Azimuth Error&#39;, &#39;Elevation&#39;, &#39;Elevation Error&#39;,
+                    &#39;Array VPA&#39;, &#39;Nod Index&#39;, &#39;HWP Index&#39;]
+        # real and imaginary averages
+        realchop = w_real * self.praw[&#39;Chop Offset&#39;]
+        imagchop = w_imag * self.praw[&#39;Chop Offset&#39;]
+
+        # average over each chop cycle
+        for i, chop in enumerate(chop_vals):
+            # skip negative and too large values
+            if chop &lt; 0 or chop &gt;= nchop:
+                continue
+
+            nsamp = chop_cts[i]
+
+            # calculate and store the average values in the
+            # demod arrays by chop
+            self.pdemod[&#39;R array&#39;][chop, :] = \
+                np.sum(r_real[chop_idx[i], :, :], axis=0) / nsamp
+            self.pdemod[&#39;R array Imag&#39;][chop, :] = \
+                np.sum(r_imag[chop_idx[i], :, :], axis=0) / nsamp
+            self.pdemod[&#39;T array&#39;][chop, :] = \
+                np.sum(t_real[chop_idx[i], :, :], axis=0) / nsamp
+            self.pdemod[&#39;T array Imag&#39;][chop, :] = \
+                np.sum(t_imag[chop_idx[i], :, :], axis=0) / nsamp
+
+            self.pdemod[&#39;R array VAR&#39;][chop, :] = \
+                np.sum(rvar[chop_idx[i], :, :], axis=0) / nsamp**2
+            self.pdemod[&#39;R array Imag VAR&#39;][chop, :] = \
+                np.sum(rivar[chop_idx[i], :, :], axis=0) / nsamp**2
+            self.pdemod[&#39;T array VAR&#39;][chop, :] = \
+                np.sum(tvar[chop_idx[i], :, :], axis=0) / nsamp**2
+            self.pdemod[&#39;T array Imag VAR&#39;][chop, :] = \
+                np.sum(tivar[chop_idx[i], :, :], axis=0) / nsamp**2
+
+            # also store some other chop-averaged values
+            self.pdemod[&#39;Samples&#39;][chop] = chop_cts[i]
+            self.pdemod[&#39;Chop Offset&#39;][chop] = \
+                np.sum(realchop[chop_idx[i]]) / nsamp
+            self.pdemod[&#39;Chop Offset Imag&#39;][chop] = \
+                np.sum(imagchop[chop_idx[i]]) / nsamp
+            for col in colnames:
+                self.pdemod[col][chop] = \
+                    np.sum(self.praw[col][chop_idx[i]]) / nsamp</div>
+
+
+<div class="viewcode-block" id="StepDemodulate.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.html#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        This step is run as a single-in single-out (SISO) step:
+        self.datain should be a DataFits object, and output will also
+        be a single DataFits, stored in self.dataout.
+
+        The process is:
+
+        1. Read data and tag chop, nod, and HWP state for all
+           samples.
+        2. Convolve data with a box filter.
+        3. Flag data for bad tracking states.
+        4. Weight the chop data with a sine wave and average to
+           demodulate the chops. Compute the variance across samples
+           at the same time.
+        5. Apply a phase correction to every pixel to correct for
+           readout delays.
+        6. Compute the magnitude of the demodulated signal (from
+           real, imaginary, or absolute value).
+        7. Store demodulated data in a new DataFits.
+
+        &quot;&quot;&quot;
+
+        # Set up variables
+        chop_tol = self.getarg(&#39;chop_tol&#39;)
+        nod_tol = self.getarg(&#39;nod_tol&#39;)
+        hwp_tol = self.getarg(&#39;hwp_tol&#39;)
+        az_tol = self.getarg(&#39;az_tol&#39;)  # arcseconds
+        el_tol = self.getarg(&#39;el_tol&#39;)  # arcseconds
+        track_tol = self.getarg(&#39;track_tol&#39;)
+        track_extra = self.getarg(&#39;track_extra&#39;)
+        checkhwp = self.getarg(&#39;checkhwp&#39;)
+        boxfilter = self.getarg(&#39;boxfilter&#39;)
+        nhwpexpect = self.datain.getheadval(&quot;nhwp&quot;)
+        sampfreq = self.datain.getheadval(&quot;smplfreq&quot;)
+        chopfreq = self.datain.getheadval(&quot;chpfreq&quot;)
+        choponfpa = self.datain.getheadval(&quot;chponfpa&quot;)  # T or F
+        nodflag = self.datain.getheadval(&quot;nodding&quot;)
+        tracksampcut = float(self.getarg(&#39;tracksampcut&#39;))
+        data_sigma = self.getarg(&#39;data_sigma&#39;)
+        l0method = self.getarg(&#39;l0method&#39;)
+
+        # get a user frequency for a couple default purposes
+        try:
+            user_freq = float(self.config[&#39;dmdplot&#39;][&#39;user_freq&#39;])
+            log.debug(&#39;User frequency from dmdplot &#39;
+                      &#39;params: %f&#39; % user_freq)
+        except (KeyError, ValueError):
+            user_freq = 10.2
+            log.debug(&#39;Default user frequency: %f&#39; % user_freq)
+
+        # Check chop frequency for legal values
+        if chopfreq &lt;= 0.:
+            if l0method[:3] == &#39;ABS&#39;:
+                # set to user value
+                log.debug(&quot;Invalid chop frequency: {}. Using user &quot;
+                          &quot;frequency instead: {}&quot;.format(chopfreq, user_freq))
+                chopfreq = user_freq
+            else:
+                msg = &quot;Invalid chop frequency: %f&quot; % chopfreq
+                log.error(msg)
+                raise ValueError(msg)
+
+        # If needed, get chop frequency for boxfilter
+        if boxfilter &lt; 0:
+            boxfilter = chopfreq
+
+        # Box highpass filter: subtract highpass filtered data
+        if boxfilter &gt; 0:
+            datar = self.datain.table[&#39;R array&#39;]
+            datat = self.datain.table[&#39;T array&#39;]
+
+            # make convolution function size and shape
+            dtime = 1.0 / self.datain.getheadval(&#39;SMPLFREQ&#39;)
+            winwidth = int(round(1.0 / boxfilter / dtime))
+            winsize = [winwidth]
+            for i in range(1, datar.ndim):
+                winsize.append(1)
+
+            # make convolution function
+            window = np.ones(winwidth) / winwidth
+            window.shape = winsize
+
+            # convolve data
+            log.debug(&#39;Convolving with box filter&#39;)
+            flatr = convolve(datar, window, mode=&#39;same&#39;)
+            flatt = convolve(datat, window, mode=&#39;same&#39;)
+
+            # subtract and save result
+            self.datain.table[&#39;R array&#39;] = datar - flatr
+            self.datain.table[&#39;T array&#39;] = datat - flatt
+        else:
+            flatr = None
+            flatt = None
+
+        # Read raw data and set up python (self.praw) arrays
+        log.debug(&#39;Reading data into Python structures&#39;)
+        self.readdata()
+        nsamp = self.praw[&#39;nsamp&#39;]
+
+        # Define the array for premask
+        premask = np.zeros(nsamp, dtype=np.int32)
+        # bit 0: incomplete chop
+        # bit 1: check on azelstate
+        # bit 2: HWP moving
+        # bit 3: check on nodstate
+        # bit 4: spare
+        # bit 5: spare
+        # bit 6: LOS rewind
+        # bit 7: tracking errors too high
+        # bit 8: CentroidExpMsec below threshold
+        # bit 9: extra samples &quot;before&quot; and &quot;after&quot;
+        #        tracking tolerance violation
+
+        # Read, parse and check HWP angles
+        hwpstate, nhwp = basehawc.readhwp(self, nsamp, hwp_tol, sampfreq)
+
+        # Use checkhwp to determine if should
+        # check the expected number of HWP angles
+        # with the number actually found in the timestream (true).
+        # If false, will ignore the checking. This is useful
+        # if continuously rotating the HWP (in lab mode) or if
+        # initial keyword NHWP is expected to be incorrect.
+        if checkhwp:
+            if nhwpexpect != nhwp:
+                msg = &quot;Expected %d HWP angles; found %d&quot; % (nhwpexpect, nhwp)
+                log.warning(msg)
+        else:
+            log.warning(&#39;Assigning NHWP keyword with the actual &#39;
+                        &#39;number of HWP angles (%d) found&#39; % nhwp)
+            self.datain.setheadval(&#39;NHWP&#39;, nhwp, &#39;Number of HWP Angles&#39;)
+
+        # Read and parse chop and nod signals
+        chopstate = basehawc.readchop(self, nsamp, chop_tol)
+        nodstate = basehawc.readnod(self, nsamp, nod_tol, nodflag)
+        chopstaten = sum([1 for s in chopstate if s != 0])
+        nodstaten = sum([1 for s in nodstate if s != 0])
+        log.debug(&#39;Chop State: #good samples=%d&#39; % chopstaten)
+        log.debug(&#39;Nod State: #good samples=%d&#39; % nodstaten)
+
+        # Read az and el errors to determine good/bad
+        log.debug(&#39;Reading Az/El errors to find when telescope is moving&#39;)
+        azelstate = np.zeros(nsamp, dtype=np.int32)
+        c1 = np.abs(self.praw[&#39;Azimuth Error&#39;]) &lt;= az_tol
+        c2 = np.abs(self.praw[&#39;Elevation Error&#39;]) &lt;= el_tol
+        azelstate[c1 &amp; c2] = 1
+        premask[azelstate == 0] += 2**1
+        log.debug(&#39;Az/El State: #good samples=%d&#39; % sum(azelstate))
+
+        # Removing samples that occur during LOS rewinds (flag = 1)
+        if &#39;Flag&#39; in self.praw:
+            # to avoid failing with old data where &#39;Flag&#39; was not present
+            flagstate = self.praw[&#39;Flag&#39;].astype(np.int32)
+            ind_losrewind = np.where(flagstate != 0)
+            premask[ind_losrewind] += 2**6
+            azelstate[ind_losrewind] = 0
+
+        log.debug(&#39;Az/El after flagstate: #good samples=%d&#39; %
+                  sum(azelstate))
+
+        # Removing samples if tracking errors are too high
+        log.debug(&#39;Number of good samples before tracking &#39;
+                  &#39;error correction: %d&#39; % sum(azelstate))
+        ngoodsampbefore = sum(azelstate)
+
+        trcerr3 = None
+        trcerr4 = None
+        try:
+            trcerr3 = self.praw[&#39;TrackErrAoi3&#39;].astype(np.float64)
+            trcerr4 = self.praw[&#39;TrackErrAoi4&#39;].astype(np.float64)
+            if np.isnan(trcerr3).any():
+                log.warning(&#39;TrackErrAoi3 signal contains NaNs - &#39;
+                            &#39;Assigning 999999 so these samples &#39;
+                            &#39;can be flagged by track_tol&#39;)
+                trcerr3[trcerr3 != trcerr3] = 999999.
+            if np.isnan(trcerr4).any():
+                log.warning(&#39;TrackErrAoi4 signal contains NaNs - &#39;
+                            &#39;Assigning 999999 so these samples &#39;
+                            &#39;can be flagged by track_tol&#39;)
+                trcerr4[trcerr4 != trcerr4] = 999999.
+        except (ValueError, KeyError):
+            msg = &#39;TrackErrAoi3 and 4 tables not found. &#39; \
+                  &#39;Deactivating sample removal due to tracking errors.&#39;
+            log.warning(msg)
+            # assigning negative track_tol will
+            # deactivate sample removal (see below)
+            track_tol = -1.
+
+        if track_tol == &#39;beam&#39;:
+            # Labeling bad samples based on trcerr3 and trcerr4
+            beamsize, waveband = self.read_beam()
+            indtrc = np.where((trcerr3 &gt; beamsize) | (trcerr4 &gt; beamsize))
+            azelstate[indtrc] = np.int32(0)
+            premask[indtrc] += 2**7
+            log.debug(&#39;Removing bad samples, tracking issues - &#39;
+                      &#39;using beam size of %s arcsec (Band %s)&#39; %
+                      (beamsize, waveband))
+            log.debug(&#39;Number of good samples after removing samples &#39;
+                      &#39;due to bad tracking = %d&#39; % sum(azelstate))
+
+            ngoodsampafter = sum(azelstate)
+            if float(ngoodsampafter) / float(ngoodsampbefore) &gt; \
+                    (1.0 - tracksampcut):
+                self.datain.setheadval(&#39;TRCKSTAT&#39;,
+                                       &#39;GOOD - less than %.3f of &#39;
+                                       &#39;samples removed&#39; % tracksampcut,
+                                       &#39;Tracking status (stepDemod)&#39;)
+            elif float(ngoodsampafter) / float(ngoodsampbefore) &lt;= \
+                    (1.0 - tracksampcut):
+                self.datain.setheadval(&#39;TRCKSTAT&#39;,
+                                       &#39;BAD - more than %.3f of samples &#39;
+                                       &#39;removed&#39; % tracksampcut,
+                                       &#39;Tracking status (stepDemod)&#39;)
+                log.warning(&#39;Tracking status is BAD: more &#39;
+                            &#39;than %.3f of samples removed&#39; % tracksampcut)
+        elif track_tol == &#39;centroidexp&#39;:
+            # Look for centroidexp
+            centroidexp = None
+            try:
+                centroidexp = self.praw[&#39;CentroidExpMsec&#39;].astype(np.float64)
+            except (KeyError, ValueError):
+                msg = &#39;CentroidExpMsec not found. Deactivating sample &#39; \
+                      &#39;removal due to tracking errors.&#39;
+                log.warning(msg)
+
+                # assigning negative track_tol will deactivate
+                # sample removal (see below)
+                track_tol = -1.
+                self.datain.setheadval(&#39;TRCKSTAT&#39;,
+                                       &#39;NONE - CentroidExpMsec not found&#39;,
+                                       &#39;Tracking status (stepDemod)&#39;)
+
+            if track_tol == &#39;centroidexp&#39;:
+                # Labeling bad samples based on centroidexp
+                badtrack = np.where(centroidexp &lt; 10)
+                azelstate[badtrack] = np.int32(0)
+                premask[badtrack] += 2**8
+                log.debug(&#39;Removing bad samples, tracking &#39;
+                          &#39;issues - using centroidexp)&#39; % centroidexp)
+                log.debug(&#39;Number of good samples after removing &#39;
+                          &#39;samples due to bad tracking = %d&#39; %
+                          sum(azelstate))
+
+                ngoodsampafter = sum(azelstate)
+                if float(ngoodsampafter) / float(ngoodsampbefore) &gt; \
+                        (1.0 - tracksampcut):
+                    self.datain.setheadval(&#39;TRCKSTAT&#39;,
+                                           &#39;GOOD - less than %.3f of &#39;
+                                           &#39;samples removed&#39; % tracksampcut,
+                                           &#39;Tracking status (stepDemod)&#39;)
+                elif float(ngoodsampafter) / float(ngoodsampbefore) &lt;= \
+                        (1.0 - tracksampcut):
+                    self.datain.setheadval(&#39;TRCKSTAT&#39;,
+                                           &#39;BAD - more than %.3f of samples &#39;
+                                           &#39;removed&#39; % tracksampcut,
+                                           &#39;Tracking status (stepDemod)&#39;)
+                    log.warning(&#39;Tracking status is BAD: more &#39;
+                                &#39;than %.3f of samples removed&#39; %
+                                tracksampcut)
+
+        else:
+            try:
+                track_tol = float(track_tol)
+            except ValueError:
+                msg = &#39;track_tol value is undefined: %s; &#39; \
+                      &#39;specify either &quot;beam&quot;, a positive number (arcsec) &#39; \
+                      &#39;or a negative number (to deactivate)&#39; % track_tol
+                log.error(msg)
+                raise ValueError(msg)
+            if track_tol &lt;= 0.:
+                log.debug(&#39;Removal bad samples due to tracking &#39;
+                          &#39;issues is deactivated (negative track_tol &#39;
+                          &#39;equal to %s)&#39; % track_tol)
+                self.datain.setheadval(&#39;TRCKSTAT&#39;,
+                                       &#39;NONE - tracking tolerance is &#39;
+                                       &#39;deactivated&#39;,
+                                       &#39;Tracking status (stepDemod)&#39;)
+            else:
+                indtrc = np.where(
+                    (trcerr3 &gt; track_tol) | (trcerr4 &gt; track_tol))
+                azelstate[indtrc] = np.int32(0)
+                premask[indtrc] += 2**7
+                log.debug(&#39;Removing bad samples, tracking issues - &#39;
+                          &#39;using track_tol equal to %s arcsec&#39; %
+                          track_tol)
+                log.debug(&#39;Number of good samples after removing &#39;
+                          &#39;samples due to bad tracking = %d&#39; %
+                          sum(azelstate))
+                ngoodsampafter = sum(azelstate)
+
+                if float(ngoodsampafter) / float(ngoodsampbefore) &gt; \
+                        (1.0 - tracksampcut):
+                    self.datain.setheadval(&#39;TRCKSTAT&#39;,
+                                           &#39;GOOD - less than %.3f of samples &#39;
+                                           &#39;removed&#39; % tracksampcut,
+                                           &#39;Tracking status (stepDemod)&#39;)
+                else:
+                    self.datain.setheadval(&#39;TRCKSTAT&#39;,
+                                           &#39;BAD - more than %.3f of samples &#39;
+                                           &#39;removed&#39; % tracksampcut,
+                                           &#39;Tracking status (stepDemod)&#39;)
+                    log.warning(&#39;Tracking status is BAD: more than %.3f of &#39;
+                                &#39;samples removed&#39; % tracksampcut)
+
+        # Extra tracking error correction
+        if track_tol == &#39;beam&#39; or track_tol == &#39;centroidexp&#39; or track_tol &gt; 0.:
+            track_extra_before = int(sampfreq * track_extra[0])
+            track_extra_after = int(sampfreq * track_extra[1])
+            # at least one positive, neither negative
+            if (track_extra_before &gt; 0 or track_extra_after &gt; 0) and not \
+                    (track_extra_before &lt; 0 or track_extra_after &lt; 0):
+                ref_azelstate = np.empty_like(azelstate)
+                np.copyto(ref_azelstate, azelstate)
+                for i in range(nsamp - 1):
+                    samp1 = ref_azelstate[i]
+                    samp2 = ref_azelstate[i + 1]
+                    if (samp1 - samp2) == 1:
+                        beg = max(0, i - track_extra_before)
+                        end = i
+                        azelstate[beg:end] = np.int32(0)
+                        premask[beg:end] += 2**9
+                    elif (samp1 - samp2) == -1:
+                        beg = i
+                        end = min(i + track_extra_after, nsamp - 1)
+                        azelstate[beg:end] = np.int32(0)
+                        premask[beg:end] += 2**9
+                    else:
+                        pass
+
+                log.debug(&#39;Number of good samples after EXTRA removal &#39;
+                          &#39;of bad samples due to bad tracking &#39;
+                          &#39;(track_extra) = %d&#39; % sum(azelstate))
+
+                ngoodsampafter = sum(azelstate)
+                if float(ngoodsampafter) / float(ngoodsampbefore) &gt; \
+                        (1.0 - tracksampcut):
+                    self.datain.setheadval(&#39;TRCKSTAT&#39;,
+                                           &#39;GOOD - less than %.3f of samples &#39;
+                                           &#39;removed&#39; % tracksampcut,
+                                           &#39;Tracking status (stepDemod)&#39;)
+                elif float(ngoodsampafter) / float(ngoodsampbefore) \
+                        &lt;= (1.0 - tracksampcut):
+                    self.datain.setheadval(&#39;TRCKSTAT&#39;,
+                                           &#39;BAD - more than %.3f of samples &#39;
+                                           &#39;removed&#39; % tracksampcut,
+                                           &#39;Tracking status (stepDemod)&#39;)
+                    log.warning(&#39;Tracking status is BAD: more &#39;
+                                &#39;than %.3f of samples removed&#39; %
+                                tracksampcut)
+            else:
+                log.debug(&#39;Extra removal of bad samples is &#39;
+                          &#39;deactivated because values in &#39;
+                          &#39;track_extra are &lt;= 0.&#39;)
+        else:
+            log.debug(&#39;Extra removal of bad samples is deactivated &#39;
+                      &#39;because track_tol is not activated&#39;)
+
+        # Read Phase file: Set arrays, get angles, reformat
+        # - FLOAT ARR rphases = np.arange(0, 1, 0.1).astype(np.float64)
+        rphase = np.ones((self.praw[&#39;nrow&#39;],
+                          self.praw[&#39;ncol&#39;])).astype(np.float64)
+        tphase = np.ones((self.praw[&#39;nrow&#39;],
+                          self.praw[&#39;ncol&#39;])).astype(np.float64)
+        phasefile = os.path.expandvars(str(self.getarg(&#39;phasefile&#39;)))
+        phaseoffset = self.getarg(&#39;phaseoffset&#39;)
+        aux = False
+        if os.path.isfile(phasefile):
+            # If it&#39;s a file, read it as such
+            aux = True
+            phasedata = DataFits(config=self.config)
+            phasedata.load(phasefile)
+            rphase = phasedata.imgdata[0]
+            tphase = phasedata.imgdata[1]
+
+            # add in phaseoffset
+            log.debug(&#39;Applying phase offset: %f / 360. / %f sec&#39; %
+                      (phaseoffset, user_freq))
+            offset_sec = phaseoffset / 360. / user_freq
+            rphase += offset_sec
+            tphase += offset_sec
+        else:
+            # Try read as number
+            log.debug(&#39;Could not load &lt;%s&gt; as a phasefile&#39; % phasefile)
+            try:
+                phasefloat = float(phasefile)
+            except ValueError:
+                log.warning(&quot;Could not set phasefile &lt;%s&gt; &quot;
+                            &quot;setting phase=0&quot; % phasefile)
+                phasefile = &quot;Invalid Phase File&quot;
+                phasefloat = 0.0
+            log.debug(&#39;Applying a phase correction of &lt;%s&gt;&#39; % phasefloat)
+            rphase *= phasefloat
+            tphase *= phasefloat
+
+        # Finally, demodulate chop
+        log.info(&#39;Running Sine-wave demodulation...&#39;)
+
+        # number of samples in chop period is chopsamp
+        chopsamp = int(round(sampfreq / (1. * chopfreq)))
+        log.debug(&quot;Number of samples in chop &quot;
+                  &quot;period = %d&quot; % chopsamp)
+        log.debug(&#39;Demodulating chop signal to count &#39;
+                  &#39;number of chop cycles&#39;)
+
+        nchops, choptag, phasetag = \
+            self.make_chop_phase_tags(chopstate, chopsamp,
+                                      hwpstate, nodstate)
+        premask[hwpstate != 1] += 2**2
+        premask[azelstate != 1] += 2**1
+        premask[nodstate == 0] += 2**3
+        premask[phasetag == -1] += 2**0
+
+        log.info(&#39;Found %d chop cycles&#39; % nchops)
+        if nchops &lt;= 0:
+            msg = &quot;Invalid number of chops (%d) found&quot; % nchops
+            log.error(msg)
+            raise ValueError(msg)
+
+        # allocate space
+        self.makedemod(nchops)
+
+        # do sine demodulation
+        log.debug(&#39;Averaging values in each chop using &#39;
+                  &#39;sine/cosine waves&#39;)
+        log.debug(&#39;Calculating variance across chops at &#39;
+                  &#39;common nod/HWP positions&#39;)
+        self.avgdemodsin(choptag, phasetag, chopsamp, nchops,
+                         data_sigma)
+
+        # compute chopmask (may need speeding up)
+        log.debug(&#39;Making chopmask, averaging columns&#39;)
+        chopmask = np.zeros(nchops, dtype=np.int32)
+        for i in range(nchops):
+            chopmask[i] = np.bitwise_or.reduce(premask[choptag == i])
+
+            # also average extracols, while we&#39;re iterating over nchop
+            for name in self.extracols:
+                self.pdemod[name][i] = np.mean(self.praw[name][choptag == i])
+
+        # make chop phase correction
+        if self.getarg(&#39;chopphase&#39;):
+            log.debug(&#39;Doing Chop Phase Correction&#39;)
+            mag = np.sqrt(self.pdemod[&#39;Chop Offset&#39;] ** 2
+                          + self.pdemod[&#39;Chop Offset Imag&#39;] ** 2)
+
+            # to avoid Nan
+            mag[np.where(mag == 0.0)] = 1.0
+            phasereal = self.pdemod[&#39;Chop Offset&#39;] / mag
+            phaseimag = -self.pdemod[&#39;Chop Offset Imag&#39;] / mag
+            phasereal = phasereal.reshape((phasereal.shape[0], 1, 1))
+            phaseimag = phaseimag.reshape((phaseimag.shape[0], 1, 1))
+            self.pdemod[&#39;Chop Offset&#39;] = mag
+            tmp = \
+                self.pdemod[&#39;R array&#39;] * phasereal \
+                - self.pdemod[&#39;R array Imag&#39;] * phaseimag
+            self.pdemod[&#39;R array Imag&#39;] = \
+                self.pdemod[&#39;R array&#39;] * phaseimag \
+                + self.pdemod[&#39;R array Imag&#39;] * phasereal
+            self.pdemod[&#39;R array&#39;] = tmp
+
+            tmp = \
+                self.pdemod[&#39;T array&#39;] * phasereal \
+                - self.pdemod[&#39;T array Imag&#39;] * phaseimag
+            self.pdemod[&#39;T array Imag&#39;] = \
+                self.pdemod[&#39;T array&#39;] * phaseimag \
+                + self.pdemod[&#39;T array Imag&#39;] * phasereal
+            self.pdemod[&#39;T array&#39;] = tmp
+
+            phase = np.arctan2(phaseimag, phasereal)
+
+            # propagate variance
+            # (normalized correlation coefficient for r and i is 1)
+            # qr = r * pr - i * pi
+            # Vqr = pr^2 * Vr + pi^2 * Vi - 2 * pr * pi sqrt(Vr * Vi)
+            # qi = r * pi + i * pr
+            # Vqi = pi^2 * Vr + pr^2 * Vi + 2 * pr * pi sqrt(Vr * Vi)
+            tmp = \
+                self.pdemod[&#39;R array VAR&#39;] * phasereal**2 \
+                + self.pdemod[&#39;R array Imag VAR&#39;] * phaseimag**2 \
+                - 2 * phasereal * phaseimag \
+                * np.sqrt(self.pdemod[&#39;R array VAR&#39;]
+                          * self.pdemod[&#39;R array Imag VAR&#39;])
+            self.pdemod[&#39;R array Imag VAR&#39;] = \
+                self.pdemod[&#39;R array VAR&#39;] * phaseimag ** 2 \
+                + self.pdemod[&#39;R array Imag VAR&#39;] * phasereal ** 2 \
+                + 2 * phasereal * phaseimag \
+                * np.sqrt(self.pdemod[&#39;R array VAR&#39;]
+                          * self.pdemod[&#39;R array Imag VAR&#39;])
+            self.pdemod[&#39;R array VAR&#39;] = tmp
+
+            tmp = \
+                self.pdemod[&#39;T array VAR&#39;] * phasereal**2 \
+                + self.pdemod[&#39;T array Imag VAR&#39;] * phaseimag**2 \
+                - 2 * phasereal * phaseimag \
+                * np.sqrt(self.pdemod[&#39;T array VAR&#39;]
+                          * self.pdemod[&#39;T array Imag VAR&#39;])
+            self.pdemod[&#39;T array Imag VAR&#39;] = \
+                self.pdemod[&#39;T array VAR&#39;] * phaseimag ** 2 \
+                + self.pdemod[&#39;T array Imag VAR&#39;] * phasereal ** 2 \
+                + 2 * phasereal * phaseimag \
+                * np.sqrt(self.pdemod[&#39;T array VAR&#39;]
+                          * self.pdemod[&#39;T array Imag VAR&#39;])
+            self.pdemod[&#39;T array VAR&#39;] = tmp
+        else:
+            phase = np.zeros(nchops, dtype=np.float64)
+
+        # Do pixel phase correction
+
+        # R phase values
+        rphase = 2. * math.pi * rphase * chopfreq
+        phasereal = np.cos(rphase).reshape(
+            1, self.praw[&#39;nrow&#39;], self.praw[&#39;ncol&#39;])
+        phaseimag = np.sin(rphase).reshape(
+            1, self.praw[&#39;nrow&#39;], self.praw[&#39;ncol&#39;])
+
+        # correct R data
+        tmp = \
+            self.pdemod[&#39;R array&#39;] * phasereal - \
+            self.pdemod[&#39;R array Imag&#39;] * phaseimag
+        self.pdemod[&#39;R array Imag&#39;] = \
+            self.pdemod[&#39;R array&#39;] * phaseimag + \
+            self.pdemod[&#39;R array Imag&#39;] * phasereal
+        self.pdemod[&#39;R array&#39;] = tmp
+
+        # propagate R variance
+        # (normalized correlation coefficient for R and I is still 1)
+        tmp = \
+            self.pdemod[&#39;R array VAR&#39;] * phasereal ** 2 \
+            + self.pdemod[&#39;R array Imag VAR&#39;] * phaseimag ** 2 \
+            - 2 * phasereal * phaseimag \
+            * np.sqrt(self.pdemod[&#39;R array VAR&#39;]
+                      * self.pdemod[&#39;R array Imag VAR&#39;])
+        self.pdemod[&#39;R array Imag VAR&#39;] = \
+            self.pdemod[&#39;R array VAR&#39;] * phaseimag ** 2 \
+            + self.pdemod[&#39;R array Imag VAR&#39;] * phasereal ** 2 \
+            + 2 * phasereal * phaseimag \
+            * np.sqrt(self.pdemod[&#39;R array VAR&#39;]
+                      * self.pdemod[&#39;R array Imag VAR&#39;])
+        self.pdemod[&#39;R array VAR&#39;] = tmp
+
+        # now T phase values
+        tphase = 2. * math.pi * tphase * chopfreq
+        phasereal = np.cos(tphase).reshape(
+            1, self.praw[&#39;nrow&#39;], self.praw[&#39;ncol&#39;])
+        phaseimag = np.sin(tphase).reshape(
+            1, self.praw[&#39;nrow&#39;], self.praw[&#39;ncol&#39;])
+
+        # correct T data
+        tmp = \
+            self.pdemod[&#39;T array&#39;] * phasereal \
+            - self.pdemod[&#39;T array Imag&#39;] * phaseimag
+        self.pdemod[&#39;T array Imag&#39;] = \
+            self.pdemod[&#39;T array&#39;] * phaseimag \
+            + self.pdemod[&#39;T array Imag&#39;] * phasereal
+        self.pdemod[&#39;T array&#39;] = tmp
+
+        # propagate T variance
+        tmp = \
+            self.pdemod[&#39;T array VAR&#39;] * phasereal ** 2 \
+            + self.pdemod[&#39;T array Imag VAR&#39;] * phaseimag ** 2 \
+            - 2 * phasereal * phaseimag \
+            * np.sqrt(self.pdemod[&#39;T array VAR&#39;]
+                      * self.pdemod[&#39;T array Imag VAR&#39;])
+        self.pdemod[&#39;T array Imag VAR&#39;] = \
+            self.pdemod[&#39;T array VAR&#39;] * phaseimag ** 2 \
+            + self.pdemod[&#39;T array Imag VAR&#39;] * phasereal ** 2 \
+            + 2 * phasereal * phaseimag \
+            * np.sqrt(self.pdemod[&#39;T array VAR&#39;]
+                      * self.pdemod[&#39;T array Imag VAR&#39;])
+        self.pdemod[&#39;T array VAR&#39;] = tmp
+
+        # Do L0 method correction -&gt; Result in R array and T array
+        if l0method[:3] == &#39;ABS&#39;:
+            rr = self.pdemod[&#39;R array&#39;]
+            ri = self.pdemod[&#39;R array Imag&#39;]
+            tr = self.pdemod[&#39;T array&#39;]
+            ti = self.pdemod[&#39;T array Imag&#39;]
+            self.pdemod[&#39;R array&#39;] = np.sqrt(rr**2 + ri**2)
+            self.pdemod[&#39;T array&#39;] = np.sqrt(tr**2 + ti**2)
+
+            # propagate variance
+            # q = (r^2 + i^2)^(1/2)
+            # Vq = 1/q^2 * (r^2 Vr + i^2 Vi + 2 r i sqrt(Vr Vi))
+            qr = self.pdemod[&#39;R array&#39;]
+            qt = self.pdemod[&#39;T array&#39;]
+            rrv = self.pdemod[&#39;R array VAR&#39;]
+            riv = self.pdemod[&#39;R array Imag VAR&#39;]
+            trv = self.pdemod[&#39;T array VAR&#39;]
+            tiv = self.pdemod[&#39;T array Imag VAR&#39;]
+            self.pdemod[&#39;R array VAR&#39;] = \
+                (1 / qr**2) * (rrv * rr**2 + riv * ri**2
+                               + 2 * rr * ri * np.sqrt(rrv * riv))
+            self.pdemod[&#39;T array VAR&#39;] = \
+                (1 / qt**2) * (trv * tr**2 + tiv * ti**2
+                               + 2 * tr * ti * np.sqrt(trv * tiv))
+        elif l0method[:2] == &#39;IM&#39;:
+            self.pdemod[&#39;R array&#39;] = self.pdemod[&#39;R array Imag&#39;]
+            self.pdemod[&#39;T array&#39;] = self.pdemod[&#39;T array Imag&#39;]
+            self.pdemod[&#39;R array VAR&#39;] = self.pdemod[&#39;R array Imag VAR&#39;]
+            self.pdemod[&#39;T array VAR&#39;] = self.pdemod[&#39;T array Imag VAR&#39;]
+        elif l0method[:2] != &#39;RE&#39;:
+            log.warning(&#39;Sine demod: unknown l0method=%s&#39; % l0method)
+
+        # Calculating the effective EXPTIME (on-source) based
+        # on the samples actually used
+        # (the samples for which choptag &lt;= 0 where excluded)
+        ind_goodsamp = np.where(choptag &gt;= 0)
+        goodsamp = choptag[ind_goodsamp]
+        ngoodsamp = len(goodsamp)
+        if choponfpa:
+            # chopping on-chip (double the exposure time)
+            exptime = 2.0 * (ngoodsamp / 2.0) / sampfreq
+        else:
+            # chopping off-chip
+            exptime = (ngoodsamp / 2.0) / sampfreq
+
+        # make output columns of demodulated data
+        cols = []
+        for c, f, d, u in zip(self.column_names, self.format_names,
+                              self.dim_names, self.unit_names):
+            log.debug(&quot;Appending column with name=%s&quot; % c)
+            junk = fits.Column(name=c, format=f, dim=d,
+                               unit=u, array=self.pdemod[c])
+            cols.append(junk)
+
+        for name in [&#39;R array&#39;, &#39;T array&#39;, &#39;Chop Offset&#39;]:
+            # add in Imag columns
+            log.debug(&quot;Appending column with name=%s Imag&quot; % name)
+            idx = self.column_names.index(name)
+            col_to_add = fits.Column(name=&quot;%s Imag&quot; % name,
+                                     format=self.format_names[idx],
+                                     dim=self.dim_names[idx],
+                                     unit=self.unit_names[idx],
+                                     array=self.pdemod[&#39;%s Imag&#39; % name])
+            cols.append(col_to_add)
+
+        # add phase and chopmask column for demod mode
+        log.debug(&quot;Appending column with name=Phase Corr&quot;)
+        col_to_add = fits.Column(name=&quot;Phase Corr&quot;, format=&#39;1E&#39;,
+                                 unit=&#39;Radians&#39;, array=phase)
+        cols.append(col_to_add)
+        log.debug(&quot;Appending column with name=Chop Mask&quot;)
+        col_to_add = fits.Column(name=&quot;Chop Mask&quot;, format=&#39;1J&#39;,
+                                 unit=&#39;&#39;, array=chopmask)
+        cols.append(col_to_add)
+
+        for name in [&#39;R array&#39;, &#39;T array&#39;]:
+            # add in VAR columns
+            log.debug(&quot;Appending column with name=%s VAR&quot; % name)
+            idx = self.column_names.index(name)
+            col_to_add = fits.Column(name=&quot;%s VAR&quot; % name,
+                                     format=self.format_names[idx],
+                                     dim=self.dim_names[idx],
+                                     unit=self.unit_names[idx] + &#39;^2&#39;,
+                                     array=self.pdemod[&#39;%s VAR&#39; % name])
+            cols.append(col_to_add)
+            col_to_add = fits.Column(name=&quot;%s Imag VAR&quot; % name,
+                                     format=self.format_names[idx],
+                                     dim=self.dim_names[idx],
+                                     unit=self.unit_names[idx] + &#39;^2&#39;,
+                                     array=self.pdemod[&#39;%s Imag VAR&#39; % name])
+            cols.append(col_to_add)
+
+        # Add column with chop averaged raw data (if requested)
+        if self.getarg(&quot;chopavg&quot;) and boxfilter:
+            # Make Arrays
+            log.debug(&quot;Making Chop Averaged Arrays&quot;)
+            chopavgr = np.empty((nchops,
+                                 self.praw[&#39;nrow&#39;], self.praw[&#39;ncol&#39;]))
+            chopavgt = np.empty((nchops,
+                                 self.praw[&#39;nrow&#39;], self.praw[&#39;ncol&#39;]))
+
+            # Fill Arrays (choptag is int array, increases from 0 to nchop-1)
+            # limits of chop in raw samples
+            indbeg, indend = 0, 0
+            # index of current chop
+            chopind = 0
+            while chopind &lt; nchops - 1 and indbeg &lt; nsamp:
+                # search for next chop start
+                indbeg = indend
+                while indbeg &lt; nsamp and choptag[indbeg] &lt;= chopind:
+                    indbeg += 1
+                if indbeg &lt; nsamp:
+                    # search for next chop end
+                    indend = indbeg
+                    # safer than chopind+=1 in case chops are missing
+                    chopind = choptag[indbeg]
+                    while indend &lt; nsamp and choptag[indend] == chopind:
+                        indend += 1
+
+                    # average data
+                    chopavgr[chopind, ...] = np.average(
+                        flatr[indbeg:indend, ...], axis=0)
+                    chopavgt[chopind, ...] = np.average(
+                        flatt[indbeg:indend, ...], axis=0)
+
+            # Add to columns
+            newcol = fits.Column(name=&#39;R array AVG&#39;,
+                                 format=&#39;%dE&#39; % (self.praw[&#39;nrow&#39;]
+                                                 * self.praw[&#39;ncol&#39;]),
+                                 dim=&#39;(%d,%d)&#39; % (self.praw[&#39;ncol&#39;],
+                                                  self.praw[&#39;nrow&#39;]),
+                                 unit=&#39;counts&#39;, array=chopavgr)
+            cols.append(newcol)
+            newcol = fits.Column(name=&#39;T array AVG&#39;,
+                                 format=&#39;%dE&#39; % (self.praw[&#39;nrow&#39;]
+                                                 * self.praw[&#39;ncol&#39;]),
+                                 dim=&#39;(%d,%d)&#39; % (self.praw[&#39;ncol&#39;],
+                                                  self.praw[&#39;nrow&#39;]),
+                                 unit=&#39;counts&#39;, array=chopavgt)
+            cols.append(newcol)
+
+        # Make output data
+        log.debug(&quot;Storing output data&quot;)
+        tbhdu = fits.BinTableHDU.from_columns(fits.ColDefs(cols))
+
+        self.dataout = DataFits(config=self.datain.config)
+        self.dataout.filename = self.datain.filename
+        self.dataout.imageset(None, self.datain.imgnames[0],
+                              self.datain.header)
+        self.dataout.tableset(tbhdu.data, &#39;DEMODULATED DATA&#39;, tbhdu.header)
+
+        # Updating the EXPTIME keyword value in the header
+        self.dataout.setheadval(&#39;EXPTIME&#39;, exptime,
+                                &#39;On-source exposure time [s]&#39;)
+
+        # Update SOFIA mandated keywords (since this is first pipe step)
+        obsid = &#39;P_&#39; + self.dataout.getheadval(&#39;OBS_ID&#39;)
+        self.dataout.setheadval(&#39;OBS_ID&#39;, obsid)
+        self.dataout.setheadval(&#39;PROCSTAT&#39;, &#39;LEVEL_1&#39;)
+        self.dataout.setheadval(&#39;PIPELINE&#39;, &#39;HAWC_DRP&#39;)
+        try:
+            self.dataout.setheadval(&#39;ASSC_AOR&#39;,
+                                    self.dataout.getheadval(&#39;AOR_ID&#39;),
+                                    &#39;Associated AORs&#39;)
+        except KeyError:
+            pass
+        try:
+            self.dataout.setheadval(&#39;ASSC_MSN&#39;,
+                                    self.dataout.getheadval(&#39;MISSN-ID&#39;),
+                                    &#39;Associated Mission IDs&#39;)
+        except KeyError:
+            pass
+
+        # Add auxiliary file to history
+        if aux:
+            phasebasename = phasefile.split(str(self.dataout.data_path))[-1]
+            self.dataout.setheadval(&#39;HISTORY&#39;, &#39;PHASE: %s&#39; %
+                                    phasebasename)
+
+        # If an Instrumental Configuration HDU is present
+        # in datain, copy it to dataout (in HDU1)
+        if &#39;CONFIGURATION&#39; in self.datain.imgnames:
+            configdata = self.datain.imgdata[
+                self.datain.imageindex(imagename=&#39;CONFIGURATION&#39;)]
+            confighead = self.datain.imgheads[
+                self.datain.imageindex(imagename=&#39;CONFIGURATION&#39;)]
+            self.dataout.imageset(configdata,
+                                  &#39;CONFIGURATION&#39;,
+                                  imageheader=confighead, index=1)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

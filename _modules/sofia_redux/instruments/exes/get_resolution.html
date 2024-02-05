@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.exes.get_resolution &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.exes.get_resolution</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import os
+
+from astropy import log
+from astropy.io import fits
+import pandas
+
+from sofia_redux.instruments import exes
+from sofia_redux.toolkit.utilities import goodfile, hdinsert
+
+__all__ = [&#39;get_resolution&#39;]
+
+
+<div class="viewcode-block" id="get_resolution">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.get_resolution.get_resolution.html#sofia_redux.instruments.exes.get_resolution.get_resolution">[docs]</a>
+def get_resolution(header):
+    &quot;&quot;&quot;
+    Retrieve expected spectral resolving power.
+
+    Requires spectral resolution files in exes/data/resolution for
+    overriding cross-dispersed resolutions:
+
+        - short_wave_resolution.txt
+        - medium_wave_resolution.txt
+        - long_wave_resolution.txt
+
+    These files must have 2 columns: slit width (arcsec) and
+    spectral resolving power (lambda / dlambda).  The file chosen is
+    based on the central wavelength for the observation.
+
+    The procedure is:
+
+        1. Read resolution data from the configuration file matching
+           the central wavelength of the observation (WAVECENT).
+        2. Use SLITWID to find the closest resolution value.
+        3. If no appropriate data is found, or the mode is not cross-dispersed,
+           the value of the RP (if present) or RESOLUN keyword is returned.
+           Otherwise, the best matching resolving power is returned.
+
+    Parameters
+    ----------
+    header : fits.Header
+
+    Returns
+    -------
+    float
+        Expected resolving power.
+    &quot;&quot;&quot;
+    if not isinstance(header, fits.Header):
+        msg = &#39;Invalid header.&#39;
+        log.error(msg)
+        raise ValueError(msg)
+
+    required_keywords = [&#39;WAVECENT&#39;, &#39;SLITWID&#39;, &#39;RESOLUN&#39;, &#39;INSTCFG&#39;]
+    for key in required_keywords:
+        if key not in header:
+            msg = f&#39;Header missing {key} keyword.&#39;
+            log.error(msg)
+            raise ValueError(msg)
+
+    instcfg = header[&#39;INSTCFG&#39;]
+    slitwid = header[&#39;SLITWID&#39;]
+    resolun = header[&#39;RESOLUN&#39;]
+    wavecent = header[&#39;WAVECENT&#39;]
+
+    # check for valid RP value: if present and reasonable,
+    # use instead of resolun
+    rp = header.get(&#39;RP&#39;, -9999)
+    if rp &gt; 500:
+        resolun = rp
+
+    if &#39;HIGH&#39; not in str(instcfg).strip().upper():
+        log.debug(f&#39;Mode {instcfg}: returning header value.&#39;)
+        return resolun
+
+    if wavecent &lt; 10.5:
+        rfile = &#39;short_wave_resolution.txt&#39;
+    elif wavecent &lt; 15.5:
+        rfile = &#39;medium_wave_resolution.txt&#39;
+    else:
+        rfile = &#39;long_wave_resolution.txt&#39;
+
+    resfile = os.path.join(os.path.dirname(exes.__file__), &#39;data&#39;,
+                           &#39;resolution&#39;, rfile)
+    hdinsert(header, &#39;RESFILE&#39;, resfile)
+    log.debug(f&#39;Using resolution file: {resfile}&#39;)
+
+    if not goodfile(resfile, verbose=True):
+        msg = f&#39;Cannot read resolution file: {resfile}&#39;
+        log.error(msg)
+        raise ValueError(msg)
+
+    # Find appropriate resolution
+    log.debug(f&quot;Loading resolution file: {resfile}&quot;)
+    names = [&#39;slitwid&#39;, &#39;res&#39;]
+    df = pandas.read_csv(resfile, comment=&#39;#&#39;, names=names,
+                         delim_whitespace=True)
+    if df.empty:
+        log.debug(&#39;No resolution data; returning header value.&#39;)
+        return resolun
+
+    resolution = float(df.loc[
+        (df.slitwid - slitwid).abs().idxmin()][&#39;res&#39;])
+
+    log.debug(f&#39;Found resolution: {resolution}&#39;)
+    return resolution</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

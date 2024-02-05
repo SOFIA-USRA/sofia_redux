@@ -1,0 +1,1544 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.gui.main &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.gui.main</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Main window for Redux Qt5 GUI.&quot;&quot;&quot;
+
+import os
+import signal
+
+from astropy import log
+
+import sofia_redux.pipeline
+from sofia_redux.pipeline.gui import widgets
+
+try:
+    # dill allows pickling of more complex
+    # software structures.
+    # Undo may be unavailable for some reduction
+    # objects if dill is not installed.
+    import dill as pickle
+except ImportError:
+    import pickle
+
+try:
+    from PyQt5 import QtWidgets, QtCore, QtGui
+    from sofia_redux.pipeline.gui.ui import ui_main
+except ImportError:
+    HAS_PYQT5 = False
+    QtCore, QtGui = None, None
+
+    # duck type parents to allow class definition
+    class QtWidgets:
+        class QMainWindow:
+            pass
+
+    class ui_main:
+        class Ui_MainWindow:
+            pass
+else:
+    HAS_PYQT5 = True
+
+__all__ = [&#39;ReduxMainWindow&#39;]
+
+
+<div class="viewcode-block" id="ReduxMainWindow">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow">[docs]</a>
+class ReduxMainWindow(QtWidgets.QMainWindow, ui_main.Ui_MainWindow):
+    &quot;&quot;&quot;
+    Redux Qt5 GUI main window.
+
+    All attributes and methods for this class are intended for
+    internal use, to support the main GUI event loop and operations.
+    This class is normally instantiated from a `redux.Application`
+    object; all methods are triggered by user interaction only.
+
+    The UI for this application is built in Qt Designer: see the
+    `designer` folder for the Designer input files; the compiled
+    Python scripts are in the `ui` module.  All `ui_*.py` files
+    should not be edited manually, as they are automatically generated.
+    See the `designer/compile_ui` file for the sequence of commands
+    required to rebuild the UI from Designer files.
+    &quot;&quot;&quot;
+    def __init__(self, interface):
+        &quot;&quot;&quot;
+        Start up the main GUI window.
+
+        Parameters
+        ----------
+        interface : redux.Application
+            Reduction interface object.  This class chooses, instantiates,
+            and runs appropriate reduction objects for input data, as well
+            as controlling any associated viewers.
+        &quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for Redux GUI.&#39;)
+
+        # parent initialization
+        QtWidgets.QMainWindow.__init__(self)
+
+        # store parent interface
+        self.interface = interface
+
+        # place holder for a text view dialog
+        self.param_view = None
+        self.config_view = None
+
+        # set up UI from Designer generated file
+        self.setupUi(self)
+
+        # establish signal handler to catch ctrl-C
+        signal.signal(signal.SIGINT, self.cleanup)
+
+        # connect GUI signals to slots
+
+        # menu events
+        self.actionOpenNewReduction.triggered.connect(
+            self.onOpenReduction)
+        self.actionCloseReduction.triggered.connect(
+            self.onCloseReduction)
+        self.actionAddFiles.triggered.connect(
+            self.onAddFiles)
+        self.actionRemoveFiles.triggered.connect(
+            self.onRemoveFiles)
+        self.actionSetOutputDirectory.triggered.connect(
+            self.setOutputDirectory)
+        self.actionSaveInputManifest.triggered.connect(
+            self.saveInputManifest)
+        self.actionSaveOutputManifest.triggered.connect(
+            self.saveOutputManifest)
+        self.actionDisplayAllParameters.triggered.connect(
+            self.onDisplayParameters)
+        self.actionLoadParameters.triggered.connect(
+            self.onLoadParameters)
+        self.actionSaveParameters.triggered.connect(
+            self.saveParameters)
+        self.actionResetAllParameters.triggered.connect(
+            self.onResetParameters)
+        self.actionDisplayConfiguration.triggered.connect(
+            self.onDisplayConfig)
+        self.actionLoadConfiguration.triggered.connect(
+            self.onLoadConfiguration)
+        self.actionSaveConfiguration.triggered.connect(
+            self.saveConfiguration)
+        self.actionResetConfiguration.triggered.connect(
+            self.onResetConfiguration)
+        self.actionQuit.triggered.connect(
+            self.closeEvent)
+
+        # set default values for display menu options
+        if self.interface.configuration.update_display is False:
+            self.actionUpdateDisplays.setChecked(False)
+        else:
+            self.actionUpdateDisplays.setChecked(True)
+        if self.interface.configuration.display_intermediate is False:
+            self.actionDisplayIntermediate.setChecked(False)
+        else:
+            self.actionDisplayIntermediate.setChecked(True)
+
+        # then connect the display updates to slots
+        self.actionUpdateDisplays.triggered.connect(
+            self.toggleDisplay)
+        self.actionDisplayIntermediate.triggered.connect(
+            self.toggleDisplayIntermediate)
+
+        # other widgets
+        self.stepButton.clicked.connect(self.step)
+        self.undoButton.clicked.connect(self.undo)
+        self.resetButton.clicked.connect(self.resetSteps)
+        self.reduceButton.clicked.connect(self.reduce)
+
+        # set the in-application log handler
+        logger = widgets.TextEditLogger()
+        logger.signals.finished.connect(self.addLog)
+        # set it to the same level as the terminal handler
+        logger.setLevel(log.handlers[0].level)
+        log.addHandler(logger)
+
+        # get a threadpool for running pipeline steps
+        self.threadpool = QtCore.QThreadPool.globalInstance()
+        self.worker = None
+
+        # add a hidden progress widget to show when necessary
+        self.progress = widgets.ProgressFrame(self.stepControls)
+        self.stepControls.layout().addWidget(self.progress)
+        self.progress.hide()
+        self.progress.stopButton.clicked.connect(self.stopReduction)
+
+        # reduction information
+        self.base_directory = str(QtCore.QDir.currentPath())
+        self.param_directory = self.base_directory
+        self.save_directory = self.base_directory
+        self.nsteps = 0
+        self.last_step = -1
+        self.loaded_files = []
+        self.default_param = None
+        self.default_config = self.interface.configuration.to_text()
+        self.pickled_reduction = None
+        self.allow_undo = True
+
+        # set Redux version in label
+        self.setPipeName()
+
+        # disable most controls on startup
+        self.initial_startup = True
+        self.enableReduction(False)
+
+<div class="viewcode-block" id="ReduxMainWindow.closeEvent">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.closeEvent">[docs]</a>
+    def closeEvent(self, event):
+        &quot;&quot;&quot;
+        Confirm before closing the application.
+
+        Parameters
+        ----------
+        event : QEvent
+            Close event.
+        &quot;&quot;&quot;
+        response = QtWidgets.QMessageBox.question(
+            self, &#39;Quit&#39;, &#39;Quit Redux?&#39;)
+        if response == QtWidgets.QMessageBox.Yes:
+            self.cleanup()
+        else:  # pragma: no cover
+            try:
+                event.ignore()
+            except AttributeError:
+                pass</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.cleanup">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.cleanup">[docs]</a>
+    def cleanup(self, *args):
+        &quot;&quot;&quot;Quit the application.&quot;&quot;&quot;
+        # close the current reduction
+        self.resetPipeline()
+        for hand in log.handlers:
+            if isinstance(hand, widgets.TextEditLogger):
+                log.removeHandler(hand)
+        # quit
+        QtWidgets.QApplication.quit()</div>
+
+
+    # display functions
+
+<div class="viewcode-block" id="ReduxMainWindow.addLog">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.addLog">[docs]</a>
+    def addLog(self, msg):
+        &quot;&quot;&quot;
+        Add a log message to the log widget.
+
+        Callback for the TextEditLogger.  Messages are appended
+        to the end of the TextEdit window, in HTML format.
+
+        Parameters
+        ----------
+        msg : str
+            HTML formatted string to display in the TextEdit widget.
+        &quot;&quot;&quot;
+        # move cursor to the end
+        cursor = self.logTextEdit.textCursor()
+        cursor.movePosition(QtGui.QTextCursor.End)
+        self.logTextEdit.setTextCursor(cursor)
+
+        # insert the message as HTML
+        self.logTextEdit.insertHtml(&quot;&lt;pre&gt;{}&lt;br&gt;&lt;/pre&gt;&quot;.format(msg))
+
+        # move the cursor to the end again
+        cursor.movePosition(QtGui.QTextCursor.End)
+        self.logTextEdit.setTextCursor(cursor)
+
+        # repaint to refresh view
+        self.logTextEdit.repaint()</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.setPipeName">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.setPipeName">[docs]</a>
+    def setPipeName(self, msg=None):
+        &quot;&quot;&quot;
+        Set the pipeline name in a label widget.
+
+        Parameters
+        ----------
+        msg : str, optional
+            Pipeline version label.  If not provided, the Redux
+            version label will be displayed.
+        &quot;&quot;&quot;
+        if msg is None:
+            msg = &quot;Redux v{}&quot;.format(sofia_redux.pipeline.__version__)
+        self.pipelineVersionLabel.setText(msg)
+        self.pipelineVersionLabel.repaint()</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.setStatus">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.setStatus">[docs]</a>
+    def setStatus(self, msg):
+        &quot;&quot;&quot;
+        Set a status message.
+
+        Messages are displayed in the status bar and as an
+        INFO level log message.
+
+        Parameters
+        ----------
+        msg : str
+            Status message.
+        &quot;&quot;&quot;
+        self.statusbar.showMessage(msg, 5000)
+        log.info(&#39; == {} ==&#39;.format(msg))</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.resetView">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.resetView">[docs]</a>
+    def resetView(self):
+        &quot;&quot;&quot;Remove the Data View tab.&quot;&quot;&quot;
+        if self.dataTabWidget.tabText(0) == &quot;Data View&quot;:
+            # delete the viewer widget, then remove the tab
+            data_widget = self.dataTabWidget.widget(0)
+            data_widget.deleteLater()
+            self.dataTabWidget.removeTab(0)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.setFileSummary">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.setFileSummary">[docs]</a>
+    def setFileSummary(self):
+        &quot;&quot;&quot;Set a loaded file summary message.&quot;&quot;&quot;
+        nfiles = len(self.loaded_files)
+        maxdisp = 6
+        msg = [&quot;Loaded files:&quot;]
+        for i in range(maxdisp + 1):
+            val = &#39;&#39;
+            if i &gt;= nfiles:
+                val = &#39;  &#39;
+            elif i &lt;= maxdisp - 2:
+                val = &#39;  &#39; + os.path.basename(self.loaded_files[i])
+            elif i == maxdisp - 1:
+                if nfiles == maxdisp:
+                    val = &#39;  &#39; + os.path.basename(self.loaded_files[i])
+                else:
+                    val = &#39;  ...&#39;
+            elif i == maxdisp:
+                val = &#39;  &#39; + os.path.basename(self.loaded_files[-1])
+            msg.append(val)
+        self.fileSummaryTextEdit.setText(&#39;\n&#39;.join(msg))
+        self.fileSummaryTextEdit.repaint()</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.updateConfigView">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.updateConfigView">[docs]</a>
+    def updateConfigView(self):
+        &quot;&quot;&quot;Update config viewer widget with new values.&quot;&quot;&quot;
+        if self.config_view is not None and self.config_view.isVisible():
+            title = &#39;Redux Configuration&#39;
+            text = self.interface.save_configuration()
+            self.config_view.load(text)
+            self.config_view.setTitle(title)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.updateParamView">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.updateParamView">[docs]</a>
+    def updateParamView(self):
+        &quot;&quot;&quot;Update parameter viewer widget with new values.&quot;&quot;&quot;
+        if self.param_view is not None and self.param_view.isVisible():
+            title = &#39;Reduction Parameters&#39;
+            text = self.interface.save_parameters()
+            self.param_view.load(text)
+            self.param_view.setTitle(title)</div>
+
+
+    # reduction functions
+<div class="viewcode-block" id="ReduxMainWindow.enableControls">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.enableControls">[docs]</a>
+    def enableControls(self, enable=True):
+        &quot;&quot;&quot;
+        Toggle reduction-related controls.
+
+        These controls (add files, edit parameters, run step, etc.)
+        are disabled while a reduction step is running.
+
+        Parameters
+        ----------
+        enable : bool
+            If True, controls are enabled.  If False they are disabled.
+        &quot;&quot;&quot;
+        # dis/enable most menu items
+        self.actionOpenNewReduction.setEnabled(enable)
+        self.actionAddFiles.setEnabled(enable)
+        self.actionRemoveFiles.setEnabled(enable)
+        self.actionLoadParameters.setEnabled(enable)
+        self.actionSaveParameters.setEnabled(enable)
+        self.actionCloseReduction.setEnabled(enable)
+        self.actionResetAllParameters.setEnabled(enable)
+        self.actionSetOutputDirectory.setEnabled(enable)
+        self.actionSaveInputManifest.setEnabled(enable)
+        self.actionSaveOutputManifest.setEnabled(enable)
+
+        # dis/enable the reduction controls
+        self.stepFrame.setEnabled(enable)
+        self.stepThroughFrame.setEnabled(enable)
+        self.pipeStepFrame.setEnabled(enable)
+
+        # enable the controls box either way,
+        # so that progress bar is available
+        self.controlsBox.setEnabled(True)
+
+        # enable selection in list widget if controls are disabled
+        if enable:
+            self.pipeStepListWidget.clearSelection()
+            self.pipeStepListWidget.setSelectionMode(
+                QtWidgets.QAbstractItemView.NoSelection)
+        else:
+            self.pipeStepListWidget.setSelectionMode(
+                QtWidgets.QAbstractItemView.SingleSelection)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.enableReduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.enableReduction">[docs]</a>
+    def enableReduction(self, enable=True):
+        &quot;&quot;&quot;
+        Toggle all non-default controls.
+
+        These controls are disabled when no data is loaded.
+        Only opening a new reduction or quitting is allowed in
+        this condition.
+
+        Parameters
+        ----------
+        enable : bool
+            If True, enable the controls.  If False, disable them.
+        &quot;&quot;&quot;
+        # always allow a new reduction to be opened and
+        # Redux to quit
+        self.actionOpenNewReduction.setEnabled(True)
+        self.actionQuit.setEnabled(True)
+
+        # dis/enable most other menu items
+        self.actionAddFiles.setEnabled(enable)
+        self.actionRemoveFiles.setEnabled(enable)
+        self.actionSetOutputDirectory.setEnabled(enable)
+        self.actionSaveInputManifest.setEnabled(enable)
+        self.actionSaveOutputManifest.setEnabled(enable)
+
+        self.actionDisplayAllParameters.setEnabled(enable)
+        self.actionLoadParameters.setEnabled(enable)
+        self.actionSaveParameters.setEnabled(enable)
+        self.actionCloseReduction.setEnabled(enable)
+        self.actionResetAllParameters.setEnabled(enable)
+
+        # dis/enable the top-level reduction controls;
+        # always enable the sub-widgets
+        self.controlsBox.setEnabled(enable)
+        self.stepFrame.setEnabled(True)
+        self.stepThroughFrame.setEnabled(True)
+        self.pipeStepFrame.setEnabled(True)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.reduce">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.reduce">[docs]</a>
+    def reduce(self):
+        &quot;&quot;&quot;Run all remaining reduction steps.&quot;&quot;&quot;
+        self.step(skip_save=True, run_all=True)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.resetPipeline">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.resetPipeline">[docs]</a>
+    def resetPipeline(self):
+        &quot;&quot;&quot;
+        Reset the pipeline when a reduction is closed.
+
+        All data items, parameter values, and pipeline
+        steps are removed.
+        &quot;&quot;&quot;
+        self.initial_startup = False
+        self.interface.close_viewers()
+        self.interface.clear_reduction()
+        self.logTextEdit.clear()
+        self.resetView()
+        self.pipeStepListWidget.clear()
+        self.fileSummaryTextEdit.clear()
+        self.setPipeName()
+        self.fileTableView.setModel(None)
+
+        # clear steps out of combo box,
+        # then add a blank item (i.e. no step-through)
+        self.stepThroughComboBox.clear()
+        self.stepThroughComboBox.addItem(&#39;&#39;)
+
+        self.stepButton.setEnabled(False)
+        self.undoButton.setEnabled(False)
+        self.reduceButton.setEnabled(False)
+        self.resetButton.setEnabled(False)
+
+        self.last_step = -1</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.resetSteps">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.resetSteps">[docs]</a>
+    def resetSteps(self):
+        &quot;&quot;&quot;
+        Reset reduction steps to re-start a loaded reduction.
+
+        Parameters are not reset from edited values.  The raw data
+        is re-loaded into the reduction.  Viewers are reset.
+        &quot;&quot;&quot;
+        if self.interface.reduction is None:
+            return
+
+        # reset reduction, then restore current parameters
+        saved_param = self.interface.reduction.parameters.copy()
+        self.interface.reset_reduction(self.loaded_files)
+        self.interface.reset_viewers()
+        self.interface.reduction.parameters = saved_param
+
+        # reset step controls
+        self.logTextEdit.clear()
+        self.stepButton.setEnabled(True)
+        self.undoButton.setEnabled(False)
+        self.reduceButton.setEnabled(True)
+        self.resetButton.setEnabled(False)
+
+        for i in range(self.nsteps):
+            item = self.pipeStepListWidget.item(i)
+            widget = self.pipeStepListWidget.itemWidget(item)
+            widget.setEnabled(True)
+            if i == 0:
+                widget.enableRun()
+            else:
+                widget.enableRun(False)
+        self.last_step = -1
+
+        # update any associated viewers
+        self.interface.update_viewers()
+        self.setStatus(&quot;Pipeline steps reset.&quot;)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.stepFinish">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.stepFinish">[docs]</a>
+    def stepFinish(self, status):
+        &quot;&quot;&quot;
+        Update GUI after a reduction step finishes.
+
+        Callback for the `widgets.StepRunnable`, which runs
+        a reduction step in a separate thread.
+
+        Parameters
+        ----------
+        status : tuple or str
+            If tuple, `status` is assumed to be an unexpected exception
+            message, with values (type, message, traceback).  If str,
+            it is assumed to be an error caught by the reduction
+            object and recorded as a return value for the step.  Either
+            way, if the message is not an empty string, it is displayed
+            to the user in a QMessageBox warning and reduction is halted.
+
+        Returns
+        -------
+        bool
+            True if reduction step succeeded; False if it threw an error.
+        &quot;&quot;&quot;
+        if type(status) is tuple:
+            # log the error
+            log.error(&quot;\n{}&quot;.format(status[2]))
+            msg = status[1]
+        else:
+            msg = status
+
+        # update viewers from last step
+        self.interface.update_viewers()
+
+        self.enableControls(True)
+        self.controlsBox.unsetCursor()
+        self.progress.hide()
+        self.stepFrame.show()
+        self.stepThroughFrame.show()
+
+        last = self.last_step
+        current = self.interface.reduction.step_index
+        for step in range(last, current):
+            # disable the steps just run
+            item = self.pipeStepListWidget.item(step)
+            try:
+                self.pipeStepListWidget.itemWidget(item).setEnabled(False)
+            except AttributeError:
+                # ignore it if the item isn&#39;t available
+                pass
+
+        # enable the undo and reset buttons
+        if self.allow_undo:
+            self.undoButton.setEnabled(True)
+        else:
+            self.undoButton.setEnabled(False)
+        self.resetButton.setEnabled(True)
+
+        if msg != &#39;&#39;:
+            # error from pipeline -- disable steps
+            self.stepButton.setEnabled(False)
+            self.reduceButton.setEnabled(False)
+            QtWidgets.QMessageBox.warning(
+                self, &#39;Pipeline Step&#39;,
+                &quot;Error from pipeline: {}&quot;.format(msg))
+            return False
+
+        # enable run for the next step
+        item = self.pipeStepListWidget.item(current)
+        try:
+            self.pipeStepListWidget.itemWidget(item).enableRun()
+        except AttributeError:
+            # no more steps -- disable step and reduce
+            self.stepButton.setEnabled(False)
+            self.reduceButton.setEnabled(False)
+
+        self.setStatus(&quot;Pipeline step complete.&quot;)
+        self.repaint()
+        return True</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.highlightStep">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.highlightStep">[docs]</a>
+    def highlightStep(self, idx):
+        &quot;&quot;&quot;
+        Highlight the currently running step.
+
+        Parameters
+        ----------
+        idx : int
+            Step index number.
+        &quot;&quot;&quot;
+        if -1 &lt; idx &lt; self.nsteps:
+            item = self.pipeStepListWidget.item(idx)
+            self.pipeStepListWidget.setCurrentItem(item)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.stepProgress">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.stepProgress">[docs]</a>
+    def stepProgress(self, value):
+        &quot;&quot;&quot;
+        Update the progress widget.
+
+        Callback for the `widgets.StepRunnable` for intermediate
+        progress.
+        &quot;&quot;&quot;
+        self.progress.setProgress(value)
+        self.highlightStep(self.interface.reduction.step_index)
+
+        # check whether intermediate files are displayed
+        if self.actionDisplayIntermediate.isChecked():
+            self.interface.update_viewers()</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.step">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.step">[docs]</a>
+    def step(self, skip_save=False, skip_break=False, run_all=False):
+        &quot;&quot;&quot;
+        Launch a reduction step, or series of steps.
+
+        Reduction steps are run in a separate thread from a thread pool,
+        via `QtCore.QThreadPool`.  The worker for this thread is
+        `widgets.StepRunnable`.
+
+        The number of steps to run is determined by the widget from
+        which this method was triggered.  If the Reduce button
+        is pressed, all remaining steps are run (run_all=True).
+        If the Run button next to a step is pressed, only that step is run
+        (skip_break=True).  If the Step button is pressed, all steps up
+        through the value selected in the Step Through box are run (default).
+
+        Parameters
+        ----------
+        skip_save : bool, optional
+            If True, the reduction object will not be pickled before
+            running the step.  This effectively disables Undo for the
+            step.
+        skip_break : bool, optional
+            If True, the value of the stepThroughComboBox will be ignored
+            and only the next step will be run.
+        run_all : bool, optional
+            If True, all remaining steps will be run.
+        &quot;&quot;&quot;
+        if self.interface.reduction is None:
+            return
+
+        # save the last step index
+        self.last_step = self.interface.reduction.step_index
+
+        # pickle the current reduction
+        # Check the internal allow_undo here -- some steps may
+        # be undoable, some not.
+        if self.interface.reduction.allow_undo and not skip_save:
+            try:
+                self.pickled_reduction = pickle.dumps(self.interface.reduction)
+                self.allow_undo = True
+            except (TypeError, AttributeError, pickle.PicklingError):
+                # raise error
+                log.warning(&quot;Reduction object is not serializable; &quot;
+                            &quot;&#39;undo&#39; will not be available.&quot;)
+                self.allow_undo = False
+                self.pickled_reduction = None
+        else:
+            self.pickled_reduction = None
+            self.allow_undo = False
+
+        # get the step-through value
+        if run_all:
+            step_through = self.nsteps
+        elif skip_break:
+            step_through = -1
+        else:
+            step_through = self.stepThroughComboBox.currentIndex()
+
+        if step_through &gt; 0 and step_through &gt; self.last_step:
+            nsteps = step_through - self.last_step
+        else:
+            nsteps = 1
+
+        # turn off the whole controls box and menus
+        # while steps are running
+        self.enableControls(False)
+        self.controlsBox.setCursor(QtCore.Qt.BusyCursor)
+        self.highlightStep(self.interface.reduction.step_index)
+
+        # make a runnable object for threading and connect it
+        # to its callback
+        self.setStatus(&quot;Running pipeline step.&quot;)
+        self.worker = widgets.StepRunnable(self.interface.step, nsteps)
+        self.worker.signals.finished.connect(self.stepFinish)
+
+        # show a progress widget if running more than one step
+        if nsteps &gt; 1:
+            self.progress.resetProgress()
+            self.progress.setNStep(nsteps)
+
+            self.stepFrame.hide()
+            self.stepThroughFrame.hide()
+            self.progress.show()
+
+            # connect the runnable to the progress widget
+            self.worker.signals.progress.connect(self.stepProgress)
+
+        # start the reduction
+        self.threadpool.start(self.worker)
+        self.repaint()</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.undo">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.undo">[docs]</a>
+    def undo(self):
+        &quot;&quot;&quot;
+        Undo the last reduction step.
+
+        This method unpickles the last reduction object saved in the
+        `pickled_reduction` attribute.  This normally happens at the
+        beginning of the `step` method, but a pickled reduction may
+        be unavailable for either of the following reasons:
+
+        * the reduction object does not allow undo operations (because
+          the object is too large to save, for example)
+        * serialization failed (the reduction object currently holds
+          a reference to a file pointer, for example)
+
+        It is recommended that the user install the dill module, as it
+        allows serialization for more complex software structures than
+        the built-in pickle module.
+        &quot;&quot;&quot;
+        if self.pickled_reduction is None:
+            QtWidgets.QMessageBox.warning(
+                self, &#39;Undo&#39;, &quot;Cannot undo the last step.&quot;)
+            return
+
+        # get the step index from the current reduction
+        current = self.interface.reduction.step_index
+
+        # restore the reduction from a pickle
+        self.interface.reduction = pickle.loads(self.pickled_reduction)
+        self.pickled_reduction = None
+
+        # enable/disable buttons
+        self.undoButton.setEnabled(False)
+        self.stepButton.setEnabled(True)
+        self.reduceButton.setEnabled(True)
+
+        for i in range(current, self.last_step - 1, -1):
+            item = self.pipeStepListWidget.item(i)
+            try:
+                step_widget = self.pipeStepListWidget.itemWidget(item)
+                step_widget.setEnabled(True)
+                if i == self.last_step:
+                    step_widget.enableRun(True)
+                else:
+                    step_widget.enableRun(False)
+                name = step_widget.pipeStepLabel.text()
+                if i &lt; current:
+                    log.warning(&quot;Undid step {}: {}&quot;.format(i + 1, name))
+            except AttributeError:
+                # ignore if the item isn&#39;t available
+                # (e.g. if there is one step, it has been run, and then
+                # undone)
+                pass
+
+        self.last_step = -1
+
+        # update viewers from last data if possible
+        self.interface.update_viewers()</div>
+
+
+    # slot functions
+
+<div class="viewcode-block" id="ReduxMainWindow.onOpenReduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.onOpenReduction">[docs]</a>
+    def onOpenReduction(self, add=False, remove_files=None):
+        &quot;&quot;&quot;
+        Open a new reduction.
+
+        Called when the following File menu items are selected:
+
+        * Open New Reduction
+        * Add Files (`add` = True)
+        * Remove Files (`remove_files` = True)
+
+        Any of these three options will reset the reduction and
+        load the data into a new reduction object.  If files are being
+        removed or added, the parameters and output directory
+        from the old reduction object will be saved and restored
+        into the new one.
+
+        Files are loaded in a new thread from a thread pool,
+        via `QtCore.QThreadPool`.  The worker for this thread is
+        `widgets.LoadRunnable`.
+
+        Parameters
+        ----------
+        add : bool
+            Add more files to the current reduction.
+        remove_files : bool
+            Remove files from the current reduction
+        &quot;&quot;&quot;
+        # save the parameters to avoid resetting them
+        # them if adding or removing files
+        if (add or remove_files) and self.interface.reduction is not None:
+            saved_param = self.interface.reduction.parameters.copy()
+            saved_dir = self.interface.reduction.output_directory
+        else:
+            saved_param = None
+            saved_dir = None
+
+        if remove_files is None:
+            # file dialog widget to choose new files for add or open
+            newpath = QtWidgets.QFileDialog.getOpenFileNames(
+                self, caption=&quot;Select Data File(s)&quot;,
+                directory=self.base_directory,
+                filter=&quot;FITS files (*.fits);;&quot;
+                       &quot;Input manifests (*.txt);;&quot;
+                       &quot;All files (*)&quot;)
+            if len(newpath[0]) == 0:
+                # do nothing if no files were selected.
+                return
+
+            # store the path from the first file
+            if add and self.interface.reduction is not None:
+                # if adding, test that the new files can be reduced
+                # with the same object
+                data_files = self.loaded_files.copy()
+                for fname in newpath[0]:
+                    if fname not in data_files:
+                        data_files.append(fname)
+                test_reduction = \
+                    self.interface.chooser.choose_reduction(data_files)
+                if not isinstance(test_reduction,
+                                  type(self.interface.reduction)):
+                    msg = &#39;New files do not match old files; cannot add them.&#39;
+                    log.warning(msg)
+                    QtWidgets.QMessageBox.warning(self, &#39;Add Files&#39;, msg)
+                    return
+            else:
+                # otherwise, just use the new files
+                data_files = newpath[0]
+                self.base_directory = os.path.dirname(data_files[0])
+        else:
+            # if removing, filter out any selected files
+            data_files = []
+            for fname in self.loaded_files.copy():
+                if fname not in remove_files:
+                    data_files.append(fname)
+                else:
+                    log.warning(&#39;Removing {}&#39;.format(os.path.basename(fname)))
+            if not data_files:
+                # if all files removed, reset the pipeline and return
+                self.resetPipeline()
+                self.loaded_files = []
+                return
+
+        # reset the pipeline
+        self.resetPipeline()
+
+        # load the data in a new thread
+        loader = widgets.LoadRunnable(self.interface.start,
+                                      data_files, saved_param,
+                                      saved_dir)
+        loader.signals.finished.connect(self.openFinish)
+        self.threadpool.start(loader)
+        self.setCursor(QtCore.Qt.BusyCursor)
+        self.enableReduction(False)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.openFinish">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.openFinish">[docs]</a>
+    def openFinish(self, result):
+        &quot;&quot;&quot;
+        Finish loading a new reduction.
+
+        This method builds the pipeline step widgets, updates display
+        widgets and viewers, and enables reduction controls.
+
+        This method is the callback for the `widgets.LoadRunnable` class,
+        which loads new data from disk in a separate thread.
+
+        Parameters
+        ----------
+        result : tuple
+            If `result` is a three-element tuple, it is assumed to
+            be an unexpected exception, with elements
+            (type, message, traceback).  If it is a two-element
+            tuple, the first element is a set of saved parameters
+            from the previous reduction and the second element is
+            the output directory from the old reduction. If either
+            element is non-null, it will be restored to the new
+            reduction.
+        &quot;&quot;&quot;
+        # load the reduction from the files
+        self.unsetCursor()
+        if type(result) is tuple and len(result) == 3:
+            # log the error
+            log.error(&quot;\n{}&quot;.format(result[2]))
+            QtWidgets.QMessageBox.warning(
+                self, &#39;Open Reduction&#39;,
+                &quot;Error loading data: {}&quot;.format(result[1]))
+            self.enableReduction(False)
+            return
+        else:
+            saved_param, saved_dir = result
+
+        if self.interface.reduction is None:
+            QtWidgets.QMessageBox.warning(
+                self, &#39;Open Reduction&#39;,
+                &quot;No data loaded.&quot;)
+            self.enableReduction(False)
+            return
+
+        self.enableReduction(True)
+
+        self.loaded_files = self.interface.reduction.raw_files
+        if saved_param is not None \
+            and (self.interface.reduction.parameters.stepnames
+                 == saved_param.stepnames):
+            log.debug(&#39;Loading saved parameters.&#39;)
+            self.interface.reduction.parameters = saved_param
+        else:
+            self.default_param = self.interface.reduction.parameters.copy()
+        if saved_dir is not None:
+            self.interface.reduction.output_directory = saved_dir
+            self.interface.set_log_file()
+        self.allow_undo = self.interface.reduction.allow_undo
+
+        # set the pipeline description
+        msg = self.interface.reduction.description
+        self.setPipeName(msg)
+        recipe = self.interface.reduction.recipe
+        step_dict = self.interface.reduction.processing_steps
+        self.nsteps = len(recipe)
+
+        # set the file summary
+        self.setFileSummary()
+
+        # register viewers for the reduction;
+        # if they are embedded, add them to a splitter widget
+        parent = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+        self.interface.register_viewers(parent)
+        if self.interface.has_embedded_viewers():
+            self.dataTabWidget.insertTab(0, parent, &#39;Data View&#39;)
+            self.dataTabWidget.setCurrentIndex(0)
+
+        # read the data id keys and set them in the file info table
+        self.interface.load_data_id()
+        model = widgets.DataTableModel(self.interface.reduction.data_id,
+                                       self.fileTableView)
+        proxy = QtCore.QSortFilterProxyModel()
+        proxy.setSourceModel(model)
+        self.fileTableView.setModel(proxy)
+
+        # size the columns to content, then make them interactive
+        header = self.fileTableView.horizontalHeader()
+        for column in range(self.fileTableView.model().columnCount()):
+            header.setSectionResizeMode(
+                column, QtWidgets.QHeaderView.ResizeToContents)
+            width = header.sectionSize(column)
+            header.setSectionResizeMode(
+                column, QtWidgets.QHeaderView.Interactive)
+            header.resizeSection(column, width)
+
+        # add row numbers
+        self.fileTableView.verticalHeader().show()
+
+        # load the pipe steps
+        for idx, step in enumerate(recipe):
+            try:
+                stepname = step_dict[step]
+            except KeyError:
+                stepname = step
+            step_widget = widgets.PipeStep(stepname=stepname,
+                                           index=idx)
+            step_widget.connectRun(self.onRun)
+            step_widget.connectEdit(self.onEdit)
+
+            # enable run for the first step; leave the others disabled
+            if idx == 0:
+                step_widget.enableRun()
+
+            # disable edit if no parameters to set
+            try:
+                param = self.interface.reduction.get_parameter_set(idx)
+            except IndexError:
+                param = None
+            if param:
+                step_widget.enableEdit()
+            else:
+                step_widget.enableEdit(False)
+
+            w_item = QtWidgets.QListWidgetItem(self.pipeStepListWidget)
+            w_item.setSizeHint(step_widget.sizeHint())
+            self.pipeStepListWidget.addItem(w_item)
+            self.pipeStepListWidget.setItemWidget(w_item, step_widget)
+
+            # also add step name to the &quot;Step Through&quot; box
+            self.stepThroughComboBox.addItem(
+                &quot;{}. {}&quot;.format(idx + 1, stepname))
+
+        self.stepButton.setEnabled(True)
+        self.undoButton.setEnabled(False)
+        self.reduceButton.setEnabled(True)
+        self.resetButton.setEnabled(False)
+
+        # update any associated viewers after load
+        self.interface.update_viewers()
+        self.updateParamView()
+
+        self.setStatus(&#39;New reduction loaded.&#39;)
+        self.repaint()</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.onCloseReduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.onCloseReduction">[docs]</a>
+    def onCloseReduction(self):
+        &quot;&quot;&quot;
+        Close the current reduction.
+
+        Called when the user selects Close Reduction from the File menu.
+        &quot;&quot;&quot;
+        if self.interface.reduction is None:
+            return
+
+        response = QtWidgets.QMessageBox.question(
+            self, &#39;Close Reduction&#39;, &#39;Close current reduction?&#39;)
+        if response == QtWidgets.QMessageBox.Yes:
+            self.resetPipeline()
+            self.enableReduction(False)
+            self.setStatus(&#39;Reduction closed.&#39;)
+            self.repaint()</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.onAddFiles">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.onAddFiles">[docs]</a>
+    def onAddFiles(self):
+        &quot;&quot;&quot;Add new files to the current reduction.&quot;&quot;&quot;
+        self.onOpenReduction(add=True)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.onRemoveFiles">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.onRemoveFiles">[docs]</a>
+    def onRemoveFiles(self):
+        &quot;&quot;&quot;Remove files from the current reduction.&quot;&quot;&quot;
+        dialog = widgets.RemoveFilesDialog(self, self.loaded_files)
+        retval = dialog.exec_()
+        if retval == QtWidgets.QDialog.Accepted:
+            remove_files = dialog.getValue()
+            self.onOpenReduction(remove_files=remove_files)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.onDisplayConfig">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.onDisplayConfig">[docs]</a>
+    def onDisplayConfig(self):
+        &quot;&quot;&quot;Display all current configuration in a new widget.&quot;&quot;&quot;
+        if self.config_view is None or not self.config_view.isVisible():
+            self.config_view = widgets.ConfigView(self)
+            self.config_view.saveButton.clicked.connect(
+                self.onEditConfiguration)
+
+        self.config_view.show()
+        self.updateConfigView()</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.onDisplayParameters">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.onDisplayParameters">[docs]</a>
+    def onDisplayParameters(self):
+        &quot;&quot;&quot;Display all current parameters in a new widget.&quot;&quot;&quot;
+        if self.interface.reduction is None:
+            return
+
+        if self.param_view is None or not self.param_view.isVisible():
+            self.param_view = widgets.ParamView(self)
+
+        self.param_view.show()
+        self.updateParamView()</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.onLoadConfiguration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.onLoadConfiguration">[docs]</a>
+    def onLoadConfiguration(self, default=False, config_edit=False):
+        &quot;&quot;&quot;Load persistent configuration from a file.&quot;&quot;&quot;
+        if self.initial_startup:
+            # clear startup image
+            self.resetPipeline()
+
+        if not default and not config_edit:
+            newpath = QtWidgets.QFileDialog.getOpenFileName(
+                self, caption=&quot;Select input file path for configuration&quot;,
+                directory=self.param_directory,
+                filter=&quot;Config files (*.cfg);;All files (*)&quot;)
+            if len(newpath[0]) == 0:
+                # do nothing if no files were selected.
+                return
+
+            infile = newpath[0]
+            self.param_directory = os.path.dirname(infile)
+            self.interface.update_configuration(infile)
+            self.setStatus(&quot;Configuration updated from {}.&quot;.format(infile))
+        elif default:
+            config_str = &#39;\n&#39;.join(self.default_config)
+            self.interface.configuration.load(config_str)
+            self.setStatus(&quot;All settings reset to default values.&quot;)
+        elif config_edit:
+            if self.config_view is not None:
+                new_config = self.config_view.text
+                try:
+                    self.interface.configuration.load(new_config)
+                except (OSError, SyntaxError):
+                    log.error(&#39;Configuration badly formatted; not saved.&#39;)
+                    return
+                self.setStatus(&quot;Configuration edited.&quot;)
+
+        # check for GUI settings in new config
+        update = bool(self.interface.configuration.update_display)
+        intermed = bool(self.interface.configuration.display_intermediate)
+        self.actionUpdateDisplays.setChecked(update)
+        self.actionDisplayIntermediate.setChecked(intermed)
+        self.toggleDisplay()
+        self.toggleDisplayIntermediate()</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.onLoadParameters">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.onLoadParameters">[docs]</a>
+    def onLoadParameters(self):
+        &quot;&quot;&quot;Load parameters from a configuration file.&quot;&quot;&quot;
+        if self.interface.reduction is None:
+            return
+
+        newpath = QtWidgets.QFileDialog.getOpenFileName(
+            self, caption=&quot;Select input file path for parameters&quot;,
+            directory=self.param_directory,
+            filter=&quot;Config files (*.cfg);;All files (*)&quot;)
+        if len(newpath[0]) == 0:
+            # do nothing if no files were selected.
+            return
+
+        infile = newpath[0]
+        self.param_directory = os.path.dirname(infile)
+        self.interface.load_parameters(infile)
+        self.default_param = self.interface.reduction.parameters.copy()
+
+        self.updateParamView()
+        self.setStatus(&quot;Parameters updated from {}.&quot;.format(infile))</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.onResetConfiguration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.onResetConfiguration">[docs]</a>
+    def onResetConfiguration(self):
+        &quot;&quot;&quot;Reset configuration to default values.&quot;&quot;&quot;
+        # confirm before destroying existing config
+        response = QtWidgets.QMessageBox.question(
+            self, &#39;Reset Configuration&#39;, &#39;Reset configuration settings?&#39;)
+        if response != QtWidgets.QMessageBox.Yes:
+            return
+
+        self.onLoadConfiguration(default=True)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.onResetParameters">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.onResetParameters">[docs]</a>
+    def onResetParameters(self):
+        &quot;&quot;&quot;Reset all parameters to default values.&quot;&quot;&quot;
+        if self.interface.reduction is None:
+            return
+
+        # confirm before destroying existing parameters
+        response = QtWidgets.QMessageBox.question(
+            self, &#39;Reset Parameters&#39;, &#39;Reset all parameters?&#39;)
+        if response != QtWidgets.QMessageBox.Yes:
+            return
+
+        self.interface.load_parameters()
+        self.default_param = self.interface.reduction.parameters.copy()
+        self.updateParamView()
+        self.setStatus(&quot;All reduction parameters reset to default values.&quot;)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.onRun">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.onRun">[docs]</a>
+    def onRun(self, index):
+        &quot;&quot;&quot;
+        Run the next reduction step.
+
+        Called when a Run button in a `widgets.PipeStep` is pushed.
+
+        Parameters
+        ----------
+        index : int
+            Reduction step index.  This value is stored in the
+            step widget (`widgets.PipeStep`).  `index` is currently ignored,
+            since the Run buttons are enabled for the next step only.
+        &quot;&quot;&quot;
+        self.step(skip_break=True)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.onEdit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.onEdit">[docs]</a>
+    def onEdit(self, index):
+        &quot;&quot;&quot;
+        Edit parameters for a reduction step.
+
+        Called when an Edit button in a `widgets.PipeStep` is pushed.
+
+        Parameters
+        ----------
+        index : int
+            Reduction step index.  This value is stored in the
+            step widget (`widgets.PipeStep`).
+        &quot;&quot;&quot;
+        if self.interface.reduction is None:
+            return
+        param = self.interface.reduction.get_parameter_set(index)
+        default = self.default_param.current[index]
+        try:
+            name = self.interface.reduction.processing_steps[
+                self.interface.reduction.recipe[index]]
+        except KeyError:
+            name = self.interface.reduction.recipe[index]
+        dialog = widgets.EditParam(self, name,
+                                   param, default,
+                                   self.base_directory)
+        retval = dialog.exec_()
+        if retval == QtWidgets.QDialog.Accepted:
+            # change params
+            param = dialog.getValue()
+            self.interface.reduction.set_parameter_set(param, index)
+            self.updateParamView()</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.onEditConfiguration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.onEditConfiguration">[docs]</a>
+    def onEditConfiguration(self):
+        self.onLoadConfiguration(config_edit=True)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.stopReduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.stopReduction">[docs]</a>
+    def stopReduction(self):
+        &quot;&quot;&quot;
+        Cancel reduction in thread after current step.
+
+        Called when the Stop Reduction button is pressed in the
+        progress widget.
+        &quot;&quot;&quot;
+        if self.worker is None:
+            return
+        self.worker.stop = True
+        self.progress.stopButton.setEnabled(False)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.saveInputManifest">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.saveInputManifest">[docs]</a>
+    def saveInputManifest(self):
+        &quot;&quot;&quot;
+        Save an input manifest to disk.
+
+        Called by a File menu option.  Calls the
+        `Interface.save_input_manifest` method.
+        &quot;&quot;&quot;
+        if self.interface.reduction is None:
+            return
+
+        default_name = self.interface.configuration.input_manifest
+        if default_name is None:
+            dirname = self.save_directory
+        else:
+            if not os.path.isabs(default_name):
+                dirname = os.path.join(self.save_directory, default_name)
+            else:
+                dirname = default_name
+        newpath = QtWidgets.QFileDialog.getSaveFileName(
+            self, caption=&quot;Select output file path for input manifest&quot;,
+            directory=dirname, filter=&quot;Text files (*.txt);;All files (*)&quot;)
+        if len(newpath[0]) == 0:
+            # do nothing if no files were selected.
+            return
+
+        outfile = newpath[0]
+        self.save_directory = os.path.dirname(outfile)
+        self.interface.save_input_manifest(outfile)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.saveOutputManifest">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.saveOutputManifest">[docs]</a>
+    def saveOutputManifest(self):
+        &quot;&quot;&quot;
+        Save an output manifest to disk.
+
+        Called by a File menu option.  Calls the
+        `Interface.save_output_manifest` method.
+        &quot;&quot;&quot;
+        if self.interface.reduction is None:
+            return
+
+        default_name = self.interface.configuration.output_manifest
+        if default_name is None:
+            dirname = self.save_directory
+        else:
+            if not os.path.isabs(default_name):
+                dirname = os.path.join(self.save_directory, default_name)
+            else:
+                dirname = default_name
+        newpath = QtWidgets.QFileDialog.getSaveFileName(
+            self, caption=&quot;Select output file path for output manifest&quot;,
+            directory=dirname, filter=&quot;Text files (*.txt);;All files (*)&quot;)
+        if len(newpath[0]) == 0:
+            # do nothing if no files were selected.
+            return
+
+        outfile = newpath[0]
+        self.save_directory = os.path.dirname(outfile)
+        self.interface.save_output_manifest(outfile)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.saveConfiguration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.saveConfiguration">[docs]</a>
+    def saveConfiguration(self):
+        &quot;&quot;&quot;
+        Save configuration settings to disk.
+
+        Called by a Settings menu option.  Calls the
+        `Interface.save_configuration` method.
+        &quot;&quot;&quot;
+        if self.initial_startup:
+            # clear startup image
+            self.resetPipeline()
+
+        default_name = self.interface.configuration.config_file_name
+        if default_name is None:
+            dirname = self.save_directory
+        else:
+            if not os.path.isabs(default_name):
+                dirname = os.path.join(self.save_directory, default_name)
+            else:
+                dirname = default_name
+        newpath = QtWidgets.QFileDialog.getSaveFileName(
+            self, caption=&quot;Select output file path for configuration&quot;,
+            directory=dirname,
+            filter=&quot;Config files (*.cfg);;All files (*)&quot;)
+        if len(newpath[0]) == 0:
+            # do nothing if no files were selected.
+            return
+
+        outfile = newpath[0]
+        self.save_directory = os.path.dirname(outfile)
+        self.interface.save_configuration(outfile)</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.saveParameters">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.saveParameters">[docs]</a>
+    def saveParameters(self):
+        &quot;&quot;&quot;
+        Save reduction parameters to disk.
+
+        Called by a Parameters menu option.  Calls the
+        `Interface.save_parameters` method.
+        &quot;&quot;&quot;
+
+        if self.interface.reduction is None:
+            return
+
+        default_name = self.interface.configuration.parameter_file
+        if default_name is None:
+            dirname = self.save_directory
+        else:
+            if not os.path.isabs(default_name):
+                dirname = os.path.join(self.save_directory, default_name)
+            else:
+                dirname = default_name
+        newpath = QtWidgets.QFileDialog.getSaveFileName(
+            self, caption=&quot;Select output file path for parameters&quot;,
+            directory=dirname,
+            filter=&quot;Config files (*.cfg);;All files (*)&quot;)
+        if len(newpath[0]) == 0:
+            # do nothing if no files were selected.
+            return
+
+        outfile = newpath[0]
+        self.save_directory = os.path.dirname(outfile)
+        self.interface.save_parameters(outfile)
+
+        self.setStatus(&quot;Current parameters saved to {}.&quot;.format(outfile))</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.setOutputDirectory">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.setOutputDirectory">[docs]</a>
+    def setOutputDirectory(self):
+        &quot;&quot;&quot;
+        Set an output directory for the reduction.
+
+        Called by a File menu option.  Calls the
+        `Interface.set_output_directory` method.
+        &quot;&quot;&quot;
+        if self.interface.reduction is None:
+            return
+
+        newpath = QtWidgets.QFileDialog.getExistingDirectory(
+            self, caption=&quot;Select Directory&quot;,
+            directory=self.save_directory)
+        if len(newpath) == 0:
+            return
+        else:
+            # set new output directory for reduction and log
+            self.interface.set_output_directory(newpath)
+            self.interface.set_log_file()
+            self.save_directory = newpath
+            self.setStatus(&quot;Set output directory to {}&quot;.format(newpath))</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.toggleDisplay">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.toggleDisplay">[docs]</a>
+    def toggleDisplay(self):
+        &quot;&quot;&quot;Toggle viewers.&quot;&quot;&quot;
+        # set the option in the configuration
+        if self.actionUpdateDisplays.isChecked():
+            self.interface.configuration.update_display = True
+        else:
+            self.interface.configuration.update_display = False
+
+        # if there is a current reduction, register its viewers
+        parent = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+        self.interface.register_viewers(parent)
+
+        # create or close a Data View tab
+        self.resetView()
+        if self.interface.has_embedded_viewers():
+            self.dataTabWidget.insertTab(0, parent, &#39;Data View&#39;)
+            self.dataTabWidget.setCurrentIndex(0)
+
+        self.updateConfigView()</div>
+
+
+<div class="viewcode-block" id="ReduxMainWindow.toggleDisplayIntermediate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.main.ReduxMainWindow.html#sofia_redux.pipeline.gui.main.ReduxMainWindow.toggleDisplayIntermediate">[docs]</a>
+    def toggleDisplayIntermediate(self):
+        &quot;&quot;&quot;Toggle intermediate display setting.&quot;&quot;&quot;
+        # set the option in the configuration
+        if self.actionDisplayIntermediate.isChecked():
+            self.interface.configuration.display_intermediate = True
+        else:
+            self.interface.configuration.display_intermediate = False
+        self.updateConfigView()</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

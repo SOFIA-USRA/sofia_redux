@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.toolkit.utilities.fits &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.toolkit.utilities.fits</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from contextlib import contextmanager
+import os
+
+from astropy import log
+from astropy.io import fits
+import configobj
+import numpy as np
+
+from sofia_redux.toolkit.utilities.func import goodfile, date2seconds
+
+__all__ = [&#39;hdinsert&#39;, &#39;add_history&#39;, &#39;add_history_wrap&#39;,
+           &#39;robust_read&#39;, &#39;getheader&#39;, &#39;getdata&#39;, &#39;header_to_chararray&#39;,
+           &#39;chararray_to_header&#39;, &#39;gethdul&#39;, &#39;write_hdul&#39;,
+           &#39;get_key_value&#39;, &#39;set_log_level&#39;,
+           &#39;order_headers&#39;, &#39;merge_headers&#39;]
+
+kref = &#39;AAAAAAAA&#39;  # Keywords reference key marker (via redux)
+href = &#39;BBBBBBBB&#39;  # HISTORY reference key marker (via redux)
+
+
+<div class="viewcode-block" id="hdinsert">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.fits.hdinsert.html#sofia_redux.toolkit.utilities.fits.hdinsert">[docs]</a>
+def hdinsert(header, key, value, comment=None, refkey=&#39;HISTORY&#39;, after=False):
+    &quot;&quot;&quot;
+    Insert or replace a keyword and value in the header
+
+    Note that the insert method of astropy.io.fits.header.Header appears
+    to be broken in cases where a value is to be inserted after a
+    certain keyword and before HISTORY.  In these cases header.insert()
+    inserts the new keyword after the first history card... which is
+    bad.  Therefore, we do the insertion using a more manual indexing.
+
+    In cases where both `refkey` and `after` are supplied, the `after`
+    parameter will be evaluated first.
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+    key : str
+        keyword name to insert or replace
+    value
+        The value for the keyword
+    comment : str, optional
+        If provided a new comment will be used.  Otherwise, the previous
+        comment will be used when a keyword value is being replaced.
+    refkey : str or int or None or 2-tuple, optional
+        The keyword before which the keyword should be inserted in cases
+        where the new keyword does not yet exist in the header.  By default
+        new keywords will be placed before the first HISTORY card.  If None,
+        use the end of the header.
+    after : bool
+        If True, insert after `refkey` rather than before.
+
+    Returns
+    -------
+    None
+        The header will be modified in place
+    &quot;&quot;&quot;
+    if not isinstance(header, fits.header.Header):
+        log.error(&quot;Invalid header&quot;)
+        return
+    if key in header and comment is None:
+        comment = header.comments[key]
+    if refkey not in header or key in header:
+        header[key] = value, comment
+    else:
+        header.insert(refkey, (key, value, comment), after=after)</div>
+
+
+
+<div class="viewcode-block" id="add_history">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.fits.add_history.html#sofia_redux.toolkit.utilities.fits.add_history">[docs]</a>
+def add_history(header, msg, prefix=None, refkey=href):
+    &quot;&quot;&quot;
+    Add HISTORY message to a FITS header before the pipeline.
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+        FITS header used to write the HISTORY message
+    msg : str
+        the HISTORY message
+    prefix : str, optional
+        Prefix message with this string.
+    refkey : str, optional
+        A reference key to insert the message after.
+    &quot;&quot;&quot;
+    if header is not None:
+        s = &#39;&#39; if prefix is None else str(prefix) + &#39;: &#39;
+        if refkey not in header:
+            refkey = &#39;HISTORY&#39;
+        hdinsert(header, &#39;HISTORY&#39;, s + msg, refkey=refkey)</div>
+
+
+
+<div class="viewcode-block" id="add_history_wrap">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.fits.add_history_wrap.html#sofia_redux.toolkit.utilities.fits.add_history_wrap">[docs]</a>
+def add_history_wrap(prefix):
+    &quot;&quot;&quot;
+    Make a function to add HISTORY messages to a header,
+    prefixed with a string.
+
+    Parameters
+    ----------
+    prefix : str
+        The message to prefix.
+
+    Returns
+    -------
+    function
+    &quot;&quot;&quot;
+    def wrapper(header, message):
+        add_history(header, message, prefix=prefix)
+    return wrapper</div>
+
+
+
+<div class="viewcode-block" id="robust_read">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.fits.robust_read.html#sofia_redux.toolkit.utilities.fits.robust_read">[docs]</a>
+def robust_read(filename, data_hdu=0, header_hdu=0, extension=None,
+                verbose=True):
+    &quot;&quot;&quot;
+    Retrieve the data and header from a FITS file
+
+    Does as many checks as possible to fix a potentially broken
+    FITS file.  Feel free to add other stuff.
+
+    Parameters
+    ----------
+    filename : str
+        path to a FITS file
+    header_hdu : int, optional
+        Header Data Unit to retrieve header. Default is 0 (Primary)
+    data_hdu : int, optional
+        Header Data Unit to retrieve data. Default is 0 (Primary)
+    extension : int, optional
+        If supplied, overrides both `header_hdu` and `data_hdu`
+    verbose : bool, optional
+        If True, output log messages on error
+
+    Returns
+    -------
+    numpy.ndarray, astropy.io.fits.header.Header
+       The data array and header of the FITS file as a 2-tuple
+    &quot;&quot;&quot;
+
+    hdul, dataout, headout = None, None, None
+    if not goodfile(filename, verbose=verbose):
+        return dataout, headout
+
+    if isinstance(extension, int):
+        data_hdu = extension
+        header_hdu = extension
+
+    try:
+        hdul = fits.open(
+            filename, mode=&#39;readonly&#39;, ignore_missing_end=True)
+        hdul.verify(&#39;silentfix&#39;)
+        for hidx in [data_hdu, header_hdu]:
+            if not isinstance(hidx, int) or (hidx &lt; 0) or (hidx &gt;= len(hdul)):
+                log.warning(&quot;HDU %s does not exist (data)&quot; % data_hdu)
+                return dataout, headout
+        dataout = hdul[data_hdu].data
+        headout = hdul[header_hdu].header
+    except ValueError as err:
+        if &#39;ASCII&#39; in str(err):
+            header = hdul[header_hdu].header
+            try:
+                for key in header.keys():
+                    try:
+                        _ = header[key]
+                    except fits.verify.VerifyError:
+                        header.remove(key)
+                        header = header.copy()
+                        header[key] = &#39;UNKNOWN&#39;
+                headout = header
+            except (Exception, ValueError):
+                pass
+    except (Exception, AttributeError):
+        pass
+    finally:
+        try:
+            hdul.close()
+        except (AttributeError, Exception):
+            pass
+    return dataout, headout</div>
+
+
+
+<div class="viewcode-block" id="getheader">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.fits.getheader.html#sofia_redux.toolkit.utilities.fits.getheader">[docs]</a>
+def getheader(filename, hdu=0, verbose=True):
+    &quot;&quot;&quot;
+    Returns the header of a FITS file
+
+    Uses robust_read to extract the header.
+
+    Parameters
+    ----------
+    filename : str
+        path to a FITS file
+    hdu : int, optional
+        Header Data Unit.  Primary HDU is 0 (default)
+    verbose : bool, optional
+        If True, output log messages on error
+
+    Returns
+    -------
+    astropy.io.fits.header.Header
+    &quot;&quot;&quot;
+    if not goodfile(filename, verbose=verbose):
+        return
+    _, header = robust_read(filename, header_hdu=hdu)
+    if not isinstance(header, fits.header.Header):
+        log.error(&quot;Could not read FITS header: %s&quot; % filename)
+        return
+    return header</div>
+
+
+
+<div class="viewcode-block" id="getdata">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.fits.getdata.html#sofia_redux.toolkit.utilities.fits.getdata">[docs]</a>
+def getdata(filename, hdu=0, verbose=True):
+    &quot;&quot;&quot;
+    Returns the data from a FITS file
+
+    Uses robust_read to extract the data.
+
+    Parameters
+    ----------
+    filename : str
+        path to a FITS file
+    hdu : int, optional
+        Header Data Unit.  Primary HDU is 0 (default)
+    verbose : bool, optional
+        If True, output log messages on error
+
+    Returns
+    -------
+    numpy.ndarray
+    &quot;&quot;&quot;
+    if not goodfile(filename, verbose=verbose):
+        return
+    data, _ = robust_read(filename, data_hdu=hdu)
+    if not isinstance(data, (fits.fitsrec.FITS_rec, np.ndarray)):
+        log.error(&quot;Could not read FITS data: %s&quot; % filename)
+        return
+    return data</div>
+
+
+
+<div class="viewcode-block" id="header_to_chararray">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.fits.header_to_chararray.html#sofia_redux.toolkit.utilities.fits.header_to_chararray">[docs]</a>
+def header_to_chararray(header):
+    &quot;&quot;&quot;
+    Convert a FITS header to an array of strings
+
+    For the weirdness of FIFI-LS
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+
+    Returns
+    -------
+    np.ndarray
+    &quot;&quot;&quot;
+    if not isinstance(header, fits.header.Header):
+        log.error(&quot;Invalid header&quot;)
+        return
+    c = repr(header).split(&#39;\n&#39;)
+    c = [x.ljust(80)[:80] for x in c]
+    return np.char.array([c], itemsize=80, unicode=True)</div>
+
+
+
+<div class="viewcode-block" id="chararray_to_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.fits.chararray_to_header.html#sofia_redux.toolkit.utilities.fits.chararray_to_header">[docs]</a>
+def chararray_to_header(chararray):
+    &quot;&quot;&quot;
+    Convert an array of strings to a FITS header
+
+    For the weirdness of FIFI-LS
+
+    Parameters
+    ----------
+    chararray : np.ndarray
+
+    Returns
+    -------
+    astropy.io.fits.header.Header
+    &quot;&quot;&quot;
+    if not isinstance(chararray, np.ndarray):
+        log.error(&quot;Invalid chararray&quot;)
+        return
+
+    if chararray.ndim not in [1, 2]:
+        log.error(&quot;Invalid chararray features&quot;)
+        return
+
+    try:
+        c = chararray[0] if chararray.ndim == 2 else chararray
+        c = &#39;&#39;.join([x.ljust(80)[:80] for x in c])
+        h = fits.header.Header.fromstring(c)
+        return h
+    except (ValueError, TypeError, AttributeError) as err:
+        log.error(str(err))
+        return</div>
+
+
+
+<div class="viewcode-block" id="gethdul">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.fits.gethdul.html#sofia_redux.toolkit.utilities.fits.gethdul">[docs]</a>
+def gethdul(filename, verbose=True):
+    &quot;&quot;&quot;
+    Returns the HDUList from a FITS file
+
+    Performs a few additional sanity checks
+
+    Parameters
+    ----------
+    filename : str or HDUList or array of HDU
+        Path to a FITS file
+    verbose : bool, optional
+        If True, output log messages on error.
+
+    Returns
+    -------
+    astropy.io.fits.HDUList
+    &quot;&quot;&quot;
+    if isinstance(filename, fits.HDUList):
+        return filename
+    if (isinstance(filename, list)
+            and len(filename) &gt; 0
+            and isinstance(filename[0], fits.PrimaryHDU)):
+        return fits.HDUList(filename)
+    if not goodfile(filename, verbose=verbose):
+        return
+    try:
+        hdul = fits.open(filename, ignore_missing_end=True)
+        hdul.verify(&#39;silentfix&#39;)
+    except (AttributeError, Exception, fits.VerifyError) as err:
+        if verbose:
+            log.error(&quot;Unable to read FITS file %s: %s&quot; %
+                      (str(err), filename))
+        return
+    return hdul</div>
+
+
+
+<div class="viewcode-block" id="write_hdul">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.fits.write_hdul.html#sofia_redux.toolkit.utilities.fits.write_hdul">[docs]</a>
+def write_hdul(hdul, outdir=None, overwrite=True):
+    &quot;&quot;&quot;
+    Write a HDULists to disk.
+
+    Output filename is extracted from the primary header (extension 0) of
+    each HDUList from the FILENAME keyword.
+
+    Parameters
+    ----------
+    hdul : astropy.io.fits.HDUList
+    outdir : str, optional
+        Name of the output path.  Default is the current working directory.
+    overwrite : bool, optional
+        If False, will fail if the output filename already exists.
+
+    Returns
+    -------
+    str
+        Filename written to disk
+    &quot;&quot;&quot;
+    outfile = hdul[0].header.get(&#39;FILENAME&#39;)
+    if outfile is None:
+        log.error(&quot;Missing FILENAME in HDUList primary header&quot;)
+        return
+    if outdir is not None:
+        if isinstance(outdir, str):
+            outfile = os.path.join(outdir, outfile)
+        else:
+            raise ValueError(&#39;Invalid output directory type.&#39;)
+
+    if os.path.isfile(outfile):
+        if os.path.exists(outfile):
+            if not overwrite:
+                log.error(&quot;%s already exists - will not overwrite&quot; % outfile)
+                return
+            try:
+                os.remove(outfile)
+            except (IOError, OSError):  # pragma: no cover
+                log.error(&quot;Unable to remove file %s&quot; % outfile)
+                return
+    try:
+        hdul.writeto(outfile, overwrite=True,
+                     output_verify=&#39;silentfix&#39;)
+    except (fits.VerifyError, OSError, Exception) as err:
+        log.error(&quot;Unable to write to %s: %s&quot; % (outfile, str(err)))
+        return
+    finally:
+        hdul.close()
+    return outfile</div>
+
+
+
+<div class="viewcode-block" id="get_key_value">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.fits.get_key_value.html#sofia_redux.toolkit.utilities.fits.get_key_value">[docs]</a>
+def get_key_value(header, key, default=&#39;UNKNOWN&#39;):
+    &quot;&quot;&quot;
+    Get a key value from a header.
+
+    Parameters
+    ----------
+    header : `astropy.io.fits.Header`
+        FITS header.
+    key : str
+        Key to retrieve.
+    default :
+        Value to return if not retrievable from the header.
+
+    Returns
+    -------
+    str, int, float, or bool
+        FITS keyword value; default if not found.
+    &quot;&quot;&quot;
+    try:
+        value = header[key]
+        if isinstance(value, str):
+            value = str(value).strip().upper()
+    except (KeyError, TypeError):
+        value = default
+    return value</div>
+
+
+
+<div class="viewcode-block" id="set_log_level">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.fits.set_log_level.html#sofia_redux.toolkit.utilities.fits.set_log_level">[docs]</a>
+@contextmanager
+def set_log_level(level):
+    &quot;&quot;&quot;
+    Context manager to temporarily set the log level.
+
+    Parameters
+    ----------
+    level : str or int
+        Logging level as defined in the `logging` module.
+    &quot;&quot;&quot;
+    orig_level = log.level
+    log.setLevel(level)
+    try:
+        yield
+    finally:
+        log.setLevel(orig_level)</div>
+
+
+
+<div class="viewcode-block" id="order_headers">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.fits.order_headers.html#sofia_redux.toolkit.utilities.fits.order_headers">[docs]</a>
+def order_headers(headers):
+    &quot;&quot;&quot;
+    Order headers based on contents.
+
+    Return the earliest header and the header list sorted by date.
+    B nods are never returned as the earliest header.
+
+    Parameters
+    ----------
+    headers : array_like of fits.Header
+
+    Returns
+    -------
+    2-tuple
+       fits.Header : earliest header
+       list of fits.Header : ordered headers
+    &quot;&quot;&quot;
+    nhead = len(headers)
+    if nhead == 1:
+        return headers[0].copy(), [headers[0]]
+
+    dateobs, nodbeam = [], []
+    for header in headers:
+        dateobs.append(
+            date2seconds(
+                str(header.get(&#39;DATE-OBS&#39;, default=&#39;3000-01-01T00:00:00&#39;))))
+        nodbeam.append(str(header.get(&#39;NODBEAM&#39;, &#39;UNKNOWN&#39;)).upper())
+
+    # get the earliest A header as the basehead
+    # Otherwise, just use the earliest header
+    idx = np.argsort(dateobs)
+    if &#39;A&#39; in nodbeam:
+        a_test = np.where(np.array(nodbeam)[idx] == &#39;A&#39;)[0]
+        earliest_a = int(a_test[0])
+    else:
+        earliest_a = 0
+
+    earliest_idx = idx[earliest_a]
+    basehead = headers[earliest_idx].copy()
+
+    # sort all headers by date-obs, including the basehead
+    # This is used to get &#39;last&#39; values, whether
+    # in A or B nod
+    sorted_headers = [headers[i] for i in idx]
+
+    return basehead, sorted_headers</div>
+
+
+
+<div class="viewcode-block" id="merge_headers">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.fits.merge_headers.html#sofia_redux.toolkit.utilities.fits.merge_headers">[docs]</a>
+def merge_headers(headers, keyword_configuration, reference_header=None):
+    &quot;&quot;&quot;
+    Merge input headers.
+
+    Keyword handling is defined in the input configuration file, in
+    ConfigObj format, as a list of keyword = value pairs.  Allowed
+    values are:
+
+       - LAST : take the value from the latest file, by DATE-OBS
+       - CONCATENATE : join unique string values with a &#39;,&#39;
+       - DEFAULT : set to &#39;UNKNOWN&#39; for strings, -9999 for numbers
+       - OR : logical-or boolean values
+       - AND : logical-and boolean values
+       - MEAN : mean of all values
+       - SUM : sum of all values
+
+    Parameters
+    ----------
+    headers : list of astropy.io.fits.Header
+        Headers to check.
+    keyword_configuration : str, dict, or ConfigObj
+        Configuration file name or object.
+    reference_header : astropy.io.fits.Header, optional
+        If provided, is used as the base header to be updated.
+        If not provided, the first header (by DATE-OBS) is used
+        as the reference.
+
+    Returns
+    -------
+    astropy.io.fits.Header
+        Combined header.
+    &quot;&quot;&quot;
+    try:
+        merge_conf = configobj.ConfigObj(keyword_configuration)
+    except configobj.ConfigObjError as error:
+        msg = &#39;Error while loading header merge configuration file.&#39;
+        log.error(msg)
+        raise error
+
+    basehead, all_headers = order_headers(headers)
+
+    if reference_header is not None:
+        basehead = reference_header.copy()
+
+    for key, operation in merge_conf.items():
+        values = [h[key] for h in all_headers if key in h]
+        if len(values) == 0:
+            continue
+
+        value = values[0]
+        if operation == &#39;LAST&#39;:
+            value = values[-1]
+
+        elif operation == &#39;SUM&#39;:
+            try:
+                value = np.sum(values)
+            except TypeError:
+                log.warning(f&#39;Key merge SUM operation is invalid for {key}&#39;)
+                continue
+
+        elif operation == &#39;MEAN&#39;:
+            try:
+                value = np.mean(values)
+            except TypeError:
+                log.warning(f&#39;Key merge MEAN operation is invalid for {key}&#39;)
+                continue
+
+        elif operation == &#39;AND&#39;:
+            try:
+                value = np.all(values)
+            except TypeError:
+                log.warning(f&#39;Key merge AND operation is invalid for {key}&#39;)
+                continue
+
+        elif operation == &#39;OR&#39;:
+            try:
+                value = np.any(values)
+            except TypeError:
+                log.warning(f&#39;Key merge OR operation is invalid for {key}&#39;)
+                continue
+
+        elif operation == &#39;CONCATENATE&#39;:
+            split_list = list()
+            for v in values:
+                split_list.extend(str(v).split(&#39;,&#39;))
+            unique = set(split_list)
+            value = &#39;,&#39;.join(sorted(unique))
+
+        elif operation == &#39;DEFAULT&#39;:
+            test_val = values[0]
+            if type(test_val) is str:
+                value = &#39;UNKNOWN&#39;
+            elif type(test_val) is int:
+                value = -9999
+            elif type(test_val) is float:
+                value = -9999.0
+
+        elif operation == &#39;FIRST&#39;:
+            value = values[0]
+
+        else:
+            log.warning(f&#39;Invalid key merge operation {operation}&#39;)
+            continue
+
+        # comments are not handled -- it is assumed these keys
+        # are already in the base header
+        hdinsert(basehead, key, value)
+
+    return basehead</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

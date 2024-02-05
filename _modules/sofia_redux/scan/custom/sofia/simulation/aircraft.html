@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.simulation.aircraft &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.simulation.aircraft</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC
+from astropy import constants
+from astropy import units
+from astropy.units import imperial
+import numpy as np
+
+from sofia_redux.scan.configuration.dates import DateRange
+from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
+    EquatorialCoordinates
+from sofia_redux.scan.coordinate_systems.geodetic_coordinates import \
+    GeodeticCoordinates
+from sofia_redux.scan.utilities.utils import safe_sidereal_time
+
+
+imperial.enable()
+ft = units.Unit(&#39;ft&#39;)
+kft = ft * 1000
+knot = units.Unit(&#39;knot&#39;)
+second = units.Unit(&#39;second&#39;)
+hourangle = units.Unit(&#39;hourangle&#39;)
+degree = units.Unit(&#39;degree&#39;)
+
+
+__all__ = [&#39;AircraftSimulation&#39;]
+
+
+<div class="viewcode-block" id="AircraftSimulation">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.simulation.aircraft.AircraftSimulation.html#sofia_redux.scan.custom.sofia.simulation.aircraft.AircraftSimulation">[docs]</a>
+class AircraftSimulation(ABC):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize a simulated SOFIA aircraft.
+
+        The simulated SOFIA contains location (longitude, latitude, altitude)
+        coordinates, speeds, and times.  This is used to model a flight path
+        and angle of the telescope towards the observed source.
+        &quot;&quot;&quot;
+        self.start_altitude = 41 * kft
+        self.end_altitude = 41 * kft
+        self.heading = None
+        self.airspeed = 500 * knot
+        self.ground_speed = None  # Calculate via subtracting wind
+        self.start_utc = None
+        self.end_utc = None
+        self.flight_time = None
+        self.source = None
+        self.start_location = None
+        self.end_location = None
+        self.start_lst = None
+        self.end_lst = None
+        self.start_horizontal = None
+        self.end_horizontal = None
+
+<div class="viewcode-block" id="AircraftSimulation.initialize_from_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.simulation.aircraft.AircraftSimulation.html#sofia_redux.scan.custom.sofia.simulation.aircraft.AircraftSimulation.initialize_from_header">[docs]</a>
+    def initialize_from_header(self, header):
+        &quot;&quot;&quot;
+        Initialize the aircraft from settings in a primary FITS header.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if &#39;ALTI_STA&#39; in header:
+            self.start_altitude = float(header[&#39;ALTI_STA&#39;]) * ft
+        if &#39;ALTI_END&#39; in header:
+            self.end_altitude = float(header[&#39;ALTI_END&#39;]) * ft
+        if &#39;AIRSPEED&#39; in header:
+            self.airspeed = float(header[&#39;AIRSPEED&#39;]) * knot
+        if &#39;GRDSPEED&#39; in header:
+            self.ground_speed = float(header[&#39;GRDSPEED&#39;]) * knot
+        else:
+            self.ground_speed = self.airspeed  # Assume no wind
+
+        if &#39;DATE-OBS&#39; in header:
+            self.start_utc = DateRange.to_time(header[&#39;DATE-OBS&#39;])
+
+        if &#39;EXPTIME&#39; in header:
+            self.end_utc = self.start_utc + header[&#39;EXPTIME&#39;] * second
+        elif &#39;UTCEND&#39; in header and &#39;DATE-OBS&#39; in header:
+            day = header[&#39;DATE-OBS&#39;].split(&#39;T&#39;)[0]
+            utc_end = f&quot;{day}T{header[&#39;UTCEND&#39;]}&quot;
+            self.end_utc = DateRange.to_time(utc_end)
+
+        if self.end_utc is None:
+            raise ValueError(&quot;Cannot determine flight length (time) &quot;
+                             &quot;from header.&quot;)
+
+        self.flight_time = (self.end_utc - self.start_utc).to(&#39;second&#39;)
+
+        self.source = EquatorialCoordinates([
+            header[&#39;OBJRA&#39;] * hourangle, header[&#39;OBJDEC&#39;] * degree])
+
+        self.start_location = GeodeticCoordinates([
+            header[&#39;LON_STA&#39;] * degree, header[&#39;LAT_STA&#39;] * degree])
+
+        self.start_lst = safe_sidereal_time(
+            self.start_utc, &#39;mean&#39;, longitude=self.start_location.longitude)
+
+        self.start_horizontal = self.source.to_horizontal(
+            self.start_location, self.start_lst)
+
+        self.orient_to_source()
+        self.calculate_end_position()</div>
+
+
+<div class="viewcode-block" id="AircraftSimulation.orient_to_source">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.simulation.aircraft.AircraftSimulation.html#sofia_redux.scan.custom.sofia.simulation.aircraft.AircraftSimulation.orient_to_source">[docs]</a>
+    def orient_to_source(self):
+        &quot;&quot;&quot;
+        Orient the aircraft wrt the source.
+
+        Alters the heading of the aircraft so the source is at 90 degrees
+        to the side.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.heading = self.start_horizontal.az - (90 * degree)
+        self.heading = self.heading.to(&#39;degree&#39;)</div>
+
+
+<div class="viewcode-block" id="AircraftSimulation.calculate_end_position">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.simulation.aircraft.AircraftSimulation.html#sofia_redux.scan.custom.sofia.simulation.aircraft.AircraftSimulation.calculate_end_position">[docs]</a>
+    def calculate_end_position(self):
+        &quot;&quot;&quot;
+        Calculate the end position of the flight using Vicenty&#39;s formula.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        d = (self.airspeed * self.flight_time).decompose()  # distance
+        mean_height = (self.start_altitude + self.end_altitude) / 2
+        r = (constants.R_earth + mean_height).decompose()  # radius
+        a = self.heading  # bearing
+        dr = (d / r).decompose().value * units.Unit(&#39;radian&#39;)
+
+        lon_1 = self.start_location.longitude
+        lat_1 = self.start_location.latitude
+
+        lat_2 = np.arcsin(np.sin(lat_1) * np.cos(dr)
+                          + np.cos(lat_1) * np.sin(dr) * np.cos(a))
+
+        lon_2 = lon_1 + np.arctan2(np.sin(a) * np.sin(dr) * np.cos(lat_1),
+                                   np.cos(dr) - (np.sin(lat_1)
+                                                 * np.sin(lat_2)))
+
+        self.end_location = GeodeticCoordinates([lon_2, lat_2], unit=&#39;degree&#39;)
+        self.end_lst = safe_sidereal_time(
+            self.end_utc, &#39;mean&#39;, longitude=self.end_location.longitude)
+        self.end_horizontal = self.source.to_horizontal(
+            self.end_location, self.end_lst)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

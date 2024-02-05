@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.exes.readraw &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.exes.readraw</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import re
+
+from astropy import log
+import bottleneck as bn
+import numpy as np
+
+from sofia_redux.instruments.exes.lincor import lincor
+from sofia_redux.instruments.exes.get_badpix import get_badpix
+from sofia_redux.instruments.exes.utils import get_reset_dark
+
+__all__ = [&#39;readraw&#39;]
+
+
+<div class="viewcode-block" id="readraw">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.readraw.readraw.html#sofia_redux.instruments.exes.readraw.readraw">[docs]</a>
+def readraw(data, header, do_lincor=False, algorithm=None,
+            toss_nint=0, copy_int=True):
+    &quot;&quot;&quot;
+    Correct for nonlinearity combine individual readouts.
+
+    First corrects nonlinearity for each readout frame (`exes.lincor`),
+    then determines the readout pattern from the OTPAT keyword.
+
+    For readout coadding methods, this step currently has support for Fowler
+    mode, simple destructive read, and equally spaced sample-up-the-ramp
+    patterns.  Frames are combined and variance is calculated based on the
+    readout pattern, using algorithms from the following paper:
+
+        Nonlinearity Corrections and Statistical Uncertainties
+        Associated with Near-Infrared Arrays, William D. Vacca,
+        Michael C. Cushing and John T. Rayner (2004, PASP 116, 352).
+
+    The readout algorithm may also be directly specified by the `algorithm`
+    parameter, which takes the following possible integer values:
+
+        - 0 : Use the last destructive frame only
+        - 1 : Simple destructive mode
+        - 2 : Use the first and last frames only
+        - 3 : Use the second and penultimate frames only
+        - 4 : Fowler mode
+        - 5 : Sample-up-the-ramp mode
+
+    After readout coadd, multiple frames taken at the same nod position (as
+    indicated by the NINT keyword) are averaged.  Extra frames that
+    do not match the OTPAT or NINT pattern are dropped.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        [nframe, nspec, nspat] array of float values.
+    header : fits.Header
+        FITS header produced by `exes.readhdr`.  Note that the header will
+        be updated in-place.
+    do_lincor : bool, optional
+        If True, do the nonlinear correction.  If False, no check is
+        performed on data quality: the output mask will be all False
+        (no bad pixels).
+    algorithm : int, optional
+        Used to select processing mode.  If None, defaults to that determined
+        by `check_readout_pattern`.
+    toss_nint : int, optional
+        If provided and greater than 0 but less than the number of
+        integrations present in the data, `toss_nint` integrations will be
+        discarded from the beginning of the data array.  If the number
+        equals the number of integrations, the first nod is a B nod,
+        and there is another B nod in the data array, the first integrations
+        are instead replaced with a copy of the second B nod.
+    copy_int : bool, optional
+        If `toss_nint` is greater than 0 and `copy_int` is True, replacement
+        integrations are always copied from the next B nod, regardless of
+        the number of integrations available.
+
+    Returns
+    -------
+    coadd_data, variance, mask : 3-tuple of numpy.ndarray
+       The coadded data, variance, and good data mask.  The coadd_data and
+       variance have shape (nframes, ny, nx).  The mask has shape (ny, nx)
+       and Boolean data type, where True indicates a good pixel; False
+       indicates a bad pixel.
+    &quot;&quot;&quot;
+    _check_header(header)
+    data = _check_data(data)
+    data, mask = _get_data_subarray(data, header)
+    data, readmode = _check_readout_pattern(data, header)
+
+    if isinstance(algorithm, int):
+        touse_lookup = {
+            0: &#39;last destructive&#39;,
+            1: &#39;destructive&#39;,
+            2: &#39;first/last nd&#39;,
+            3: &#39;second/penultimate nd&#39;,
+            4: &#39;fowler&#39;,
+            5: &#39;sample-up-the-ramp&#39;}
+        touse = touse_lookup.get(algorithm)
+        if touse is None:
+            raise ValueError(f&#39;Invalid algorithm: {touse}&#39;)
+    else:
+        touse = readmode[&#39;mode&#39;]
+
+    if do_lincor:
+        log.info(&quot;Applying linear correction&quot;)
+        lindata, linmask = lincor(data, header)
+        # &quot;And&quot; the output mask to get all nonlinear detector pixels
+        mask &amp;= np.all(linmask, axis=0)
+    else:
+        log.info(&quot;Linear correction not applied: do_lincor=False&quot;)
+        lindata = data.copy()
+
+    log.info(&#39;&#39;)
+    log.info(f&#39;Using read mode algorithm: {touse}&#39;)
+    log.info(&#39;&#39;)
+    if touse == &#39;destructive&#39; or touse == &#39;last destructive&#39;:
+        coadd_data, variance = _process_destructive(data, header, readmode)
+    elif touse == &#39;first/last nd&#39;:
+        coadd_data, variance = _process_nondestructive1(
+            lindata, header, readmode)
+    elif touse == &#39;second/penultimate nd&#39;:
+        coadd_data, variance = _process_nondestructive2(
+            lindata, header, readmode)
+    elif touse == &#39;fowler&#39;:
+        coadd_data, variance = _process_fowler(lindata, header, readmode)
+    elif touse == &#39;sample-up-the-ramp&#39;:
+        coadd_data, variance = _process_sample_up_the_ramp(
+            data, header, readmode)
+    else:  # pragma: no cover
+        # shouldn&#39;t be reachable
+        raise ValueError(f&#39;Unrecognized readmode: {readmode[&quot;mode&quot;]}&#39;)
+
+    coadd_data, variance = _combine_nods(coadd_data, variance, header,
+                                         readmode, toss_nint, copy_int)
+
+    return coadd_data, variance, mask</div>
+
+
+
+def _get_data_subarray(data, header):
+    ectpat = str(header.get(&#39;ECTPAT&#39;, &#39;UNKNOWN&#39;)).split()
+    if len(ectpat) == 6:
+        ectpat = np.asarray(ectpat, dtype=int)
+        ystart = ectpat[2] * 2
+        ystop = ystart + (ectpat[3] * 2)
+        xstart = ectpat[4]
+        xstop = xstart + (ectpat[5])
+    else:
+        xstart = 0
+        xstop = data.shape[2]
+        ystart = 0
+        ystop = data.shape[1]
+
+    nframes, ny, nx = data.shape
+
+    bpm = get_badpix(header)
+    if bpm is not None:
+        if bpm.shape[0] &lt; ny or bpm.shape[1] &lt; nx:
+            raise ValueError(
+                &quot;Bad pixel mask is too small %s; data shape is %s&quot; %
+                (repr(bpm.shape), repr(data.shape[1:])))
+
+        # Reference columns are marked as 2 in the badpix mask
+        refidx = bpm == 2
+        if refidx.any():
+            xrange = np.where(~refidx)[1]
+            data = data[:, :, xrange.min():xrange.max() + 1]
+            bpm = bpm[:, xrange.min():xrange.max() + 1]
+            nx = data.shape[2]
+            xstart = 0
+            xstop = nx
+
+        # Take subarray if needed
+        bpm = bpm[ystart:ystop, xstart:xstop]
+
+    mask = np.full((ny, nx), True)
+    if bpm is not None:
+        mask[bpm != 1] = False
+
+    # Store data size
+    header[&#39;DETSEC&#39;] = &#39;[%i:%i,%i:%i]&#39; % (
+        xstart + 1, xstop, ystart + 1, ystop)
+    header[&#39;NSPAT&#39;] = nx
+    header[&#39;NSPEC&#39;] = ny
+
+    # Correct frametime for subarray size as needed
+    header[&#39;FRAMETIM&#39;] *= ny / 1024.
+
+    return data, mask
+
+
+def _check_header(header):
+    &quot;&quot;&quot;Ensure header values are of the correct type&quot;&quot;&quot;
+    header[&#39;OTPAT&#39;] = str(header[&#39;OTPAT&#39;]).upper().strip()
+    header[&#39;NINT&#39;] = int(header[&#39;NINT&#39;])
+    header[&#39;FRAMETIM&#39;] = float(header[&#39;FRAMETIM&#39;])
+    header[&#39;READNOIS&#39;] = float(header[&#39;READNOIS&#39;])
+    header[&#39;DARKVAL&#39;] = float(header[&#39;DARKVAL&#39;])
+
+    try:
+        header[&#39;PAGAIN&#39;] = float(header[&#39;PAGAIN&#39;])
+    except (KeyError, ValueError):
+        header[&#39;PAGAIN&#39;] = 1.0
+
+    try:
+        header[&#39;EPERADU&#39;] = float(header[&#39;EPERADU&#39;])
+    except (KeyError, ValueError):
+        header[&#39;EPERADU&#39;] = 1.0
+
+
+def _check_data(data):
+    data = np.asarray(data, dtype=float)
+    if data.ndim == 2:
+        data = data[None]
+    if data.ndim != 3:
+        raise ValueError(&quot;Data must be a 3-D cube (nframe, nspec, nspat)&quot;)
+    return data
+
+
+def _check_readout_pattern(data, header):
+    regex = re.compile(&#39;[STNDC][0-9]+&#39;)
+    if regex.match(header[&#39;OTPAT&#39;]) is None:
+        raise ValueError(&quot;Unreadable OT pattern. OTPAT=%s&quot; % header[&#39;OTPAT&#39;])
+    patterns = regex.findall(header[&#39;OTPAT&#39;])
+
+    spin = trash = nondest = dest = coadd = nread = npass = 0
+    for pattern in patterns:
+        optype, n_op = pattern[0], int(pattern[1:]) + 1
+        if optype == &#39;S&#39;:
+            spin += n_op
+            npass += n_op
+        elif optype == &#39;T&#39;:
+            trash += n_op
+        elif optype == &#39;D&#39;:
+            dest += n_op
+            npass += n_op
+        elif optype == &#39;C&#39;:
+            coadd += n_op
+            dest += n_op
+            npass += n_op
+        elif optype == &#39;N&#39;:
+            nread += 1
+            nondest += n_op
+            npass += n_op
+
+    nframes = coadd if coadd &gt; 0 else (nondest + dest)
+    npattern = data.shape[0] // nframes
+    if npattern == 0:
+        raise ValueError(f&quot;Data does not match OTPAT={header[&#39;OTPAT&#39;]}.&quot;
+                         &quot; A full pattern is not present; aborting.&quot;)
+    elif (npattern * nframes) != data.shape[0]:
+        log.warning(f&quot;Data does not match OTPAT={header[&#39;OTPAT&#39;]}.&quot;
+                    &quot; Dropping extra frames.&quot;)
+        data = data[:npattern * nframes]
+
+    if nread == 2 or (nread == 1 and nondest == 1):
+        mode = &#39;fowler&#39;
+    elif nondest == 0 and dest == 1 and nframes == 1:
+        mode = &#39;destructive&#39;
+    elif nondest != 0 and dest == 1:
+        mode = &#39;sample-up-the-ramp&#39;
+    else:
+        raise ValueError(&quot;Unrecognized readmode&quot;)
+
+    log.info(&#39;&#39;)
+    log.info(f&quot;Readout pattern: {header[&#39;OTPAT&#39;]}&quot;)
+    log.info(f&quot;Frame(s) per pattern: {nframes}&quot;)
+    log.info(f&quot;Total frames: {data.shape[0]}&quot;)
+    log.info(f&quot;Recommended readout mode: {mode}&quot;)
+
+    readmode = {&#39;spin&#39;: spin,
+                &#39;trash&#39;: trash,
+                &#39;nondest&#39;: nondest,
+                &#39;dest&#39;: dest,
+                &#39;coadd&#39;: coadd,
+                &#39;nread&#39;: nread,
+                &#39;npass&#39;: npass,
+                &#39;nframes&#39;: nframes,
+                &#39;npattern&#39;: npattern,
+                &#39;mode&#39;: mode}
+
+    return data, readmode
+
+
+def _process_destructive(data, header, readmode):
+    # Using D only
+    log.info(&#39;Last destructive read&#39;)
+    frametime = float(header[&#39;FRAMETIM&#39;])
+    interval = (readmode[&#39;dest&#39;] + readmode[&#39;nondest&#39;]
+                + readmode[&#39;spin&#39;]) * frametime
+    log.info(f&#39;Interval = {interval}&#39;)
+
+    read_noise = float(header[&#39;READNOIS&#39;])
+    gain = float(header[&#39;PAGAIN&#39;])
+    eperadu = float(header[&#39;EPERADU&#39;])
+    zeroval = float(header[&#39;DARKVAL&#39;]) / (frametime * gain)
+    gain_factor = interval * gain
+    v_gain_factor = interval * eperadu
+
+    shape = readmode[&#39;npattern&#39;], data.shape[1], data.shape[2]
+    coadd_data = np.empty(shape, dtype=float)
+    variance = np.empty(shape, dtype=float)
+
+    dark1s = get_reset_dark(header)
+    for i in range(readmode[&#39;npattern&#39;]):
+        if readmode[&#39;coadd&#39;] == 1:  # pragma: no cover
+            # The Fowler coadd/subtraction should have been done in hardware
+            # (this OTPAT was never used for EXES)
+            coadd_data[i] = zeroval - data[i] / gain_factor
+        else:
+            pattern_start = i * readmode[&#39;nframes&#39;]
+            pattern_end = pattern_start + readmode[&#39;nframes&#39;]
+            signal = data[pattern_end - 1]
+            coadd_data[i] = zeroval - (signal - dark1s[None]) / gain_factor
+
+        variance[i] = (np.abs(coadd_data[i]) / v_gain_factor
+                       + (read_noise / v_gain_factor) ** 2)
+
+    header[&#39;NFRAME&#39;] = 1
+    header[&#39;BEAMTIME&#39;] = interval
+    return coadd_data, variance
+
+
+def _process_nondestructive1(lindata, header, readmode):
+    if readmode[&#39;nondest&#39;] + readmode[&#39;dest&#39;] &lt; 2:
+        raise ValueError(&#39;OTPAT is not suitable for First/Last ND mode&#39;)
+
+    log.info(&quot;First/Last ND mode&quot;)
+    frametime = float(header[&#39;FRAMETIM&#39;])
+    nread = (readmode[&#39;nondest&#39;] + readmode[&#39;dest&#39;]) // 2
+
+    interval = (readmode[&#39;dest&#39;]
+                + readmode[&#39;nondest&#39;]
+                + readmode[&#39;spin&#39;] - 1) * frametime
+    log.info(f&#39;Interval = {interval}&#39;)
+
+    gain = float(header[&#39;PAGAIN&#39;])
+    gainfac = gain * interval
+    vgainfac = float(header[&#39;EPERADU&#39;]) * interval
+    readnoise = float(header[&#39;READNOIS&#39;])
+    darkval = float(header[&#39;DARKVAL&#39;])
+    zeroval = darkval / (frametime * gain)
+    nframes = readmode[&#39;nframes&#39;]
+
+    shape = readmode[&#39;npattern&#39;], lindata.shape[1], lindata.shape[2]
+    coadd_data = np.empty(shape, dtype=float)
+    variance = np.empty(shape, dtype=float)
+
+    for i in range(shape[0]):
+        if readmode[&#39;coadd&#39;] == 1:  # pragma: no cover
+            # (this OTPAT was never used for EXES)
+            coadd_data[i] = zeroval - lindata[i] / gainfac
+        else:
+            pattern_start = i * nframes  # 1st frame
+            pattern_end = pattern_start + nframes  # last frame
+            pattern_data = lindata[pattern_start:pattern_end]
+            pedestal = pattern_data[0]
+            signal = pattern_data[pattern_end - pattern_start - 1]
+            coadd_data[i] = zeroval - ((signal - pedestal) / gainfac)
+
+        variance[i] = ((np.abs(coadd_data[i]) / vgainfac)
+                       * (1 - (frametime * (nread ** 2 - 1))
+                          / (3 * interval * nread))
+                       + 2 * (readnoise ** 2) / ((vgainfac ** 2) * nread))
+
+    header[&#39;NFRAME&#39;] = nread
+    header[&#39;BEAMTIME&#39;] = interval
+    return coadd_data, variance
+
+
+def _process_nondestructive2(lindata, header, readmode):
+    if readmode[&#39;nondest&#39;] + readmode[&#39;dest&#39;] &lt; 4:
+        raise ValueError(&#39;OTPAT is not suitable for &#39;
+                         &#39;Second/Penultimate ND mode&#39;)
+
+    log.info(&quot;Second/Penultimate ND mode&quot;)
+    frametime = float(header[&#39;FRAMETIM&#39;])
+    nread = (readmode[&#39;nondest&#39;] - 1) // 2
+
+    interval = (readmode[&#39;nondest&#39;] + readmode[&#39;spin&#39;] - 2) * frametime
+    log.info(f&#39;Interval = {interval}&#39;)
+
+    gain = float(header[&#39;PAGAIN&#39;])
+    gainfac = gain * interval
+    vgainfac = float(header[&#39;EPERADU&#39;]) * interval
+    readnoise = float(header[&#39;READNOIS&#39;])
+    darkval = float(header[&#39;DARKVAL&#39;])
+    zeroval = darkval / (frametime * gain)
+    nframes = readmode[&#39;nframes&#39;]
+
+    shape = readmode[&#39;npattern&#39;], lindata.shape[1], lindata.shape[2]
+    coadd_data = np.empty(shape, dtype=float)
+    variance = np.empty(shape, dtype=float)
+
+    for i in range(shape[0]):
+        if readmode[&#39;coadd&#39;] == 1:  # pragma: no cover
+            # (this OTPAT was never used for EXES)
+            coadd_data[i] = zeroval - lindata[i] / gainfac
+        else:
+            pattern_start = i * nframes + 1  # 2nd frame
+            pattern_end = pattern_start + nframes - 2  # penultimate frame
+            pattern_data = lindata[pattern_start:pattern_end]
+            pedestal = pattern_data[0]
+
+            signal = pattern_data[pattern_end - pattern_start - 1]
+            coadd_data[i] = zeroval - ((signal - pedestal) / gainfac)
+
+            variance[i] = ((np.abs(coadd_data[i]) / vgainfac)
+                           * (1 - (frametime * (nread ** 2 - 1))
+                              / (3 * interval * nread))
+                           + 2 * (readnoise ** 2) / ((vgainfac ** 2) * nread))
+
+    header[&#39;NFRAME&#39;] = nread
+    header[&#39;BEAMTIME&#39;] = interval
+    return coadd_data, variance
+
+
+def _process_fowler(lindata, header, readmode):
+    log.info(&quot;Fowler mode&quot;)
+    frametime = float(header[&#39;FRAMETIM&#39;])
+    gain = float(header[&#39;PAGAIN&#39;])
+    eperadu = float(header[&#39;EPERADU&#39;])
+    readnoise = float(header[&#39;READNOIS&#39;])
+    darkval = float(header[&#39;DARKVAL&#39;])
+    zeroval = darkval / (frametime * gain)
+
+    nread = (readmode[&#39;nondest&#39;] + readmode[&#39;dest&#39;]) // 2
+    interval = (readmode[&#39;npass&#39;] - nread) * frametime
+    gainfac = interval * gain
+    vgainfac = interval * eperadu
+    log.info(f&#39;Interval = {interval}&#39;)
+
+    shape = readmode[&#39;npattern&#39;], lindata.shape[1], lindata.shape[2]
+    coadd_data = np.empty(shape, dtype=float)
+    variance = np.empty(shape, dtype=float)
+
+    for i in range(shape[0]):
+        if readmode[&#39;coadd&#39;] == 1:  # pragma: no cover
+            # The Fowler coadd/subtraction should have been done in hardware
+            # (this OTPAT was never used for EXES)
+            coadd_data[i] = zeroval - lindata[i] / gainfac
+        else:
+            pattern_start = i * readmode[&#39;nframes&#39;]
+            pattern_end = pattern_start + readmode[&#39;nframes&#39;]
+            pattern_data = lindata[pattern_start:pattern_end]
+
+            if nread &gt; 1:
+                # Add initial reads for pedestal level
+                pedestal = bn.nansum(pattern_data[:nread], axis=0)
+                # Add final reads for signal level
+                signal = bn.nansum(
+                    pattern_data[nread:readmode[&#39;nframes&#39;]], axis=0)
+            else:
+                pedestal = pattern_data[0]
+                signal = pattern_data[1]
+            coadd_data[i] = zeroval - ((signal - pedestal) / (nread * gainfac))
+
+        variance[i] = ((np.abs(coadd_data[i]) / vgainfac)
+                       * (1 - (frametime * (nread ** 2 - 1))
+                          / (3 * interval * nread))
+                       + 2 * (readnoise ** 2) / ((vgainfac ** 2) * nread))
+
+    header[&#39;NFRAME&#39;] = nread
+    header[&#39;BEAMTIME&#39;] = interval
+    return coadd_data, variance
+
+
+def _process_sample_up_the_ramp(data, header, readmode):
+    if readmode[&#39;nondest&#39;] + readmode[&#39;dest&#39;] &lt; 3:
+        raise ValueError(&#39;OTPAT is not suitable for &#39;
+                         &#39;Second/Penultimate ND mode&#39;)
+
+    log.info(&quot;Sample-up-the-ramp mode&quot;)
+    frametime = float(header[&#39;FRAMETIM&#39;])
+    gain = float(header[&#39;PAGAIN&#39;])
+    eperadu = float(header[&#39;EPERADU&#39;])
+    darkval = float(header[&#39;DARKVAL&#39;])
+    zeroval = darkval / (frametime * gain)
+    readnoise = float(header[&#39;READNOIS&#39;])
+
+    nread = readmode[&#39;nframes&#39;]
+    interval = (readmode[&#39;npass&#39;] - 1) * frametime
+    alpha = nread * (nread + 1) // 12
+    gainfac = interval * gain
+    vgainfac = interval * eperadu
+    log.info(f&#39;Interval = {interval}&#39;)
+
+    shape = readmode[&#39;npattern&#39;], data.shape[1], data.shape[2]
+    coadd_data = np.empty(shape, dtype=float)
+    variance = np.empty(shape, dtype=float)
+
+    for i in range(readmode[&#39;npattern&#39;]):
+        if readmode[&#39;coadd&#39;] == 1:  # pragma: no cover
+            # The SUTR fit should have been done in hardware
+            # (this OTPAT was never used for EXES)
+            coadd_data[i] = zeroval - (data[i] / gainfac)
+        else:
+            nframes = readmode[&#39;nframes&#39;]
+            pattern_start = i * nframes
+            pattern_end = pattern_start + nframes
+            pattern_data = data[pattern_start:pattern_end]
+
+            fac = ((np.arange(nread) + 1) - ((nread + 1) / 2)) / alpha
+            s = bn.nansum(pattern_data[:nread] * fac[:, None, None], axis=0)
+            coadd_data[i] = zeroval - (s / gainfac)
+
+        variance[i] = (6 * np.abs(coadd_data[i]) * ((nread ** 2) + 1))
+        variance[i] /= (5 * vgainfac * nread * (nread + 1))
+        variance[i] += ((12 * (readnoise ** 2) * (nread - 1))
+                        / ((vgainfac ** 2) * nread * (nread + 1)))
+
+    header[&#39;NFRAME&#39;] = nread
+    header[&#39;BEAMTIME&#39;] = interval
+    return coadd_data, variance
+
+
+def _combine_nods(coadd_data, variance, header, readmode, toss_nint, copy_int):
+    # Check for multiple frames at the same nod position
+    nint = int(header[&#39;NINT&#39;])
+    if nint &lt;= 1:
+        return coadd_data, variance
+
+    npatt = readmode[&#39;npattern&#39;]
+    nout = npatt // nint
+
+    itot = header[&#39;BEAMTIME&#39;] * nint * nout
+    header[&#39;INTTIME&#39;] = itot
+    if &#39;OFF_SLIT&#39; in str(header.get(&#39;INSTMODE&#39;, &#39;UNKNOWN&#39;)).upper():
+        header[&#39;EXPTIME&#39;] = itot / 2.
+    else:
+        header[&#39;EXPTIME&#39;] = itot
+    header[&#39;NEXP&#39;] = nint * nout
+
+    log.info(f&quot;Combining {nint} frames per nod position&quot;)
+    if npatt &lt; nint:
+        raise ValueError(f&quot;Data does not match NINT={nint}&quot;)
+    elif npatt % nint != 0:
+        log.warning(f&quot;Data does not match NINT={nint}; &quot;
+                    f&quot;ignoring extra frames.&quot;)
+
+    shape = nout, coadd_data.shape[1], coadd_data.shape[2]
+    mcoadd = np.empty(shape, dtype=float)
+    mvar = np.empty(shape, dtype=float)
+    nodn = header.get(&#39;NODN&#39;, 1)
+    for i in range(nout):
+        if i == 0:
+            if toss_nint &gt; 0:
+                if toss_nint &lt; nint and (not copy_int or nodn &lt; 2):
+                    log.info(f&#39;Dropping the first {toss_nint} frames&#39;)
+                    start = toss_nint
+                else:
+                    if toss_nint &lt;= nint and nodn &gt;= 2:
+                        # allow copying the sky data from the next nod
+                        # if available
+                        log.warning(&#39;Copying the first &#39;
+                                    &#39;integration(s) from the next B nod&#39;)
+                        cstart = 2 * nint
+                        cstop = 2 * nint + nint
+                        coadd_data[0:nint] = coadd_data[cstart:cstop]
+                        variance[0:nint] = variance[cstart:cstop]
+                    else:
+                        # otherwise, just ignore the toss for this file
+                        log.warning(&#39;TOSS_NINT is set higher than &#39;
+                                    &#39;NINT; ignoring.&#39;)
+
+                    # in either case, use all frames
+                    start = 0
+            else:
+                start = 0
+        else:
+            start = i * nint
+        stop = i * nint + nint
+        ncomb = stop - start
+        mcoadd[i] = bn.nansum(coadd_data[start:stop], axis=0) / ncomb
+        mvar[i] = bn.nansum(variance[start:stop], axis=0) / (ncomb ** 2)
+
+    return mcoadd, mvar
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

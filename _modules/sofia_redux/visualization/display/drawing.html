@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.visualization.display.drawing &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.visualization.display.drawing</h1><div class="highlight"><pre>
+<span></span>import uuid
+import re
+from typing import Dict, Optional
+
+import numpy as np
+from matplotlib import artist as mart
+from matplotlib.collections import PathCollection
+from matplotlib.lines import Line2D
+from numpy import ma as mask
+
+from sofia_redux.visualization import log
+
+__all__ = [&#39;Drawing&#39;]
+
+
+<div class="viewcode-block" id="Drawing">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing">[docs]</a>
+class Drawing(object):
+    &quot;&quot;&quot;
+    Class to hold an individual matplotlib artist.
+    &quot;&quot;&quot;
+
+    def __init__(self, **kwargs):
+        self._artist = kwargs.get(&#39;artist&#39;, None)
+        self._high_model = str(kwargs.get(&#39;high_model&#39;, &#39;&#39;))
+        self._mid_model = str(kwargs.get(&#39;mid_model&#39;, &#39;&#39;))
+        self._data_id = str(kwargs.get(&#39;data_id&#39;, &#39;&#39;))  # Wavelength of ref
+        self._model_id = kwargs.get(&#39;model_id&#39;, None)  # UUID
+        self._kind = kwargs.get(&#39;kind&#39;, &#39;&#39;)
+        self._pane = kwargs.get(&#39;pane&#39;, None)
+        self._axes = kwargs.get(&#39;axes&#39;, &#39;primary&#39;)
+        self._fields = self._parse_fields(kwargs.get(&#39;fields&#39;))
+        self._label = kwargs.get(&#39;label&#39;, &#39;&#39;)
+        self._updates = kwargs.get(&#39;updates&#39;, dict())
+        self._state = &#39;new&#39;
+        self._update = False
+        if self.artist:
+            self.populate_properties(kwargs)
+
+    def __eq__(self, other):
+        if isinstance(other, Drawing):
+            checks = [self.match_high_model(other.get_high_model()),
+                      self.match_kind(other.get_kind()),
+                      self.match_mid_model(other.get_mid_model()),
+                      self.match_data_id(other.get_data_id()),
+                      self.match_pane(other.get_pane()),
+                      self.match_fields(other.get_fields()),
+                      self.match_axes(other.get_axes())
+                      ]
+            return all(checks)
+        return False
+
+    @staticmethod
+    def _type_error(type_, field):
+        raise TypeError(f&#39;Improper type {type_} for {field}.&#39;)
+
+    @staticmethod
+    def _value_error(value, field):
+        raise ValueError(f&#39;Invalid value {value} for {field}.&#39;)
+
+    @property
+    def artist(self):
+        &quot;&quot;&quot;
+        matplotlib.collections.PolyCollection : Matplotlib artist.
+
+        Matplotlib artist appropriate to the data type, such as
+        a rectangle for the border or a line for the data plot.
+        &quot;&quot;&quot;
+        return self._artist
+
+    @artist.setter
+    def artist(self, artist):
+        if isinstance(artist, mart.Artist):
+            self._artist = artist
+        else:
+            self._type_error(type(artist), &#39;artist&#39;)
+
+    @property
+    def high_model(self):
+        &quot;&quot;&quot;str : High-level model name for the drawing.&quot;&quot;&quot;
+        return self._high_model
+
+    @high_model.setter
+    def high_model(self, model):
+        self._high_model = str(model)
+
+    @property
+    def mid_model(self):
+        &quot;&quot;&quot;str : Mid-level model name for the drawing.&quot;&quot;&quot;
+        return self._mid_model
+
+    @mid_model.setter
+    def mid_model(self, model):
+        self._mid_model = str(model)
+
+    @property
+    def model_id(self) -&gt; uuid.UUID:
+        &quot;&quot;&quot;
+        uuid.UUID : Model ID for the drawing.
+
+        Unique id associated with a single input file.
+        &quot;&quot;&quot;
+        return self._model_id
+
+    @model_id.setter
+    def model_id(self, model_id: uuid.UUID) -&gt; None:
+        self._model_id = model_id
+
+    @property
+    def kind(self):
+        &quot;&quot;&quot;
+        str : Classification category for the drawing.
+
+        Available kinds:
+            - line
+            - border
+            - error
+            - crosshair
+            - guide
+            - cursor
+            - fit_line
+            - fit_center
+            - text
+            - reference
+            - patch
+        &quot;&quot;&quot;
+        return self._kind
+
+    @kind.setter
+    def kind(self, kind):
+        self._kind = str(kind)
+
+    @property
+    def data_id(self):
+        &quot;&quot;&quot;
+        str : Reference data ID.
+
+        Labels reference data lines, e.g. with wavelength values.
+        &quot;&quot;&quot;
+        return self._data_id
+
+    @data_id.setter
+    def data_id(self, data_id):
+        self._data_id = str(data_id)
+
+    @property
+    def color(self):
+        &quot;&quot;&quot;str : Matplotlib color for artist.&quot;&quot;&quot;
+        if self.artist is None:
+            return None
+        try:
+            return self.artist.get_color()
+        except AttributeError:  # pragma: no cover
+            # doesn&#39;t seem reachable with current artists
+            return self.artist.get_facecolor()
+
+    @color.setter
+    def color(self, color):
+        if self.artist is None:
+            return
+        try:
+            self.artist.set_color(color)
+        except AttributeError:  # pragma: no cover
+            # doesn&#39;t seem reachable with current artists
+            self.artist.set_facecolor(color)
+
+    @property
+    def visible(self):
+        &quot;&quot;&quot;bool : Visibility state for the artist&quot;&quot;&quot;
+        if self.artist is None:
+            return None
+        else:
+            return self.artist.get_visible()
+
+    @visible.setter
+    def visible(self, visible: bool):
+        if self.artist is not None:
+            self.artist.set_visible(visible)
+
+    @property
+    def marker(self):
+        &quot;&quot;&quot;str : Marker associated with the artist.&quot;&quot;&quot;
+        if self.artist is None:
+            return None
+        else:
+            try:
+                return self.artist.get_marker()
+            except AttributeError:
+                return None
+
+    @marker.setter
+    def marker(self, marker: str):
+        if self.artist is not None:
+            try:
+                self.artist.set_marker(marker)
+            except AttributeError:
+                pass
+
+    @property
+    def state(self):
+        &quot;&quot;&quot;
+        str : Current state of the drawing.
+
+        Set to &#39;new&#39; on initialization.
+        &quot;&quot;&quot;
+        return self._state
+
+    @state.setter
+    def state(self, state: str):
+        self._state = str(state)
+
+    @property
+    def pane(self):
+        &quot;&quot;&quot;Pane : Display pane containing the drawing.&quot;&quot;&quot;
+        return self._pane
+
+    @pane.setter
+    def pane(self, pane):
+        self._pane = pane
+
+    @property
+    def axes(self):
+        &quot;&quot;&quot;
+        str : Axes containing the drawing artist.
+
+        May be &#39;primary&#39; or &#39;alternate&#39;.
+        &quot;&quot;&quot;
+        return self._axes
+
+    @axes.setter
+    def axes(self, axes):
+        if isinstance(axes, str):
+            axes = str(axes).strip().lower()
+            if axes in [&#39;pri&#39;, &#39;p&#39;, &#39;primary&#39;]:
+                self._axes = &#39;primary&#39;
+            elif axes in [&#39;sec&#39;, &#39;s&#39;, &#39;secondary&#39;, &#39;alt&#39;, &#39;alternate&#39;]:
+                self._axes = &#39;alt&#39;
+            else:
+                self._value_error(axes, &#39;axes&#39;)
+        else:
+            self._type_error(type(axes), &#39;axes&#39;)
+
+    @property
+    def fields(self):
+        &quot;&quot;&quot;
+        dict : Plot fields associated with drawing axes.
+
+        Typical values are: &#39;wavepos&#39;, &#39;spectral_flux&#39;, &#39;spectral_error&#39;,
+        &#39;transmission&#39;, &#39;response&#39;.
+        &quot;&quot;&quot;
+        return self._fields
+
+    @fields.setter
+    def fields(self, fields):
+        new = self._parse_fields(fields)
+        self._fields.update(new)
+
+    @property
+    def label(self):
+        &quot;&quot;&quot;str : Label for the drawing.&quot;&quot;&quot;
+        return self._label
+
+    @label.setter
+    def label(self, label):
+        self._label = str(label)
+
+    @property
+    def updates(self):
+        &quot;&quot;&quot;
+        dict : New updates to apply to the drawing.
+
+        Keys represent the axis being changed and the values are lists of
+        values to update.
+        &quot;&quot;&quot;
+        return self._updates
+
+    @updates.setter
+    def updates(self, updates):
+        if isinstance(updates, dict):
+            self._updates = updates
+        else:
+            self._type_error(type(updates), &#39;updates&#39;)
+
+    @property
+    def update(self):
+        &quot;&quot;&quot;bool : Flag to indicate an update is required.&quot;&quot;&quot;
+        return self._update
+
+    @update.setter
+    def update(self, update):
+        self._update = bool(update)
+
+<div class="viewcode-block" id="Drawing.update_options">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.update_options">[docs]</a>
+    def update_options(self, other, kind=&#39;default&#39;) -&gt; bool:
+        &quot;&quot;&quot;
+        Update plot options from another drawing.
+
+        Parameters
+        ----------
+        other : Drawing
+            Drawing to copy updates from.
+        kind : str
+            Kind of drawing to apply updates to. If default, all available
+            updates are applied.
+
+        Returns
+        -------
+        success : bool
+            True if an update is found and applied; False otherwise.
+        &quot;&quot;&quot;
+        if not isinstance(other, Drawing):
+            raise RuntimeError(&#39;Can only update with another Drawing&#39;)
+        props = dict()
+        updates = other.get_updates()
+        if kind in [&#39;default&#39;, &#39;cursor&#39;, &#39;fit&#39;, &#39;ref&#39;, &#39;border&#39;,
+                    &#39;error_range&#39;, &#39;line&#39;, &#39;patch&#39;]:
+            props[&#39;color&#39;] = updates.get(&#39;color&#39;, self.color)
+        if kind in [&#39;default&#39;, &#39;fit&#39;, &#39;ref&#39;, &#39;line&#39;, &#39;patch&#39;, &#39;border&#39;,
+                    &#39;error_range&#39;]:
+            props[&#39;visible&#39;] = bool(updates.get(&#39;visible&#39;, self.visible))
+        if kind in [&#39;default&#39;, &#39;line&#39;]:
+            props[&#39;marker&#39;] = updates.get(&#39;marker&#39;, self.marker)
+        if props:
+            self._artist.update(props)
+            return True
+        return False</div>
+
+
+<div class="viewcode-block" id="Drawing.clear_updates">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.clear_updates">[docs]</a>
+    def clear_updates(self) -&gt; None:
+        &quot;&quot;&quot;Clear any existing updates.&quot;&quot;&quot;
+        self.updates = dict()</div>
+
+
+<div class="viewcode-block" id="Drawing.populate_properties">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.populate_properties">[docs]</a>
+    def populate_properties(self, kwargs: Dict):
+        &quot;&quot;&quot;
+        Set standard properties for the artist
+
+        Parameters
+        ----------
+        kwargs : dict
+           Keys may be: &#39;visible&#39;, &#39;color&#39;, &#39;marker&#39;, &#39;alpha&#39;, &#39;linestyle&#39;.
+           Values must be appropriate for the Matplotlib artist for the
+           associated property.
+        &quot;&quot;&quot;
+        props = dict()
+        artist_props = [&#39;visible&#39;, &#39;color&#39;, &#39;marker&#39;, &#39;alpha&#39;, &#39;linestyle&#39;]
+        for key in artist_props:
+            try:
+                props[key] = kwargs[key]
+            except KeyError:
+                continue
+        self.artist.update(props)</div>
+
+
+    def _parse_fields(self, fields):
+        &quot;&quot;&quot;Parse plot fields by axis from input list or dict.&quot;&quot;&quot;
+        if fields is None:
+            return dict()
+        if isinstance(fields, dict):
+            return fields
+        elif isinstance(fields, list):
+            parsed = dict()
+            for ax, field in zip([&#39;x&#39;, &#39;y&#39;, &#39;y_alt&#39;], fields):
+                parsed[ax] = field
+            return parsed
+        else:
+            self._type_error(type(fields), &#39;fields&#39;)
+
+<div class="viewcode-block" id="Drawing.matches">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.matches">[docs]</a>
+    def matches(self, other, strict=False):
+        &quot;&quot;&quot;
+        Check if this drawing matches another.
+
+        Required attributes for matching are model_id, kind,
+        mid_model, and data_id. If `strict` is set, pane,
+        fields, and axes must additionally match.
+
+        Parameters
+        ----------
+        other : Drawing
+            The other drawing to compare against.
+        strict : bool
+            If True, drawings must match exactly.
+
+        Returns
+        -------
+        match : bool
+            True if drawings match; False otherwise.
+        &quot;&quot;&quot;
+        # Change to compare UUID instead of high_model/mid_model
+        checks = [self.match_id(other.model_id),
+                  self.match_kind(other.kind),
+                  self.match_mid_model(other.mid_model),
+                  self.match_data_id(other.data_id)]
+        if strict:
+            checks.extend([self.match_pane(other.pane),
+                           self.match_fields(other.fields),
+                           self.match_axes(other.axes)])
+        return all(checks)</div>
+
+
+<div class="viewcode-block" id="Drawing.match_id">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.match_id">[docs]</a>
+    def match_id(self, model_id: uuid.UUID) -&gt; bool:
+        &quot;&quot;&quot;
+        Match model IDs.
+
+        Parameters
+        ----------
+        model_id : uuid.UUID
+            Model ID to compare to this drawing&#39;s model_id attribute.
+
+        Returns
+        -------
+        success : bool
+            True if model IDs match; False otherwise.
+        &quot;&quot;&quot;
+        match = model_id == self._model_id
+        return match</div>
+
+
+<div class="viewcode-block" id="Drawing.match_high_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.match_high_model">[docs]</a>
+    def match_high_model(self, name):
+        &quot;&quot;&quot;
+        Match high models.
+
+        Parameters
+        ----------
+        name : str
+            Model name to compare to this drawing&#39;s high_model attribute.
+
+        Returns
+        -------
+        success : bool
+            True if model IDs match; False otherwise.
+        &quot;&quot;&quot;
+        match = str(name).lower() in self.high_model.lower()
+        return match</div>
+
+
+<div class="viewcode-block" id="Drawing.match_kind">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.match_kind">[docs]</a>
+    def match_kind(self, kind):
+        &quot;&quot;&quot;
+        Match drawing kinds.
+
+        Parameters
+        ----------
+        kind : str
+            Kind to compare to this drawing&#39;s kind attribute.
+
+        Returns
+        -------
+        success : bool
+            True if kinds match; False otherwise.
+        &quot;&quot;&quot;
+        if &#39;fit&#39; in kind and &#39;fit&#39; in self.kind:
+            return True
+        elif &#39;error&#39; in kind and &#39;error&#39; in self.kind:
+            return True
+        else:
+            return kind == self.kind</div>
+
+
+<div class="viewcode-block" id="Drawing.match_mid_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.match_mid_model">[docs]</a>
+    def match_mid_model(self, name):
+        &quot;&quot;&quot;
+        Match mid models.
+
+        Parameters
+        ----------
+        name : str
+            Model name to compare to this drawing&#39;s mid_model attribute.
+
+        For multi-order spectra, mid-model is formatted as
+        &lt;order&gt;.&lt;aperture&gt;. Both must match.
+
+        Returns
+        -------
+        success : bool
+            True if model IDs match; False otherwise.
+        &quot;&quot;&quot;
+
+        try:
+            re.match(r&#39;\d+\.\d+&#39;, self.mid_model)[0]
+        except TypeError:
+            try:
+                other = int(name)
+                this = int(self.mid_model)
+            except ValueError:
+                match = str(name).lower() in self.mid_model.lower()
+            else:
+                match = this == other
+        else:
+            match = name == self.mid_model
+        return match</div>
+
+
+<div class="viewcode-block" id="Drawing.match_data_id">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.match_data_id">[docs]</a>
+    def match_data_id(self, data_id):
+        &quot;&quot;&quot;
+        Match data IDs.
+
+        Parameters
+        ----------
+        data_id : str
+            Data ID to compare to this drawing&#39;s data_id attribute.
+
+        Returns
+        -------
+        success : bool
+            True if data IDs match; False otherwise.
+        &quot;&quot;&quot;
+        match = str(data_id).lower() == self.data_id.lower()
+        return match</div>
+
+
+<div class="viewcode-block" id="Drawing.match_pane">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.match_pane">[docs]</a>
+    def match_pane(self, pane):
+        &quot;&quot;&quot;
+        Match panes.
+
+        Parameters
+        ----------
+        pane : Pane
+            Pane  to compare to this drawing&#39;s pane attribute.
+
+        Returns
+        -------
+        success : bool
+            True if panes match; False otherwise.
+        &quot;&quot;&quot;
+        return self.pane == pane</div>
+
+
+<div class="viewcode-block" id="Drawing.match_fields">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.match_fields">[docs]</a>
+    def match_fields(self, fields):
+        &quot;&quot;&quot;
+        Match fields.
+
+        Parameters
+        ----------
+        fields : list or dict
+            Fields to compare to this drawing&#39;s fields attribute.
+
+        Returns
+        -------
+        success : bool
+            True if fields match; False otherwise.
+        &quot;&quot;&quot;
+        checks = list()
+        if isinstance(fields, dict):
+            for ax, field in fields.items():
+                try:
+                    checks.append(field == self.fields[ax])
+                except KeyError:
+                    checks.append(False)
+        elif isinstance(fields, list):
+            for field, ax in zip(fields, [&#39;x&#39;, &#39;y&#39;, &#39;y_alt&#39;]):
+                checks.append(field == self.fields[ax])
+        return all(checks)</div>
+
+
+<div class="viewcode-block" id="Drawing.match_axes">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.match_axes">[docs]</a>
+    def match_axes(self, axes):
+        &quot;&quot;&quot;
+        Match axes.
+
+        If either value is &#39;any&#39;, True is always returned.
+
+        Parameters
+        ----------
+        axes : str
+            Axes to compare to this drawing&#39;s axes attribute.
+
+        Returns
+        -------
+        success : bool
+            True if fields match; False otherwise.
+        &quot;&quot;&quot;
+        if axes == &#39;any&#39; or self.axes == &#39;any&#39;:
+            return True
+        else:
+            return self.axes == axes</div>
+
+
+<div class="viewcode-block" id="Drawing.match_text">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.match_text">[docs]</a>
+    def match_text(self, artist):
+        &quot;&quot;&quot;
+        Match text.
+
+        Parameters
+        ----------
+        artist : matplotlib.Artist
+            Artist containing text values, retrievable via get_text().
+
+        Returns
+        -------
+        success : bool
+            True if text values match; False otherwise.
+        &quot;&quot;&quot;
+        if isinstance(self.artist, type(artist)):
+            try:
+                return str(self.artist.get_text()) == str(artist.get_text())
+            except AttributeError:
+                return False
+        else:
+            return False</div>
+
+
+<div class="viewcode-block" id="Drawing.apply_updates">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.apply_updates">[docs]</a>
+    def apply_updates(self, updates):
+        &quot;&quot;&quot;
+        Apply updates to the current drawing.
+
+        Parameters
+        ----------
+        updates : dict
+           Updates to apply.
+        &quot;&quot;&quot;
+        self.set_data(updates)</div>
+
+
+<div class="viewcode-block" id="Drawing.set_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_data">[docs]</a>
+    def set_data(self, data=None, axis: Optional[str] = None,
+                 update: Optional = None):
+        &quot;&quot;&quot;
+        Set data for the current artist.
+
+        Parameters
+        ----------
+        data : array-like, optional
+            If provided, may be used to directly set the data for the artist.
+        axis : {&#39;x&#39;, &#39;y&#39;}, optional
+            Specifies the axis to set data for.
+        update : dict, optional
+            Keys may be &#39;x_data&#39;, &#39;y_data&#39;, &#39;artist&#39;. If &#39;x_data&#39; or
+            &#39;y_data&#39; are provided, they override the `data` and `axis`
+            inputs.
+        &quot;&quot;&quot;
+        artist = None
+        if update is not None:
+            try:
+                data = update.updates[&#39;x_data&#39;]
+            except KeyError:
+                try:
+                    data = update.updates[&#39;y_data&#39;]
+                except KeyError:
+                    artist = update.updates[&#39;artist&#39;]
+                else:
+                    axis = &#39;y&#39;
+            except AttributeError:
+                try:
+                    data = update[&#39;x_data&#39;]
+                except KeyError:
+                    try:
+                        data = update[&#39;y_data&#39;]
+                    except KeyError:
+                        artist = update[&#39;artist&#39;]
+                    else:
+                        axis = &#39;y&#39;
+                else:
+                    axis = &#39;x&#39;
+            else:
+                axis = &#39;x&#39;
+        if isinstance(self.artist, Line2D):
+            self._set_line_data(data=data, axis=axis, artist=artist)
+        elif isinstance(self.artist, PathCollection):
+            self._set_scatter_data(data=data, axis=axis, artist=artist)
+        else:
+            log.debug(f&#39;Unable to process artist type &#39;
+                      f&#39;{type(self.artist)}&#39;)</div>
+
+
+    def _set_line_data(self, data=None, axis=None, artist=None):
+        try:
+            if data is not None and axis is not None:
+                props = {f&#39;{axis}data&#39;: data}
+            else:
+                props = {&#39;xdata&#39;: artist.get_xdata(),
+                         &#39;ydata&#39;: artist.get_ydata()}
+            self.artist.update(props)
+
+        except AttributeError:
+            pass
+
+    def _set_scatter_data(self, data=None, axis=None, artist=None):
+        current_data = self.get_artist().get_offsets()
+        if data is not None and axis is not None:
+            if axis == &#39;all&#39;:
+                new_data = mask.array(data)
+            else:
+                if axis == &#39;x&#39;:
+                    x_data = data
+                    y_data = current_data[:, 1]
+                elif axis == &#39;y&#39;:
+                    x_data = current_data[:, 0]
+                    y_data = data
+                else:
+                    x_data = current_data[:, 0]
+                    y_data = current_data[:, 1]
+
+                new_data = mask.array(np.vstack((x_data, y_data)).T)
+        elif artist is not None:
+            new_data = artist.get_offsets()
+        self.artist.set_offsets(new_data)
+
+<div class="viewcode-block" id="Drawing.update_line_fields">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.update_line_fields">[docs]</a>
+    def update_line_fields(self, update):  # pragma: no cover
+        &quot;&quot;&quot;
+        Update line fields.
+
+        Currently has no effect.
+        &quot;&quot;&quot;
+        # todo - implement or remove placeholder
+        pass</div>
+
+
+<div class="viewcode-block" id="Drawing.in_pane">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.in_pane">[docs]</a>
+    def in_pane(self, pane, alt=False) -&gt; bool:
+        &quot;&quot;&quot;
+        Check if current drawing is in specified pane.
+
+        Parameters
+        ----------
+        pane : Pane
+           Pane instance to check.
+        alt : bool, optional
+           If set, alternate axes are checked as well as the primary.
+
+        Returns
+        -------
+        bool
+            True if artist is in specified pane; False otherwise.
+        &quot;&quot;&quot;
+        if (self.artist in pane.ax.get_children()
+                or (alt and self.artist in pane.ax_alt.get_children())):
+            return True
+        else:
+            return False</div>
+
+
+<div class="viewcode-block" id="Drawing.set_artist">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_artist">[docs]</a>
+    def set_artist(self, artist):
+        &quot;&quot;&quot;Set the `artist` attribute.&quot;&quot;&quot;
+        self.artist = artist</div>
+
+
+<div class="viewcode-block" id="Drawing.set_high_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_high_model">[docs]</a>
+    def set_high_model(self, high_model):
+        &quot;&quot;&quot;Set the `high_model` attribute.&quot;&quot;&quot;
+        self.high_model = str(high_model)</div>
+
+
+<div class="viewcode-block" id="Drawing.set_mid_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_mid_model">[docs]</a>
+    def set_mid_model(self, mid_model):
+        &quot;&quot;&quot;Set the `mid_model` attribute.&quot;&quot;&quot;
+        self.mid_model = str(mid_model)</div>
+
+
+<div class="viewcode-block" id="Drawing.set_data_id">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_data_id">[docs]</a>
+    def set_data_id(self, data_id):
+        &quot;&quot;&quot;Set the `data_id` attribute.&quot;&quot;&quot;
+        self.data_id = str(data_id)</div>
+
+
+<div class="viewcode-block" id="Drawing.set_model_id">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_model_id">[docs]</a>
+    def set_model_id(self, model_id):
+        &quot;&quot;&quot;Set the `model_id` attribute.&quot;&quot;&quot;
+        self.model_id = str(model_id)</div>
+
+
+<div class="viewcode-block" id="Drawing.set_kind">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_kind">[docs]</a>
+    def set_kind(self, kind):
+        &quot;&quot;&quot;Set the `kind` attribute.&quot;&quot;&quot;
+        self.kind = kind</div>
+
+
+<div class="viewcode-block" id="Drawing.set_pane">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_pane">[docs]</a>
+    def set_pane(self, pane):
+        &quot;&quot;&quot;Set the `pane` attribute.&quot;&quot;&quot;
+        self.pane = pane</div>
+
+
+<div class="viewcode-block" id="Drawing.set_axes">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_axes">[docs]</a>
+    def set_axes(self, axes):
+        &quot;&quot;&quot;Set the `axes` attribute.&quot;&quot;&quot;
+        self.axes = axes</div>
+
+
+<div class="viewcode-block" id="Drawing.set_label">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_label">[docs]</a>
+    def set_label(self, label):
+        &quot;&quot;&quot;Set the `label` attribute.&quot;&quot;&quot;
+        self.label = label</div>
+
+
+<div class="viewcode-block" id="Drawing.set_state">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_state">[docs]</a>
+    def set_state(self, state):
+        &quot;&quot;&quot;Set the `state` attribute.&quot;&quot;&quot;
+        self.state = state</div>
+
+
+<div class="viewcode-block" id="Drawing.set_update">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_update">[docs]</a>
+    def set_update(self, update):
+        &quot;&quot;&quot;Set the `update` attribute.&quot;&quot;&quot;
+        self.update = update</div>
+
+
+<div class="viewcode-block" id="Drawing.set_updates">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_updates">[docs]</a>
+    def set_updates(self, updates):
+        &quot;&quot;&quot;Update the `updates` attribute.&quot;&quot;&quot;
+        self.updates.update(updates)</div>
+
+
+<div class="viewcode-block" id="Drawing.set_fields">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_fields">[docs]</a>
+    def set_fields(self, fields):
+        &quot;&quot;&quot;Set the `fields` attribute.&quot;&quot;&quot;
+        self.fields = fields</div>
+
+
+<div class="viewcode-block" id="Drawing.set_visible">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_visible">[docs]</a>
+    def set_visible(self, visible):
+        &quot;&quot;&quot;Set the `visible` attribute.&quot;&quot;&quot;
+        self.visible = visible</div>
+
+
+<div class="viewcode-block" id="Drawing.set_color">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_color">[docs]</a>
+    def set_color(self, color):
+        &quot;&quot;&quot;Set the `color` attribute.&quot;&quot;&quot;
+        self.color = color</div>
+
+
+<div class="viewcode-block" id="Drawing.set_marker">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_marker">[docs]</a>
+    def set_marker(self, marker):
+        &quot;&quot;&quot;Set the `marker` attribute.&quot;&quot;&quot;
+        self.marker = marker</div>
+
+
+<div class="viewcode-block" id="Drawing.get_artist">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_artist">[docs]</a>
+    def get_artist(self):
+        &quot;&quot;&quot;Get the `artist` attribute.&quot;&quot;&quot;
+        return self.artist</div>
+
+
+<div class="viewcode-block" id="Drawing.get_high_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_high_model">[docs]</a>
+    def get_high_model(self):
+        &quot;&quot;&quot;Get the `high_model` attribute.&quot;&quot;&quot;
+        return self.high_model</div>
+
+
+<div class="viewcode-block" id="Drawing.get_mid_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_mid_model">[docs]</a>
+    def get_mid_model(self):
+        &quot;&quot;&quot;Get the `mid_model` attribute.&quot;&quot;&quot;
+        return self.mid_model</div>
+
+
+<div class="viewcode-block" id="Drawing.get_data_id">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_data_id">[docs]</a>
+    def get_data_id(self):
+        &quot;&quot;&quot;Get the `data_id` attribute.&quot;&quot;&quot;
+        return self.data_id</div>
+
+
+<div class="viewcode-block" id="Drawing.get_model_id">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_model_id">[docs]</a>
+    def get_model_id(self):
+        &quot;&quot;&quot;Get the `model_id` attribute.&quot;&quot;&quot;
+        return self.model_id</div>
+
+
+<div class="viewcode-block" id="Drawing.get_kind">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_kind">[docs]</a>
+    def get_kind(self):
+        &quot;&quot;&quot;Get the `kind` attribute.&quot;&quot;&quot;
+        return self.kind</div>
+
+
+<div class="viewcode-block" id="Drawing.get_pane">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_pane">[docs]</a>
+    def get_pane(self):
+        &quot;&quot;&quot;Get the `pane` attribute.&quot;&quot;&quot;
+        return self.pane</div>
+
+
+<div class="viewcode-block" id="Drawing.get_axes">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_axes">[docs]</a>
+    def get_axes(self):
+        &quot;&quot;&quot;Get the `axes` attribute.&quot;&quot;&quot;
+        return self.axes</div>
+
+
+<div class="viewcode-block" id="Drawing.get_label">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_label">[docs]</a>
+    def get_label(self):
+        &quot;&quot;&quot;Get the `label` attribute.&quot;&quot;&quot;
+        return self.label</div>
+
+
+<div class="viewcode-block" id="Drawing.get_state">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_state">[docs]</a>
+    def get_state(self):
+        &quot;&quot;&quot;Get the `state` attribute.&quot;&quot;&quot;
+        return self.state</div>
+
+
+<div class="viewcode-block" id="Drawing.get_update">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_update">[docs]</a>
+    def get_update(self):
+        &quot;&quot;&quot;Get the `update` attribute.&quot;&quot;&quot;
+        return self.update</div>
+
+
+<div class="viewcode-block" id="Drawing.get_updates">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_updates">[docs]</a>
+    def get_updates(self):
+        &quot;&quot;&quot;Get the `updates` attribute.&quot;&quot;&quot;
+        return self.updates</div>
+
+
+<div class="viewcode-block" id="Drawing.get_fields">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_fields">[docs]</a>
+    def get_fields(self):
+        &quot;&quot;&quot;Get the `fields` attribute.&quot;&quot;&quot;
+        return self.fields</div>
+
+
+<div class="viewcode-block" id="Drawing.get_visible">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_visible">[docs]</a>
+    def get_visible(self):
+        &quot;&quot;&quot;Get the `visible` attribute.&quot;&quot;&quot;
+        return self.visible</div>
+
+
+<div class="viewcode-block" id="Drawing.get_color">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_color">[docs]</a>
+    def get_color(self):
+        &quot;&quot;&quot;Get the `color` attribute.&quot;&quot;&quot;
+        return self.color</div>
+
+
+<div class="viewcode-block" id="Drawing.get_marker">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_marker">[docs]</a>
+    def get_marker(self):
+        &quot;&quot;&quot;Get the `marker` attribute.&quot;&quot;&quot;
+        return self.marker</div>
+
+
+<div class="viewcode-block" id="Drawing.get_linestyle">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_linestyle">[docs]</a>
+    def get_linestyle(self):
+        &quot;&quot;&quot;Get the linestyle associated with the artist.&quot;&quot;&quot;
+        if self.artist:
+            return self.artist.get_linestyle()
+        else:
+            return None</div>
+
+
+<div class="viewcode-block" id="Drawing.set_animated">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.set_animated">[docs]</a>
+    def set_animated(self, state):
+        &quot;&quot;&quot;Set the animated state for the artist.&quot;&quot;&quot;
+        self._artist.set_animated(state)</div>
+
+
+<div class="viewcode-block" id="Drawing.get_animated">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.get_animated">[docs]</a>
+    def get_animated(self):
+        &quot;&quot;&quot;Get the animated state for the artist.&quot;&quot;&quot;
+        if self._artist:
+            return self._artist.get_animated()
+        else:
+            return None</div>
+
+
+<div class="viewcode-block" id="Drawing.convert_to_scatter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.convert_to_scatter">[docs]</a>
+    @staticmethod
+    def convert_to_scatter(line_artist: Line2D,
+                           marker: str) -&gt; PathCollection:
+        &quot;&quot;&quot;
+        Convert a line plot to a scatter plot.
+
+        Parameters
+        ----------
+        line_artist : Line2D
+            The line artist to replace.
+        marker : str
+            The marker symbol to use in the plot.  If None,
+            the default &#39;o&#39; symbol is used.
+
+        Returns
+        -------
+        scatter_artist : PathCollection
+            The new scatter plot artist.
+        &quot;&quot;&quot;
+        x, y = line_artist.get_data()
+        color = line_artist.get_color()
+        ax = line_artist.axes
+        label = line_artist.get_label()
+        if marker is None:
+            marker = &#39;o&#39;
+        scatter_artist = ax.scatter(x, y, color=color, label=label,
+                                    animated=True, marker=marker)
+        return scatter_artist</div>
+
+
+<div class="viewcode-block" id="Drawing.convert_to_line">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.convert_to_line">[docs]</a>
+    def convert_to_line(self, drawstyle: str, marker: str) -&gt; None:
+        &quot;&quot;&quot;
+        Convert a scatter plot to a line plot.
+
+        Parameters
+        ----------
+        scatter_artist : PathCollection
+            The scatter plot artist to replace.
+        drawstyle : str
+            The line drawing style for the new line plot.
+            Should be &#39;line&#39; or &#39;step&#39;.
+        marker : str
+            The marker symbol to use in the plot.  If None,
+            the default &#39;o&#39; symbol is used.
+
+        Returns
+        -------
+        line_artist : Line2D
+            The new line plot artist.
+        &quot;&quot;&quot;
+        data = self.artist.get_offsets()
+        color = self.artist.get_facecolor()[0]
+        ax = self.artist.axes
+        label = self.artist.get_label()
+        line_artist = ax.plot(data[:, 0], data[:, 1], c=color,
+                              label=label, animated=True,
+                              marker=marker)[0]
+        if drawstyle == &#39;line&#39;:
+            line_artist.set_drawstyle(&#39;default&#39;)
+        else:
+            line_artist.set_drawstyle(&#39;steps-mid&#39;)
+        self.artist.remove()
+        self.artist = line_artist</div>
+
+
+<div class="viewcode-block" id="Drawing.remove">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.drawing.Drawing.html#sofia_redux.visualization.display.drawing.Drawing.remove">[docs]</a>
+    def remove(self):
+        &quot;&quot;&quot;Remove an artist from the plot and from this drawing.&quot;&quot;&quot;
+        self._artist.remove()
+        self._artist = None</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

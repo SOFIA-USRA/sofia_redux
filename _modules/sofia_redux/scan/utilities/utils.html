@@ -1,0 +1,1992 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.utilities.utils &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.utilities.utils</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units, log
+from astropy.io import fits
+from astropy.io.fits.verify import VerifyWarning
+from astropy.time import Time
+from astropy.coordinates import FK4, FK5, BaseCoordinateFrame
+from astropy.coordinates import concatenate as astro_concat
+from astropy.coordinates.angles import Angle
+from astropy.modeling.functional_models import Gaussian2D
+from astropy.stats import gaussian_fwhm_to_sigma
+import bottleneck as bn
+from copy import deepcopy
+import math
+import numpy as np
+import random
+import re
+import string
+import warnings
+
+from sofia_redux import scan as sofia_scan_module
+from sofia_redux.scan.utilities.range import Range
+from sofia_redux.scan.utilities import numba_functions
+from sofia_redux.toolkit.utilities.func import clear_numba_cache as \
+    toolkit_clear_numba_cache
+
+__all__ = [&#39;UNKNOWN_STRING_VALUE&#39;, &#39;UNKNOWN_FLOAT_VALUE&#39;,
+           &#39;UNKNOWN_INT_VALUE&#39;, &#39;UNKNOWN_BOOL_VALUE&#39;, &#39;get_string&#39;,
+           &#39;get_bool&#39;, &#39;get_int&#39;, &#39;get_float&#39;, &#39;get_range&#39;,
+           &#39;get_list&#39;, &#39;get_string_list&#39;, &#39;get_float_list&#39;,
+           &#39;get_int_list&#39;, &#39;to_int_list&#39;, &#39;parse_time&#39;,
+           &#39;parse_angle&#39;, &#39;get_dms_angle&#39;, &#39;get_hms_time&#39;,
+           &#39;get_sign&#39;, &#39;get_epoch&#39;, &#39;valid_value&#39;, &#39;robust_mean&#39;,
+           &#39;robust_sigma_clip_mask&#39;, &#39;roundup_ratio&#39;, &#39;rotate&#39;,
+           &#39;log2round&#39;, &#39;pow2round&#39;, &#39;pow2floor&#39;, &#39;pow2ceil&#39;,
+           &#39;skycoord_insert_blanks&#39;, &#39;dict_intersection&#39;,
+           &#39;dict_difference&#39;, &#39;to_header_quantity&#39;, &#39;to_header_float&#39;,
+           &#39;combine_beams&#39;, &#39;convolve_beam&#39;, &#39;deconvolve_beam&#39;,
+           &#39;encompass_beam&#39;, &#39;encompass_beam_fwhm&#39;, &#39;get_beam_area&#39;,
+           &#39;get_header_quantity&#39;, &#39;ascii_file_to_frame_data&#39;,
+           &#39;insert_into_header&#39;, &#39;insert_info_in_header&#39;, &#39;to_header_cards&#39;,
+           &#39;clear_numba_cache&#39;, &#39;round_values&#39;, &#39;get_comment_unit&#39;,
+           &#39;safe_sidereal_time&#39;]
+
+UNKNOWN_STRING_VALUE = &#39;&#39;
+UNKNOWN_FLOAT_VALUE = -9999.0
+UNKNOWN_INT_VALUE = -9999
+UNKNOWN_BOOL_VALUE = False
+
+ieee_remainder = np.vectorize(math.remainder)
+
+
+<div class="viewcode-block" id="get_string">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.get_string.html#sofia_redux.scan.utilities.utils.get_string">[docs]</a>
+def get_string(value, default=None):
+    &quot;&quot;&quot;
+    Return a string representation of the given value.
+
+    Parameters
+    ----------
+    value : thing
+        The value to resolve.
+    default : str, optional
+        The default result to return if a conversion is not possible,
+        or `value` matches the UNKNOWN_STRING_VALUE.
+
+    Returns
+    -------
+    str
+    &quot;&quot;&quot;
+    if value is None or value == UNKNOWN_STRING_VALUE:
+        return default
+    try:
+        result = str(value)
+    except (ValueError, TypeError):
+        result = default
+    return result</div>
+
+
+
+<div class="viewcode-block" id="get_bool">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.get_bool.html#sofia_redux.scan.utilities.utils.get_bool">[docs]</a>
+def get_bool(value, default=False):
+    &quot;&quot;&quot;
+    Return a bool representation of the given value.
+
+    Parameters
+    ----------
+    value : thing
+        The value to resolve.
+    default : bool, optional
+        The default result to return if a conversion is not possible,
+        or `value` matches the UNKNOWN_BOOL_VALUE.
+
+    Returns
+    -------
+    bool
+    &quot;&quot;&quot;
+    if value is None:
+        return default
+    value = str(value).strip().lower()
+    if len(value) == 0:
+        return default
+    if value[0] in [&#39;0&#39;, &#39;n&#39;, &#39;f&#39;]:
+        return False
+    return True</div>
+
+
+
+<div class="viewcode-block" id="get_int">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.get_int.html#sofia_redux.scan.utilities.utils.get_int">[docs]</a>
+def get_int(value, default=0):
+    &quot;&quot;&quot;
+    Return an integer representation of the given value.
+
+    Parameters
+    ----------
+    value : thing
+        The value to resolve.
+    default : int, optional
+        The default result to return if a conversion is not possible,
+        or `value` matches the UNKNOWN_INT_VALUE.
+
+    Returns
+    -------
+    int
+    &quot;&quot;&quot;
+    if value is None:
+        return default
+    try:
+        value = int(value)
+    except (ValueError, TypeError):
+        return default
+
+    if value == UNKNOWN_INT_VALUE:
+        return default
+    return value</div>
+
+
+
+<div class="viewcode-block" id="get_float">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.get_float.html#sofia_redux.scan.utilities.utils.get_float">[docs]</a>
+def get_float(value, default=np.nan):
+    &quot;&quot;&quot;
+    Return a float representation of the given value.
+
+    Parameters
+    ----------
+    value : thing
+        The value to resolve.
+    default : float, optional
+        The default result to return if a conversion is not possible,
+        or `value` matches the UNKNOWN_FLOAT_VALUE.
+
+    Returns
+    -------
+    int
+    &quot;&quot;&quot;
+    if value is None:
+        return default
+    try:
+        value = float(value)
+    except (ValueError, TypeError):
+        return default
+
+    if np.isclose(value, UNKNOWN_FLOAT_VALUE, equal_nan=True):
+        return default
+    return value</div>
+
+
+
+<div class="viewcode-block" id="get_range">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.get_range.html#sofia_redux.scan.utilities.utils.get_range">[docs]</a>
+def get_range(value, default=Range(), is_positive=False):
+    &quot;&quot;&quot;
+    Return a Range object generated from the given value.
+
+    Parameters
+    ----------
+    value : thing
+        The thing to resolve.
+    default : Range, optional
+        The default result to return if a Range could not be resolved.
+    is_positive : bool, optional
+        If `True`, all values in the range are considered positive and any
+        &#39;-&#39; character in `spec` will be treated as a delimiter rather than
+        a minus sign.
+
+    Returns
+    -------
+    Range
+    &quot;&quot;&quot;
+    if value is None:
+        return default
+    elif isinstance(value, Range):
+        return value.copy()
+    elif not isinstance(value, str) and len(value) == 2:
+        try:
+            return Range(min_val=value[0], max_val=value[1])
+        except ValueError:
+            return default
+
+    try:
+        return Range.from_spec(value, is_positive=is_positive)
+    except ValueError:
+        return default</div>
+
+
+
+<div class="viewcode-block" id="get_list">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.get_list.html#sofia_redux.scan.utilities.utils.get_list">[docs]</a>
+def get_list(value):
+    &quot;&quot;&quot;
+    Resolve the given value into a list.
+
+    Parameters
+    ----------
+    value : list or thing
+
+    Returns
+    -------
+    list
+    &quot;&quot;&quot;
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]</div>
+
+
+
+<div class="viewcode-block" id="get_string_list">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.get_string_list.html#sofia_redux.scan.utilities.utils.get_string_list">[docs]</a>
+def get_string_list(value, delimiter=&#39;,&#39;, default=None):
+    &quot;&quot;&quot;
+    Return a list of strings from the given single string.
+
+    Parameters
+    ----------
+    value : str
+        The string to convert into a list.
+    delimiter : str, optional
+        The string delimiter used to separate one element from the next.
+    default : list, optional
+        The result to return if the value passed in is `None`.
+
+    Returns
+    -------
+    list (str)
+    &quot;&quot;&quot;
+    if value is None:
+        return default
+    if isinstance(value, str):
+        value = [s.strip() for s in re.split(delimiter, value)]
+    return value</div>
+
+
+
+<div class="viewcode-block" id="get_float_list">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.get_float_list.html#sofia_redux.scan.utilities.utils.get_float_list">[docs]</a>
+def get_float_list(value, delimiter=&#39;,&#39;, default=None):
+    &quot;&quot;&quot;
+    Return a list of floats from a single string.
+
+    Parameters
+    ----------
+    value : str
+        The string to convert into a list of floats.
+    delimiter : str, optional
+        The string delimiter used to separate one element from the next.
+    default : list, optional
+        The result to return if the value passed in is `None`.
+
+    Returns
+    -------
+    list (float)
+    &quot;&quot;&quot;
+    value = get_string_list(value, delimiter=delimiter, default=None)
+    if value is None:
+        return default
+    return [get_float(x) for x in value]</div>
+
+
+
+<div class="viewcode-block" id="get_int_list">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.get_int_list.html#sofia_redux.scan.utilities.utils.get_int_list">[docs]</a>
+def get_int_list(value, delimiter=&#39;,&#39;, default=None, is_positive=True):
+    &quot;&quot;&quot;
+    Return a list of ints from a single string.
+
+    Parameters
+    ----------
+    value : str
+        The string to convert into a list of integers.
+    delimiter : str, optional
+        The string delimiter used to separate one element from the next.
+    default : list, optional
+        The result to return if the value passed in is `None`.
+    is_positive : bool, optional
+        If `True`, ranges may be specified using both &#39;:&#39; and &#39;-&#39; characters in
+        a string.  Otherwise, the &#39;-&#39; character will imply a negative value.
+
+    Returns
+    -------
+    list (int)
+    &quot;&quot;&quot;
+    values = get_string_list(value, delimiter=delimiter, default=None)
+    if values is None:
+        return default
+    return to_int_list(values, is_positive=is_positive)</div>
+
+
+
+<div class="viewcode-block" id="to_int_list">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.to_int_list.html#sofia_redux.scan.utilities.utils.to_int_list">[docs]</a>
+def to_int_list(values, is_positive=True):
+    &quot;&quot;&quot;
+    Convert all elements in a list to integers.
+
+    String representations of integers may also be included as ranges.
+    The default behaviour is to treat the &#39;-&#39; character as range rather than
+    a minus sign.  Ranges should generally be specified using the &#39;:&#39;
+    character. To allow negative values, set `is_positive=False`.
+
+    For example
+    &gt;&gt;&gt; print(to_int_list([&#39;1-3&#39;]))
+    [1, 2, 3]
+    &gt;&gt;&gt; print(to_int_list([&#39;-1:3&#39;], is_positive=False))
+    [-1, 0, 1, 2, 3]
+
+    If is_positive is not set, the meaning of &#39;-&#39; is ambiguous and can result
+    in errors.
+
+    Parameters
+    ----------
+    values : list
+    is_positive : bool, optional
+        If `True`, ranges may be specified using both &#39;:&#39; and &#39;-&#39; characters in
+        a string.  Otherwise, the &#39;-&#39; character will imply a negative value.
+
+    Returns
+    -------
+    list (int)
+    &quot;&quot;&quot;
+    result = []
+    for value in values:
+        if isinstance(value, str):
+            splitter = r&#39;[-:]&#39; if is_positive else r&#39;[:]&#39;
+            if re.search(splitter, value) is not None:
+                start, stop = re.split(splitter, value)
+                result.extend(list(np.arange(int(start), int(stop) + 1)))
+            else:
+                result.append(int(value))
+        else:
+            result.append(int(value))
+    return result</div>
+
+
+
+<div class="viewcode-block" id="parse_time">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.parse_time.html#sofia_redux.scan.utilities.utils.parse_time">[docs]</a>
+def parse_time(hms_string, angle=False):
+    &quot;&quot;&quot;
+    Returns H:M:S string as time Quantity.
+
+    Parameters
+    ----------
+    hms_string : string or float
+    angle : bool, optional
+        If `True`, return an hour angle unit instead of hour unit.
+
+    Returns
+    -------
+    time : units.Quantity
+        An hour if angle is `False`, otherwise an hour angle.
+    &quot;&quot;&quot;
+    hms = re.split(r&#39;[\t\n\r:hmsHMS]&#39;, str(hms_string))
+    hms = [x.strip() for x in hms]
+    hms = [x for x in hms if x != &#39;&#39;]
+    unit = units.Unit(&#39;hourangle&#39;) if angle else units.Unit(&#39;hour&#39;)
+    if len(hms) != 3:
+        raise ValueError(f&quot;Cannot parse {hms_string} as an hh:mm:ss string.&quot;)
+
+    try:
+        hms = [float(x) for x in hms]
+    except (ValueError, TypeError):
+        raise ValueError(f&quot;Cannot parse {hms_string} as an hh:mm:ss string.&quot;)
+
+    return ((hms[0]) + (hms[1] / 60) + (hms[2] / 3600)) * unit</div>
+
+
+
+<div class="viewcode-block" id="parse_angle">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.parse_angle.html#sofia_redux.scan.utilities.utils.parse_angle">[docs]</a>
+def parse_angle(dms):
+    &quot;&quot;&quot;
+    Convert a degree:minute:second string into an angle.
+
+    Parameters
+    ----------
+    dms : str
+
+    Returns
+    -------
+    angle : astropy.units.Quantity
+    &quot;&quot;&quot;
+
+    dms = dms.strip()
+    negative = dms.startswith(&#39;-&#39;)
+    if negative:
+        dms = dms[1:]
+
+    regex = r&#39;[- \t\n\r:dmsDMS]&#39;
+    s = re.split(regex, dms)
+    s = [x for x in s if s != &#39;&#39;]
+    try:
+        angle = int(s[0]) + (int(s[1]) / 60) + (float(s[2]) / 3600)
+    except (ValueError, TypeError):
+        raise ValueError(f&quot;Cannot parse {dms} as a dd:mm:ss string.&quot;)
+    if negative:
+        angle *= -1
+    return angle * units.Unit(&#39;deg&#39;)</div>
+
+
+
+<div class="viewcode-block" id="get_dms_angle">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.get_dms_angle.html#sofia_redux.scan.utilities.utils.get_dms_angle">[docs]</a>
+def get_dms_angle(value, default=np.nan):
+    &quot;&quot;&quot;
+    Return a degree angle quantity from a given value.
+
+    The provided value may be a Quantity, float, int, or string value.  If a
+    string value is provided, it will be parsed according to
+    :func:`parse_angle`.
+
+    Parameters
+    ----------
+    value : int or float or str or units.Quantity
+    default : int or float or units.Quantity, optional
+        The default angle to return in cases where the `value` cannot be
+        parsed correctly
+
+    Returns
+    -------
+    angle : units.Quantity
+        The resolved angle in degrees.
+    &quot;&quot;&quot;
+    degree = units.Unit(&#39;deg&#39;)
+
+    if not isinstance(default, units.Quantity):
+        try:
+            default = float(default) * degree
+        except (ValueError, TypeError):
+            raise ValueError(f&quot;Cannot convert default ({default}) to degrees.&quot;)
+    else:
+        try:
+            default = default.to(degree)
+        except units.UnitConversionError:
+            raise ValueError(f&quot;Cannot convert default ({default} to degrees.&quot;)
+
+    if isinstance(value, units.Quantity):
+        try:
+            return value.to(degree)
+        except units.UnitConversionError:
+            log.warning(f&quot;Cannot convert {value.unit} to {degree}&quot;)
+            return default
+
+    if value is None:
+        return default
+
+    try:
+        value = float(value)
+        if np.isclose(value, UNKNOWN_FLOAT_VALUE, equal_nan=True):
+            return default
+        value *= degree
+    except (ValueError, TypeError):
+        try:
+            value = parse_angle(str(value))
+        except (ValueError, TypeError):
+            log.warning(f&quot;Attempting to parse {value} as a dd:mm:ss string.&quot;)
+            return default
+    return value</div>
+
+
+
+<div class="viewcode-block" id="get_hms_time">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.get_hms_time.html#sofia_redux.scan.utilities.utils.get_hms_time">[docs]</a>
+def get_hms_time(value, angle=False, default=np.nan):
+    &quot;&quot;&quot;
+    Return a time or hour angle quantity from a given value.
+
+    The provided value may be a Quantity, float, int, or string value.  If a
+    string value is provided, it will be parsed according to
+    :func:`parse_angle`.
+
+    Parameters
+    ----------
+    value : int or float or str or units.Quantity
+    angle : bool, optional
+        If `True`, return an hour angle unit instead of hour unit.
+    default : int or float or units.Quantity, optional
+        The default angle to return in cases where the `value` cannot be
+        parsed correctly
+
+    Returns
+    -------
+    time : units.Quantity
+        The resolved time in hours, or as an hour angle.
+    &quot;&quot;&quot;
+    unit = units.Unit(&#39;hourangle&#39;) if angle else units.Unit(&#39;hour&#39;)
+
+    if not isinstance(default, units.Quantity):
+        try:
+            default = float(default) * unit
+        except (ValueError, TypeError):
+            raise ValueError(f&quot;Cannot convert default ({default}) to {unit}.&quot;)
+    else:
+        try:
+            default = default.to(unit)
+        except units.UnitConversionError:
+            raise ValueError(f&quot;Cannot convert default ({default} to {unit}.&quot;)
+
+    if isinstance(value, units.Quantity):
+        try:
+            return value.to(unit)
+        except units.UnitConversionError:
+            log.warning(f&quot;Cannot convert {value.unit} to {unit}&quot;)
+            return default
+
+    if value is None:
+        return default
+
+    try:
+        value = float(value)
+        if np.isclose(value, UNKNOWN_FLOAT_VALUE, equal_nan=True):
+            return default
+        value *= unit
+    except (ValueError, TypeError):
+        try:
+            value = parse_time(str(value), angle=angle)
+        except (ValueError, TypeError):
+            log.warning(f&quot;Attempting to parse {value} as an hh:mm:ss string.&quot;)
+            return default
+    return value</div>
+
+
+
+<div class="viewcode-block" id="get_sign">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.get_sign.html#sofia_redux.scan.utilities.utils.get_sign">[docs]</a>
+def get_sign(value, default=0):
+    &quot;&quot;&quot;
+    Return an integer representation of a sign.
+
+    Parameters
+    ----------
+    value : int or float or str
+        The value to parse.
+    default : int, optional
+        The default sign to return.
+
+    Returns
+    -------
+    sign : int
+        1 for a positive sign, -1 for a negative sign, and 0 for no sign.
+    &quot;&quot;&quot;
+    if isinstance(value, (int, float)):
+        if value == 0 or np.isnan(value):
+            return 0
+        return -1 if value &lt; 0 else 1
+
+    if value is None:
+        return default
+
+    str_value = str(value).strip().lower()
+    if str_value in [&#39;+&#39;, &#39;pos&#39;, &#39;positive&#39;, &#39;plus&#39;]:
+        return 1
+    elif str_value in [&#39;-&#39;, &#39;neg&#39;, &#39;negative&#39;, &#39;minus&#39;]:
+        return -1
+    elif str_value in [&#39;*&#39;, &#39;any&#39;]:
+        return 0
+    else:
+        try:
+            value = float(value)
+            if value &lt; 0:
+                return -1
+            elif value &gt; 0:
+                return 1
+            else:
+                return 0
+        except ValueError:
+            return default</div>
+
+
+
+<div class="viewcode-block" id="get_epoch">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.get_epoch.html#sofia_redux.scan.utilities.utils.get_epoch">[docs]</a>
+def get_epoch(equinox):
+    &quot;&quot;&quot;
+    Return an astropy frame representing the equinox of an observation.
+
+    An FK4 frame will be returned in instances where `equinox` is a string and
+    the first letter is &#39;B&#39; (B1950 for example), or the year is less than 1984.
+    In other instances a Julian FK5 frame will be returned.
+
+    Parameters
+    ----------
+    equinox : BaseCoordinateFrame or Time or float or int or str
+        The equinox of the observation
+
+    Returns
+    -------
+    epoch : BaseCoordinateFrame
+        Typically and FK5 or FK5 frame unless another BaseCoordinateFrame was
+        passed in as `equinox`.
+    &quot;&quot;&quot;
+    if isinstance(equinox, BaseCoordinateFrame):
+        return equinox
+    elif isinstance(equinox, Time):
+        if equinox.datetime.year &lt; 1984:
+            return FK4(equinox=equinox)
+        else:
+            return FK5(equinox=equinox)
+
+    equinox = str(equinox).strip().upper()
+    if equinox[0].isalpha():
+        prefix = equinox[0]
+        year = float(equinox[1:])
+    else:
+        year = float(equinox)
+        prefix = &#39;B&#39; if year &lt; 1984 else &#39;J&#39;
+
+    equinox = prefix + str(year)
+    frame = FK4 if prefix == &#39;B&#39; else FK5
+    return frame(equinox=Time(equinox))</div>
+
+
+
+<div class="viewcode-block" id="valid_value">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.valid_value.html#sofia_redux.scan.utilities.utils.valid_value">[docs]</a>
+def valid_value(value):
+    &quot;&quot;&quot;
+    Return if a given value is valid in the context of unknown values.
+
+    The unknown values are `utils.UNKNOWN_INT_VALUE`,
+    `utils.UNKNOWN_STRING_VALUE`, `utils.UNKNOWN_FLOAT_VALUE`, and NaN.
+
+    Parameters
+    ----------
+    value : bool or int or str or float
+        The value to check against the list of UNKNOWN values.
+
+    Returns
+    -------
+    valid : bool
+        `False` if the value and type matches the corresponding unknown
+        value or is not a bool, int, str, or float.  NaNs also return `False`.
+        All other values will return `True`.
+    &quot;&quot;&quot;
+    if isinstance(value, bool):
+        return True
+    elif isinstance(value, int):
+        return value != UNKNOWN_INT_VALUE
+    elif isinstance(value, str):
+        return value != UNKNOWN_STRING_VALUE
+    elif isinstance(value, float):
+        return (value != UNKNOWN_FLOAT_VALUE) and not np.isnan(value)
+    else:
+        return False</div>
+
+
+
+<div class="viewcode-block" id="robust_mean">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.robust_mean.html#sofia_redux.scan.utilities.utils.robust_mean">[docs]</a>
+def robust_mean(array, tails=None):
+    &quot;&quot;&quot;
+    Performs a mean calculation with optional tails.
+
+    NaNs are automatically excluded from the mean calculation.  The `tails`
+    parameter should be between 0 and 0.5, and will exclude
+    `tails` * `array.size` from both the beginning and end of the sorted
+    array values.
+
+    Parameters
+    ----------
+    array : numpy.ndarray or Quantity
+    tails : float, optional
+        The fraction of tails to discount from the mean calculation.  The
+        default (`None`), does not exclude any tails and considers the entire
+        population.
+
+    Returns
+    -------
+    mean : float or Quantity
+        The mean of the array.
+    &quot;&quot;&quot;
+    if isinstance(array, units.Quantity):
+        u = array.unit
+    else:
+        u = None
+
+    if tails is None:
+        result = bn.nanmean(array)
+        return result if u is None else result * u
+
+    array = np.asarray(array)
+    dn = round_values(array.size * tails)
+    result = bn.nanmean(np.sort(array)[dn:-dn])
+    return result if u is None else result * u</div>
+
+
+
+<div class="viewcode-block" id="robust_sigma_clip_mask">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.robust_sigma_clip_mask.html#sofia_redux.scan.utilities.utils.robust_sigma_clip_mask">[docs]</a>
+def robust_sigma_clip_mask(values, weights=None, mask=None, sigma=5.0,
+                           verbose=False, max_iterations=5):
+    &quot;&quot;&quot;
+    Return a masking array indicating sigma clipped elements of an input array.
+
+    Iteratively identifies outliers in a given input array based on the number
+    of standard deviations (`sigma`) of each datum from the median value of
+    the given `values`.
+
+    On each iteration, values that are more than `sigma` * std(`values`) away
+    from the median are ignored on subsequent iterations in which new medians
+    and standard deviations are calculated.
+
+    Note that while any multi-dimensional arrays may be provided, the
+    calculated median and standard deviation on each iteration will apply
+    to the entirety of the data set.
+
+    The iterations will desist once `max_iterations` iterations have occurred,
+    no additional elements are identified as outliers on an iteration, or all
+    elements have been masked.
+
+    Parameters
+    ----------
+    values : units.Quantity or numpy.ndarray (float)
+        The values for which to calculated the sigma clipping masked array.
+        NaN values will be ignored in all calculations and appear as `False` in
+        the output mask array.
+    weights : units.Quantity or numpy.ndarray (float), optional
+        Optional weighting for the values.  These should typically represent
+        the inverse variance of the provided data.  If provided, the calculated
+        median will be weighted accordingly using
+        :func:`numba_functions.smart_median`, as will the derived standard
+        deviation.
+    mask : numpy.ndarray (bool), optional
+        An optional starting mask where `False` indicates an invalid or clipped
+        value.  Will not be updated in-place.
+    sigma : float, optional
+        The number of standard deviations away from the median that will result
+        in a datum being clipped.
+    verbose : bool, optional
+        If `True`, will output log messages indicating the total number of
+        clipped values, the median, and the standard deviation on each
+        iteration.
+    max_iterations : int, optional
+        The maximum number of iterations that will be used to derive the
+        masking array.
+
+    Returns
+    -------
+    mask : np.ndarray (bool)
+        The sigma clipped masking array where `False` indicates a clipped value
+        and `True` indicates a valid value.
+    &quot;&quot;&quot;
+    if isinstance(values, units.Quantity):
+        unit = values.unit
+        values = values.value
+    else:
+        unit = None
+
+    if isinstance(weights, units.Quantity):
+        weights = weights.value
+
+    if mask is None:
+        mask = np.isfinite(values)
+    else:
+        mask = mask &amp; np.isfinite(values)
+
+    for _ in range(max_iterations):
+        if verbose:
+            log.info(f&quot;Valid values: {mask.sum()}&quot;)
+        current_values = values[mask]
+        current_weights = None if weights is None else weights[mask]
+
+        median_value = numba_functions.smart_median(
+            current_values, weights=current_weights)[0]
+        standard_deviation = np.sqrt(
+            np.cov(current_values, aweights=current_weights))
+        limit = standard_deviation * sigma
+
+        if verbose:
+            line = f&quot;Median: {median_value} +/- {standard_deviation}&quot;
+            if unit is not None:
+                line += f&quot; {unit}&quot;
+            log.info(line)
+
+        valid = np.abs(current_values - median_value) &lt;= limit
+        if valid.all():
+            break
+
+        mask[mask] = valid
+
+        # This is probably redundant and can&#39;t be tested easily
+        if not valid.any():  # pragma: no cover
+            break
+
+    return mask</div>
+
+
+
+<div class="viewcode-block" id="roundup_ratio">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.roundup_ratio.html#sofia_redux.scan.utilities.utils.roundup_ratio">[docs]</a>
+def roundup_ratio(a, b):
+    &quot;&quot;&quot;
+    Returns int((a + b - 1) / b).
+
+    Parameters
+    ----------
+    a : int or float or numpy.ndarray
+    b : int or float or numpy.ndarray
+
+    Returns
+    -------
+    ratio : int
+        The roundup ratio.
+    &quot;&quot;&quot;
+    if hasattr(a, &#39;__len__&#39;) or hasattr(b, &#39;__len__&#39;):
+        a = np.asarray(a)
+        b = np.asarray(b)
+        return ((a + b - 1) / b).astype(int)
+
+    return numba_functions.roundup_ratio(a, b)</div>
+
+
+
+<div class="viewcode-block" id="rotate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.rotate.html#sofia_redux.scan.utilities.utils.rotate">[docs]</a>
+def rotate(positions, angle):
+    &quot;&quot;&quot;
+    Rotate 2 dimensional coordinates by a given angle.
+
+    Parameters
+    ----------
+    positions : numpy.ndarray
+        x, y positions of shape (N, 2)
+    angle : float or astropy.units.Quantity or numpy.ndarray (float)
+        The rotation angle (anti-clockwise) in radians (float) or as an
+        astropy unit.  If supplied as an array, should be of shape (N,).
+
+    Returns
+    -------
+    numpy.ndarray
+        Rotated x, y positions
+    &quot;&quot;&quot;
+    sin_a = np.sin(angle)
+    cos_a = np.cos(angle)
+    result = np.empty_like(positions)
+    result[:, 0] = (positions[:, 0] * cos_a) - (positions[:, 1] * sin_a)
+    result[:, 1] = (positions[:, 0] * sin_a) + (positions[:, 1] * cos_a)
+    return result</div>
+
+
+
+<div class="viewcode-block" id="log2round">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.log2round.html#sofia_redux.scan.utilities.utils.log2round">[docs]</a>
+def log2round(x):
+    &quot;&quot;&quot;
+    Returns the rounded value of log_2(x).
+
+    Examples
+    --------
+    &gt;&gt;&gt; print(log2round(1024))
+    10
+    &gt;&gt;&gt; halfway = int(2 ** 9.5)
+    &gt;&gt;&gt; print(log2round(halfway))
+    9
+    &gt;&gt;&gt; print(log2round(halfway + 1))
+    10
+
+    Parameters
+    ----------
+    x : int or float or numpy.ndarray
+        The input value(s).
+
+    Returns
+    -------
+    log2 : int or numpy.ndarray (int)
+    &quot;&quot;&quot;
+    return round_values(np.log2(x))</div>
+
+
+
+<div class="viewcode-block" id="pow2round">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.pow2round.html#sofia_redux.scan.utilities.utils.pow2round">[docs]</a>
+def pow2round(x):
+    &quot;&quot;&quot;
+    Returns the value rounded to the closest 2^N integer.
+
+    Examples
+    --------
+    &gt;&gt;&gt; print(pow2round(1023))
+    1024
+    &gt;&gt;&gt; halfway = int(2 ** 9.5)
+    &gt;&gt;&gt; print(pow2round(halfway))
+    512
+    &gt;&gt;&gt; print(pow2round(halfway + 1))
+    1024
+
+    Parameters
+    ----------
+    x : int or float or numpy.ndarray
+       The input value(s).
+
+    Returns
+    -------
+    result : int or numpy.ndarray (int)
+    &quot;&quot;&quot;
+    return 1 &lt;&lt; log2round(x)</div>
+
+
+
+<div class="viewcode-block" id="pow2floor">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.pow2floor.html#sofia_redux.scan.utilities.utils.pow2floor">[docs]</a>
+def pow2floor(x):
+    &quot;&quot;&quot;
+    Returns the value floored to the closest 2^N integer.
+
+    Examples
+    --------
+    &gt;&gt;&gt; print(pow2floor(1023))
+    512
+    &gt;&gt;&gt; print(pow2floor(1024))
+    1024
+    &gt;&gt;&gt; print(pow2floor(1025))
+    1024
+
+    Parameters
+    ----------
+    x : int or float or numpy.ndarray
+        The input value(s).
+
+    Returns
+    -------
+    result : int or numpy.ndarray (int)
+    &quot;&quot;&quot;
+    l2 = np.log2(x)
+    if isinstance(l2, np.ndarray):
+        return 2 ** l2.astype(int)
+    return 2 ** int(np.log2(x))</div>
+
+
+
+<div class="viewcode-block" id="pow2ceil">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.pow2ceil.html#sofia_redux.scan.utilities.utils.pow2ceil">[docs]</a>
+def pow2ceil(x):
+    &quot;&quot;&quot;
+    Returns the value ceiled to the closest 2^N integer.
+
+    Examples
+    --------
+    &gt;&gt;&gt; print(pow2ceil(1023))
+    1024
+    &gt;&gt;&gt; print(pow2ceil(1024))
+    1024
+    &gt;&gt;&gt; print(pow2ceil(1025))
+    2048
+
+    Parameters
+    ----------
+    x : int or float or numpy.ndarray
+        The input value(s).
+
+    Returns
+    -------
+    result : int or numpy.ndarray (int)
+    &quot;&quot;&quot;
+    value = pow2floor(x)
+    if not isinstance(value, np.ndarray):
+        return value if value == x else value * 2
+    value[value != np.asarray(x)] *= 2
+    return value</div>
+
+
+
+<div class="viewcode-block" id="skycoord_insert_blanks">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.skycoord_insert_blanks.html#sofia_redux.scan.utilities.utils.skycoord_insert_blanks">[docs]</a>
+def skycoord_insert_blanks(coordinates, insert_indices):
+    &quot;&quot;&quot;
+    Insert zeroed coordinates in an astropy coordinate frame.
+
+    Parameters
+    ----------
+    coordinates : astropy.coordinates.BaseCoordinateFrame or SkyCoord
+    insert_indices : numpy.ndarray (float)
+        The indices at which to insert zero values.
+
+    Returns
+    -------
+    astropy.coordinates.BaseCoordinateFrame
+    &quot;&quot;&quot;
+    n_insert = insert_indices.size
+    new = astro_concat((coordinates, coordinates))
+    new.cache.clear()
+    new.data.lat[coordinates.size:] *= 0
+    new.data.lon[coordinates.size:] *= 0
+
+    old_indices = np.arange(coordinates.size)
+    good_indices = old_indices.copy()
+    for index in insert_indices:
+        good_indices[index:] += 1
+    bad_indices = np.arange(n_insert) + insert_indices
+
+    full_indices = np.zeros(coordinates.size + n_insert, dtype=int)
+    full_indices[good_indices] = old_indices
+    full_indices[bad_indices] = coordinates.size + np.arange(n_insert)
+    return new[full_indices].copy()</div>
+
+
+
+<div class="viewcode-block" id="dict_intersection">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.dict_intersection.html#sofia_redux.scan.utilities.utils.dict_intersection">[docs]</a>
+def dict_intersection(options1, options2, initialized=False):
+    &quot;&quot;&quot;
+    Return the intersection of two dictionaries.
+
+    Parameters
+    ----------
+    options1 : dict
+    options2 : dict
+    initialized : bool, optional
+        A switch for use on recursive calls.  Don&#39;t mess.
+
+    Returns
+    -------
+    intersection : dict
+    &quot;&quot;&quot;
+    if initialized:
+        result = dict()
+    else:
+        result = options1.__class__()
+    for k in set(options1.keys()) &amp; set(options2.keys()):
+        value1 = options1[k]
+        value2 = options2[k]
+        if isinstance(value1, dict) and isinstance(value2, dict):
+            result[k] = dict_intersection(value1, value2, initialized=True)
+        elif value1 == value2:
+            result[k] = value1
+    return result</div>
+
+
+
+<div class="viewcode-block" id="dict_difference">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.dict_difference.html#sofia_redux.scan.utilities.utils.dict_difference">[docs]</a>
+def dict_difference(options1, options2, initialized=False):
+    &quot;&quot;&quot;
+    Return the difference of two dictionaries.
+
+    Parameters
+    ----------
+    options1 : dict
+    options2 : dict
+    initialized : bool, optional
+        A switch for use on recursive calls.  Don&#39;t mess.
+
+    Returns
+    -------
+    dict
+    &quot;&quot;&quot;
+    if initialized:
+        result = dict()
+    else:
+        result = options1.__class__()
+
+    for key, value in options1.items():
+        if key not in options2:
+            result[key] = deepcopy(value)
+            continue
+        other_value = options2[key]
+        if isinstance(value, dict) and isinstance(other_value, dict):
+            diff = dict_difference(value, other_value, initialized=True)
+            if len(diff) &gt; 0:
+                result[key] = diff
+            continue
+        if value != other_value:
+            result[key] = value
+
+    return result</div>
+
+
+
+<div class="viewcode-block" id="to_header_quantity">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.to_header_quantity.html#sofia_redux.scan.utilities.utils.to_header_quantity">[docs]</a>
+def to_header_quantity(value, unit=None, keep=False):
+    &quot;&quot;&quot;
+    Convert a value to a Quantity suitable for header entry.
+
+    Converts various input types to a `float` or `units.Quantity` output value.
+    If a dimensionless value is input, it will be multiplied by the unit if
+    present.  UNKNOWN header quantities (typically -9999) are preserved, and
+    non-finite values also return the UNKNOWN float value.
+
+    Parameters
+    ----------
+    value : int or float or str or units.Quantity or None
+        The value to convert.
+    unit : str or units.Unit or units.Quantity, optional
+        The units of the output value.  If a `units.Quantity` value is
+        supplied, the output value will be converted to the quantity unit and
+        scaled by the quantity value.  Dimensionless units will have no effect,
+        while dimensionless quantities will still scale the value, but result
+        in no conversion to an output unit.
+    keep : bool, optional
+        If `True`, return the original value when invalid instead of the
+        UNKNOWN_FLOAT_VALUE.
+
+    Returns
+    -------
+    header_quantity : float or units.Quantity
+    &quot;&quot;&quot;
+    ud = units.dimensionless_unscaled
+    if unit is None and isinstance(value, units.Quantity):
+        unit = value.unit
+
+    # Determine scaling and unit
+    if unit is None:
+        scaling = 1.0
+    elif isinstance(unit, units.Quantity):
+        scaling = unit.value
+        unit = unit.unit
+    else:
+        scaling = 1.0
+        unit = units.Unit(unit)
+
+    if isinstance(unit, units.UnitBase) and unit == ud:
+        unit = None
+
+    if isinstance(value, (str, int, float)):
+        value = float(value)
+    elif value is None:
+        value = np.nan
+    elif not isinstance(value, units.Quantity):
+        raise ValueError(f&quot;Value must be {float}, {int}, {str}, {None} or &quot;
+                         f&quot;{units.Quantity}.&quot;)
+
+    if isinstance(value, units.Quantity):
+        if value.unit == ud:
+            value = value.value
+
+    if keep:
+        bad_return_value = value
+    else:
+        bad_return_value = UNKNOWN_FLOAT_VALUE
+
+    # Value is either a float or quantity at this point
+    # Unit is either None or an actual unit
+    # Neither is dimensionless
+
+    if isinstance(value, units.Quantity):
+        if value.value == UNKNOWN_FLOAT_VALUE or not np.isfinite(value):
+            if unit is None:
+                return bad_return_value * value.unit
+            else:
+                return bad_return_value * unit
+        elif isinstance(unit, units.Unit):
+            return value.to(unit) * scaling
+        else:
+            return value * scaling
+
+    elif value == UNKNOWN_FLOAT_VALUE or not np.isfinite(value):
+        if isinstance(unit, units.Unit):
+            return bad_return_value * unit
+        else:
+            return bad_return_value
+
+    elif isinstance(unit, units.Unit):
+        return value * scaling * unit
+
+    else:
+        return value * scaling</div>
+
+
+
+<div class="viewcode-block" id="to_header_float">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.to_header_float.html#sofia_redux.scan.utilities.utils.to_header_float">[docs]</a>
+def to_header_float(value, unit=None):
+    &quot;&quot;&quot;
+    Parse a value to a parsable header float value.
+
+    Parameters
+    ----------
+    value : float or units.Quantity or None
+    unit : str or units.Unit or units.Quantity or int or float, optional
+        If a quantity was passed in, convert to this unit first.
+
+    Returns
+    -------
+    float
+    &quot;&quot;&quot;
+    if value is None:
+        return UNKNOWN_FLOAT_VALUE
+    if np.isnan(value):
+        return UNKNOWN_FLOAT_VALUE
+    if isinstance(value, units.Quantity):
+        if unit is None:
+            return value.value
+        else:
+            return value.to(unit).value
+    else:
+        return float(value)</div>
+
+
+
+<div class="viewcode-block" id="combine_beams">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.combine_beams.html#sofia_redux.scan.utilities.utils.combine_beams">[docs]</a>
+def combine_beams(beam1, beam2, deconvolve=False):
+    &quot;&quot;&quot;
+    Convolve or deconvolve one beam by another.
+
+    Parameters
+    ----------
+    beam1 : beams.gaussian_2d.Gaussian2D or Gaussian2D
+        The original beam to modify.
+    beam2 : Gaussian2D or None or beams.gaussian_2d.Gaussian2D
+        The beam to modify `beam1` with.
+    deconvolve : bool, optional
+        If `True`, indicates a deconvolution rather than a convolution.
+
+    Returns
+    -------
+    beams.gaussian_2d.Gaussian2D or Gaussian2D
+        The combined beam.
+    &quot;&quot;&quot;
+    if beam2 is None:
+        return beam1.copy()
+    a2x = beam1.x_stddev ** 2
+    a2y = beam1.y_stddev ** 2
+    b2x = beam2.x_stddev ** 2
+    b2y = beam2.y_stddev ** 2
+    direction = -1 if deconvolve else 1
+    a = a2x - a2y
+    b = b2x - b2y
+
+    rad = units.Unit(&#39;radian&#39;)
+    theta1 = beam1.theta
+    theta2 = beam2.theta
+    if not isinstance(theta1, units.Quantity):
+        theta1 = theta1 * rad
+    if not isinstance(theta2, units.Quantity):
+        theta2 = theta2 * rad
+
+    delta = theta2 - theta1
+    delta_unit = delta.unit
+    delta = ((delta.to(rad).value % np.pi) * rad).to(delta_unit)
+    c2 = (a ** 2) + (b ** 2) + (2 * direction * a * b * np.cos(delta))
+
+    if hasattr(beam1.x_stddev, &#39;unit&#39;) and beam1.x_stddev.unit is not None:
+        unit = beam1.x_stddev.unit
+    else:
+        unit = None
+
+    new = beam1.copy()
+    if c2 &lt; 0:  # pragma: no cover
+        if unit is None:
+            new.x_stddev = 0.0
+            new.y_stddev = 0.0
+        else:
+            new.x_stddev = 0.0 * unit
+            new.y_stddev = 0.0 * unit
+        return new
+
+    c = np.sqrt(c2)
+    b2 = a2x + a2y + (direction * (b2x + b2y))
+    x2 = 0.5 * (b2 + c)
+    y2 = 0.5 * (b2 - c)
+    if x2 &lt; 0:  # pragma: no cover
+        x2 = 0.0 if unit is None else 0.0 * (unit ** 2)  # pragma: no cover
+    if y2 &lt; 0:
+        y2 = 0.0 if unit is None else 0.0 * (unit ** 2)
+
+    x_stddev = np.sqrt(x2)
+    y_stddev = np.sqrt(y2)
+    if unit is not None:
+        x_stddev = x_stddev.to(unit)
+        y_stddev = y_stddev.to(unit)
+
+    if c == 0 or np.isnan(c):
+        theta = 0.0 * delta_unit
+    else:
+        sin_beta = direction * np.sin(delta).value * b / c
+        if isinstance(sin_beta, units.Quantity):
+            sin_beta = sin_beta.decompose().value
+        theta = (theta1.value + (0.5 * np.arcsin(sin_beta))) * rad
+        theta = theta.to(delta_unit)
+
+    new.x_stddev = x_stddev
+    new.y_stddev = y_stddev
+    new.theta = theta
+    return new</div>
+
+
+
+<div class="viewcode-block" id="convolve_beam">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.convolve_beam.html#sofia_redux.scan.utilities.utils.convolve_beam">[docs]</a>
+def convolve_beam(beam1, beam2):
+    &quot;&quot;&quot;
+    Convolve one beam by another.
+
+    Parameters
+    ----------
+    beam1 : beams.gaussian_2d.Gaussian2D or Gaussian2D
+        The Gaussian beam to convolve.
+    beam2 : beams.gaussian_2d.Gaussian2D or Gaussian2D
+        The Gaussian beam to convolve `beam1` with.
+
+    Returns
+    -------
+    beam : beams.gaussian_2d.Gaussian2D or Gaussian2D
+    &quot;&quot;&quot;
+    return combine_beams(beam1, beam2, deconvolve=False)</div>
+
+
+
+<div class="viewcode-block" id="deconvolve_beam">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.deconvolve_beam.html#sofia_redux.scan.utilities.utils.deconvolve_beam">[docs]</a>
+def deconvolve_beam(beam1, beam2):
+    &quot;&quot;&quot;
+    Deconvolve one beam by another.
+
+    Parameters
+    ----------
+    beam1 : beams.gaussian_2d.Gaussian2D or Gaussian2D
+        The Gaussian beam to deconvolve.
+    beam2 : beams.gaussian_2d.Gaussian2D or Gaussian2D
+        The Gaussian beam to deconvolve `beam1` by.
+
+    Returns
+    -------
+    beam : beams.gaussian_2d.Gaussian2D or Gaussian2D
+    &quot;&quot;&quot;
+    return combine_beams(beam1, beam2, deconvolve=True)</div>
+
+
+
+<div class="viewcode-block" id="encompass_beam">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.encompass_beam.html#sofia_redux.scan.utilities.utils.encompass_beam">[docs]</a>
+def encompass_beam(beam1, beam2):
+    &quot;&quot;&quot;
+    Encompass one beam by another.
+
+    Parameters
+    ----------
+    beam1 : beams.gaussian_2d.Gaussian2D or Gaussian2D
+        The Gaussian beam to encompass.
+    beam2 : beams.gaussian_2d.Gaussian2D or Gaussian2D
+        The Gaussian beam to encompass `beam1` with.
+
+    Returns
+    -------
+    beam : beams.gaussian_2d.Gaussian2D or Gaussian2D
+    &quot;&quot;&quot;
+    delta_angle = beam2.theta - beam1.theta
+    cos_a = np.cos(delta_angle)
+    sin_a = np.sin(delta_angle)
+
+    if hasattr(beam1.x_stddev, &#39;unit&#39;):
+        base_unit = beam1.x_stddev.unit
+    else:
+        base_unit = None
+
+    min_x = np.hypot(beam2.x_stddev * cos_a, beam2.y_stddev * sin_a)
+    min_y = np.hypot(beam2.x_stddev * sin_a, beam2.y_stddev * cos_a)
+    if base_unit is not None:
+        if base_unit != min_x.unit:
+            min_x = min_x.decompose().to(base_unit)
+        if base_unit != min_y.unit:
+            min_y = min_y.decompose().to(base_unit)
+
+    beam = beam1.copy()
+    if beam1.x_stddev &lt; min_x:
+        beam.x_stddev = min_x
+    if beam1.y_stddev &lt; min_y:
+        beam.y_stddev = min_y
+
+    return beam</div>
+
+
+
+<div class="viewcode-block" id="encompass_beam_fwhm">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.encompass_beam_fwhm.html#sofia_redux.scan.utilities.utils.encompass_beam_fwhm">[docs]</a>
+def encompass_beam_fwhm(beam, fwhm):
+    &quot;&quot;&quot;
+    Encompass one beam by a given fwhm.
+
+    Parameters
+    ----------
+    beam : beams.gaussian_2d.Gaussian2D or Gaussian2D or None
+        The Gaussian beam to encompass.
+    fwhm : float or units.Quantity
+        The full-width-half-max to encompass `beam1` with.
+
+    Returns
+    -------
+    beams.gaussian_2d.Gaussian2D or Gaussian2D
+    &quot;&quot;&quot;
+    stddev = gaussian_fwhm_to_sigma * fwhm
+    if beam is None:
+        return Gaussian2D(x_stddev=stddev, y_stddev=stddev)
+
+    encompassed_beam = beam.copy()
+    if beam.x_stddev &lt; stddev:
+        encompassed_beam.x_stddev = stddev
+    if beam.y_stddev &lt; stddev:
+        encompassed_beam.y_stddev = stddev
+
+    return encompassed_beam</div>
+
+
+
+<div class="viewcode-block" id="get_beam_area">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.get_beam_area.html#sofia_redux.scan.utilities.utils.get_beam_area">[docs]</a>
+def get_beam_area(psf):
+    &quot;&quot;&quot;
+    Return the area of a 2-dimensional Gaussian model.
+
+    Parameters
+    ----------
+    psf : beams.gaussian_2d.Gaussian2D or Gaussian2D or None
+
+    Returns
+    -------
+    area : float or units.Quantity
+    &quot;&quot;&quot;
+    if psf is None:
+        return 0.0
+
+    if hasattr(psf.x_stddev, &#39;unit&#39;):
+        unit = psf.x_stddev.unit
+    else:
+        unit = None
+
+    area = 2.0 * np.pi * psf.x_stddev * psf.y_stddev
+    if unit is not None:
+        area = area.to(unit ** 2)
+    return area</div>
+
+
+
+<div class="viewcode-block" id="get_header_quantity">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.get_header_quantity.html#sofia_redux.scan.utilities.utils.get_header_quantity">[docs]</a>
+def get_header_quantity(header, key, default=np.nan,
+                        default_unit=units.dimensionless_unscaled):
+    &quot;&quot;&quot;
+    Get an astropy quantity from a FITS header value.
+
+    The unit is determined from the FITS comment, where unit should be enclosed
+    in [unit] or (unit).
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+    key : str
+    default : float, optional
+        The default value to pass back if the key is not found in the header.
+    default_unit : astropy.units.Unit or astropy.units.Quantity or str
+        The default unit if cannot be determined from header.  If a quantity
+        is provided, will be multiplied by the value.
+
+    Returns
+    -------
+    astropy.units.Quantity
+    &quot;&quot;&quot;
+    value = header.get(key, default)
+
+    if isinstance(default_unit, str):
+        default_unit = units.Unit(default_unit)
+
+    if key not in header:
+        return value * default_unit
+
+    comment = header.comments[key]
+    str_units = re.findall(r&#39;\(.*?\)|\[.*?\]&#39;, comment)
+
+    if len(str_units) == 0:
+        return value * default_unit
+
+    try:
+        header_unit = units.Unit(str_units[0][1:-1])
+        return value * header_unit
+    except ValueError:
+        return value * default_unit</div>
+
+
+
+<div class="viewcode-block" id="ascii_file_to_frame_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.ascii_file_to_frame_data.html#sofia_redux.scan.utilities.utils.ascii_file_to_frame_data">[docs]</a>
+def ascii_file_to_frame_data(ascii_file):
+    &quot;&quot;&quot;
+    Convert time stream data from a ascii file to a numpy array.
+
+    Parameters
+    ----------
+    ascii_file : str
+        The filename for the ascii file.  Output from SOFSCAN via the
+        &quot;write.ascii&quot; configuration option.
+
+    Returns
+    -------
+    frame_data : numpy.ndarray (float)
+        The frame data of shape (n_frames, n_channels).
+    &quot;&quot;&quot;
+    with open(ascii_file, &#39;r&#39;) as f:
+        contents = f.readlines()
+
+    contents = [
+        c.strip().replace(&#39;---&#39;, &#39;NaN&#39;).replace(&#39;\t\t&#39;, &#39;\t&#39;).split(&#39;\t&#39;)
+        for c in contents[1:]]
+
+    n_frames = len(contents)
+    n_channels = len(contents[0])
+
+    frame_data = np.empty((n_frames, n_channels), dtype=float)
+    for frame in range(n_frames):
+        frame_data[frame] = contents[frame]
+
+    return frame_data</div>
+
+
+
+<div class="viewcode-block" id="insert_into_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.insert_into_header.html#sofia_redux.scan.utilities.utils.insert_into_header">[docs]</a>
+def insert_into_header(header, key, value, comment=None, refkey=&#39;HISTORY&#39;,
+                       after=False, delete_special=False):
+    &quot;&quot;&quot;
+    Insert a key, value into the header at a specific location.
+
+    The key will always be inserted at the desired location.  If it already
+    exists in the header, the old value will be removed before insertion.
+
+    Parameters
+    ----------
+    header : fits.Header
+        The header in which to insert the key.
+    key : str
+        The name of the header key to insert.
+    value : str or object
+        The value of the header key.
+    comment : str, optional
+        An optional header comment.  If `None` and the key already exists in
+        the header, the old comment will be used instead.
+    refkey : str, optional
+        A key in the header marking the location at which to insert `key`.  If
+        not present in the header, the key will be inserted in the standard
+        manner.
+    after : bool, optional
+        If `True`, insert `key` after `refkey`.  If `False`, insert `key`
+        before `refkey`.
+    delete_special : bool, optional
+        If `True`, allow deletion of previous HISTORY and COMMENT entries
+        containing the same value.
+
+    Returns
+    -------
+    None
+    &quot;&quot;&quot;
+    upper_key = key.upper()
+    special_key = upper_key in [&#39;COMMENT&#39;, &#39;HISTORY&#39;]
+    old_key = old_comment = None
+    for try_key in [upper_key, key]:
+        if try_key in header:
+            old_key = try_key
+            if not special_key:
+                old_comment = header.comments[try_key]
+                if old_comment == &#39;&#39;:
+                    old_comment = None
+            else:
+                old_comment = None
+            break
+
+    in_header = old_key is not None
+    if in_header:
+        if not special_key:
+            del header[old_key]
+        elif delete_special:
+            delete_indices = []
+            previous_special = header[old_key]
+            for i, previous_value in enumerate(previous_special):
+                if value == previous_value:
+                    delete_indices.append(i)
+            for delete_index in delete_indices[::-1]:
+                del header[old_key, delete_index]
+
+    if special_key or (comment is None and old_comment is None):
+        insert_card = (key, value)
+    elif comment is not None:
+        insert_card = (key, value, comment)
+    else:
+        insert_card = (key, value, old_comment)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter(&#39;ignore&#39;, VerifyWarning)
+        if refkey not in header:
+            header[insert_card[0]] = insert_card[1:]
+        else:
+            header.insert(refkey, insert_card, after=after)</div>
+
+
+
+<div class="viewcode-block" id="insert_info_in_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.insert_info_in_header.html#sofia_redux.scan.utilities.utils.insert_info_in_header">[docs]</a>
+def insert_info_in_header(header, header_info, refkey=&#39;HISTORY&#39;, after=False,
+                          delete_special=False):
+    &quot;&quot;&quot;
+    Insert header information into a header at a given location.
+
+    Parameters
+    ----------
+    header : fits.Header
+        The header for which to insert `header_info`.
+    header_info : fits.Header or dict or list or tuple or set.
+        The header information to insert.  Will be normalized using
+        :func:`to_header_cards`.
+    refkey : str, optional
+        The key in `header` marking the insertion location.
+    after : bool, optional
+        If `True`, insert `header_info` after `refkey`.  Otherwise, insert
+        before `refkey`.
+    delete_special : bool, optional
+        If `True`, allow deletion of previous HISTORY and COMMENT entries
+        containing the same value.
+
+    Returns
+    -------
+    None
+    &quot;&quot;&quot;
+    cards = to_header_cards(header_info)
+    if len(cards) == 0:
+        return
+
+    letters = string.ascii_uppercase
+    marker = &#39;&#39;.join(random.choice(letters) for _ in range(8))
+    while marker in header:  # pragma: no cover
+        marker = &#39;&#39;.join(random.choice(letters) for _ in range(8))
+    insert_into_header(header, marker, True,
+                       comment=&#39;Temporary marker for header insertion.&#39;,
+                       refkey=refkey, after=after)
+
+    for card in cards:
+        insert_into_header(header, card[0], card[1], comment=card[2],
+                           refkey=marker, after=False,
+                           delete_special=delete_special)
+    del header[marker]</div>
+
+
+
+<div class="viewcode-block" id="to_header_cards">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.to_header_cards.html#sofia_redux.scan.utilities.utils.to_header_cards">[docs]</a>
+def to_header_cards(header_info):
+    &quot;&quot;&quot;
+    Convert header-like information to a list of cards.
+
+    Standardizes header type information into a list of cards suitable for
+    passing into :func:`insert_into_header`.  COMMENT and HISTORY keys will
+    automatically set the associated comment to `None`.
+
+    Parameters
+    ----------
+    header_info : fits.Header or dict or list or tuple or set or None
+
+    Returns
+    -------
+    cards : list (tuple)
+       A list of cards where each element is (key, value, comment).
+    &quot;&quot;&quot;
+    cards = []
+    if header_info is None:
+        return cards
+
+    if isinstance(header_info, fits.Header):
+        for key, value in header_info.items():
+            comment = header_info.comments[key]
+            cards.append((key, value, comment))
+
+    elif isinstance(header_info, dict):
+        for key, value in header_info.items():
+            if (hasattr(value, &#39;__len__&#39;)
+                    and not isinstance(value, str)
+                    and len(value) == 2
+                    and isinstance(value[1], str)):
+                comment = value[1]
+                value = value[0]
+            else:
+                comment = None
+            cards.append((key, value, comment))
+
+    elif isinstance(header_info, (list, tuple, set)):
+        for element in header_info:
+            if isinstance(element, str):
+                element = [x.strip() for x in element.split(&#39;,&#39;)]
+            if len(element) not in [2, 3]:
+                continue
+            key, value = element[:2]
+            if len(element) == 3 and isinstance(element[-1], str):
+                comment = element[-1]
+            else:
+                comment = None
+            cards.append((key, value, comment))
+
+    else:
+        log.warning(f&#39;Header info must be {fits.Header}, {dict}, {list}, &#39;
+                    f&#39;{set} or {tuple} type.  Received {header_info}&#39;)
+        return cards
+
+    result = []
+    for (key, value, comment) in cards:
+        key = str(key)
+        if key.upper() in [&#39;COMMENT&#39;, &#39;HISTORY&#39;] or comment in [&#39;&#39;, None]:
+            comment = None
+        else:
+            comment = str(comment)
+        result.append((key, value, comment))
+    return result</div>
+
+
+
+<div class="viewcode-block" id="clear_numba_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.clear_numba_cache.html#sofia_redux.scan.utilities.utils.clear_numba_cache">[docs]</a>
+def clear_numba_cache():  # pragma: no cover
+    &quot;&quot;&quot;
+    Aggressively remove the numba cache for the sofia_scan package.
+
+    This is necessary when numba does not pick up changes in currently cached
+    functions.
+
+    Returns
+    -------
+    None
+    &quot;&quot;&quot;
+    toolkit_clear_numba_cache(module=sofia_scan_module)</div>
+
+
+
+<div class="viewcode-block" id="round_values">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.round_values.html#sofia_redux.scan.utilities.utils.round_values">[docs]</a>
+def round_values(x):
+    &quot;&quot;&quot;
+    Round any given value to the expected result.
+
+    The function :func:`np.round` does not round values as one might expect.
+    If int(x) is equal to an odd number, #.5 numbers will be rounded down
+    rather than up (as expected).  This function attempts to fix that.
+
+    Parameters
+    ----------
+    x : int or float or numpy.ndarray or units.Quantity
+        The value to round.
+
+    Returns
+    -------
+    rounded : int or numpy.ndarray (int) or units.Quantity
+    &quot;&quot;&quot;
+    if isinstance(x, int):
+        return x
+    if isinstance(x, float):
+        return numba_functions.round_value(x)
+
+    is_quantity = isinstance(x, units.Quantity)
+    if not is_quantity:
+        x = np.asarray(x)
+
+    if x.dtype == int:
+        return x
+    if is_quantity:
+        unit, values = x.unit, x.value
+    else:
+        unit, values = None, x
+    if values.shape == ():
+        result = np.asarray(numba_functions.round_value(float(values)))
+    else:
+        result = numba_functions.round_array(values)
+    if unit is None:
+        return result
+    return result * unit</div>
+
+
+
+def calculate_position_angle(lon1, lat1, lon2, lat2):
+    &quot;&quot;&quot;
+    Position Angle (East of North) between two points on a sphere.
+
+    Parameters
+    ----------
+    lon1 : float or units.Quantity
+        The longitude of position 1.
+    lat1: float or units.Quantity
+        The latitude of position 1.
+    lon2 : float or units.Quantity
+        The longitude of position 2.
+    lat2 : float or units.Quantity
+        The latitude of position 2.
+
+    Returns
+    -------
+    pa : units.Quantity
+        The (positive) position angle of the vector pointing from position
+        1 to position 2.  If any of the angles are arrays, this will contain
+        an array following the appropriate `numpy` broadcasting rules.
+    &quot;&quot;&quot;
+    delta_lon = lon2 - lon1
+    cos_lat = np.cos(lat2)
+
+    x = (np.sin(lat2) * np.cos(lat1)
+         - cos_lat * np.sin(lat1) * np.cos(delta_lon))
+    y = np.sin(delta_lon) * cos_lat
+
+    pa = Angle(np.arctan2(y, x), units.Unit(&#39;radian&#39;))
+    pa = pa.wrap_at(360 * units.Unit(&#39;degree&#39;)).to(&#39;degree&#39;).value
+    return pa * units.Unit(&#39;degree&#39;)
+
+
+<div class="viewcode-block" id="get_comment_unit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.get_comment_unit.html#sofia_redux.scan.utilities.utils.get_comment_unit">[docs]</a>
+def get_comment_unit(comment, default=None):
+    &quot;&quot;&quot;
+    See if a header comment contains a unit and return if found.
+
+    In this case, header units are expected to be enclosed within round ()
+    or square [] brackets.  The first valid unit found inside brackets will be
+    returned with round brackets overruling square.
+
+    Parameters
+    ----------
+    comment : str or None
+        The header comment which may contain a unit.
+    default : str or units.Unit, optional
+        The unit to return if not found.
+
+    Returns
+    -------
+    unit : None or units.Unit
+    &quot;&quot;&quot;
+    if default is not None:
+        default = units.Unit(default)
+
+    if comment is None or len(comment) == 0:
+        return default
+    brackets = [&#39;()&#39;, &#39;[]&#39;]
+    slash = &#39;\\&#39;
+    for bracket in brackets:
+        if bracket[0] not in comment:
+            continue
+        found = re.search(f&#39;{slash}{bracket[0]}.*?{slash}{bracket[1]}&#39;,
+                          comment)
+        if found is None:
+            continue
+
+        try:
+            unit = units.Unit(found[0][1:-1])
+            return unit
+        except ValueError:
+            continue
+    else:
+        return default</div>
+
+
+
+<div class="viewcode-block" id="safe_sidereal_time">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.utils.safe_sidereal_time.html#sofia_redux.scan.utilities.utils.safe_sidereal_time">[docs]</a>
+def safe_sidereal_time(t, kind, longitude=None, model=None):
+    &quot;&quot;&quot;
+    Calculate sidereal time, even if offline.
+
+    This is a wrapper around :func:`Time.sidereal_time` in cases where the IERS
+    table cannot be downloaded.
+
+    Parameters
+    ----------
+    t : Time
+        The time for which to calculate the sidereal time.
+    kind : str
+        May be one of {&#39;mean&#39;, &#39;apparent&#39;} i.e., accounting for precession
+        only, or also for nutation.
+    longitude : units.Quantity or float or numpy.ndarray, optional
+        The longitude on the Earth at which to compute the Earth rotation
+        angle.  If a float is provided, it should be in degrees.
+    model : str, optional
+        The precession model to use.
+
+    Returns
+    -------
+    longitude : units.Quantity
+        The local sidereal time in hourangle units.
+    &quot;&quot;&quot;
+    try:
+        return t.sidereal_time(kind, longitude=longitude, model=model)
+    except Exception as err:
+        log.warning(f&quot;There was an error calculating sidereal time: {err}&quot;)
+
+    from astropy.utils.iers import iers
+    with iers.conf.set_temp(&#39;auto_max_age&#39;, None):  # An offline option
+        return t.sidereal_time(kind, longitude=longitude, model=model)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

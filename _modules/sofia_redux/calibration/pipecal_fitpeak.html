@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.calibration.pipecal_fitpeak &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.calibration.pipecal_fitpeak</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Fit a 2D function to an image.&quot;&quot;&quot;
+
+from astropy import log
+import numpy as np
+from scipy.optimize import curve_fit
+
+from sofia_redux.calibration.pipecal_error import PipeCalError
+
+__all__ = [&#39;elliptical_gaussian&#39;, &#39;elliptical_lorentzian&#39;,
+           &#39;elliptical_moffat&#39;, &#39;pipecal_fitpeak&#39;]
+
+
+<div class="viewcode-block" id="elliptical_gaussian">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_fitpeak.elliptical_gaussian.html#sofia_redux.calibration.pipecal_fitpeak.elliptical_gaussian">[docs]</a>
+def elliptical_gaussian(coords,
+                        baseline=0., dpeak=1.,
+                        col_mean=0., row_mean=0.,
+                        col_sigma=1., row_sigma=1.,
+                        theta=0.):
+    &quot;&quot;&quot;
+    Function for an elliptical Gaussian profile.
+
+    Parameters
+    ----------
+    coords : tuple of arrays
+        row,col coordinates of image
+    baseline : float, optional
+        Background flux level. Defaults to 0.
+    dpeak : float, optional
+        Maximum flux value. Defaults to 1.
+    col_mean : float, optional
+        col coordinate of star location. Defaults to 0.
+    row_mean : float, optional
+        row coordinate of star location. Defaults to 0
+    col_sigma : float, optional
+        col component of Gaussian sigma. Defaults to 1
+    row_sigma : float, optional
+        row component of Gaussian sigma. Defaults to 1
+    theta : float, optional
+        Angle the major axis of the Gaussian is rotated
+        from the column axis in radians. Defaults to 0.
+
+    Returns
+    -------
+    g : 1d array of floats
+        Flattened 2D Gaussian array.
+
+    &quot;&quot;&quot;
+    row, col = coords
+    a = (np.cos(theta) / col_sigma)**2 + (np.sin(theta) / row_sigma)**2
+    b = (np.sin(theta) / col_sigma)**2 + (np.cos(theta) / row_sigma)**2
+    c = 2. * np.sin(theta) * np.cos(theta) * (1 / col_sigma**2
+                                              - 1 / row_sigma**2)
+    g = baseline + dpeak * np.exp(-1 / 2 * (a * (col - col_mean)**2
+                                            + b * (row - row_mean)**2
+                                            + c
+                                            * (col - col_mean)
+                                            * (row - row_mean)))
+    return g.ravel()</div>
+
+
+
+<div class="viewcode-block" id="elliptical_lorentzian">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_fitpeak.elliptical_lorentzian.html#sofia_redux.calibration.pipecal_fitpeak.elliptical_lorentzian">[docs]</a>
+def elliptical_lorentzian(coords,
+                          baseline=0., dpeak=1.,
+                          col_mean=0., row_mean=0.,
+                          col_sigma=1., row_sigma=1.,
+                          theta=0.):
+    &quot;&quot;&quot;
+    Function for an elliptical Lorentzian profile.
+
+    Parameters
+    ----------
+    coords : tuple of arrays
+        row,col coordinates of image.
+    baseline : float, optional
+        Background flux level. Defaults to 0.
+    dpeak : flat, optional
+        Maximum flux value. Defaults to 1.
+    col_mean : float, optional
+        col coordinate of star location. Defaults to 0.
+    row_mean : float, optional
+        row coordinate of star location. Defaults to 0.
+    col_sigma : float, optional
+        col component of Lorentzian width. Defaults to 1.
+    row_sigma : float, optional
+        row component of Lorentzian width. Defaults to 1.
+    theta : float, optional
+        Angle the major axis of the Lorentzian is rotated
+        from the column axis in radians. Defaults to 0.
+
+    Returns
+    -------
+    g : 1d array of floats
+        Flattened 2D Lorentzian array.
+    &quot;&quot;&quot;
+    row, col = coords
+    rwcol = (((col - col_mean) * np.cos(theta)
+              + (row - row_mean) * np.sin(theta)) / col_sigma) ** 2
+    rwrow = ((-(col - col_mean) * np.sin(theta)
+              + (row - row_mean) * np.cos(theta)) / row_sigma) ** 2
+    p = baseline + dpeak / (1 + rwcol + rwrow)
+    return p.ravel()</div>
+
+
+
+<div class="viewcode-block" id="elliptical_moffat">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_fitpeak.elliptical_moffat.html#sofia_redux.calibration.pipecal_fitpeak.elliptical_moffat">[docs]</a>
+def elliptical_moffat(coords,
+                      baseline=0, dpeak=1.,
+                      col_mean=0., row_mean=0.,
+                      col_sigma=1., row_sigma=1.,
+                      theta=0., beta=1.):
+    &quot;&quot;&quot;
+    Function for an elliptical Moffat profile.
+
+    Parameters
+    ----------
+    coords : tuple of floats
+        row,col coordinates of image.
+    baseline : float, optional
+        Background flux level. Defaults to 0.
+    dpeak : flat, optional
+        Maximum flux value. Defaults to 1.
+    col_mean : float, optional
+        col coordinate of star location. Defaults to 0.
+    row_mean : float, optional
+        row coordinate of star location. Defaults to 0.
+    col_sigma : float, optional
+        col component of Moffat width. Defaults to 1.
+    row_sigma : float, optional
+        row component of Moffat width. Defaults to 1.
+    theta : float, optional
+        Angle the major axis of the Moffat profile is rotated
+        from the column axis in radians. Defaults to 0.
+    beta : float, optional
+        Power law exponent. Defaults to 1.
+
+    Returns
+    -------
+    g : 1d array of floats
+        Flattened 2D Moffat array.
+    &quot;&quot;&quot;
+    row, col = coords
+    rwcol = (((col - col_mean) * np.cos(theta)
+              + (row - row_mean) * np.sin(theta)) / col_sigma) ** 2
+    rwrow = ((-(col - col_mean) * np.sin(theta)
+              + (row - row_mean) * np.cos(theta)) / row_sigma) ** 2
+    m = baseline + dpeak * (1 + rwcol + rwrow) ** (-beta)
+    return m.ravel()</div>
+
+
+
+def _plot_comparison(fitdata, model, function):  # pragma: no cover
+    &quot;&quot;&quot;
+    Plots difference between model and data.
+
+    Saves the plot as model_fit_&lt;function&gt;.png
+
+    Parameters
+    ----------
+    fitdata : numpy.ndarray
+        Data that was fit
+    model : numpy.ndarray
+        Model of the best fit
+    function : string
+        Name of function used
+    &quot;&quot;&quot;
+    from matplotlib.backends.backend_agg \
+        import FigureCanvasAgg as FigureCanvas
+    from matplotlib.figure import Figure
+
+    fig = Figure(figsize=(15, 5))
+    FigureCanvas(fig)
+    ax = fig.add_subplot(1, 1, 1)
+
+    outname = &#39;model_fit_{0:s}.png&#39;
+
+    diff = fitdata - model
+    vmin = np.nanmin(fitdata)
+    vmax = np.nanmax(fitdata)
+
+    ax[0].imshow(fitdata, cmap=&#39;jet&#39;, origin=&#39;bottom&#39;, vmin=vmin, vmax=vmax)
+    ax[1].imshow(model, cmap=&#39;jet&#39;, origin=&#39;bottom&#39;, vmin=vmin, vmax=vmax)
+    ax[2].imshow(diff, cmap=&#39;jet&#39;, origin=&#39;bottom&#39;, vmin=vmin, vmax=vmax)
+
+    ax[0].set_title(&#39;Data&#39;)
+    ax[1].set_title(&#39;Fit&#39;)
+    ax[2].set_title(&#39;Difference&#39;)
+
+    fig.tight_layout()
+    fig.savefig(outname.format(function), dpi=300, bbox_inches=&#39;tight&#39;)
+
+
+<div class="viewcode-block" id="pipecal_fitpeak">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_fitpeak.pipecal_fitpeak.html#sofia_redux.calibration.pipecal_fitpeak.pipecal_fitpeak">[docs]</a>
+def pipecal_fitpeak(image, profile=&#39;moffat&#39;,
+                    estimates=None, bounds=None,
+                    error=None, bestnorm=True):
+    &quot;&quot;&quot;
+    Fit a peak profile to a 2D image.
+
+    Using scipy&#39;s curve_fit, fit either a 2D elliptical Gaussian,
+    Lorentzian, or Moffat function to the image.
+
+    Parameters
+    ----------
+    image : 2D numpy array
+        The image to fit a profile to.
+    profile : {&#39;gaussian&#39;, &#39;lorentzian&#39;, &#39;moffat&#39;}, optional
+        Name of function to fit.
+    estimates : dictionary, optional
+        Initial estimates of fitting parameters. Keys should include:
+
+            - *baseline* : background flux level
+            - *dpeak* : peak value of the image
+            - *col_mean* : col coordinate location of peak
+            - *row_mean* : row coordinate location of peak
+            - *col_sigma* : width of function in col direction
+            - *row_sigma* : width of function in row direction
+            - *theta* : angle function is rotated from column axis
+            - *beta* : power law index of Moffat function. Ignored for
+              Gaussian and Lorentzian fits.
+
+        If not provided, generic estimates are generated based on `image`.
+    bounds : dictionary, optional
+        The limits of parameters for the fits. Must have the same keys as
+        estimates. Each value should be a two element array-like containing
+        the lower and upper limits of the parameter. To not impose a limit,
+        set it to +/- inf.  If not provided, reasonable default bounds are
+        used.
+    error : 2D numpy array, optional
+        Array with the 1-sigma uncertainties of each pixel in image. Must
+        be the same shape as image.
+    bestnorm : boolean, optional
+        Set to return the summed square weighted residuals for the
+        best-fit parameters. Defaults to True.
+
+    Returns
+    -------
+    fit_param : dictionary
+        A dictionary containing the best fit paramters. Has the same
+        keys as estimates.
+    fit_errs : dictionary
+        A dictionary containing the 1-sigma uncertainities on the
+        best fit parameters. Has the same keys as estimates.
+    bestnorm : float
+        The summed squared weighted residuals for the best-fit
+        parameters.  Set to None if `bestnorm` is False.
+
+    Raises
+    ------
+    PipeCalError
+        If a provided input is not valid.
+    &quot;&quot;&quot;
+    # Verify image is valid
+    if not isinstance(image, np.ndarray) or image.ndim != 2:
+        msg = &#39;Image must be 2-dimensional numpy array&#39;
+        log.error(msg)
+        raise PipeCalError(msg)
+
+    # Verify error:
+    if error is not None:
+        if not isinstance(error, np.ndarray) or error.ndim != 2:
+            msg = &#39;Error must be 2-dimensional numpy array&#39;
+            log.error(msg)
+            raise PipeCalError(msg)
+        if error.shape != image.shape:
+            msg = &#39;Error must have the same shape as image&#39;
+            log.error(msg)
+            raise PipeCalError(msg)
+
+    # Verify function is a valid choice
+    valid_functions = [&#39;gaussian&#39;, &#39;lorentzian&#39;, &#39;moffat&#39;]
+    if profile not in valid_functions:
+        msg = &#39;Profile must be one of: gaussian, lorentzian, moffat&#39;
+        log.error(msg)
+        raise PipeCalError(msg)
+
+    # Coordinates for every pixel in image
+    row, col = np.mgrid[0:image.shape[0], 0:image.shape[1]]
+
+    # Verify estimates is set correctly
+    fields = [&#39;baseline&#39;, &#39;dpeak&#39;, &#39;col_mean&#39;, &#39;row_mean&#39;,
+              &#39;col_sigma&#39;, &#39;row_sigma&#39;, &#39;theta&#39;, &#39;beta&#39;]
+    default_fwhm = 3.0
+    if profile == &#39;gaussian&#39;:
+        mfac = 2. * np.sqrt(2. * np.log(2.))
+    else:
+        mfac = 2.
+    if estimates:
+        if not isinstance(estimates, dict):
+            msg = &#39;Estimates must be a dictionary&#39;
+            log.error(msg)
+            raise PipeCalError(msg)
+
+        inkeys = set(estimates.keys())
+        reqkeys = set(fields)
+        if profile == &#39;moffat&#39;:
+            if inkeys != reqkeys:
+                msg = &#39;Estimates missing required keys&#39;
+                log.error(msg)
+                raise PipeCalError(msg)
+        else:
+            try:
+                reqkeys.remove(&#39;beta&#39;)
+                inkeys.remove(&#39;beta&#39;)
+            except KeyError:
+                pass
+            if inkeys != reqkeys:
+                msg = &#39;Estimates missing required keys&#39;
+                log.error(msg)
+                raise PipeCalError(msg)
+    else:
+        # Initial guesses not given, come up with some
+        estimates = dict()
+        estimates[&#39;baseline&#39;] = np.nanmedian(image)
+        estimates[&#39;dpeak&#39;] = np.nanmax(image)
+        estimates[&#39;col_mean&#39;] = (col.max() - col.min()) / 2.
+        estimates[&#39;row_mean&#39;] = (row.max() - row.min()) / 2.
+        estimates[&#39;col_sigma&#39;] = default_fwhm / mfac
+        estimates[&#39;row_sigma&#39;] = default_fwhm / mfac
+        estimates[&#39;beta&#39;] = 1.
+        estimates[&#39;theta&#39;] = 0.
+
+    # Verify bounds  is set correctly
+    if bounds:
+        if not isinstance(bounds, dict):
+            msg = &#39;Bounds must be a dictionary&#39;
+            log.error(msg)
+            raise PipeCalError(msg)
+        inkeys = set(bounds.keys())
+        reqkeys = set(fields)
+        if profile == &#39;moffat&#39;:
+            if inkeys != reqkeys:
+                msg = &#39;Bounds missing required keys&#39;
+                log.error(msg)
+                raise PipeCalError(msg)
+        else:
+            try:
+                reqkeys.remove(&#39;beta&#39;)
+                inkeys.remove(&#39;beta&#39;)
+            except KeyError:
+                pass
+            if inkeys != reqkeys:
+                msg = &#39;Bounds missing required keys&#39;
+                log.error(msg)
+                raise PipeCalError(msg)
+        for key in bounds:
+            if not hasattr(bounds[key], &#39;__len__&#39;) or len(bounds[key]) != 2:
+                msg = &#39;Elements of bounds must be 2-element list/array&#39;
+                log.error(msg)
+                raise PipeCalError(msg)
+    else:
+        # No limits given, put up some basic ones
+        bounds = dict()
+        bounds[&#39;baseline&#39;] = [0, np.inf]
+        bounds[&#39;dpeak&#39;] = [0, np.inf]
+        bounds[&#39;col_mean&#39;] = [col.min(), col.max()]
+        bounds[&#39;row_mean&#39;] = [row.min(), row.max()]
+        bounds[&#39;col_sigma&#39;] = [0, 2. * (col.max() - col.min()) / mfac]
+        bounds[&#39;row_sigma&#39;] = [0, 2. * (row.max() - row.min()) / mfac]
+        bounds[&#39;beta&#39;] = [1, 6]
+        bounds[&#39;theta&#39;] = [-np.pi / 2., np.pi / 2.]
+
+    if profile == &#39;moffat&#39;:
+        bounds = ([bounds[&#39;baseline&#39;][0], bounds[&#39;dpeak&#39;][0],
+                  bounds[&#39;col_mean&#39;][0], bounds[&#39;row_mean&#39;][0],
+                  bounds[&#39;col_sigma&#39;][0], bounds[&#39;row_sigma&#39;][0],
+                  bounds[&#39;theta&#39;][0], bounds[&#39;beta&#39;][0]],
+                  [bounds[&#39;baseline&#39;][1], bounds[&#39;dpeak&#39;][1],
+                  bounds[&#39;col_mean&#39;][1], bounds[&#39;row_mean&#39;][1],
+                  bounds[&#39;col_sigma&#39;][1], bounds[&#39;row_sigma&#39;][1],
+                  bounds[&#39;theta&#39;][1], bounds[&#39;beta&#39;][1]])
+    else:
+        bounds = ([bounds[&#39;baseline&#39;][0], bounds[&#39;dpeak&#39;][0],
+                  bounds[&#39;col_mean&#39;][0], bounds[&#39;row_mean&#39;][0],
+                  bounds[&#39;col_sigma&#39;][0], bounds[&#39;row_sigma&#39;][0],
+                  bounds[&#39;theta&#39;][0]],
+                  [bounds[&#39;baseline&#39;][1], bounds[&#39;dpeak&#39;][1],
+                  bounds[&#39;col_mean&#39;][1], bounds[&#39;row_mean&#39;][1],
+                  bounds[&#39;col_sigma&#39;][1], bounds[&#39;row_sigma&#39;][1],
+                  bounds[&#39;theta&#39;][1]])
+
+    # Find any NaNs to ignore
+    idx = np.where(np.isfinite(image))
+
+    if error is not None:
+        error = error[idx]
+
+    if profile == &#39;gaussian&#39;:
+        popt, pcov = curve_fit(elliptical_gaussian,
+                               (row[idx], col[idx]), image[idx],
+                               p0=(estimates[&#39;baseline&#39;],
+                                   estimates[&#39;dpeak&#39;],
+                                   estimates[&#39;col_mean&#39;],
+                                   estimates[&#39;row_mean&#39;],
+                                   estimates[&#39;col_sigma&#39;],
+                                   estimates[&#39;row_sigma&#39;],
+                                   estimates[&#39;theta&#39;]),
+                               bounds=bounds, sigma=error,
+                               absolute_sigma=True)
+
+    elif profile == &#39;lorentzian&#39;:
+        popt, pcov = curve_fit(elliptical_lorentzian,
+                               (row[idx], col[idx]), image[idx],
+                               p0=(estimates[&#39;baseline&#39;],
+                                   estimates[&#39;dpeak&#39;],
+                                   estimates[&#39;col_mean&#39;],
+                                   estimates[&#39;row_mean&#39;],
+                                   estimates[&#39;col_sigma&#39;],
+                                   estimates[&#39;row_sigma&#39;],
+                                   estimates[&#39;theta&#39;]),
+                               bounds=bounds, sigma=error,
+                               absolute_sigma=True)
+
+    else:
+        popt, pcov = curve_fit(elliptical_moffat,
+                               (row[idx], col[idx]), image[idx],
+                               p0=(estimates[&#39;baseline&#39;],
+                                   estimates[&#39;dpeak&#39;],
+                                   estimates[&#39;col_mean&#39;],
+                                   estimates[&#39;row_mean&#39;],
+                                   estimates[&#39;col_sigma&#39;],
+                                   estimates[&#39;row_sigma&#39;],
+                                   estimates[&#39;theta&#39;],
+                                   estimates[&#39;beta&#39;]),
+                               bounds=bounds, sigma=error,
+                               absolute_sigma=True)
+
+    fit_param = dict()
+    fit_errs = dict()
+    for field, val, err in zip(fields, popt, np.sqrt(np.diag(pcov))):
+        fit_param[field] = val
+        fit_errs[field] = err
+
+    if bestnorm:
+        if profile == &#39;gaussian&#39;:
+            model = elliptical_gaussian((row, col), *popt)
+        elif profile == &#39;lorentzian&#39;:
+            model = elliptical_lorentzian((row, col), *popt)
+        else:
+            model = elliptical_moffat((row, col), *popt)
+        diff = image.ravel() - model
+        bestnorm = np.nansum(diff ** 2)
+        # plot_comparison(image, model.reshape(image.shape), profile)
+    else:
+        bestnorm = None
+
+    return fit_param, fit_errs, bestnorm</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

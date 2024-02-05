@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.flags.flag_numba_functions &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.flags.flag_numba_functions</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numba as nb
+import numpy as np
+
+from sofia_redux.toolkit.splines import spline_utils
+
+nb.config.THREADING_LAYER = &#39;threadsafe&#39;
+
+__all__ = [&#39;set_flags&#39;, &#39;unflag&#39;, &#39;flatten_nd_indices&#39;,
+           &#39;is_flagged&#39;, &#39;is_unflagged&#39;, &#39;get_mem_correction&#39;,
+           &#39;set_new_blank_value&#39;]
+
+
+<div class="viewcode-block" id="set_flags">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flag_numba_functions.set_flags.html#sofia_redux.scan.flags.flag_numba_functions.set_flags">[docs]</a>
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
+def set_flags(flag_array, flag, indices=None):  # pragma: no cover
+    &quot;&quot;&quot;
+    Add a flag indicator to an array of flags.
+
+    Parameters
+    ----------
+    flag_array : numpy.ndarray (int)
+        An array of flag values to be updated in-place of shape (n,).
+    flag : int
+        The integer flag to set.
+    indices : numpy.ndarray (int) or int, optional
+        An array indicating which `flag_array` indices to flag with `flag`.
+        The default is all indices.
+
+    Returns
+    -------
+    None
+    &quot;&quot;&quot;
+    flat_array = flag_array.flat
+    if indices is None:
+        for index in range(flag_array.size):
+            flat_array[index] |= flag
+    else:
+        if flag_array.ndim &gt; 1:
+            flat_indices = flatten_nd_indices(indices, flag_array.shape).flat
+        else:
+            flat_indices = np.asarray(indices).flat
+
+        for index in flat_indices:
+            flat_array[index] |= flag</div>
+
+
+
+<div class="viewcode-block" id="unflag">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flag_numba_functions.unflag.html#sofia_redux.scan.flags.flag_numba_functions.unflag">[docs]</a>
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
+def unflag(flag_array, flag=None, indices=None):  # pragma: no cover
+    &quot;&quot;&quot;
+    Remove a flag indicator from an array of flags.
+
+    Parameters
+    ----------
+    flag_array : numpy.ndarray (int)
+        An array of flag values to be updated in-place of shape (n,).
+    flag : int, optional
+        The integer flag to remove.  If not supplied, all flags are removed
+        (set to zero).
+    indices : numpy.ndarray (int) or int, optional
+        An array indicating which `flag_array` indices to flag with `flag`.
+        The default is all indices.
+
+    Returns
+    -------
+    None
+    &quot;&quot;&quot;
+    flat_array = flag_array.flat
+    if indices is None:
+        if flag is None:
+            for index in range(flag_array.size):
+                flat_array[index] = 0
+        else:
+            for index in range(flag_array.size):
+                flag_value = flat_array[index]
+                if (flag_value &amp; flag) == 0:
+                    continue
+                flat_array[index] = flag_value ^ flag
+        return
+
+    if flag_array.ndim &gt; 1:
+        flat_indices = flatten_nd_indices(indices, flag_array.shape).flat
+    else:
+        flat_indices = np.asarray(indices).flat
+    if flag is None:
+        for index in flat_indices:
+            flat_array[index] = 0
+    else:
+        for index in flat_indices:
+            flag_value = flat_array[index]
+            if (flag_value &amp; flag) == 0:
+                continue
+            flat_array[index] = flag_value ^ flag</div>
+
+
+
+<div class="viewcode-block" id="flatten_nd_indices">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flag_numba_functions.flatten_nd_indices.html#sofia_redux.scan.flags.flag_numba_functions.flatten_nd_indices">[docs]</a>
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
+def flatten_nd_indices(indices, array_shape):  # pragma: no cover
+    &quot;&quot;&quot;
+    Converts ND array indices to flat indices.
+
+    Parameters
+    ----------
+    indices : tuple or numpy.ndarray (int)
+        The ND indices in the form that would be returned by
+        :func:`np.nonzero`.
+    array_shape : tuple (int) or numpy.ndarray (int)
+        The shape of the array for which to generate flat indices.
+
+    Returns
+    -------
+    array.flat, flat_indices : numpy.ndarray, numpy.ndarray (int)
+    &quot;&quot;&quot;
+    n_dimensions = len(indices)
+    _, _, steps = spline_utils.flat_index_mapping(np.asarray(array_shape))
+    n = indices[0].size
+    flat_indices = np.zeros(n, dtype=nb.int64)
+    for dimension in range(n_dimensions):
+        step = steps[dimension]
+        index_line = indices[dimension]
+        for i in range(n):
+            flat_indices[i] += step * index_line[i]
+    return flat_indices</div>
+
+
+
+<div class="viewcode-block" id="is_flagged">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flag_numba_functions.is_flagged.html#sofia_redux.scan.flags.flag_numba_functions.is_flagged">[docs]</a>
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
+def is_flagged(flag_array, flag=None, exact=False):  # pragma: no cover
+    &quot;&quot;&quot;
+    Return whether a flag array is flagged with a given flag.
+
+    Parameters
+    ----------
+    flag_array : numpy.ndarray (int)
+        An array of integer flags.
+    flag : int, optional
+        The flag to check.  If not supplied, any non-zero flag will be
+        returned as a `True` value.
+    exact : bool, optional
+        If `True`, a flagged result is one that exactly matches the flag.
+        Otherwise, a flagged result is one which contains the flag.
+
+    Returns
+    -------
+    flagged : numpy.ndarray (bool)
+        A mask the same shape as `flag_array` where `True` indicates an
+        element is flagged.
+    &quot;&quot;&quot;
+    mask = np.empty(flag_array.shape, dtype=nb.b1)
+    flat_mask = mask.flat
+    flat_flag = flag_array.flat
+    if flag is None:
+        for i in range(flag_array.size):
+            flat_mask[i] = flat_flag[i] != 0
+    elif flag == 0:
+        for i in range(flag_array.size):
+            flat_mask[i] = flat_flag[i] == 0
+    elif exact:
+        for i in range(flag_array.size):
+            flat_mask[i] = flat_flag[i] == flag
+    else:
+        for i in range(flag_array.size):
+            flat_mask[i] = (flat_flag[i] &amp; flag) != 0
+    return mask</div>
+
+
+
+<div class="viewcode-block" id="is_unflagged">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flag_numba_functions.is_unflagged.html#sofia_redux.scan.flags.flag_numba_functions.is_unflagged">[docs]</a>
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=True)
+def is_unflagged(flag_array, flag=None, exact=False):  # pragma: no cover
+    &quot;&quot;&quot;
+    Return whether a flag array is unflagged by the given flag.
+
+    Parameters
+    ----------
+    flag_array : numpy.ndarray (int)
+        An array of integer flags.
+    flag : int, optional
+        The flag to check.  If not supplied, returns `True` if `flagged_array`
+        is zero.
+    exact : bool, optional
+        If `True`, an unflagged result is one that does not exactly match the
+        flag.  Otherwise, an unflagged result is one which does not contain
+        the flag.
+
+    Returns
+    -------
+    unflagged : numpy.ndarray (bool)
+        A mask the same shape as `flag_array` where `True` indicates an
+        element is unflagged.
+    &quot;&quot;&quot;
+    mask = np.empty(flag_array.shape, dtype=nb.b1)
+    flat_mask = mask.flat
+    flat_flag = flag_array.flat
+    if flag is None:
+        for i in range(flag_array.size):
+            flat_mask[i] = flat_flag[i] == 0
+    elif flag == 0:
+        for i in range(flag_array.size):
+            flat_mask[i] = flat_flag[i] != 0
+    elif exact:
+        for i in range(flag_array.size):
+            flat_mask[i] = flat_flag[i] != flag
+    else:
+        for i in range(flag_array.size):
+            flat_mask[i] = (flat_flag[i] &amp; flag) == 0
+    return mask</div>
+
+
+
+<div class="viewcode-block" id="get_mem_correction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flag_numba_functions.get_mem_correction.html#sofia_redux.scan.flags.flag_numba_functions.get_mem_correction">[docs]</a>
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def get_mem_correction(data, noise, multiplier=0.1, valid=None, model=None
+                       ):  # pragma: no cover
+    &quot;&quot;&quot;
+    Determine the Maximum-Entropy-Method (MEM) correction.
+
+    The MEM correction is given by:
+
+    dx = sign(x) * n * multiplier * log(sqrt(x^2 + n^2) / sqrt(m^2 + n^2))
+
+    Where x is a data value, n is the noise, and m is the model.  Any invalid
+    values (NaN, zero-divisions, marked invalid etc.) will result in zero
+    valued MEM correction (dx) on output.
+
+    Parameters
+    ----------
+    data : numpy.ndarray (float)
+        A data array of values with arbitrary shape (shape,).
+    noise : numpy.ndarray (float)
+        The noise array with shape (shape,).
+    multiplier : float, optional
+        The Lagrange multiplier.
+    valid : numpy.ndarray (bool), optional
+        A boolean mask of shape (shape,) where `False` excludes an element from
+        the MEM correction.
+    model : numpy.ndarray (float), optional
+        An optional model of shape (shape,).  By default, all model values are
+        zero.
+
+    Returns
+    -------
+    mem_correction : numpy.ndarray (float)
+        The MEM correction of shape (shape,).
+    &quot;&quot;&quot;
+    flat_data = data.flat
+    flat_noise = noise.flat
+    if valid is None:
+        do_valid = False
+        flat_valid = np.empty(0, dtype=nb.b1).ravel()
+    else:
+        do_valid = True
+        flat_valid = valid.ravel()
+    if model is None:
+        do_model = False
+        flat_model = np.empty(0, dtype=nb.float64).ravel()
+    else:
+        do_model = True
+        flat_model = model.ravel()
+
+    mem_values = np.empty_like(data)
+    flat_mem = mem_values.flat
+
+    for i in range(data.size):
+        if do_valid and not flat_valid[i]:
+            flat_mem[i] = 0.0
+            continue
+        value = flat_data[i]
+        if np.isnan(value):
+            flat_mem[i] = 0.0
+            continue
+        if do_model:
+            target = flat_model[i]
+            if np.isnan(target):
+                flat_mem[i] = 0.0
+                continue
+        else:
+            target = 0.0
+        sigma = flat_noise[i]
+        if np.isnan(sigma):
+            flat_mem[i] = 0.0
+            continue
+
+        d_target = np.hypot(target, sigma)
+        if d_target == 0:
+            flat_mem[i] = 0.0
+            continue
+        d_value = np.hypot(value, sigma)
+
+        mem_value = multiplier * sigma * np.log(d_value / d_target)
+        if value &lt; 0:
+            mem_value *= -1
+        flat_mem[i] = mem_value
+
+    return mem_values</div>
+
+
+
+<div class="viewcode-block" id="set_new_blank_value">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flag_numba_functions.set_new_blank_value.html#sofia_redux.scan.flags.flag_numba_functions.set_new_blank_value">[docs]</a>
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def set_new_blank_value(data, old_blank, new_blank):  # pragma: no cover
+    &quot;&quot;&quot;
+    Set all old blanking levels in the data to the new blanking level.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        An arbitrarily shaped data array of arbitrary type.
+    old_blank : int or float
+    new_blank : int or float or None
+
+    Returns
+    -------
+    None
+    &quot;&quot;&quot;
+    if old_blank == new_blank or old_blank is new_blank or new_blank is None:
+        return
+    data = data.ravel()
+    for i in range(data.size):
+        if data[i] == old_blank or data[i] is old_blank:
+            data[i] = new_blank</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

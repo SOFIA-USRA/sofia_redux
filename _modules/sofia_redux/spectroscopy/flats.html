@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.flats &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.flats</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import inspect
+import numpy as np
+from sofia_redux.toolkit.utilities.fits import gethdul
+from sofia_redux.toolkit.fitting.polynomial import poly1d
+from sofia_redux.toolkit.image.adjust import rotate90
+
+__all__ = [&#39;FlatBase&#39;, &#39;FlatInfo&#39;, &#39;Flat&#39;]
+
+
+<div class="viewcode-block" id="FlatBase">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.flats.FlatBase.html#sofia_redux.spectroscopy.flats.FlatBase">[docs]</a>
+class FlatBase:
+
+    def __init__(self, filename):
+        self.shape = None
+        self._filename = None
+        self._header = None
+        self._data = None
+        self._ishell = None
+        self.guesspos = None
+        self.omask = None
+        self.orders = None
+        self.norders = None
+        self.edgedeg = None
+        self.edgecoeffs = None
+        self.xranges = None
+        self.rotation = None
+        self.ybuffer = None
+        self._default_xranges = None
+        self._default_guesspos = None
+        self.filename = str(filename)
+
+    @property
+    def filename(self):
+        return self._filename
+
+    @filename.setter
+    def filename(self, value):
+        value = value.strip()
+        self._load_file(value)
+
+    def __repr__(self):
+        attributes = [x for x in dir(self) if not x.startswith(&#39;_&#39;)]
+        s = &#39;&#39;
+        for attrib in attributes:
+            a = getattr(self, attrib)
+            if not inspect.ismethod(a):
+                if isinstance(a, np.ndarray):
+                    a = &#39;%s %s of %s&#39; % (np.ndarray, a.shape, a.dtype)
+                s += &#39;%s: %s\n&#39; % (attrib, repr(a))
+        return s
+
+    def _set_order_info(self):
+        orders = np.array(
+            [int(x) for x in self._header[&#39;ORDERS&#39;].split(&#39;,&#39;)])
+        norders = len(orders)
+        edgedeg = int(self._header[&#39;EDGEDEG&#39;])
+
+        xranges = np.zeros((norders, 2), dtype=int)
+        edgecoeffs = np.full((norders, 2, edgedeg + 1), np.nan)
+
+        test = &#39;ODR%s_T*&#39; % str(orders[0]).zfill(2)
+        self._ishell = len(self._header.get(test)) == 0
+        prefix, nz = (&#39;OR&#39;, 3) if self._ishell else (&#39;ODR&#39;, 2)
+
+        for i, order in enumerate(orders):
+            ostr = prefix + str(order).zfill(nz)
+            bname = &#39;%s_B*&#39; % ostr
+            tname = &#39;%s_T*&#39; % ostr
+            xname = &#39;%s_XR&#39; % ostr
+            edgecoeffs[i, 0] = list(self._header[bname].values())
+            edgecoeffs[i, 1] = list(self._header[tname].values())
+            xranges[i] = [int(x) for x in self._header[xname].split(&#39;,&#39;)]
+
+        self.orders = orders
+        self.norders = norders
+        self.edgedeg = edgedeg
+        self.edgecoeffs = edgecoeffs
+        self.xranges = xranges
+        self._default_xranges = xranges.copy()
+        self.default_guess_position()
+
+    def _load_file(self, filename):
+        hdul = gethdul(filename, verbose=True)
+        if hdul is None:
+            raise ValueError(&quot;Could not load: %s&quot; % filename)
+        self._header = hdul[0].header.copy()
+        if hdul[0].data is not None:
+            self._data = hdul[0].data.copy()
+        else:
+            self._data = None
+        self._filename = filename
+        self._set_order_info()
+        self.parse_info()
+
+<div class="viewcode-block" id="FlatBase.parse_info">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.flats.FlatBase.html#sofia_redux.spectroscopy.flats.FlatBase.parse_info">[docs]</a>
+    def parse_info(self):  # pragma: no cover
+        pass</div>
+
+
+<div class="viewcode-block" id="FlatBase.generate_order_mask">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.flats.FlatBase.html#sofia_redux.spectroscopy.flats.FlatBase.generate_order_mask">[docs]</a>
+    def generate_order_mask(self, offset=0):
+        &quot;&quot;&quot;
+        Generate an order mask based on xranges and edge coefficients
+
+        Notes
+        -----
+        No rotation is applied if we&#39;re generating the order mask.  The
+        parameters required for order mask generation are already correct.
+
+        Parameters
+        ----------
+        offset : int, optional
+            If provided, will be added to the x coordinate before
+            generating the edge coefficient polynomials.  This is intended
+            to allow reusing edge coordinates for a shifted array in
+            the x-direction.
+        &quot;&quot;&quot;
+        nrow, ncol = self.shape
+        yy, xx = np.mgrid[:nrow, :ncol]
+        fillmask = np.empty(self.shape, dtype=bool)
+        omask = np.zeros(self.shape, dtype=int)
+        for i, order in enumerate(self.orders):
+            fillmask[...] = False
+            x = np.arange(self.xranges[i, 0], self.xranges[i, 1] + 1) + offset
+            botedge = poly1d(x, self.edgecoeffs[i, 0])
+            topedge = poly1d(x, self.edgecoeffs[i, 1])
+            column_ok = topedge &lt;= nrow - 0.5
+            column_ok &amp;= botedge &gt;= -0.5
+            botedge = np.clip(np.floor(botedge), 0, nrow).astype(int)
+            topedge = np.clip(np.ceil(topedge), 0, nrow).astype(int)
+            xl, xu = self.xranges[i]
+            fillmask[:, xl:xu + 1] = ((yy[:, xl:xu + 1] &lt;= topedge)
+                                      &amp; (yy[:, xl:xu + 1] &gt;= botedge)
+                                      &amp; column_ok[None])
+            omask[fillmask] = order
+        return omask</div>
+
+
+<div class="viewcode-block" id="FlatBase.create_order_mask">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.flats.FlatBase.html#sofia_redux.spectroscopy.flats.FlatBase.create_order_mask">[docs]</a>
+    @staticmethod
+    def create_order_mask(shape, orders, edgecoeffs, xranges):
+        &quot;&quot;&quot;
+        Create an ordermask
+
+        Parameters
+        ----------
+        shape : 2-tuple
+            (nrow, ncol) shape of the ordermask
+        orders : array_like of int
+            (norders,) array of orders
+        edgecoeffs : array_like of float
+            (norders, 2)
+        xranges : array_like of int
+            (norders, 2)
+
+        Returns
+        -------
+        ordermask : numpy.ndarray
+            (nrow, ncol) of int
+        &quot;&quot;&quot;
+        nrow, ncol = shape
+        yy, xx = np.mgrid[:nrow, :ncol]
+        fillmask = np.empty(shape, dtype=bool)
+        omask = np.zeros(shape, dtype=int)
+        for i, order in enumerate(orders):
+            fillmask[...] = False
+            x = np.arange(xranges[i, 0], xranges[i, 1] + 1)
+            botedge = poly1d(x, edgecoeffs[i, 0])
+            topedge = poly1d(x, edgecoeffs[i, 1])
+            column_ok = topedge &lt;= nrow - 0.5
+            column_ok &amp;= botedge &gt;= -0.5
+            botedge = np.clip(np.floor(botedge), 0, nrow).astype(int)
+            topedge = np.clip(np.ceil(topedge), 0, nrow).astype(int)
+            xl, xu = xranges[i]
+            fillmask[:, xl:xu + 1] = ((yy[:, xl:xu + 1] &lt;= topedge)
+                                      &amp; (yy[:, xl:xu + 1] &gt;= botedge)
+                                      &amp; column_ok[None])
+            omask[fillmask] = order
+        return omask</div>
+
+
+<div class="viewcode-block" id="FlatBase.default_guess_position">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.flats.FlatBase.html#sofia_redux.spectroscopy.flats.FlatBase.default_guess_position">[docs]</a>
+    def default_guess_position(self):
+        &quot;&quot;&quot;Sets default guess positions for each order
+
+        Notes
+        -----
+        xranges is also reset to default values
+        &quot;&quot;&quot;
+        self.xranges = self._default_xranges.copy()
+        guesspos = np.zeros((self.norders, 2), dtype=int)
+        for i in range(self.norders):
+            guesspos[i, 0] = self.xranges[i].mean()
+            botedge = poly1d(guesspos[i, 0], self.edgecoeffs[i, 0])
+            topedge = poly1d(guesspos[i, 0], self.edgecoeffs[i, 1])
+            guesspos[i, 1] = (topedge + botedge) / 2
+        self.guesspos = guesspos
+        self._default_guesspos = guesspos.copy()</div>
+
+
+<div class="viewcode-block" id="FlatBase.adjust_guess_position">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.flats.FlatBase.html#sofia_redux.spectroscopy.flats.FlatBase.adjust_guess_position">[docs]</a>
+    def adjust_guess_position(self, image, order, ybuffer=3):
+        &quot;&quot;&quot;
+        Updates guess positions and xranges via image correlation
+
+        The correlation occurs only in the spatial dimension (y).
+
+        Parameters
+        ----------
+        image : array_like of float
+            (nrow, ncol) Image with which to perform the correlation.
+        order : int
+            The order from the ordermask with which to perform the
+            correlation.
+        ybuffer : int, optional
+            The number of pixels to buffer form the top and bottom
+            of the array.
+        &quot;&quot;&quot;
+        image = np.asarray(image, dtype=float)
+
+        omask = np.equal(self.omask, order)
+        if not omask.any():
+            raise ValueError(&quot;Order %i not present in ordermask&quot; % order)
+        oi = np.argwhere(self.orders == order)
+        if oi.shape[0] == 0:
+            raise ValueError(&quot;Order %i not present in orders&quot; % order)
+        oi = oi[0, 0]
+
+        x = np.arange(self.xranges[oi, 0], self.xranges[oi, 1] + 1)
+        botedge = poly1d(x, self.edgecoeffs[oi, 0])
+        topedge = poly1d(x, self.edgecoeffs[oi, 1])
+        slith_pix = int(np.ceil(max(topedge - botedge)))
+
+        # Determine the top and bottom row of the subimage to clip out
+        topidx = int(np.round(topedge).max()) + slith_pix + 1
+        botidx = int(np.round(botedge).min()) - slith_pix
+        topidx = np.clip(topidx, 0, self.shape[0])
+        botidx = np.clip(botidx, 0, self.shape[0])
+
+        subimg = image[botidx:topidx]
+        subomask = omask[botidx:topidx]
+
+        # shifts are in the y-direction only
+        subshape = subimg.shape
+        nshifts = slith_pix * 2 + 1
+        shifts = np.arange(nshifts) - slith_pix
+        cross_corr = np.zeros(nshifts)
+
+        for i, s in enumerate(shifts):
+            hbot = np.clip(-s, 0, subshape[0])
+            htop = np.clip(subshape[0] - s, 0, subshape[0])
+            mbot = np.clip(s, 0, subshape[0])
+            mtop = np.clip(subshape[0] + s, 0, subshape[0])
+            cross_corr[i] = np.sum(subimg[hbot:htop] * subomask[mbot:mtop])
+        offset = shifts[np.argmax(cross_corr)]
+
+        self.guesspos = self._default_guesspos.copy()
+        self.guesspos[:, 1] -= offset
+
+        # If we shift by this amount then xranges may need to be updated
+        self.xranges = self._default_xranges.copy()
+        dy = ybuffer - 1
+        for oi, order in enumerate(self.orders):
+            xrange = self.xranges[oi]
+            x = np.arange(xrange[1] - xrange[0] + 1) + xrange[0]
+            botedge = poly1d(x, self.edgecoeffs[oi, 0]) - offset
+            topedge = poly1d(x, self.edgecoeffs[oi, 1]) - offset
+            idx = (botedge &gt; dy) &amp; (topedge &lt; (image.shape[0] - dy))
+            if not idx.any():
+                log.warning(&quot;Order %i shifted past y-buffer&quot; % order)
+                xrange[:] = -1, -1
+            else:
+                xrange[:] = np.min(x[idx]), np.max(x[idx])</div>
+</div>
+
+
+
+<div class="viewcode-block" id="FlatInfo">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.flats.FlatInfo.html#sofia_redux.spectroscopy.flats.FlatInfo">[docs]</a>
+class FlatInfo(FlatBase):
+
+    def __init__(self, filename):
+        super().__init__(filename)
+        self.modename = None
+        self.slith_arc = None
+        self.slith_pix = None
+        self.slith_range = None
+        self.rppix = None
+        self.ps = None
+        self.fixed = None
+        self.step = None
+        self.flatfrac = None
+        self.comwin = None
+        self.norm_nxg = None
+        self.norm_nyg = None
+        self.oversamp = None
+        self.ycororder = None
+
+<div class="viewcode-block" id="FlatInfo.parse_info">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.flats.FlatInfo.html#sofia_redux.spectroscopy.flats.FlatInfo.parse_info">[docs]</a>
+    def parse_info(self):
+        self.omask = self._data.astype(int)
+        self.shape = self.omask.shape
+        h = self._header
+        # Standard keywords without logic (name, [rename], type)
+        get = [
+            (&#39;modename&#39;, str),
+            (&#39;rotation&#39;, int),  # IDL ROTATE value
+            (&#39;slth_arc&#39;, &#39;slith_arc&#39;, float),  # Slit length in arcseconds
+            (&#39;slth_pix&#39;, &#39;slith_pix&#39;, float),  # Slit length in pixels
+            (&#39;rppix&#39;, float),  # Resolving power per pixel
+            (&#39;pltscale&#39;, &#39;ps&#39;, float),  # Plate scale (arcseconds per pixel)
+            (&#39;fixed&#39;, bool),
+            (&#39;step&#39;, int),  # Edge find step size
+            (&#39;flatfrac&#39;, float),  # Edge find fraction
+            (&#39;comwin&#39;, int),  # Center-Of-Mass window
+            (&#39;norm_nxg&#39;, int),  # fiterpolate grid definition
+            (&#39;norm_nyg&#39;, int),  # fiterpolate grid definition
+            (&#39;oversamp&#39;, float),  # normspecflat (not actually used)
+            (&#39;ybuffer&#39;, int),  # buffer pixels (rows)
+            (&#39;ycorordr&#39;, &#39;ycororder&#39;, int)]
+
+        defaults = {str: &#39;&#39;, float: 0.0, int: 0, bool: False}
+        for x in get:
+            name = x[0] if len(x) == 2 else x[1]
+            dtype = type(defaults[x[-1]])
+            value = dtype(h.get(x[0], defaults[dtype]))
+            setattr(self, name, value)
+
+        if self.rotation is not None:
+            # When reading the ordermask from the flatinfo file, rotation
+            # should be applied.
+            self.omask = rotate90(self.omask, self.rotation)
+
+        # Begin extracting those that require a little parsing
+        self.slith_range = np.array(
+            [int(x) for x in h.get(&#39;SLTH_RNG&#39;, &#39;&#39;).split(&#39;,&#39;)])</div>
+</div>
+
+
+
+<div class="viewcode-block" id="Flat">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.flats.Flat.html#sofia_redux.spectroscopy.flats.Flat">[docs]</a>
+class Flat(FlatBase):
+
+    def __init__(self, filename):
+        self.image = None
+        self.variance = None
+        self.flags = None
+        self.modename = None
+        self.slith_arc = None
+        self.slith_pix = None
+        self.slitw_arc = None
+        self.slitw_pix = None
+        self.rp = None
+        self.ps = None
+        self.rms = None
+        super().__init__(filename)
+
+<div class="viewcode-block" id="Flat.parse_info">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.flats.Flat.html#sofia_redux.spectroscopy.flats.Flat.parse_info">[docs]</a>
+    def parse_info(self):
+        # do not copy data
+        if self._data.ndim == 3:
+            ndata = self._data.shape[0]
+            self.image = self._data[0]
+            self.shape = self.image.shape
+            self.variance = self._data[1] if ndata &gt; 1 else None
+            self.flags = self._data[2] if ndata &gt; 2 else None
+        else:
+            self.image = self._data
+            self.shape = self.image.shape
+            self.variance = self.flags = None
+
+        # Standard keywords without logic (name, [rename], type)
+        get = [
+            (&#39;modename&#39;, str),
+            (&#39;rotation&#39;, int),  # IDL ROTATE value
+            (&#39;slth_arc&#39;, &#39;slith_arc&#39;, float),  # Slit length in arcseconds
+            (&#39;slth_pix&#39;, &#39;slith_pix&#39;, float),  # Slit length in pixels
+            (&#39;sltw_arc&#39;, &#39;slitw_arc&#39;, float),  # Slit length in arcseconds
+            (&#39;sltw_pix&#39;, &#39;slitw_pix&#39;, float),  # Slit length in pixels
+            (&#39;rp&#39;, float),  # Resolving power
+            (&#39;pltscale&#39;, &#39;ps&#39;, float)]  # Plate scale (arcseconds per pixel)]
+
+        h = self._header
+        defaults = {str: &#39;&#39;, float: 0.0, int: 0, bool: False}
+        for x in get:
+            name = x[0] if len(x) == 2 else x[1]
+            dtype = type(defaults[x[-1]])
+            value = dtype(h.get(x[0], defaults[dtype]))
+            setattr(self, name, value)
+
+        prefix = &#39;OR&#39; if self._ishell else &#39;ODR&#39;
+        self.rms = np.full(self.norders, np.nan)
+        for i, order in enumerate(self.orders):
+            self.rms[i] = h.get(&#39;%s%i&#39; % (prefix, order), np.nan)
+        self.omask = self.create_order_mask(
+            self.shape, self.orders, self.edgecoeffs, self.xranges)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

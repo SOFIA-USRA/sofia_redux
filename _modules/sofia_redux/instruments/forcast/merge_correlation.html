@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.merge_correlation &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.merge_correlation</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.toolkit.utilities.fits import add_history_wrap
+from sofia_redux.toolkit.image.adjust import register_image
+
+from sofia_redux.instruments.forcast.getpar import getpar
+from sofia_redux.instruments.forcast.imgshift_header import imgshift_header
+from sofia_redux.instruments.forcast.merge_shift import merge_shift
+from sofia_redux.instruments.forcast.readmode import readmode
+
+addhist = add_history_wrap(&#39;Merge&#39;)
+
+__all__ = [&#39;merge_correlation&#39;]
+
+
+<div class="viewcode-block" id="merge_correlation">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.merge_correlation.merge_correlation.html#sofia_redux.instruments.forcast.merge_correlation.merge_correlation">[docs]</a>
+def merge_correlation(data, header, variance=None, maxshift=999999999.,
+                      normmap=None, upsample=100, maxregister=16,
+                      resize=True):
+    &quot;&quot;&quot;
+    Merge an image using a correlation algorithm
+
+    Add each frame of the data to a 2-d summation frame in a manner
+    appropriate to the current reduction scheme, then average by the
+    number of frames
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        Data to be merged i.e. frame with target images (nrow, ncol)
+    header : astropy.io.fits.header.Header, optional
+        FITS header of the new input data file
+    maxshift : float, optional
+        Maximum possible value of the shift
+    variance : numpy.ndarray, optional
+        Propagate provided variance.  Must match shape of data array
+        (nrow, ncol).
+    normmap : numpy.ndarray, optional
+        Array to hold the normalization map
+    upsample : int, optional
+        Determines the fractional pixel accuracy of the registration
+        algorithm.  An upsample factor of 100 will result in
+        registration accurate to one 100th of a pixel.
+    maxregister : int or float or array-like, optional
+        The maximum pixel shift allowed in each dimension applied
+        during the registration algorithm.  Order of dimensions is
+        (x, y).  The initial chop and nod estimates will be retrieved
+        from the header.  A maximum correlation will be searched for
+        in the range (chop_or_nod +/- maxregister).  Set to None to
+        perform a maximum correlation search over the entire image.
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        Merged image i.e. frame with images of object at chop and nod
+        positions merged.
+    &quot;&quot;&quot;
+    # Initial sanity checks
+    if not isinstance(header, fits.header.Header):
+        log.error(&quot;invalid header&quot;)
+        return
+
+    var = variance.copy() if isinstance(variance, np.ndarray) else None
+    if not isinstance(data, np.ndarray) or len(data.shape) != 2:
+        addhist(header, &quot;merge not applied (invalid data)&quot;)
+        log.error(&quot;invalid data - must by a 2-d array&quot;)
+        return
+    elif np.isnan(data).all():
+        addhist(header, &quot;merge not applied (invalid data)&quot;)
+        log.error(&quot;data are all NaN&quot;)
+        return
+
+    dovar = isinstance(var, np.ndarray) and var.shape == data.shape
+    var = None if not dovar else var
+    if variance is not None and not dovar:
+        addhist(header, &#39;Not propagating variance (Invalid variance)&#39;)
+        log.warning(&quot;invalid variance&quot;)
+
+    border = getpar(
+        header, &#39;BORDER&#39;, dtype=int, default=128,
+        comment=&#39;additional border pixels&#39;)
+    if border * 2 &gt;= data.shape[0] or border * 2 &gt;= data.shape[1]:
+        addhist(header, &quot;merge not applied (invalid border)&quot;)
+        log.error(&quot;border %s is too large for data shape %s&quot; %
+                  (border, repr(data.shape)))
+        return
+
+    posdata = data.copy()
+    # can&#39;t use NaNs with this method
+    posdata[np.isnan(posdata)] = np.nanmedian(posdata)
+    if border &gt; 0:
+        log.info(&#39;Removing {} pixel border from &#39;
+                 &#39;consideration&#39;.format(border))
+        posdata = posdata[border: -border, border: -border]
+    header_shift = imgshift_header(header, dither=False)
+
+    chop = np.array([header_shift[&#39;chopx&#39;], header_shift[&#39;chopy&#39;]])
+    if chop[0] != 0 or chop[1] != 0 or maxregister is None:
+        chop = register_image(posdata, -posdata, upsample=upsample,
+                              maxshift=maxregister, shift0=chop)
+
+    nod = np.array([header_shift[&#39;nodx&#39;], header_shift[&#39;nody&#39;]])
+    if (nod[0] != 0 or nod[1] != 0 or maxregister is None) \
+            and np.sqrt(np.sum(nod ** 2)) &lt; maxshift:
+        nod = register_image(posdata, -posdata, upsample=upsample,
+                             maxshift=maxregister, shift0=nod)
+
+    # Read mode from the header
+    chopnod = [chop[0], chop[1], nod[0], nod[1]]
+    mode = readmode(header)
+    return merge_shift(
+        data, chopnod, header=header, variance=var, resize=resize,
+        normmap=normmap, maxshift=maxshift, nmc=mode == &#39;NMC&#39;)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

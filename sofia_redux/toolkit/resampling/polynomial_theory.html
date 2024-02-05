@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Polynomial Representation of K-dimensional Data &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Basic Usage Example" href="examples.html" />
+    <link rel="prev" title="Resampling (sofia_redux.toolkit.resampling)" href="index.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li class="right">
+	<a href="examples.html" title="Basic Usage Example">
+	  next &raquo;
+	</a>
+      </li>
+      <li class="right">
+	<a href="index.html" title="Resampling (sofia_redux.toolkit.resampling)">
+	  &laquo; previous
+	</a>
+	 |
+      </li>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" >SOFIA Redux</a> &#187;</li>
+      <li><a href="../index.html" >sofia_redux.toolkit: Shared Utilities for SOFIA Pipelines</a> &#187;</li>
+      <li><a href="index.html" accesskey="U">Resampling (<code class="xref py py-obj docutils literal notranslate"><span class="pre">sofia_redux.toolkit.resampling</span></code>)</a> &#187;</li>
+      
+      <li>Polynomial Representation of K-dimensional Data</li> 
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="polynomial-representation-of-k-dimensional-data">
+<span id="polynomial-theory"></span><h1>Polynomial Representation of K-dimensional Data<a class="headerlink" href="#polynomial-representation-of-k-dimensional-data" title="Link to this heading">¶</a></h1>
+<p>The resampler allows polynomial order to vary by dimension, represented by
+<span class="math notranslate nohighlight">\(o_{k}\)</span> for dimension <span class="math notranslate nohighlight">\(k\)</span> in <span class="math notranslate nohighlight">\(K\)</span> dimensions.  Let the
+polynomial approximation at coordinate <span class="math notranslate nohighlight">\(x\)</span> be represented as</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[f(x) = \sum_{p_{1}=0}^{o_{1}} \sum_{p_{2}=0}^{o_{2}}
+       ... \sum_{p_{K}=0}^{o_{K}}
+    \lambda_{(p_{1},p_{2},...,p_{K})} a_{(p_{1},p_{2},...,p_{K})}
+    x_{1}^{p_{1}} x_{2}^{p_{2}} ... x_{K}^{p_{K}}\]</div>
+</div></blockquote>
+<p>where <span class="math notranslate nohighlight">\(\lambda_{(p_{1},p_{2},...,p_{K})} \rightarrow \{0,1\}\)</span> defining
+redundancy where</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+\lambda_{(p_{1},p_{2},...,p_{K})} = \Biggl \lbrace{
+    1, \text{ if } \sum_{k=1}^{K}{p_k} \leq max(o) \atop
+    0, \text{ otherwise }
+}
+\end{eqnarray}</div></div></blockquote>
+<p>Now define a the redundancy set <span class="math notranslate nohighlight">\(s\)</span> so that <span class="math notranslate nohighlight">\(f(x)\)</span> may be
+represented by the sum over <span class="math notranslate nohighlight">\(S\)</span> sets when <span class="math notranslate nohighlight">\(\lambda=1\)</span>.</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+s     &amp;=&amp; \{ (p_{1}, p_{2},...,p_{K})
+         \; | \; \lambda_{(p_{1}, p_{2},...,p_{K})} = 1 \} \\
+c_{m} &amp;=&amp; a_{s_{m}} \\
+\Phi_{m} &amp;=&amp; \prod_{k=1}^{K}{x_{k}^{s_{(m, k)}}}\\
+f(x)  &amp;=&amp; \sum_{m=1}^{S}{c_{m} \Phi_{m}}
+\end{eqnarray}</div></div></blockquote>
+<p>The set <span class="math notranslate nohighlight">\(s\)</span> is in lexographic order such that <span class="math notranslate nohighlight">\({\{0, 1, 1\}}\)</span> is
+before <span class="math notranslate nohighlight">\({\{1, 0, 0\}}\)</span> (for <span class="math notranslate nohighlight">\(K=3\)</span>).  For example, when <span class="math notranslate nohighlight">\(K=2\)</span>
+and the polynomial order is 2 in all dimensions:</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+&amp; s_{(p=2,K=2)} &amp; = [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (2, 0)] \\
+&amp; \Phi &amp; = [1, x_{2}, {x_{2}}^{2}, x_{1}, x_{1}x_{2}, {x_{1}}^{2} ] \\
+\therefore &amp; f(x) &amp; = c_{1} + c_{2}x_{2} + c_{3}{x_{2}}^2 + c_{4}x_{1}
+                      + c_{5}x_{1}x_{2} + c_{6}{x_{1}}^{2}
+\end{eqnarray}</div></div></blockquote>
+<p>Likewise, for 3-dimensional (<span class="math notranslate nohighlight">\(K=3\)</span>) data where <span class="math notranslate nohighlight">\(p_{1}=1\)</span>,
+<span class="math notranslate nohighlight">\(p_{2}=2\)</span>, and <span class="math notranslate nohighlight">\(p_{3}=3\)</span>:</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+s_{(p=[1,2,3], K=3)} = [
+&amp;(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3),
+ (0, 1, 0), (0, 1, 1), (0, 1, 2), \\
+&amp;(0, 2, 0), (0, 2, 1), (1, 0, 1), (1, 0, 2),
+ (1, 1, 0), (1, 1, 1), (1, 2, 0) \;]
+\end{eqnarray}</div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+\therefore f(x) =
+    &amp;c_{1} + c_{2}x_{3} + c_{3}{x_{3}}^{2} + c_{4}{x_{3}}^{3} +
+     c_{5}x_{2} + c_{6}x_{2}x_{3} + &amp;c_{7}x_{2}{x_{3}}^2 + \\
+    &amp;c_{8}{x_{2}}^{2} + c_{9}{x_{2}}^{2}x_{3} + c_{10}x_{1}x_{3} +
+     c_{11}x_{1}{x_{3}}^2 + c_{12}x_{1}x_{2} + &amp;c_{13}x_{1}x_{2}x_{3} +
+     c_{14}x_{1}{x_{2}}^2
+\end{eqnarray}</div></div></blockquote>
+</section>
+<section id="polynomial-resampling">
+<h1>Polynomial Resampling<a class="headerlink" href="#polynomial-resampling" title="Link to this heading">¶</a></h1>
+<p>When resampling, we wish to evaluate <span class="math notranslate nohighlight">\(f(x)\)</span> at coordinate <span class="math notranslate nohighlight">\(v\)</span>.
+To derive <span class="math notranslate nohighlight">\(f(x)\)</span>, consider a set of <span class="math notranslate nohighlight">\(N\)</span> samples contained within an
+ellipsoid hyper-surface (the window region set <span class="math notranslate nohighlight">\(\Omega\)</span>) centered about
+<span class="math notranslate nohighlight">\(v\)</span>.</p>
+<p>The preliminary step is to first define <span class="math notranslate nohighlight">\(s(o)\)</span> which for each sample
+<span class="math notranslate nohighlight">\(i\)</span>, allows us to define the set <span class="math notranslate nohighlight">\(\Phi_{i}\)</span>.  This is then used
+to build the design matrix <span class="math notranslate nohighlight">\(\Phi\)</span> of <span class="math notranslate nohighlight">\(N\)</span> rows by <span class="math notranslate nohighlight">\(S\)</span> columns.
+<span class="math notranslate nohighlight">\(c\)</span> may then be found by finding the least-squares solution of</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[\Phi c + \varepsilon = y\]</div>
+</div></blockquote>
+<p>such that <span class="math notranslate nohighlight">\(y_{i}\)</span> is the value of sample <span class="math notranslate nohighlight">\(i\)</span>, with an associated
+error of <span class="math notranslate nohighlight">\(\varepsilon_{i}\)</span> or,</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[\begin{split}\begin{bmatrix}
+        1 &amp; \Phi_{(1,2)} &amp; \Phi_{(1,3)} &amp; \cdots &amp; \Phi_{(1,S)} \\
+        1 &amp; \Phi_{(2,2)} &amp; \Phi_{(2,3)} &amp; \cdots &amp; \Phi_{(2,S)} \\
+        1 &amp; \Phi_{(3,2)} &amp; \Phi_{(3,3)} &amp; \cdots &amp; \Phi_{(3,S)} \\
+        \vdots &amp; \vdots &amp; \vdots &amp; \ddots &amp; \vdots \\
+        1 &amp; \Phi_{(N,2)} &amp; \Phi_{(N,3)} &amp; \cdots &amp; \Phi_{(N,S)}
+\end{bmatrix}
+\begin{bmatrix}
+        c_{1} \\
+        c_{2} \\
+        \vdots \\
+        c_{S}
+\end{bmatrix}
++
+\begin{bmatrix}
+        \varepsilon_{1} \\
+        \varepsilon_{2} \\
+        \varepsilon_{3} \\
+        \vdots \\
+        \varepsilon_{N}
+\end{bmatrix}
+=
+\begin{bmatrix}
+        y_{1} \\
+        y_{2} \\
+        y_{3} \\
+        \vdots \\
+        y_{N}
+\end{bmatrix}\end{split}\]</div>
+</div></blockquote>
+<p>Where <span class="math notranslate nohighlight">\(\Phi_{(i, m)}\)</span> is the <span class="math notranslate nohighlight">\(m^{th}\)</span> element of set <span class="math notranslate nohighlight">\(\Phi\)</span>
+for sample <span class="math notranslate nohighlight">\(i\)</span>.</p>
+<p>Using least-squares, the estimated values for <span class="math notranslate nohighlight">\(c\)</span> is given by:</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[\hat{c} = (\Phi^{T} \Phi)^{-1} \Phi^{T} y\]</div>
+</div></blockquote>
+<p>If performing a weighted fit, <span class="math notranslate nohighlight">\(\hat{c}\)</span> is given by:</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[\hat{c} = (\Phi^{T}W \Phi)^{-1} \Phi^{T} W y\]</div>
+</div></blockquote>
+<p>where <span class="math notranslate nohighlight">\(W\)</span> is an <span class="math notranslate nohighlight">\((N, N)\)</span> diagonal weight matrix such that
+<span class="math notranslate nohighlight">\(W_{i,i}\)</span> contains the assigned weighting for sample <span class="math notranslate nohighlight">\(i\)</span>.</p>
+<p>Once <span class="math notranslate nohighlight">\(\hat{c}\)</span> is known, we can then evaluate <span class="math notranslate nohighlight">\(f(v)\)</span> as:</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+&amp;\Phi_{m}^{v} &amp; = \prod_{k=1}^{K}{v_{k}^{s_{(m, k)}}} \\
+&amp;f(v) &amp; = \sum_{m=1}^{S}{\hat{c}_{m} \Phi_{m}^{v}}
+\end{eqnarray}</div></div></blockquote>
+</section>
+<section id="implementation">
+<h1>Implementation<a class="headerlink" href="#implementation" title="Link to this heading">¶</a></h1>
+<section id="terminology">
+<h2>Terminology<a class="headerlink" href="#terminology" title="Link to this heading">¶</a></h2>
+<p>In following sections, the samples at coordinates <span class="math notranslate nohighlight">\(x\)</span> will be referred
+to as <em>samples</em>.  The points at which we wish to derive <span class="math notranslate nohighlight">\(f(v)\)</span> will be
+referred to as <em>points</em>.  For any set <span class="math notranslate nohighlight">\(A\)</span>, <span class="math notranslate nohighlight">\(|A|\)</span> represents the
+number of members within <span class="math notranslate nohighlight">\(A\)</span> which by definition will all be unique.</p>
+</section>
+<section id="unit-conversion-and-the-window-parameter">
+<h2>Unit Conversion and the Window Parameter<a class="headerlink" href="#unit-conversion-and-the-window-parameter" title="Link to this heading">¶</a></h2>
+<p>The window parameter <span class="math notranslate nohighlight">\(\omega\)</span> defines the semi-principle axes of a
+hyper-ellipsoid such that samples <span class="math notranslate nohighlight">\(\Omega_{j}\)</span> are said to be within
+the window region of point <span class="math notranslate nohighlight">\(j\)</span> if:</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[\sum_{k=1}^{K}{\frac{(x_{k}^{\prime} - v_{k, j}^{\prime})^{2}}
+                    {\omega_{k}^{2}}} \leq 1\]</div>
+</div></blockquote>
+<p>Where <span class="math notranslate nohighlight">\(x^{\prime}\)</span> and <span class="math notranslate nohighlight">\(v^{\prime}\)</span> are coordinates before any
+unit conversion has been applied.  <span class="math notranslate nohighlight">\(\omega\)</span> should be supplied in the
+same units as <span class="math notranslate nohighlight">\(x^{\prime}\)</span> and <span class="math notranslate nohighlight">\(v^{\prime}\)</span> for each dimension.</p>
+<p>Coordinates are then converted into units of <span class="math notranslate nohighlight">\(\omega\)</span> using:</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+x &amp;= \{
+     \frac{x_{1}^{\prime} - min(x_{1}^{\prime})}{\omega_{1}},
+     \frac{x_{2}^{\prime} - min(x_{2}^{\prime})}{\omega_{2}}, ...,
+     \frac{x_{K}^{\prime} - min(x_{K}^{\prime})}{\omega_{K}},
+     \} \\
+v &amp;= \{
+     \frac{v_{1}^{\prime} - min(x_{1}^{\prime})}{\omega_{1}},
+     \frac{v_{2}^{\prime} - min(x_{2}^{\prime})}{\omega_{2}}, ...,
+     \frac{v_{K}^{\prime} - min(x_{K}^{\prime})}{\omega_{K}},
+     \}
+\end{eqnarray}</div></div></blockquote>
+<p>We can then define the set of samples within the window region of point
+<span class="math notranslate nohighlight">\(j\)</span> as</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+&amp; \Omega_{j} = &amp; \{
+    i \; | \; \left\| x_{i} - v_{j} \right\|_2 \leq 1 \; | \;
+    i \in \mathbb{Z^{+}} \leq N
+\} \\
+&amp; N_{j} = &amp; | \Omega_{j} |
+\end{eqnarray}</div></div></blockquote>
+<p>At this point, <span class="math notranslate nohighlight">\(\Phi\)</span> and <span class="math notranslate nohighlight">\(\Phi^{v}\)</span> are also calculated for all
+samples and points.  This is a fast operation, but does change the memory
+requirements from <span class="math notranslate nohighlight">\(O(K)\)</span> to <span class="math notranslate nohighlight">\(O(S)\)</span> so that in most cases, memory
+requirements are increased.  Generally though, one expects low order
+(<span class="math notranslate nohighlight">\(p \leq 3\)</span>) polynomials to be used such that calculating <span class="math notranslate nohighlight">\(\Phi\)</span> at
+this stage does not introduce significant memory issues.  The alternative would
+be to calculate <span class="math notranslate nohighlight">\(\Phi\)</span> later, for all samples within the window region of
+a resampling point leading to many duplicate calculations in situations where
+the same sample is within the window of multiple points.</p>
+<section id="the-search-problem">
+<h3>The Search Problem<a class="headerlink" href="#the-search-problem" title="Link to this heading">¶</a></h3>
+<p>Finding each <span class="math notranslate nohighlight">\(\Omega_{j}\)</span> for all <span class="math notranslate nohighlight">\(M\)</span> samples using the standard
+brute force method of looping through all <span class="math notranslate nohighlight">\(N\)</span> samples comes at the heavy
+computational cost of <span class="math notranslate nohighlight">\(O(MN)\)</span>.</p>
+<p>This problem is overcome in two stages.  The first stage breaks up the full
+extent of sample and point space into blocks (hypercubes in <span class="math notranslate nohighlight">\(K\)</span>
+dimensions) where the length of each side of a block is 1 following unit
+conversion.</p>
+<p>The search problem may then be constrained by recognizing that for each point
+within a block, one should only consider membership of samples to that point’s
+window region from within that same block and neighboring blocks (direct and
+diagonal).  Block membership <span class="math notranslate nohighlight">\(\square\)</span> for sample coordinates <span class="math notranslate nohighlight">\(x\)</span>
+or point coordinates <span class="math notranslate nohighlight">\(v\)</span> is simply defined by:</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+&amp; \square(x) = &amp; \lfloor x \rfloor \\
+&amp; \square(v) = &amp; \lfloor v \rfloor
+\end{eqnarray}</div></div></blockquote>
+<p>The block itself and all neighboring blocks are referred to as a neighborhood
+such that for block <span class="math notranslate nohighlight">\(l\)</span>, the neighborhood is defined as:</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[\square_{b}^{hood} = \square_{b} + (-1, 0, 1)^K\]</div>
+</div></blockquote>
+<p>where <span class="math notranslate nohighlight">\((-1, 0, 1)^K\)</span> indicates all permutations of (-1, 0, 1) over
+<span class="math notranslate nohighlight">\(K\)</span> dimensions.  The algorithm creates two sparse matrices for samples
+and points where each row <span class="math notranslate nohighlight">\(b\)</span> is the block index, and sample or point
+indices are stored in the columns.  This allows fast access to all samples
+and points contained within each block.  A block will be removed from any
+further processing if the point block population
+<span class="math notranslate nohighlight">\(| \square_{b}(v) | = 0\)</span> or the sample neighborhood population
+<span class="math notranslate nohighlight">\(| \square_{b}^{hood}(x) | = 0\)</span>.</p>
+<p>Once all valid blocks have been identified, the algorithm may proceed to
+process these blocks in parallel.  Having narrowed down the number of samples
+to search through for each point in a block to a local neighborhood, euclidean
+distances from each point within the block to every sample within the local
+neighborhood must be derived in order to find <span class="math notranslate nohighlight">\(\Omega\)</span>.  There are
+multiple ways this could be accomplished, but for this implementation, a
+<span class="math notranslate nohighlight">\(K\)</span> dimensional ball tree is used to directly derive all
+<span class="math notranslate nohighlight">\(\Omega_{j \in \square_{b}(v)}\)</span> efficiently.</p>
+</section>
+</section>
+<section id="block-processing">
+<h2>Block Processing<a class="headerlink" href="#block-processing" title="Link to this heading">¶</a></h2>
+<p>For a single block <span class="math notranslate nohighlight">\(b\)</span>, a value for <span class="math notranslate nohighlight">\(f(v_{j})\)</span> is derived in series
+for each <span class="math notranslate nohighlight">\(j \in \square_{b}(v)\)</span>.  However, in order to calculate
+<span class="math notranslate nohighlight">\(f(v_{j})\)</span> we must first ensure that <span class="math notranslate nohighlight">\(\hat{c}_{j}\)</span> is solvable
+via least-squares based on the sample distribution of <span class="math notranslate nohighlight">\(\Omega_{j}\)</span>.
+Let us define the vector <span class="math notranslate nohighlight">\(x(j)\)</span> such that</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[x(j) = x_{i} \; | \; i \in \Omega_{j}\]</div>
+</div></blockquote>
+<p>and <span class="math notranslate nohighlight">\(x(j)_{k}\)</span> are the coordinates of vector <span class="math notranslate nohighlight">\(x(j)\)</span> along the
+<span class="math notranslate nohighlight">\(k^{th}\)</span> dimension.</p>
+<section id="sample-distribution">
+<h3>Sample Distribution<a class="headerlink" href="#sample-distribution" title="Link to this heading">¶</a></h3>
+<p>There are three methods available to check whether an attempt to solve
+<span class="math notranslate nohighlight">\(\hat{c}_{j}\)</span> should be made, based on sample distribution.  The most
+basic method (“counts”) is to require that</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[| \Omega_{j} | &gt; \prod_{k=1}^{K}{(o_{k} + 1)}\]</div>
+</div></blockquote>
+<p>That is, the number of samples within the window region is greater than that
+required to derive a solution assuming zero redundancy
+(<span class="math notranslate nohighlight">\(\lambda_{(p_{1},p_{2},...,p_{K})} \equiv 1\)</span>).  This can be dangerous as
+we are only placing a limit on the number of samples, not how they are
+distributed.  For example, if the samples are co-linear in any dimension,
+a solution is not possible.  Therefore, while fast, “counts” should only be
+used when it is assured that samples are uniformly distributed (e.g. an image)
+and <span class="math notranslate nohighlight">\(\omega\)</span> is sufficiently large.</p>
+<p>The second method, “extrapolate” is robust, but does not guarantee that
+<span class="math notranslate nohighlight">\(v_{j}\)</span> is bounded by <span class="math notranslate nohighlight">\(x(j)\)</span>.  As such, it is possible
+that any solution may deviate significantly, especially for higher order
+polynomials.  The “extrapolate” method requirement is</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[| \{ x(j){k} \} | &gt; o_{k} + 1, \forall k = [1, 2, ..., K]\]</div>
+</div></blockquote>
+<p>or that in each dimension, there must be enough uniquely valued coordinates
+<span class="math notranslate nohighlight">\(x\)</span> to solve for <span class="math notranslate nohighlight">\(\hat{c}\)</span> given zero redundancy.  There
+may be circumstances in which the user wishes to attain extrapolated values
+of a polynomial fit.  For example, when deriving <span class="math notranslate nohighlight">\(f(v)\)</span> near the edge
+of an image.</p>
+<p>Finally, “edges” (default) is the most robust of the three methods, similar to
+“extrapolate” with the additional requirement that <span class="math notranslate nohighlight">\(v_{j}\)</span> is bounded by
+<span class="math notranslate nohighlight">\(x(j)\)</span>:</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[min(| \{ x(j)_{k} &lt; v_{k} \} |,
+    | \{ x(j)_{k} &gt; v_{k} \} |)
+&gt; o_{k} + 1, \; \forall k = [1, 2, ..., K]\]</div>
+</div></blockquote>
+<p>or that in each dimension there are more than <span class="math notranslate nohighlight">\(o + 1\)</span> uniquely valued
+sample coordinates to the “left” and “right” of <span class="math notranslate nohighlight">\(v\)</span>.</p>
+<p>If a sample distribution fails the above check, no value will be derived for
+<span class="math notranslate nohighlight">\(f(v_{j})\)</span>.  However, in certain cases when the polynomial order is
+symmetrical across all dimensions (<span class="math notranslate nohighlight">\(|\{p\}| = 1\)</span>), the user may
+allow <span class="math notranslate nohighlight">\(p\)</span> to decrease until the condition is met.  While this is
+theoretically possible for asymmetric polynomial orders, doing so would require
+recalculating <span class="math notranslate nohighlight">\(\Phi\)</span> with potentially significant overhead.</p>
+<section id="edge-clipping">
+<h4>Edge Clipping<a class="headerlink" href="#edge-clipping" title="Link to this heading">¶</a></h4>
+<p>An additional check may be performed on the sample distribution <span class="math notranslate nohighlight">\(x(j)\)</span>
+based on how close <span class="math notranslate nohighlight">\(v_{j}\)</span> is to the “edge” of <span class="math notranslate nohighlight">\(x(j)\)</span>.  This edge
+is defined by the parameter <span class="math notranslate nohighlight">\(\epsilon_{k} \; | \; k = [1, 2, ..., K]\)</span>
+where <span class="math notranslate nohighlight">\(0 &lt; \epsilon_{k} &lt; 1\)</span> and one of the three definitions of
+an edge.</p>
+<p>The “range” definition of the edge requires that point <span class="math notranslate nohighlight">\(j\)</span> satisfies</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[\exists (x(j)_{k} - v_{j, k} \leq -\epsilon_{k}) \land
+\exists (x(j)_{k} - v_{j, k} \geq \epsilon_{k}) \; \forall
+k, k = [1, 2, ..., M]\]</div>
+</div></blockquote>
+<p>or that there is at least one sample to both the “left” and “right” of a
+resampling point in each dimension at a distance of at least <span class="math notranslate nohighlight">\(\epsilon\)</span>.</p>
+<p>The “com_feature” edge clipping mode requires that</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[\frac{1}{N_{j}} \sum_{i=1}^{N_{j}}{
+\frac{| x(j)_{(i,k)} - v_{(j,k)} |}{1 - \epsilon_{k}}} \leq 1
+\; \forall{k}, k = [1, 2, ..., M]\]</div>
+</div></blockquote>
+<p>Finally, the “com_distance” edge clipping mode (default) requires that</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[\frac{1}{N_{j}} \sum_{i=1}^{N_{j}} {
+    \left[ \sum_{k=1}^{K} {
+        \left(\frac{ x(j)_{(i,k)} - v_{(j,k)} }
+                   { 1 - \epsilon_{k} }\right)^{2} }
+    \right]^{0.5}
+} \leq 1\]</div>
+</div></blockquote>
+<p>In all cases, as <span class="math notranslate nohighlight">\(\epsilon \to 1\)</span>, edge clipping effects will become
+increasingly severe.</p>
+</section>
+</section>
+</section>
+<section id="weighting">
+<h2>Weighting<a class="headerlink" href="#weighting" title="Link to this heading">¶</a></h2>
+<p>The solution to <span class="math notranslate nohighlight">\(f(v)\)</span> may be derived by placing optional weights on
+each sample based on associated measurement error in <span class="math notranslate nohighlight">\(y\)</span> and/or the
+proximity of <span class="math notranslate nohighlight">\(x\)</span> from <span class="math notranslate nohighlight">\(v\)</span>.  The weight matrix <span class="math notranslate nohighlight">\(W\)</span>
+is a diagonal matrix <span class="math notranslate nohighlight">\((N \times N)\)</span> in which we define the weight for
+sample <span class="math notranslate nohighlight">\(i\)</span> as <span class="math notranslate nohighlight">\(w_{i} = W_{(i,i)}\)</span> and</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[w_{i} = w_{i}^{\varepsilon} w_{i}^{\delta}\]</div>
+</div></blockquote>
+<p>For each point <span class="math notranslate nohighlight">\(j\)</span>, the vector of weights is</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[w(j) = w(j)^{\varepsilon} w(j)^{\delta}\]</div>
+</div></blockquote>
+<p>where <span class="math notranslate nohighlight">\(w^{\delta}\)</span> is the distance weighting and <span class="math notranslate nohighlight">\(w^{\varepsilon}\)</span>
+is the error weighting.  If error weighting is disabled then
+<span class="math notranslate nohighlight">\(w^{\varepsilon} = 1\)</span>, and if distance weighting is disabled,
+<span class="math notranslate nohighlight">\(w^{\delta} = 1\)</span>.</p>
+<section id="error-weighting">
+<h3>Error Weighting<a class="headerlink" href="#error-weighting" title="Link to this heading">¶</a></h3>
+<p>For error weighting to be applied, <span class="math notranslate nohighlight">\(\varepsilon\)</span> must be supplied by the
+user.</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+w_{i}^{\varepsilon} &amp; = &amp;  \frac{1}{{\varepsilon_{i}}^{2}} \\
+w^{\varepsilon}(j) &amp; = &amp; w_{i}^{\varepsilon}
+    \; | \; i \in \Omega_{j}
+\end{eqnarray}</div></div></blockquote>
+</section>
+<section id="distance-weighting">
+<h3>Distance Weighting<a class="headerlink" href="#distance-weighting" title="Link to this heading">¶</a></h3>
+<p>Distance weights use a Gaussian function of the euclidean distance of samples
+from a point.  The user may either supply a smoothing parameter <span class="math notranslate nohighlight">\(\alpha\)</span>,
+or the Gaussian sigma in the original coordinate units <span class="math notranslate nohighlight">\(\alpha^{\prime}\)</span>.</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[\alpha_{k} = \frac{2 {\alpha_{k}^{\prime}}^{2}}{{\omega_k}^{2}},
+k = [1, 2, ..., K]\]</div>
+</div></blockquote>
+<p>The vector of distance weights applied to point <span class="math notranslate nohighlight">\(j\)</span> is</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[w^{\delta}(j) = exp \left(
+-\sum_{k=1}^{K}{
+    \frac{(x(j)_{k} - v_{(j,k)})^{2}}{\alpha_{k}}
+}
+\right)\]</div>
+</div></blockquote>
+<p>In the initial units (marked by <span class="math notranslate nohighlight">\(\prime\)</span>), this is equivalent to</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[w^{\delta}(j) = exp \left(
+-\sum_{k=1}^{K}{
+    \frac{(x^{\prime}(j)_{k} - v^{\prime}_{(j,k)})^{2}}
+         {2 {\alpha_{k}^{\prime}}^{2}}
+}
+\right)\]</div>
+</div></blockquote>
+</section>
+</section>
+<section id="deriving-point-solutions">
+<h2>Deriving Point Solutions<a class="headerlink" href="#deriving-point-solutions" title="Link to this heading">¶</a></h2>
+<p>At point <span class="math notranslate nohighlight">\(j\)</span>, define</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+X &amp; = &amp; [\Phi_{i} \; \forall \; i \in \Omega_{j}] \\
+W &amp; = &amp; \text{ diagonal matrix } \; | \; diag(W) = w(j) \\
+Y &amp; = &amp; [y_{i} \; \forall \; i \in \Omega_{j}] \\
+Z &amp; = &amp; \text{ diagonal matrix } \; | \; diag(Z) = \varepsilon(j)
+\end{eqnarray}</div></div></blockquote>
+<p>The estimated polynomial coefficients <span class="math notranslate nohighlight">\(\hat{c}\)</span> are then solved for
+by finding the least-squares solution of</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+&amp; (X^{T} W X) \hat{c_{j}} = X^{T} W Y \\
+&amp; \hat{c_{j}} = (X^{T} W X)^{-1} X^{T} W Y
+\end{eqnarray}</div></div></blockquote>
+<p><span class="math notranslate nohighlight">\(f(v_{j})\)</span> can then be fitted for by</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[f(v_{j}) = \sum_{m=1}^{S}{\hat{c}_{m} \Phi_{j, m}^{v}}\]</div>
+</div></blockquote>
+<section id="error-estimates">
+<h3>Error Estimates<a class="headerlink" href="#error-estimates" title="Link to this heading">¶</a></h3>
+<p>If errors are to be propagated through the system, the estimated
+covariance-variance matrix <span class="math notranslate nohighlight">\(C\)</span> is</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[C = (X^{T} W X)^{-1} X^{T}W Z^{T} Z W^{T} X (X^{T} W X)^{-1}\]</div>
+</div></blockquote>
+<p>If no errors are provided, but an estimate for the error in the fit is
+required, the covariance-variance matrix is derived from the residuals
+(<span class="math notranslate nohighlight">\(r\)</span>) on the fit.</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+r &amp; = &amp; Y - f(v_{j}) \\
+C &amp; = &amp; (X^{T} W X)^{-1} X^{T} W r^{T} r W^{T} X (X^{T} W X)^{-1}
+\end{eqnarray}</div></div></blockquote>
+<p>The error <span class="math notranslate nohighlight">\(\sigma_{j}\)</span> is then given by</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[\sigma_{j}^{2} = \frac{\sum_{s1=1}^{S} \sum_{s2=1}^{S}
+                       \Phi_{j,s1}^{v} C_{s1, s2} \Phi_{j,s2}^{v}}
+                      {N_{j} - rank(X^{T} W X)}\]</div>
+</div></blockquote>
+</section>
+<section id="symmetric-order-zero">
+<h3>Symmetric Order Zero<a class="headerlink" href="#symmetric-order-zero" title="Link to this heading">¶</a></h3>
+<p>If <span class="math notranslate nohighlight">\(o_{k} = 0 \; \forall k\)</span> then the weighted mean is used instead of
+a polynomial fit.  In this case</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+f(v_{j}) &amp; = &amp; \frac{tr(W Y)}{tr(W)} \\
+\sigma_{j}^{2} &amp; = &amp; \frac{tr(W Z Z^{T} W^{T})}{tr(W^{T} W)}
+\end{eqnarray}</div></div></blockquote>
+</section>
+<section id="goodness-of-fit">
+<h3>Goodness of Fit<a class="headerlink" href="#goodness-of-fit" title="Link to this heading">¶</a></h3>
+<p>If needed, a measure of how well the fit matched the data is given by the
+reduced <span class="math notranslate nohighlight">\(\chi^2\)</span>.</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+R &amp; = &amp; Z^{-1} (Y - f(v_{j})) \\
+\chi_{r}^{2} &amp; = &amp; \frac{tr(R^{T} W R)}{tr(W)}
+                   \frac{N_{j}}{N_{j} - rank(X^{T} W X)}
+\end{eqnarray}</div></div></blockquote>
+</section>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+<ul>
+<li><a class="reference internal" href="#">Polynomial Representation of K-dimensional Data</a></li>
+<li><a class="reference internal" href="#polynomial-resampling">Polynomial Resampling</a></li>
+<li><a class="reference internal" href="#implementation">Implementation</a><ul>
+<li><a class="reference internal" href="#terminology">Terminology</a></li>
+<li><a class="reference internal" href="#unit-conversion-and-the-window-parameter">Unit Conversion and the Window Parameter</a><ul>
+<li><a class="reference internal" href="#the-search-problem">The Search Problem</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#block-processing">Block Processing</a><ul>
+<li><a class="reference internal" href="#sample-distribution">Sample Distribution</a><ul>
+<li><a class="reference internal" href="#edge-clipping">Edge Clipping</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#weighting">Weighting</a><ul>
+<li><a class="reference internal" href="#error-weighting">Error Weighting</a></li>
+<li><a class="reference internal" href="#distance-weighting">Distance Weighting</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#deriving-point-solutions">Deriving Point Solutions</a><ul>
+<li><a class="reference internal" href="#error-estimates">Error Estimates</a></li>
+<li><a class="reference internal" href="#symmetric-order-zero">Symmetric Order Zero</a></li>
+<li><a class="reference internal" href="#goodness-of-fit">Goodness of Fit</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right">
+    <a href="../../../_sources/sofia_redux/toolkit/resampling/polynomial_theory.rst.txt"
+       rel="nofollow">Page Source</a> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

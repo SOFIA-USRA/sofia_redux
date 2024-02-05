@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.pipe &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.pipe</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Run Redux reduction objects from the command line.&quot;&quot;&quot;
+
+import argparse
+
+from sofia_redux.pipeline.interface import Interface
+from sofia_redux.pipeline.configuration import Configuration
+
+__all__ = [&#39;Pipe&#39;, &#39;main&#39;]
+
+
+<div class="viewcode-block" id="Pipe">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.pipe.Pipe.html#sofia_redux.pipeline.pipe.Pipe">[docs]</a>
+class Pipe(Interface):
+    &quot;&quot;&quot;Command-line interface to data reduction steps.&quot;&quot;&quot;
+
+    def __init__(self, configuration=None):
+        &quot;&quot;&quot;
+        Initialize the pipeline with an optional configuration file.
+
+        Parameters
+        ----------
+        configuration : Configuration, optional
+            Configuration items to be used for all reductions.
+        &quot;&quot;&quot;
+        super().__init__(configuration)
+
+<div class="viewcode-block" id="Pipe.run">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.pipe.Pipe.html#sofia_redux.pipeline.pipe.Pipe.run">[docs]</a>
+    def run(self, data):
+        &quot;&quot;&quot;
+        Run the pipeline on an input data set.
+
+        Calls the `Interface` start and reduce methods.
+        If specified in the configuration, an as-run input manifest,
+        an output manifest, and an as-run parameter file will be
+        saved to disk after the reduction is complete.
+
+        Parameters
+        ----------
+        data : `list` of str or str
+            Input data file paths, or a text file containing
+            data file paths.
+        &quot;&quot;&quot;
+        # start up the pipe
+        self.start(data)
+
+        # run the reduction
+        try:
+            self.reduce()
+            # save the as-run parameters and the input/output manifest
+            if self.configuration.parameter_file is not None:
+                self.save_parameters(self.configuration.parameter_file)
+            self.save_input_manifest()
+            self.save_output_manifest()
+        finally:
+            if self.reduction is not None:
+                self.clear_reduction()</div>
+</div>
+
+
+
+<div class="viewcode-block" id="main">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.pipe.main.html#sofia_redux.pipeline.pipe.main">[docs]</a>
+def main():
+    &quot;&quot;&quot;Run a pipeline from the command line.&quot;&quot;&quot;
+    parser = argparse.ArgumentParser(
+        description=&#39;Reduce a set of data through a pipeline.&#39;)
+    parser.add_argument(&#39;filename&#39;, metavar=&#39;filename&#39;, nargs=&#39;+&#39;,
+                        help=&#39;Path to one or more input files.&#39;)
+    parser.add_argument(&#39;-c&#39;, &#39;--configuration&#39;, dest=&#39;config&#39;, type=str,
+                        action=&#39;store&#39;, default=None,
+                        help=&#39;Path to configuration file.&#39;)
+    parser.add_argument(&#39;-l&#39;, &#39;--loglevel&#39;, dest=&#39;loglevel&#39;, type=str,
+                        action=&#39;store&#39;, default=&#39;INFO&#39;,
+                        help=&#39;Log level.&#39;)
+    args = parser.parse_args()
+
+    Pipe.tidy_log(args.loglevel.upper())
+
+    if args.config is not None:
+        config = Configuration(args.config)
+    else:
+        config = Configuration()
+
+    pipe = Pipe(config)
+    pipe.run(args.filename)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

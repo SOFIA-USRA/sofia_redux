@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.visualization.models.mid_model &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.visualization.models.mid_model</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from typing import Dict, Optional, TypeVar, Union, Any, List
+from copy import deepcopy
+import astropy.io.fits as pf
+import numpy as np
+
+from sofia_redux.visualization import log
+from sofia_redux.visualization.models import low_model
+
+__all__ = [&#39;MidModel&#39;, &#39;Book&#39;, &#39;Order&#39;]
+
+LowModels = TypeVar(&#39;LowModels&#39;, low_model.Spectrum,
+                    low_model.Image)
+LowerModels = Union[LowModels, np.ndarray]
+HL = TypeVar(&#39;HL&#39;, pf.HDUList, List[pf.FitsHDU])
+
+
+<div class="viewcode-block" id="MidModel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.MidModel.html#sofia_redux.visualization.models.mid_model.MidModel">[docs]</a>
+class MidModel(object):
+    &quot;&quot;&quot;
+    Describe a mid-level data object.
+
+    A mid-level data object represents a single coherent observation
+    structure. These can be an image (containing flux values,
+    uncertainties, instrumental response, etc.) or
+    a spectrum (consisting of the flux values, uncertainties,
+    atmospheric transmission, etc).
+
+    Parameters
+    ----------
+    hdul : astropy.io.fits.HDUList
+        FITS HDU list to load.
+    filename : str
+        Filename associated with the HDU list.
+    number : int
+        Index number for the data object.
+    aperture : int
+        Aperture number for the data object.
+
+    Attributes
+    ----------
+    number : int
+        Index number for the data object.
+    aperture : int
+        Aperture number for the data object.
+    name : str
+        Name for the data object.
+    data : dict
+        Dictionary of different types of data.
+    enabled: bool
+        Indicates if a model is enabled or not.
+    book_extensions : list
+        List of extension names known to be images.
+    order_extensions : list
+        List of extension names known to be spectra.
+    &quot;&quot;&quot;
+    def __init__(self, hdul: pf.HDUList, filename: str,
+                 number: int, aperture: Optional[int] = None) -&gt; None:
+        # Order and aperture are 0-index based
+        self.number = number
+        self.aperture = aperture
+        self.name = &#39;&#39;
+        self.data = dict()
+        self.enabled = True
+        self.book_extensions = [&#39;flux&#39;, &#39;error&#39;, &#39;badmask&#39;, &#39;spatial_map&#39;,
+                                &#39;aperture_mask&#39;, &#39;flat&#39;, &#39;flat_error&#39;, &#39;mask&#39;
+                                &#39;wavecal&#39;, &#39;spatcal&#39;, &#39;order_mask&#39;,
+                                &#39;flat_illumination&#39;]
+        self.order_extensions = [&#39;wavepos&#39;, &#39;slitpos&#39;, &#39;spatial_profile&#39;,
+                                 &#39;spectral_flux&#39;, &#39;spectral_error&#39;,
+                                 &#39;transmission&#39;, &#39;flux_order&#39;, &#39;error_order&#39;,
+                                 &#39;badmask_order&#39;, &#39;slitpos_order&#39;,
+                                 &#39;spatial_map_order&#39;, &#39;response&#39;]
+
+    def __copy__(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Shallow copy of a mid_model
+        &quot;&quot;&quot;
+        cls = self.__class__
+        new = cls.__new__(cls)
+        new.__dict__.update(self.__dict__)
+        return new
+
+    def __deepcopy__(self, memodict):
+        &quot;&quot;&quot;
+        Shallow copy of a mid_model
+        &quot;&quot;&quot;
+        cls = self.__class__
+        new = cls.__new__(cls)
+        memodict[id(self)] = new
+        for k, v in self.__dict__.items():
+            setattr(new, k, deepcopy(v, memodict))
+        return new
+
+<div class="viewcode-block" id="MidModel.populated">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.MidModel.html#sofia_redux.visualization.models.mid_model.MidModel.populated">[docs]</a>
+    def populated(self) -&gt; bool:
+        &quot;&quot;&quot;
+        Test for loaded data.
+
+        Returns
+        -------
+        bool
+            True if data has been loaded; False otherwise.
+        &quot;&quot;&quot;
+        return len(self.data) &gt; 0</div>
+
+
+<div class="viewcode-block" id="MidModel.load_split">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.MidModel.html#sofia_redux.visualization.models.mid_model.MidModel.load_split">[docs]</a>
+    def load_split(self, hdul: pf.HDUList, filename: str) -&gt; None:
+        &quot;&quot;&quot;
+        Load data that is split across multiple extensions.
+
+        Parameters
+        ----------
+        hdul : astropy.io.fits.HDUList
+            List of HDU objects.
+        filename : str
+            Name of the FITS file.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="MidModel.load_combined">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.MidModel.html#sofia_redux.visualization.models.mid_model.MidModel.load_combined">[docs]</a>
+    def load_combined(self, hdu: pf.ImageHDU, filename: str) -&gt; None:
+        &quot;&quot;&quot;
+        Load data that is combined in a single extension.
+
+        Parameters
+        ----------
+        hdu : astropy.io.fits.HDU
+            An HDU object.
+        filename : str
+            Name of the FITS file.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="MidModel.retrieve">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.MidModel.html#sofia_redux.visualization.models.mid_model.MidModel.retrieve">[docs]</a>
+    def retrieve(self, field: str, level: str) -&gt; LowerModels:
+        &quot;&quot;&quot;
+        Return raw data for a specified field.
+
+        Parameters
+        ----------
+        field : str
+            Name of field to pull from `self.data`.
+        level : [&#39;low&#39;, &#39;raw&#39;]
+            Determines the level of the data to return.
+            &#39;Low&#39; returns the Spectrum object and &#39;raw&#39;
+            will return the raw numeric data.
+
+        Returns
+        -------
+        data : low_model.LowModel or array-like
+            Retrieved raw data. Can be any subclass of
+            `low_model.LowModel`, a numpy array, or None
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="MidModel.describe">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.MidModel.html#sofia_redux.visualization.models.mid_model.MidModel.describe">[docs]</a>
+    def describe(self) -&gt; Dict[str, Any]:
+        &quot;&quot;&quot;Describe the loaded data structure.&quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="MidModel.set_visibility">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.MidModel.html#sofia_redux.visualization.models.mid_model.MidModel.set_visibility">[docs]</a>
+    def set_visibility(self, enabled: bool) -&gt; None:
+        &quot;&quot;&quot;
+        Enable or disable the model visibility.
+
+        Parameters
+        ----------
+        enabled : bool
+            If True, the model is visible/enabled. If False,
+            the model is hidden/disabled.
+        &quot;&quot;&quot;
+        log.debug(f&#39;Disabling {self.name}&#39;)
+        self.enabled = enabled</div>
+
+
+<div class="viewcode-block" id="MidModel.set_enabled_state">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.MidModel.html#sofia_redux.visualization.models.mid_model.MidModel.set_enabled_state">[docs]</a>
+    def set_enabled_state(self, state: Dict[str, bool]) -&gt; None:
+        &quot;&quot;&quot;
+        Set enabled state for all contained low models.
+
+        Parameters
+        ----------
+        state : dict
+           Keys are &#39;enabled&#39; and field names for each contained
+           low model. Values are boolean flags used to set the enabled
+           state for the mid-model or the low fields, respectively.
+        &quot;&quot;&quot;
+        self.enabled = state[&#39;enabled&#39;]
+        for field, low in self.data.items():
+            low.set_visibility(state[field])</div>
+
+
+<div class="viewcode-block" id="MidModel.valid_field">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.MidModel.html#sofia_redux.visualization.models.mid_model.MidModel.valid_field">[docs]</a>
+    def valid_field(self, field: str) -&gt; bool:
+        &quot;&quot;&quot;
+        Test field name validity.
+
+        Parameters
+        ----------
+        field : str
+            Field name to test.
+
+        Returns
+        -------
+        bool
+            True if field has been loaded.
+        &quot;&quot;&quot;
+        checks = [key.startswith(field.lower()) for key in self.data.keys()]
+        return any(checks)</div>
+</div>
+
+
+
+<div class="viewcode-block" id="Book">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.Book.html#sofia_redux.visualization.models.mid_model.Book">[docs]</a>
+class Book(MidModel):
+    &quot;&quot;&quot;
+    Multi-image data object.
+
+    Parameters
+    ----------
+    hdul : astropy.io.fits.HDUList
+        FITS HDU list to load.
+    filename : str
+        Filename associated with the FITS file.
+    number : int
+        Index number for the data object.
+    aperture : int
+        Aperture number for the data object.
+    &quot;&quot;&quot;
+    def __init__(self, hdul: HL, filename: str,
+                 number: int, aperture: Optional[int] = None,
+                 **kwargs) -&gt; None:
+        super().__init__(hdul, filename, number)
+
+        self.name = f&#39;Book_{self.number + 1}&#39;
+        log.debug(f&#39;Initializing {self.name}&#39;)
+
+        if len(hdul) &gt; 1:
+            self.load_split(hdul, filename)
+        else:
+            self.load_combined(hdul[0], filename)
+
+<div class="viewcode-block" id="Book.load_split">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.Book.html#sofia_redux.visualization.models.mid_model.Book.load_split">[docs]</a>
+    def load_split(self, hdul: pf.HDUList, filename: str) -&gt; None:
+        &quot;&quot;&quot;
+        Load a book that is split across multiple extensions.
+
+        Parameters
+        ----------
+        hdul : astropy.io.fits.HDUList
+            List of HDU objects.
+        filename : str
+            Name of the FITS file.
+        &quot;&quot;&quot;
+        log.debug(f&#39;Loading split book of length {len(hdul)}&#39;)
+        for extension in hdul:
+            if extension.data.ndim == 2:
+                name = extension.name.lower()
+                if any([n in name for n in self.book_extensions]):
+                    self.data[name] = low_model.Image(extension, filename)</div>
+
+
+<div class="viewcode-block" id="Book.load_combined">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.Book.html#sofia_redux.visualization.models.mid_model.Book.load_combined">[docs]</a>
+    def load_combined(self, hdu: pf.ImageHDU, filename: str) -&gt; None:
+        &quot;&quot;&quot;
+        Load a Book that is combined in a single extension.
+
+        Parameters
+        ----------
+        hdu : astropy.io.fits.HDU
+            An HDU object.
+        filename : str
+            Name of the FITS file.
+        &quot;&quot;&quot;
+        raise NotImplementedError(&#39;Combined book not implemented&#39;)</div>
+
+
+<div class="viewcode-block" id="Book.retrieve">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.Book.html#sofia_redux.visualization.models.mid_model.Book.retrieve">[docs]</a>
+    def retrieve(self, field: str, level: str) -&gt; Optional[LowerModels]:
+        &quot;&quot;&quot;
+        Return raw data for a specified field.
+
+        Parameters
+        ----------
+        field : str
+            Name of field to pull from `self.data`.
+        level : {&#39;low&#39;, &#39;raw&#39;}
+            Determines the level of the data to return.
+            &#39;Low&#39; returns the Spectrum object; &#39;raw&#39; returns the raw
+            numeric data array.
+
+        Returns
+        -------
+        data : low_model.LowModel or array-like
+            Retrieved raw data. Can be any subclass of
+            `low_model.LowModel`, a numpy array, or None
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Book.describe">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.Book.html#sofia_redux.visualization.models.mid_model.Book.describe">[docs]</a>
+    def describe(self) -&gt; Dict[str, Any]:
+        &quot;&quot;&quot;Describe the loaded data structure.&quot;&quot;&quot;
+        raise NotImplementedError</div>
+</div>
+
+
+
+<div class="viewcode-block" id="Order">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.Order.html#sofia_redux.visualization.models.mid_model.Order">[docs]</a>
+class Order(MidModel):
+    &quot;&quot;&quot;
+    Multi-spectrum data object.
+
+    Parameters
+    ----------
+    hdul : astropy.io.fits.HDUList
+        FITS HDU list to load.
+    filename : str
+        Filename associated with the FITS file.
+    number : int
+        Index number for the data object.
+    aperture : int, optional
+        Aperture number for the data object.
+    num_apertures : int, optional
+        Total number of apertures expected.
+    &quot;&quot;&quot;
+
+    def __init__(self, hdul: HL, filename: str,
+                 number: int, aperture: Optional[int] = None,
+                 num_apertures: Optional[int] = None) -&gt; None:
+        super().__init__(hdul, filename, number, aperture)
+        if aperture is not None:
+            self.name = f&#39;Order_{self.number + 1}.{self.aperture + 1}&#39;
+        else:
+            self.aperture = 0
+            self.name = f&#39;Order_{self.number + 1}&#39;
+
+        if len(hdul) &gt; 1:
+            self.load_split(hdul, filename, num_apertures)
+        else:
+            self.load_combined(hdul[0], filename)
+
+<div class="viewcode-block" id="Order.load_combined">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.Order.html#sofia_redux.visualization.models.mid_model.Order.load_combined">[docs]</a>
+    def load_combined(self, hdu: pf.ImageHDU, filename: str) -&gt; None:
+        &quot;&quot;&quot;
+        Load an Order that is combined in a single extension.
+
+        Assumes each row describes a separate property of the data.
+        The first row contains wavelength information, the second
+        contains the measured flux, the third contains the error on
+        the measured flux. The fourth row, if it exists, contains a
+        fractional atmospheric transmission spectrum, for reference.
+        The fifth row, if it exists, contains the instrument response.
+
+        Parameters
+        ----------
+        hdu : astropy.io.fits.HDU
+            An HDU object.
+        filename : str
+            Name of the FITS file.
+        &quot;&quot;&quot;
+        log.debug(f&#39;Load combined order from {filename}, &#39;
+                  f&#39;{hdu.name}&#39;)
+        fields = [&#39;wavepos&#39;, &#39;spectral_flux&#39;,
+                  &#39;spectral_error&#39;, &#39;transmission&#39;, &#39;response&#39;]
+        kinds = [&#39;wavelength&#39;, &#39;flux&#39;, &#39;flux&#39;, &#39;scale&#39;, &#39;response&#39;]
+        x_units = hdu.header.get(&#39;XUNITS&#39;)
+        y_units = hdu.header.get(&#39;YUNITS&#39;)
+        raw_units = hdu.header.get(&#39;RAWUNITS&#39;)
+        if raw_units is not None:
+            response = f&#39;{raw_units} / {y_units}&#39;
+        else:
+            response = &#39;Me / s / Jy&#39;
+        units = [x_units, y_units, y_units, None, response]
+        for (i, field), kind, unit in zip(enumerate(fields), kinds, units):
+            try:
+                if hdu.data.ndim == 2:
+                    data_ = hdu.data[i, :]
+                else:
+                    if self.number == 0:
+                        index = self.aperture
+                    else:
+                        index = self.number
+
+                    data_ = hdu.data[index, i, :]
+            except IndexError:
+                break
+            else:
+                self.data[field] = low_model.Spectrum(
+                    hdu, filename, data=data_, unit=unit,
+                    kind=kind, name=field)</div>
+
+
+<div class="viewcode-block" id="Order.load_split">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.Order.html#sofia_redux.visualization.models.mid_model.Order.load_split">[docs]</a>
+    def load_split(self, hdul: HL, filename: str,
+                   num_apertures: Optional[int] = None) -&gt; None:
+        &quot;&quot;&quot;
+        Load an Order that is split across multiple extensions.
+
+        All extensions in `hdul` whose data array only has one
+        dimension are loaded into a `Spectrum` object.
+
+        Parameters
+        ----------
+        hdul : astropy.io.fits.HDUList
+            List of HDU objects.
+        filename : str
+            Name of the FITS file.
+        num_apertures : int, optional
+            The number of expected apertures. If not provided,
+            only 1 aperture is expected.
+        &quot;&quot;&quot;
+        log.debug(f&#39;Load split order from {filename}&#39;)
+        correct_name = not any([&#39;spectral_flux&#39; in hdu.name.lower()
+                                for hdu in hdul])
+        for extension in hdul:
+            name = extension.name.lower()
+            if any([n in name for n in self.order_extensions]):
+                if correct_name:
+                    if &#39;spectral&#39; not in name:
+                        if &#39;flux_order&#39; in name:
+                            name = name.replace(&#39;flux&#39;, &#39;spectral_flux&#39;)
+                        elif &#39;error_order&#39; in name:
+                            name = name.replace(&#39;error&#39;, &#39;spectral_error&#39;)
+                else:
+                    image_names = [&#39;flux_order&#39;, &#39;error_order&#39;]
+                    if any([name.startswith(n) for n in image_names]):
+                        continue
+                if np.squeeze(extension.data).ndim == 1:
+                    self.data[name] = low_model.Spectrum(extension, filename)
+                elif extension.data.ndim == 2:
+                    try:
+                        if (&#39;transmission&#39; in name
+                                and num_apertures is not None):
+                            if extension.data.shape[0] != num_apertures:
+                                # Case of EXES data where each column in the
+                                # transmission data is a different
+                                # atmospheric species, not a different aperture
+                                # Use the first column, which is the
+                                # composite.
+                                index = 0
+                        elif self.aperture is not None:
+                            index = self.aperture
+                        else:
+                            index = self.number
+                        data_ = extension.data[index, :]
+                        self.data[name] = low_model.Spectrum(
+                            extension, filename, data=data_)
+                    except (IndexError, RuntimeError) as err:
+                        log.debug(f&#39;Loading split order encountered error: &#39;
+                                  f&#39;{err}&#39;)
+                        pass</div>
+
+
+<div class="viewcode-block" id="Order.retrieve">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.Order.html#sofia_redux.visualization.models.mid_model.Order.retrieve">[docs]</a>
+    def retrieve(self, field: str, level: str = &#39;raw&#39;
+                 ) -&gt; Optional[LowerModels]:
+        &quot;&quot;&quot;
+        Return raw data for a specified field.
+
+        Parameters
+        ----------
+        field : str
+            Name of field to pull from `self.data`.
+        level : {&#39;low&#39;, &#39;raw&#39;}
+            Determines the level of the data to return.
+            &#39;Low&#39; returns the Spectrum object and &#39;raw&#39;
+            will return the raw numeric data.
+
+        Returns
+        -------
+        data : low_model.LowModel or array-like
+            Retrieved raw data. Can be any subclass of
+            `low_model.LowModel`, a numpy array, or None
+        &quot;&quot;&quot;
+        key = [k for k in self.data.keys()
+               if field == k.split(&#39;_order_&#39;)[0]]
+        if len(key) == 0:
+            log.debug(f&#39;Field {field} not found in Order&#39;)
+            return None
+        elif len(key) &gt; 1:
+            log.debug(f&#39;Field {field} does not uniquely identify a &#39;
+                      f&#39;field in Order&#39;)
+            return None
+        else:
+            key = key[0]
+        if level == &#39;low&#39;:
+            return self.data[key]
+        else:
+            return self.data[key].retrieve()</div>
+
+
+<div class="viewcode-block" id="Order.describe">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.mid_model.Order.html#sofia_redux.visualization.models.mid_model.Order.describe">[docs]</a>
+    def describe(self) -&gt; Dict[str, Any]:
+        &quot;&quot;&quot;
+        Describe the loaded data structure.
+
+        Returns
+        -------
+        details : dict
+            A nested dictionary containing information for all fields.
+        &quot;&quot;&quot;
+        details = dict()
+        details[&#39;name&#39;] = self.name
+        details[&#39;fields&#39;] = dict()
+        for field, spectrum in self.data.items():
+            details[&#39;fields&#39;][field] = spectrum.enabled
+        return details</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.calibration.pipecal_photometry &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.calibration.pipecal_photometry</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Fit a source and perform aperture photometry.&quot;&quot;&quot;
+
+import warnings
+
+from astropy import log
+import numpy as np
+import photutils
+
+from sofia_redux.calibration.pipecal_fitpeak import pipecal_fitpeak
+from sofia_redux.calibration.pipecal_error import PipeCalError
+
+__all__ = [&#39;pipecal_photometry&#39;]
+
+
+<div class="viewcode-block" id="pipecal_photometry">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_photometry.pipecal_photometry.html#sofia_redux.calibration.pipecal_photometry.pipecal_photometry">[docs]</a>
+def pipecal_photometry(image, variance, srcpos=None,
+                       fitsize=138, stampsize=&#39;auto&#39;, fwhm=5.0,
+                       profile=&#39;moffat&#39;, aprad=12.0,
+                       skyrad=None, runits=&#39;Me/s&#39;,
+                       stamp_center=True, allow_badfit=False):
+
+    &quot;&quot;&quot;
+    Perform aperture photometry and profile fits on image data.
+
+    Procedure:
+        1. Take a small stamp image near the source position and fit a
+           profile to it to get a centroid position of the source. The
+           fit is performed by pipecal_fitpeak.
+        2. Refit a larger subimage (set by `fitsize`) with pipecal_fitpeak to
+           get fit parameters with associated errors.
+        3. Call photutils to perform aperture photometry at the centroid
+           position.
+        4. Return calculated values in list of dictionaries.
+
+    Parameters
+    ----------
+    image : array
+        2D image array containing an object to perform photometry on.
+    variance : array
+        2D variance array corresponding to image values.
+    srcpos : array-like, optional
+          Initial guess at source position (x,y), zero-indexed.
+          Defaults to the center of the image if not provided.
+    fitsize : int, optional
+        Size of subimage to fit.
+    stampsize : &#39;auto&#39;, int, or float, optional
+        Size of initial stamp, for peak location.  If &#39;auto&#39;, the
+        stamp will be derived from the fitsize.
+    fwhm : float, optional
+        Initial guess at PSF FWHM.
+    profile : {&#39;moffat&#39;, &#39;gaussian&#39;, &#39;lorentzian&#39;}, optional
+        Type of profile to fit to image.
+    aprad : float, optional
+        Aperture radius for aperture photometry.
+    skyrad : array-like, optional
+        Sky radii (inner, outer) for aperture photometry. Defaults
+        to [15.,25.] if not provided.
+    runits : string, optional
+        Raw data units, before flux calibration. Used in
+        comment strings for some output keywords.
+    stamp_center : bool, optional
+        If True, the initial centroid position will be adjusted by
+        the centroid in the stamp fit. This is usually desirable,
+        but may sometimes result in the fit being pulled away from
+        the intended target, in the case of crowded fields.  If
+        False, the starting source position is not adjusted by
+        the centroid in the stamp fit before doing the full image
+        profile fit.
+    allow_badfit : bool, optional
+        If False, failed profile fits will raise PipeCalErrors.
+        If True, an error will be logged, but an exception will not be
+        raised, and aperture photometry will still be attempted at
+        the initial source position.
+
+    Returns
+    -------
+    phot : list
+        List containing photometric measurements values. Each value
+        stored in a dictionary with fields &#39;key&#39;, &#39;value&#39;, and
+        &#39;comment&#39;. If the value has an associated error, it is stored
+        in &#39;value&#39; as a two-element array, where the first element is
+        the value and the second element is the error.
+
+    Raises
+    ------
+    PipeCalError
+        For any improperly set parameters or for failed fit.
+    &quot;&quot;&quot;
+
+    # Image dimensions:
+    if not isinstance(image, np.ndarray):
+        msg = &#39;Invalid image type&#39;
+        log.error(msg)
+        raise PipeCalError(msg)
+    elif len(image.shape) != 2:
+        msg = &#39;Image must be 2d array&#39;
+        log.error(msg)
+        raise PipeCalError(msg)
+    else:
+        max_row, max_col = image.shape
+
+    if not isinstance(variance, np.ndarray):
+        msg = &#39;Invalid variance type&#39;
+        log.error(msg)
+        raise PipeCalError(msg)
+    elif len(variance.shape) != 2:
+        msg = &#39;Variance must be 2d array&#39;
+        log.error(msg)
+        raise PipeCalError(msg)
+    elif variance.shape != image.shape:
+        msg = &#39;Variance must be same shape as image.&#39;
+        log.error(msg)
+        raise PipeCalError(msg)
+
+    # Check defaults:
+    if srcpos is None:
+        srcpos = [max_col / 2, max_row / 2]
+    try:
+        fitsize = int(fitsize)
+    except (ValueError, TypeError):
+        fitsize = 138
+    try:
+        fwhm = float(fwhm)
+    except (ValueError, TypeError):
+        fwhm = 5.0
+    try:
+        aprad = float(aprad)
+    except (ValueError, TypeError):
+        aprad = 12.0
+
+    runits = str(runits).strip()
+    profile = str(profile).strip().lower()
+    if profile.lower() not in [&#39;moffat&#39;, &#39;gaussian&#39;, &#39;lorentzian&#39;]:
+        msg = &#39;Invalid profile selection&#39;
+        log.error(msg)
+        raise PipeCalError(msg)
+
+    if skyrad is None:
+        skyrad = [15., 25.]
+    elif not hasattr(skyrad, &#39;__len__&#39;) or len(skyrad) != 2:
+        msg = &#39;Invalid sky radius&#39;
+        log.error(msg)
+        raise PipeCalError(msg)
+
+    # Set fit parameter defaults
+    if profile == &#39;gaussian&#39;:
+        factor = 2. * np.sqrt(2. * np.log(2.))
+    elif profile == &#39;lorentzian&#39;:
+        factor = 2.0
+    else:
+        factor = 2.0
+
+    # Take stamp
+    # Size is FWHM * 5, but no smaller than 20
+    # and no larger than fitsize
+    if stampsize == &#39;auto&#39;:
+        stampsize = min(max(fwhm * 5.0, 20), fitsize)
+    else:
+        try:
+            stampsize = float(stampsize)
+        except (ValueError, TypeError):
+            msg = &#39;Invalid stampsize. Should be &quot;auto&quot; or int/float.&#39;
+            log.error(msg)
+            raise PipeCalError(msg)
+    log.debug(&#39;Full fit size: {}&#39;.format(fitsize))
+    log.debug(&#39;Initial stamp size: {}&#39;.format(stampsize))
+
+    # column min, the left side of the stamp, must be between 0 and
+    # twice the stampsize from the right edge of the image
+    left = int(max(0, min(srcpos[0] - stampsize,
+                          max_col - 2 * stampsize)))
+
+    # column max, the right side of the stamp, must be before the
+    # right side of the image and is based on column min
+    right = int(min(max_col - 1, max(srcpos[0] + stampsize - 1,
+                                     left + 20)))
+
+    # row min, the bottom side of the stamp, must be between 0
+    # and twice the stampsize from the top of the image
+    bottom = int(max(0, min(srcpos[1] - stampsize,
+                            max_row - 2 * stampsize)))
+
+    # row max, the top side of the stamp, must be under the top side
+    # of the image and is based on row min
+    top = int(min(max_row - 1, max(srcpos[1] + stampsize - 1,
+                                   bottom + 20)))
+
+    # Select out the stamp
+    # Since Python is row-major:
+    stamp = image[bottom:top + 1, left:right + 1]
+    max_row_stamp, max_col_stamp = stamp.shape
+
+    # check for reasonable data
+    if np.sum(np.isfinite(stamp)) &lt; 3:
+        msg = &#39;Stamp image is empty&#39;
+        log.error(msg)
+        raise PipeCalError(msg) from None
+
+    # Find the location of the star relative to the stamp size
+    col_cen = srcpos[0] - left
+    row_cen = srcpos[1] - bottom
+
+    # Starting parameter
+    # baseline, peak, col-cent, row-cent,
+    # col-width, row-width, rotation angle, power law index
+    est = dict()
+    est[&#39;baseline&#39;] = np.nanmedian(stamp[np.isfinite(stamp)])
+    est[&#39;dpeak&#39;] = np.nanmax(stamp[np.isfinite(stamp)])
+    est[&#39;col_mean&#39;] = col_cen
+    est[&#39;row_mean&#39;] = row_cen
+    est[&#39;col_sigma&#39;] = fwhm / factor
+    est[&#39;row_sigma&#39;] = fwhm / factor
+    est[&#39;theta&#39;] = 0.
+    est[&#39;beta&#39;] = 3.
+
+    # Set up boundaries
+    bounds = dict()
+    bounds[&#39;baseline&#39;] = [-np.inf, np.inf]
+    bounds[&#39;dpeak&#39;] = [-np.inf, np.inf]
+    bounds[&#39;col_mean&#39;] = [0, max_col_stamp]
+    bounds[&#39;row_mean&#39;] = [0, max_row_stamp]
+    bounds[&#39;col_sigma&#39;] = [0, 2 * stampsize / factor]
+    bounds[&#39;row_sigma&#39;] = [0, 2 * stampsize / factor]
+    bounds[&#39;beta&#39;] = [2, 6]
+    bounds[&#39;theta&#39;] = [-np.pi / 2., np.pi / 2.]
+
+    # Fit peak
+    try:
+        fitpars, sigma, bestnorm = \
+            pipecal_fitpeak(stamp, estimates=est, bounds=bounds,
+                            profile=profile)
+    except (RuntimeError, ValueError):
+        msg = &#39;Unable to fit stamp&#39;
+        log.error(msg)
+        if allow_badfit:
+            fitpars = est.copy()
+        else:
+            raise PipeCalError(msg) from None
+
+    log.debug(f&#39;Stamp parameters: {fitpars}&#39;)
+
+    # update center position for fit image from stamp, if desired
+    # Not updating is sometimes helpful in crowded or
+    # high-background fields.
+    if stamp_center:
+        col_cen = int(round(fitpars[&#39;col_mean&#39;])) + left
+        row_cen = int(round(fitpars[&#39;row_mean&#39;])) + bottom
+    else:
+        col_cen += left
+        row_cen += bottom
+
+    # Refit with larger image (usually 138x138) pixels,
+    # centered on the location of the star found in the stamp,
+    # using the variance array to get error estimates
+    ncut = fitsize // 2
+    left = int(max(0, min(col_cen - ncut,
+                          max_col - 2 * ncut)))
+    right = int(min(max_col - 1,
+                    max(col_cen + ncut - 1, left + 20)))
+    bottom = int(max(0, min(row_cen - ncut,
+                            max_row - 2 * ncut)))
+    top = int(min(max_row - 1,
+                  max(row_cen + ncut - 1, bottom + 20)))
+
+    # Select out larger image
+    subim = image[bottom:top + 1, left:right + 1]
+    subvar = variance[bottom:top + 1, left:right + 1]
+    max_row_stamp, max_col_stamp = subim.shape
+
+    # Select out larger variance and convert to error
+    # Replace NaNs, infs, negative values with very small value
+    with warnings.catch_warnings():
+        warnings.simplefilter(&#39;ignore&#39;)
+        subvar[(subvar &lt;= 0) | (~np.isfinite(subvar))] = 1e-15
+    suberr = np.sqrt(subvar)
+
+    # Shift the centroid and bounds for the new subimage
+    col_cen -= left
+    row_cen -= bottom
+    est = fitpars
+    est[&#39;col_mean&#39;] = col_cen
+    est[&#39;row_mean&#39;] = row_cen
+    bounds[&#39;col_mean&#39;] = [0, max_col_stamp]
+    bounds[&#39;row_mean&#39;] = [0, max_row_stamp]
+    bounds[&#39;col_sigma&#39;] = [0, 2 * stampsize / factor]
+    bounds[&#39;row_sigma&#39;] = [0, 2 * stampsize / factor]
+
+    try:
+        fitpars, sigma, bestnorm = \
+            pipecal_fitpeak(subim, estimates=est, bounds=bounds,
+                            error=suberr, profile=profile)
+    except (RuntimeError, ValueError):
+        msg = &#39;Unable to fit subimage&#39;
+        log.error(msg)
+        badfit = True
+        if allow_badfit:
+            fitpars = est.copy()
+            sigma = est.copy()
+        else:
+            raise PipeCalError(msg) from None
+    else:
+        badfit = False
+
+    log.debug(f&#39;Fit parameters: {fitpars}&#39;)
+
+    # Check for a valid fit
+    num_finite = sum([np.isfinite(fitpars[i]) for i in fitpars])
+    if badfit or len(fitpars) &lt; 7 or num_finite != len(fitpars):
+        log.debug(&#39;Invalid fit&#39;)
+        # Invalid fit
+        # Set all values except centroid and peak to zero
+        for key in fitpars:
+            fitpars[key] = 0.
+            sigma[key] = 0.
+        fitpars[&#39;col_mean&#39;] = col_cen
+        fitpars[&#39;row_mean&#39;] = row_cen
+        try:
+            fitpars[&#39;dpeak&#39;] = subim[int(np.round(row_cen)),
+                                     int(np.round(col_cen))]
+        except IndexError:  # pragma: no cover
+            # catch for bad center definition
+            pass
+
+        factor = 1.
+        factor_err = 0.
+        pfactor = 1.
+        pfactor_err = 0.
+    else:
+        # Valid fit
+
+        # Calculate factors to account for power law
+        if profile == &#39;moffat&#39; and fitpars[&#39;beta&#39;] != 0:
+            # FWHM factor
+            n = fitpars[&#39;beta&#39;]
+            dn = sigma[&#39;beta&#39;]
+            n_1 = 1 / n
+            factor = 2 * np.sqrt(2**n_1 - 1)
+            # Error on f is (df/dn) * error on n
+            factor_err = (dn * (np.log(2) * 2**n_1)
+                          / (n**2 * np.sqrt(2**n_1 - 1)))
+            # Profile flux factor
+            pfactor = fitpars[&#39;beta&#39;] - 1
+            pfactor_err = sigma[&#39;beta&#39;]
+
+        else:
+            factor_err = 0.
+            pfactor = 1.
+            pfactor_err = 0
+
+    # Get values, calculate errors from fit parameters
+    # 0 = baseline
+    baseline = fitpars[&#39;baseline&#39;]
+    baseline_err = sigma[&#39;baseline&#39;]
+
+    # 1 = dpeak
+    peak = fitpars[&#39;dpeak&#39;]
+    peak_err = sigma[&#39;dpeak&#39;]
+
+    # 2 = x_sigma
+    fwhmx = fitpars[&#39;col_sigma&#39;] * factor
+    fwhmx_err = np.sqrt(factor**2 * sigma[&#39;col_sigma&#39;]**2
+                        + fitpars[&#39;col_sigma&#39;]**2 * factor_err**2)
+    # 3 = y_sigma
+    fwhmy = fitpars[&#39;row_sigma&#39;] * factor
+    fwhmy_err = np.sqrt(factor**2 * sigma[&#39;row_sigma&#39;]**2
+                        + fitpars[&#39;row_sigma&#39;]**2 * factor_err**2)
+
+    # 4 = x_mean; shift back to full image CS
+    starx = fitpars[&#39;col_mean&#39;] + left
+    starx_err = sigma[&#39;col_mean&#39;]
+
+    # 5 = y_mean; shift back to full image CS
+    stary = fitpars[&#39;row_mean&#39;] + bottom
+    stary_err = sigma[&#39;row_mean&#39;]
+
+    # Check the rotation angle, convert to degrees
+    # 6 = theta
+    angle = fitpars[&#39;theta&#39;] * 180. / np.pi
+    if fwhmx &lt; fwhmy:
+        if angle &lt; 0:
+            angle += 90.
+        else:
+            angle -= 90.
+    if angle &lt; 0:
+        angle += 180.
+    angle_err = sigma[&#39;theta&#39;] * 180. / np.pi
+
+    # 7 = beta
+    try:
+        plaw = fitpars[&#39;beta&#39;]
+        plaw_err = sigma[&#39;beta&#39;]
+    except KeyError:
+        plaw = 0.
+        plaw_err = 0.
+
+    # Propagate the error using:
+    # var(a*b) = (var(a)*b**2) + (var(b)*a**2)
+    # var(a/b) = (var(a)/b**2) + (var(b)*a**2/b**4)
+    profile_flux = np.pi * (fitpars[&#39;dpeak&#39;]
+                            * fitpars[&#39;col_sigma&#39;]
+                            * fitpars[&#39;row_sigma&#39;]) / pfactor
+    flux_err_1 = (sigma[&#39;dpeak&#39;]**2
+                  * fitpars[&#39;col_sigma&#39;]**2
+                  * fitpars[&#39;row_sigma&#39;]**2 / pfactor**2)
+    flux_err_2 = (sigma[&#39;col_sigma&#39;]**2
+                  * fitpars[&#39;dpeak&#39;]**2
+                  * fitpars[&#39;row_sigma&#39;]**2 / pfactor**2)
+    flux_err_3 = (sigma[&#39;row_sigma&#39;]**2
+                  * fitpars[&#39;dpeak&#39;]**2
+                  * fitpars[&#39;col_sigma&#39;]**2 / pfactor**2)
+    flux_err_4 = (pfactor_err**2
+                  * fitpars[&#39;dpeak&#39;]**2
+                  * fitpars[&#39;col_sigma&#39;]**2
+                  * fitpars[&#39;row_sigma&#39;]**2 / pfactor**4)
+
+    profile_flux_err = np.pi * np.sqrt(flux_err_1 + flux_err_2
+                                       + flux_err_3 + flux_err_4)
+
+    # Do aperture photometry
+
+    # set up source and sky apertures
+    src_aper = photutils.CircularAperture(
+        [starx, stary], r=aprad)
+    try:
+        sky_aper = photutils.CircularAnnulus(
+            [starx, stary], r_in=skyrad[0], r_out=skyrad[1])
+    except ValueError:
+        # invalid sky radii passed: ignore sky extraction
+        sky_aper = None
+
+    # make a mask to ignore NaN values
+    mask = np.zeros_like(image, dtype=bool)
+    mask[~np.isfinite(image)] = True
+
+    # extract source flux
+    raw_table = photutils.aperture_photometry(
+        image, src_aper, mask=mask)
+
+    # extract variance on the source flux
+    var_table = photutils.aperture_photometry(
+        variance, src_aper, mask=mask)
+
+    # extract sky background flux
+    if sky_aper is not None:
+        bg_table = photutils.aperture_photometry(
+            image, sky_aper, mask=mask)
+
+        # extract variance on the sky flux
+        varbg_table = photutils.aperture_photometry(
+            variance, sky_aper, mask=mask)
+
+        # scale background flux to source aperture area
+        sky_area = sky_aper.area
+        src_area = src_aper.area
+        bg_sum = bg_table[&#39;aperture_sum&#39;] * src_area / sky_area
+        varsky = varbg_table[&#39;aperture_sum&#39;] * (src_area / sky_area)**2
+
+        # store sky value as average per pixel
+        sky = float(bg_sum / sky_area)
+        sky_err = np.sqrt(float(varsky / sky_area ** 2))
+
+        # get the standard deviation of the flux in the
+        # background region
+        sky_mask = sky_aper.to_mask(method=&#39;center&#39;)
+        sky_flux = sky_mask.multiply(image)
+        try:
+            sky_std = np.nanstd(sky_flux[sky_flux != 0])
+        except (TypeError, ValueError, IndexError):  # pragma: no cover
+            sky_std = 0.0
+    else:
+        bg_sum = 0.0
+        varsky = 0.0
+        sky = 0.0
+        sky_err = 0.0
+        sky_std = 0.0
+
+    # subtract background from source flux
+    if not np.isfinite(float(bg_sum)):
+        bg_sum = 0.0
+    final_sum = raw_table[&#39;aperture_sum&#39;] - bg_sum
+
+    # variance is summed over the aperture
+    varflux = var_table[&#39;aperture_sum&#39;]
+
+    # propagate sky error to subtracted source error
+    varflux += varsky
+
+    # final source flux and associated error
+    flux = float(final_sum)
+    flux_err = np.sqrt(float(varflux))
+
+    if not np.isfinite(flux):
+        flux = 0.
+    if not np.isfinite(sky):
+        sky = 0.
+    if not np.isfinite(flux_err):
+        flux_err = 0.
+    if not np.isfinite(sky_err):
+        sky_err = 0.
+
+    # Compile results
+    phot = list()
+    phot.append({&#39;key&#39;: &#39;PHOTPROF&#39;,
+                 &#39;value&#39;: profile.upper(),
+                 &#39;comment&#39;: &#39;Profile fit type for photometry&#39;})
+    phot.append({&#39;key&#39;: &#39;PHOTIMSZ&#39;,
+                 &#39;value&#39;: min(max_row_stamp, max_col_stamp),
+                 &#39;comment&#39;: &#39;Sub-image size for photometry&#39;})
+    phot.append({&#39;key&#39;: &#39;PHOTAPER&#39;,
+                 &#39;value&#39;: aprad,
+                 &#39;comment&#39;: &#39;Aperture radius for photometry&#39;})
+    phot.append({&#39;key&#39;: &#39;PHOTSKAP&#39;,
+                 &#39;value&#39;: &#39;{0}, {1}&#39;.format(skyrad[0], skyrad[1]),
+                 &#39;comment&#39;: &#39;Sky aperture radii for photometry (pix)&#39;})
+    phot.append({&#39;key&#39;: &#39;STCENTX&#39;,
+                 &#39;value&#39;: [starx, starx_err],
+                 &#39;comment&#39;: &#39;Source centroid x-value (pix)&#39;})
+    phot.append({&#39;key&#39;: &#39;STCENTY&#39;,
+                 &#39;value&#39;: [stary, stary_err],
+                 &#39;comment&#39;: &#39;Source centroid y-value (pix)&#39;})
+    phot.append({&#39;key&#39;: &#39;STPEAK&#39;,
+                 &#39;value&#39;: [peak, peak_err],
+                 &#39;comment&#39;: &#39;Source fit peak value ({0})&#39;.format(runits)})
+    phot.append({&#39;key&#39;: &#39;STBKG&#39;,
+                 &#39;value&#39;: [baseline, baseline_err],
+                 &#39;comment&#39;: &#39;Source fit background &#39;
+                            &#39;level ({0})&#39;.format(runits)})
+    phot.append({&#39;key&#39;: &#39;STFWHMX&#39;,
+                 &#39;value&#39;: [fwhmy, fwhmy_err],
+                 &#39;comment&#39;: &#39;Source fit FWHM in x-direction (pix)&#39;})
+    phot.append({&#39;key&#39;: &#39;STFWHMY&#39;,
+                 &#39;value&#39;: [fwhmx, fwhmx_err],
+                 &#39;comment&#39;: &#39;Source fit FWHM in y-direction (pix)&#39;})
+    phot.append({&#39;key&#39;: &#39;STANGLE&#39;,
+                 &#39;value&#39;: [angle, angle_err],
+                 &#39;comment&#39;: &#39;Source fit position angle (deg)&#39;})
+    phot.append({&#39;key&#39;: &#39;STPWLAW&#39;,
+                 &#39;value&#39;: [plaw, plaw_err],
+                 &#39;comment&#39;: &#39;Source fit power law index&#39;})
+    phot.append({&#39;key&#39;: &#39;STPRFLX&#39;,
+                 &#39;value&#39;: [profile_flux, profile_flux_err],
+                 &#39;comment&#39;: &#39;Source flux from profile ({0})&#39;.format(runits)})
+    phot.append({&#39;key&#39;: &#39;STAPFLX&#39;,
+                 &#39;value&#39;: [flux, flux_err],
+                 &#39;comment&#39;: (&#39;Source flux from aper phot &#39;
+                             &#39;({0})&#39;.format(runits))})
+    phot.append({&#39;key&#39;: &#39;STAPSKY&#39;,
+                 &#39;value&#39;: [sky, sky_err],
+                 &#39;comment&#39;: (&#39;Sky flux from photometry &#39;
+                             &#39;({0}/pix)&#39;.format(runits))})
+    phot.append({&#39;key&#39;: &#39;STAPSSTD&#39;,
+                 &#39;value&#39;: sky_std,
+                 &#39;comment&#39;: (&#39;Sky flux std dev &#39;
+                             &#39;({0}/pix)&#39;.format(runits))})
+    return phot</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

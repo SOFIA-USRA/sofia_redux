@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.earthvelocity &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.earthvelocity</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import astropy.units as u
+from astropy.coordinates import (
+    SkyCoord, Angle, EarthLocation, Latitude, Longitude)
+from astropy.coordinates.representation import CartesianRepresentation
+from astropy.time import Time
+from astropy.coordinates import get_body_barycentric_posvel
+
+__all__ = [&#39;cartesian_lsr&#39;, &#39;cartesian_helio&#39;, &#39;earthvelocity&#39;]
+
+
+<div class="viewcode-block" id="cartesian_lsr">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.earthvelocity.cartesian_lsr.html#sofia_redux.spectroscopy.earthvelocity.cartesian_lsr">[docs]</a>
+def cartesian_lsr(definition=&#39;kinematic&#39;):
+    &quot;&quot;&quot;
+    Find the radial LSR velocity towards sky coordinates.
+
+    The Local Standard of Rest allows for two different definitions:
+
+        - &#39;kinematic&#39; uses 20 km/s towards 18:00:00, +30:00:00 (&#39;J1900&#39;)
+        - &#39;dynamical&#39; uses the IAU definition of 9, 12, and 7 km/s along
+          the x, y, and z axis in Galactic cartesian coordinates.
+
+    Parameters
+    ----------
+    definition : str, optional
+        One of {&#39;kinematic&#39;, &#39;dynamical&#39;}
+
+    Returns
+    -------
+    lsr_vel : CartesianRepresentation
+        Cartesian representation of the LSR velocity in km / s
+    &quot;&quot;&quot;
+    if definition == &#39;kinematic&#39;:
+        lsr_vel = SkyCoord(18 * u.Unit(&#39;hourangle&#39;), 30 * u.Unit(&#39;deg&#39;),
+                           frame=&#39;fk5&#39;, equinox=&#39;J1900&#39;)
+        lsr_vel = lsr_vel.icrs.represent_as(&#39;unitspherical&#39;).to_cartesian()
+        lsr_vel *= 20 * u.Unit(&#39;km/s&#39;)
+    elif definition == &#39;dynamical&#39;:
+        lsr_vel = CartesianRepresentation([9, 12, 7]) * u.Unit(&#39;km/s&#39;)
+    else:
+        raise ValueError(&quot;invalid LSR definition: %s&quot; % definition)
+    return lsr_vel</div>
+
+
+
+<div class="viewcode-block" id="cartesian_helio">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.earthvelocity.cartesian_helio.html#sofia_redux.spectroscopy.earthvelocity.cartesian_helio">[docs]</a>
+def cartesian_helio(time, center=&#39;barycentric&#39;, location=None):
+    &quot;&quot;&quot;
+    Calculate the Cartesian velocity of the Sun.
+
+    Parameters
+    ----------
+    time : str or float or astropy.time.Time
+        Date and time of observation.  By default this is set to isot
+        (&#39;2000-01-01T00:00:00.000&#39;) in UTC.
+    center : str, optional
+        One of {&#39;heliocentric&#39;, &#39;barycentric&#39;}.  Compute the heliocentric
+        or barycentric velocity which respectively define the Sun or the
+        Sun&#39;s barycenter as the center of the Solar System.
+    location : EarthLocation
+        The location of the observation.
+
+    Returns
+    -------
+    vhelio : CartesianRepresentation
+        Cartesian representation of the velocity of the center of the
+        Solar System.
+    &quot;&quot;&quot;
+    vhelio = get_body_barycentric_posvel(&#39;earth&#39;, time)[1]
+    if center == &#39;barycentric&#39;:
+        pass
+    elif center == &#39;heliocentric&#39;:
+        vhelio -= get_body_barycentric_posvel(&#39;sun&#39;, time)[1]
+    else:
+        raise ValueError(&quot;unknown velocity correction: %s&quot; % center)
+
+    # Add rotational velocity if we have a location
+    if isinstance(location, EarthLocation):
+        vhelio += location.get_gcrs_posvel(time)[1]
+
+    return vhelio</div>
+
+
+
+def parse_inputs(ra, dec, time=None, time_format=&#39;isot&#39;, time_scale=&#39;utc&#39;,
+                 lat=None, lon=None, height=None,
+                 equinox=&#39;J2000&#39;, frame=&#39;FK5&#39;):
+    &quot;&quot;&quot;
+    Parse arguments and parameters into SkyCoord.
+
+    Parameters
+    ----------
+    ra : str or float or Angle or array_like
+    dec : str or float or Angle or array_like
+    time : str or float or Time or array_like, optional
+    time_format : str, optional
+    time_scale : str, optional
+    lat : str or float or Latitude or array_like, optional
+    lon : str or float or Longitude or array_like, optional
+    height : str or float or Quantity, optional
+    equinox : str, optional
+    frame : str, optional
+
+    Returns
+    -------
+    coordinates : SkyCoord
+    &quot;&quot;&quot;
+
+    ra = ra.to(&#39;hourangle&#39;) if isinstance(ra, Angle) else \
+        Angle(ra, unit=&#39;hourangle&#39;)
+    dec = dec.to(&#39;deg&#39;) if isinstance(dec, Angle) \
+        else Angle(dec, unit=&#39;deg&#39;)
+    time = Time(time, format=time_format, scale=time_scale)
+
+    if None not in [lat, lon, height]:
+        lat = lat.to(&#39;deg&#39;) if isinstance(lat, Latitude) else \
+            Latitude(lat, unit=&#39;deg&#39;)
+        lon = lon.to(&#39;deg&#39;) if isinstance(lon, Longitude) else \
+            Longitude(lon, unit=&#39;deg&#39;)
+        height = height.to(&#39;m&#39;) if isinstance(height, u.Quantity) else \
+            height * u.Unit(&#39;m&#39;)
+        location = EarthLocation(lat=lat, lon=lon, height=height)
+    else:
+        location = None
+
+    coords = SkyCoord(ra=ra, dec=dec, obstime=time, location=location,
+                      equinox=str(equinox).strip().lower(),
+                      frame=str(frame).strip().lower())
+    return coords
+
+
+<div class="viewcode-block" id="earthvelocity">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.earthvelocity.earthvelocity.html#sofia_redux.spectroscopy.earthvelocity.earthvelocity">[docs]</a>
+def earthvelocity(ra, dec, time, equinox=&#39;J2000&#39;, frame=&#39;FK5&#39;,
+                  time_format=None, time_scale=None,
+                  lat=None, lon=None, height=0.0,
+                  center=&#39;heliocentric&#39;, definition=&#39;kinematic&#39;):
+    &quot;&quot;&quot;
+    Provide velocities of the Earth towards a celestial position.
+
+    The Local Standard of Rest allows for two different definitions
+    defined by the `definition` keyword:
+
+        - &#39;kinematic&#39; uses 20 km/s towards 18:00:00, +30:00:00 (&#39;J1900&#39;)
+        - &#39;dynamical&#39; uses the IAU definition of 9, 12, and 7 km/s along
+          the x, y, and z axis in Galactic cartesian coordinates.
+
+    Parameters
+    ----------
+    ra : str or float or Angle or array_like
+        The right ascension[s] of the position[s].  Default unit is hourangle.
+    dec : str or float or Angle or array_like
+        The declination[s] of the position[s].  Default unit is degrees.
+    time : str or float or Time or array_like
+        Time of the observation.
+    equinox : str, optional
+        Coordinate frame equinox
+    frame : str, optional
+        Type of coordinate frame represented.
+    time_format : str, optional
+        Format of the input `time`.  See `astropy.time` for available
+        formats.
+    time_scale : str, optional
+        Time scale of `time`.  See `astropy.time` for available scales.
+    lat : str or float or Latitude or array_like, optional
+        The latitude of the observation.  Default unit is degrees.
+    lon : str or float or Longitude or array_like, optional
+        The longitude of the observation.  Default unit is degrees.
+    height : str or float or Quantity, optional
+        The height of the observation.  Default unit is meters.
+    center : str, optional
+        Defines the center of the Solar System.  One of
+        {&#39;heliocentric&#39;, &#39;barycentric&#39;}.
+    definition : str, optional
+        Defines the Local Standard of Rest (LSR) definition as described
+        above.  One of {&#39;kinematic&#39;, &#39;dynamical&#39;}.
+
+    Returns
+    -------
+    velocities : dict
+        `vhelio` -&gt; Velocity of the Earth wrt the Sun towards (ra, dec)
+        &#39;vsun&#39; -&gt; Velocity of the Solar motion wrt LSR towards (ra, dec)
+        &#39;vlsr&#39; -&gt; Net radial velocity of the Earth wrt LSR towards (ra, dec)
+
+    Note if arrays were passed in, then arrays will be passed out.  However,
+    all values will be astropy.units.Unit.Quantity with units in km /s.
+    &quot;&quot;&quot;
+    sc = parse_inputs(ra, dec, time=time, lat=lat, lon=lon, height=height,
+                      equinox=equinox, frame=frame, time_format=time_format,
+                      time_scale=time_scale)
+
+    icrs = sc.icrs.represent_as(&#39;unitspherical&#39;).to_cartesian()
+
+    if lat is None or lon is None:
+        # Cartesian earth/sun velocity from position velocities
+        vhelio = cartesian_helio(sc.obstime, location=sc.location,
+                                 center=center)
+        vhelio = icrs.dot(vhelio).to(&#39;km/s&#39;)
+    else:
+        # more accurate version including relativistic effects
+        try:
+            vhelio = sc.radial_velocity_correction(kind=center).to(&#39;km/s&#39;)
+        except ValueError as err:
+            log.warning(&#39;Error encountered in radial velocity correction; &#39;
+                        &#39;attempting offline calculation.&#39;)
+            log.debug(f&#39;Error from astropy: {str(err)}&#39;)
+            log.warning(&#39;Correction value may not be accurate.&#39;)
+            from astropy.utils.iers import iers
+            with iers.conf.set_temp(&#39;auto_max_age&#39;, None):
+                vhelio = sc.radial_velocity_correction(kind=center).to(&#39;km/s&#39;)
+
+    vlsr = cartesian_lsr(definition=definition)
+    vsun = icrs.dot(vlsr).to(&#39;km/s&#39;)
+    return {&#39;vhelio&#39;: vhelio, &#39;vsun&#39;: vsun, &#39;vlsr&#39;: vsun + vhelio}</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

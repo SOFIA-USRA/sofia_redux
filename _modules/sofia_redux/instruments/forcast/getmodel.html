@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.getmodel &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.getmodel</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import glob
+import os
+import re
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.toolkit.utilities.fits import goodfile, gethdul, hdinsert
+from sofia_redux.spectroscopy.smoothres import smoothres
+import sofia_redux.instruments.forcast as drip
+
+__all__ = [&#39;clear_model_cache&#39;, &#39;get_model_from_cache&#39;,
+           &#39;store_model_in_cache&#39;, &#39;get_model&#39;]
+
+__model_cache = {}
+
+
+<div class="viewcode-block" id="clear_model_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.getmodel.clear_model_cache.html#sofia_redux.instruments.forcast.getmodel.clear_model_cache">[docs]</a>
+def clear_model_cache():
+    &quot;&quot;&quot;
+    Clear all data from the model cache.
+    &quot;&quot;&quot;
+    global __model_cache
+    __model_cache = {}</div>
+
+
+
+<div class="viewcode-block" id="get_model_from_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.getmodel.get_model_from_cache.html#sofia_redux.instruments.forcast.getmodel.get_model_from_cache">[docs]</a>
+def get_model_from_cache(modelfile, resolution):
+    &quot;&quot;&quot;
+    Retrieves model data from the model cache.
+
+    Checks to see if the file still exists, can be read, and has not
+    been altered since last time.  If the file has changed, it will be
+    deleted from the cache so that it can be re-read.
+
+    Parameters
+    ----------
+    modelfile : str
+        File path to the model file.
+    resolution : float
+        Spectral resolution used for smoothing.
+
+    Returns
+    -------
+    filename, wave, unsmoothed, smoothed
+        filename : str
+            Used to update ATRNFILE in FITS headers.
+        wave : numpy.ndarray
+            (nwave,) array of wavelengths.
+        unsmoothed : numpy.ndarray
+            (nwave,) array containing the model data from file
+        smoothed : numpy.ndarray
+            (nwave,) array containing the smoothed model data
+    &quot;&quot;&quot;
+    global __model_cache
+
+    key = modelfile, int(resolution)
+
+    if key not in __model_cache:
+        return
+
+    if not goodfile(modelfile):
+        try:
+            del __model_cache[key]
+        except KeyError:   # pragma: no cover
+            # could happen in race conditions, working in parallel
+            pass
+        return
+
+    modtime = str(os.path.getmtime(modelfile))
+    if modtime not in __model_cache.get(key, {}):
+        return
+
+    log.debug(&quot;Retrieving model data from cache (%s, resolution %s) &quot; % key)
+    return __model_cache.get(key, {}).get(modtime)</div>
+
+
+
+<div class="viewcode-block" id="store_model_in_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.getmodel.store_model_in_cache.html#sofia_redux.instruments.forcast.getmodel.store_model_in_cache">[docs]</a>
+def store_model_in_cache(modelfile, resolution, filename, wave,
+                         unsmoothed, smoothed):
+    &quot;&quot;&quot;
+    Store model data in the model cache.
+
+    Parameters
+    ----------
+    modelfile : str
+        File path to the model file
+    resolution : float
+        Spectral resolution used for smoothing.
+    filename : str
+        Used to update ATRNFILE in FITS headers.
+    wave : numpy.ndarray
+        (nwave,) array of wavelengths.
+    unsmoothed : numpy.ndarray
+        (nwave,) array containing the model data from file
+    smoothed : numpy.ndarray
+        (nwave,) array containing the smoothed model data
+
+    &quot;&quot;&quot;
+    global __model_cache
+    key = modelfile, int(resolution)
+    log.debug(&quot;Storing model data in cache (%s, resolution %s)&quot; % key)
+    __model_cache[key] = {}
+    modtime = str(os.path.getmtime(modelfile))
+    __model_cache[key][modtime] = (
+        filename, wave, unsmoothed, smoothed)</div>
+
+
+
+<div class="viewcode-block" id="get_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.getmodel.get_model.html#sofia_redux.instruments.forcast.getmodel.get_model">[docs]</a>
+def get_model(header, resolution, filename=None,
+              get_unsmoothed=False, model_dir=None):
+    &quot;&quot;&quot;
+    Retrieve reference standard model data.
+
+    Model files in the data/model_files directory should be named
+    according to the object and date to which they apply, as:
+
+        [object]_[YYYYMMDD(HH)]_model.fits
+
+    The date may be omitted, if the model applies to all dates.
+    For example, the file generated for Ceres on Jan. 14 2020
+    should be named:
+
+        ceres_20200114_model.fits
+
+    The procedure is:
+
+        1. Identify model file by object name and date.
+        2. Read model data from file and smooth to expected spectral
+           resolution.
+        3. Store in cache and return data array.
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+        ATRNFILE keyword is written to the provided FITS header,
+        containing the name of the model file used.
+    resolution : float
+        Spectral resolution to which model data should be smoothed.
+    filename : str, optional
+        Model file to be used.  If not provided,
+        a default file will be retrieved from the data/grism/standard_models
+        directory.  The file with a matching object name and the closest
+        date will be used.
+    get_unsmoothed : bool, optional
+        If True, return the unsmoothed model data with original
+        wavelength array in addition to the smoothed array.
+    model_dir : str, optional
+        Path to a directory containing model reference FITS files.
+        If not provided, the default set of files packaged with the
+        pipeline will be used.
+
+    Returns
+    -------
+    model : numpy.ndarray
+        A (2, nw) array containing wavelengths and model data.
+    unsmoothed : numpy.ndarray, optional
+        A (2, nw) array containing wavelengths and unsmoothed
+        model data, returned only if get_unsmoothed is set.
+    &quot;&quot;&quot;
+    if filename is not None:
+        if not goodfile(filename, verbose=True):
+            log.warning(&#39;File {} not found; &#39;
+                        &#39;retrieving default&#39;.format(filename))
+            filename = None
+    if filename is None:
+        if not isinstance(header, fits.header.Header):
+            log.error(&quot;Invalid header&quot;)
+            return
+
+        # get standardized object name
+        objname = str(header.get(&#39;OBJECT&#39;, &#39;UNKNOWN&#39;)).lower()
+        objname = re.sub(r&#39;[ _\-@]|jpl&#39;, &#39;&#39;, objname)
+
+        # get YYYYMMDDHH date number
+        date = header.get(&#39;DATE-OBS&#39;, &#39;&#39;).replace(&#39;T&#39;, &#39; &#39;)
+        date = date.replace(&#39;-&#39;, &#39; &#39;).replace(&#39;:&#39;, &#39; &#39;)
+        date = date.split()
+        dateobs = 9999999999
+        if len(date) &gt;= 4:
+            try:
+                dateobs = int(&#39;&#39;.join(date[0:4]))
+            except ValueError:
+                pass
+        elif len(date) &gt;= 3:
+            try:
+                dateobs = int(&#39;&#39;.join(date[0:3]) + &#39;00&#39;)
+            except ValueError:
+                pass
+
+        log.debug(&#39;Object, date: {} {}&#39;.format(objname, dateobs))
+
+        if model_dir is not None:
+            if not os.path.isdir(str(model_dir)):
+                log.warning(&#39;Cannot find model directory: %s&#39; % model_dir)
+                log.warning(&#39;Using default model set.&#39;)
+                model_dir = None
+        if model_dir is None:
+            model_dir = os.path.join(os.path.dirname(drip.__file__),
+                                     &#39;data&#39;, &#39;grism&#39;, &#39;standard_models&#39;)
+
+        model_files = glob.glob(os.path.join(model_dir, &#39;*fits&#39;))
+        regex = re.compile(r&#39;^([0-9A-Za-z]+)_?([0-9]{8,10})?.*\.fits$&#39;)
+
+        minval = None
+        for f in model_files:
+            match = regex.match(os.path.basename(f))
+            if match is not None:
+                stdname = str(match.group(1)).lower()
+
+                # match if standard name is contained in object name
+                if stdname not in objname:
+                    continue
+
+                if match.group(2) is None:
+                    stddate = dateobs
+                else:
+                    stddate = match.group(2)
+                    if len(stddate) &lt; 10:
+                        stddate = int(stddate[:9] + &#39;00&#39;)
+                    else:
+                        stddate = int(stddate[:11])
+
+                # keep closest date
+                val = np.abs(dateobs - stddate)
+                if minval is None or val &lt; minval:
+                    minval, filename = val, f
+
+    if not isinstance(filename, str):
+        log.error(&quot;No model file found&quot;)
+        return
+    log.debug(&quot;Using model file %s&quot; % filename)
+
+    # Read the model data from cache if possible
+    modeldata = get_model_from_cache(filename, resolution)
+    if modeldata is not None:
+        modelfile, wave, unsmoothed, smoothed = modeldata
+    else:
+        hdul = gethdul(filename, verbose=True)
+        if hdul is None or hdul[0].data is None:
+            log.error(&quot;Invalid data in model file %s&quot; % filename)
+            return
+        data = hdul[0].data
+        wave = data[0]
+        unsmoothed = data[1]
+        smoothed = smoothres(data[0], data[1], resolution)
+        modelfile = os.path.basename(filename)
+        store_model_in_cache(filename, resolution, modelfile,
+                             data[0], data[1], smoothed)
+
+    hdinsert(header, &#39;MODLFILE&#39;, modelfile)
+
+    if not get_unsmoothed:
+        return np.vstack((wave, smoothed))
+    else:
+        return np.vstack((wave, smoothed)), np.vstack((wave, unsmoothed))</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

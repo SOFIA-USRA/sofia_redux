@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepscanmapflat &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepscanmapflat</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Scan flat field generation pipeline step.&quot;&quot;&quot;
+
+import os
+import warnings
+
+from astropy import log
+
+from sofia_redux.instruments.hawc.datafits import DataFits
+from sofia_redux.instruments.hawc.stepparent import StepParent
+from sofia_redux.instruments.hawc.steps.stepscanmap import StepScanMap
+from sofia_redux.scan.reduction.reduction import Reduction
+
+
+__all__ = [&#39;StepScanMapFlat&#39;]
+
+
+<div class="viewcode-block" id="StepScanMapFlat">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepscanmapflat.StepScanMapFlat.html#sofia_redux.instruments.hawc.steps.stepscanmapflat.StepScanMapFlat">[docs]</a>
+class StepScanMapFlat(StepParent):
+    &quot;&quot;&quot;
+    Generate a flat field from scanning data.
+
+    This step calls scan map with special parameters to produce a flat
+    field from a scanning observation of a bright source. Additional
+    options for the scan map algorithm may be passed in the
+    &#39;options&#39; parameter.
+
+    Input data for this step is raw HAWC data FITS files.
+
+    Output from this step is a single output DataFits,
+    with 4 image planes (HDUs): R ARRAY GAIN, T ARRAY GAIN, R BAD PIXEL MASK,
+    and T BAD PIXEL MASK.
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepScanMapFlat.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepscanmapflat.StepScanMapFlat.html#sofia_redux.instruments.hawc.steps.stepscanmapflat.StepScanMapFlat.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;scanmapflat&#39;, and are named with
+        the step abbreviation &#39;SFL&#39;.
+
+        Parameters defined for this step are:
+
+        options : str
+            Command-line options to pass to scan map.
+        use_frames : str
+            Frames to use from the reduction. Specify a particular
+            range, as &#39;400:-400&#39; or &#39;400:1000&#39;.
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;scanmapflat&#39;
+        self.description = &#39;Make Scan Flat&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;sfl&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+
+        # Append parameters
+        self.paramlist.append([&#39;scanmappath&#39;, &#39;.&#39;,
+                               &#39;Path to the scan map installation&#39;])
+        self.paramlist.append([&#39;options&#39;, &#39;&#39;,
+                               &#39;Command line options for scan map&#39;])
+        self.paramlist.append([&#39;use_frames&#39;, &#39;&#39;,
+                               &quot;Frames to use from reduction. &quot;
+                               &quot;Specify a particular range, as &quot;
+                               &quot;&#39;400:-400&#39;, or &#39;400:1000&#39;.&quot;])</div>
+
+
+    # The following comment is for PyCharm:
+    #   allow scanmap command list to be assembled
+    #   without complaining -- it&#39;s more readable that way.
+    #
+    # noinspection PyListCreation
+<div class="viewcode-block" id="StepScanMapFlat.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepscanmapflat.StepScanMapFlat.html#sofia_redux.instruments.hawc.steps.stepscanmapflat.StepScanMapFlat.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        This step is run as a single-in single-out (SISO) step:
+        self.datain should be a DataFits, and output
+        will also be a DataFits, stored in self.dataout.
+
+        The process is:
+
+        1. Assemble the scan map command from input parameters.
+        2. Call scan map as a subprocess.
+        3. Read scan map output from disk and update headers as
+           necessary.
+
+        &quot;&quot;&quot;
+        # collect input options in dict
+        kwargs = {}
+        options = {}
+
+        outpath = os.path.dirname(self.datain.filename)
+        kwargs[&#39;outpath&#39;] = outpath
+
+        # output basename
+        outname = os.path.basename(self.datain.filenamebegin
+                                   + self.procname.upper()
+                                   + self.datain.filenameend)
+        kwargs[&#39;name&#39;] = outname
+
+        # Add all subarrays
+        kwargs[&#39;subarray&#39;] = &#39;R0,T0,R1&#39;
+        kwargs[&#39;lock&#39;] = &#39;subarray&#39;
+
+        # Add frame clipping if necessary
+        use_frames = str(self.getarg(&#39;use_frames&#39;)).strip()
+        use_frames = StepScanMap.check_use_frames([self.datain], use_frames)
+        if use_frames != &#39;&#39;:
+            kwargs[&#39;frames&#39;] = use_frames
+
+        # Add flat field and output options
+        kwargs[&#39;source&#39;] = {&#39;flatfield&#39;: True}
+        kwargs[&#39;write&#39;] = {&#39;source&#39;: False,
+                           &#39;flatfield&#39;: {&#39;value&#39;: True,
+                                         &#39;name&#39;: outname}}
+        flatname = os.path.join(outpath, outname)
+
+        # add additional options from parameters at end,
+        # so they can override any defaults set by the above
+        additional = str(self.getarg(&#39;options&#39;)).strip()
+        if additional != &#39;&#39;:
+            all_val = additional.split()
+            for val in all_val:
+                try:
+                    k, v = val.split(&#39;=&#39;)
+                except (IndexError, ValueError, TypeError):
+                    pass
+                else:
+                    options[k] = v
+        kwargs[&#39;options&#39;] = options
+
+        # get input file name
+        if os.path.exists(self.datain.filename):
+            infile = self.datain.filename
+        else:
+            rawname = self.datain.rawname
+            if os.path.exists(rawname):
+                infile = rawname
+
+        # log input
+        log.debug(f&#39;All provided options: {kwargs}&#39;)
+        log.debug(f&#39;Input file: {infile}&#39;)
+
+        # run the reduction
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            reduction = Reduction(&#39;hawc_plus&#39;)
+            reduction.run(infile, **kwargs)
+
+        # check for appropriate output
+        if not os.path.isfile(flatname):
+            log.error(f&quot;Unable to open scan map output &quot;
+                      f&quot;file = {outname}&quot;)
+            raise ValueError(&quot;No scan map output found.&quot;)
+
+        # load flat output file
+        df = DataFits(config=self.config)
+        df.load(flatname)
+        os.remove(flatname)
+        df.filename = self.datain.filename
+
+        # Store the output in dataout
+        self.dataout = df
+
+        # Copy and save headers
+        scnhead = self.dataout.header.copy()
+        self.dataout.header = self.datain.header.copy()
+        StepScanMap.merge_scan_hdr(self.dataout, scnhead, [self.datain])
+
+        # Update SOFIA mandated keywords (since this is first pipe step)
+        obsid = &#39;P_&#39; + self.datain.getheadval(&#39;OBS_ID&#39;)
+        self.dataout.setheadval(&#39;OBS_ID&#39;, obsid)
+        self.dataout.setheadval(&#39;PIPELINE&#39;, &#39;HAWC_DRP&#39;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

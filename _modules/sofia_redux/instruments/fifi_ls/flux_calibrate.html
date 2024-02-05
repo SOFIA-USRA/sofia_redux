@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.fifi_ls.flux_calibrate &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.fifi_ls.flux_calibrate</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import os
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.instruments.fifi_ls.get_response \
+    import get_response, clear_response_cache
+from sofia_redux.toolkit.utilities \
+    import (gethdul, hdinsert, write_hdul, multitask)
+
+__all__ = [&#39;apply_response&#39;, &#39;flux_calibrate&#39;, &#39;wrap_flux_calibrate&#39;]
+
+
+<div class="viewcode-block" id="apply_response">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.flux_calibrate.apply_response.html#sofia_redux.instruments.fifi_ls.flux_calibrate.apply_response">[docs]</a>
+def apply_response(hdul, response):
+    &quot;&quot;&quot;
+    Apply response data to data in an HDUList.
+
+    Parameters
+    ----------
+    hdul : fits.HDUList
+    response : numpy.ndarray
+        (3, nwave) where [0, :] = wavelength and [1, :] = response data,
+        and [2, :] = response error.
+
+    Returns
+    -------
+    fits.HDUList
+    &quot;&quot;&quot;
+    wave = np.asarray(hdul[&#39;LAMBDA&#39;].data, dtype=float)
+    data = np.asarray(hdul[&#39;FLUX&#39;].data, dtype=float)
+    var = np.asarray(hdul[&#39;STDDEV&#39;].data, dtype=float) ** 2
+    udata, uvar = None, None
+    if &#39;UNCORRECTED_FLUX&#39; in hdul:
+        udata = np.asarray(hdul[&#39;UNCORRECTED_FLUX&#39;].data, dtype=float)
+        uvar = np.asarray(
+            hdul[&#39;UNCORRECTED_STDDEV&#39;].data, dtype=float) ** 2
+
+    shape = data.shape
+    resp_corr = np.full(shape, np.nan, dtype=float)
+    var_corr = np.full(shape, np.nan, dtype=float)
+    resp_store = np.full_like(wave, np.nan, dtype=float)
+
+    if udata is not None:
+        var_uncorr = np.full(shape, np.nan, dtype=float)
+        resp_uncorr = np.full(shape, np.nan, dtype=float)
+    else:
+        var_uncorr = resp_uncorr = None
+
+    for i in range(25):
+        iresp = np.interp(wave[:, i], response[0], response[1],
+                          left=np.nan, right=np.nan)
+        if np.isnan(iresp).all():
+            continue
+        resp_corr[..., i] = data[..., i] / iresp
+        var_corr[..., i] = var[..., i] / (iresp ** 2)
+        resp_store[:, i] = iresp
+
+        # propagate uncorrected data if present
+        if udata is not None:
+            resp_uncorr[..., i] = udata[..., i] / iresp
+            var_uncorr[..., i] = uvar[..., i] / (iresp ** 2)
+
+    if np.isnan(resp_store).all():
+        log.error(&quot;No valid response data found for input wavelengths&quot;)
+        return
+
+    result = fits.HDUList(fits.PrimaryHDU(header=hdul[0].header))
+    exthdr = hdul[&#39;FLUX&#39;].header
+
+    primehead = result[0].header
+    outname = os.path.basename(primehead.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;))
+    outname = outname.replace(&#39;SCM&#39;, &#39;CAL&#39;).replace(&#39;TEL&#39;, &#39;CAL&#39;)
+    primehead[&#39;HISTORY&#39;] = &#39;Flux calibrated&#39;
+    hdinsert(primehead, &#39;PRODTYPE&#39;, &#39;flux_calibrated&#39;)
+    hdinsert(primehead, &#39;PROCSTAT&#39;, &#39;LEVEL_3&#39;)
+    hdinsert(primehead, &#39;BUNIT&#39;, &#39;Jy/pixel&#39;, comment=&#39;Data units&#39;)
+    hdinsert(primehead, &#39;RAWUNITS&#39;, &#39;adu/(Hz s)&#39;,
+             comment=&#39;Raw data units before calibration&#39;)
+    hdinsert(primehead, &#39;FILENAME&#39;, outname)
+
+    # Add mean calibration error to header
+    hdinsert(primehead, &#39;CALERR&#39;, np.nanmean(response[2] / response[1]),
+             comment=&#39;Overall fractional flux cal error&#39;)
+
+    # Also calibrate the background level in the header at the mean
+    # wavelength for the observation
+    mean_response = np.interp(np.nanmean(wave), response[0], response[1],
+                              left=np.nan, right=np.nan)
+    if not np.isnan(mean_response):
+        for x in [&#39;A&#39;, &#39;B&#39;]:
+            hdinsert(primehead, &#39;BGLEVL_%s&#39; % x,
+                     primehead.get(&#39;BGLEVL_%s&#39; % x, 0) / mean_response,
+                     comment=&#39;Background level %s nod (Jy/pixel)&#39; % x)
+
+    exthdr[&#39;BUNIT&#39;] = (&#39;Jy/pixel&#39;, &#39;Data units&#39;)
+    result.append(fits.ImageHDU(resp_corr, header=exthdr, name=&#39;FLUX&#39;))
+    result.append(fits.ImageHDU(np.sqrt(var_corr), header=exthdr,
+                                name=&#39;STDDEV&#39;))
+    if udata is not None:
+        result.append(fits.ImageHDU(resp_uncorr, header=exthdr,
+                                    name=&#39;UNCORRECTED_FLUX&#39;))
+        result.append(fits.ImageHDU(np.sqrt(var_uncorr), header=exthdr,
+                                    name=&#39;UNCORRECTED_STDDEV&#39;))
+    result.append(hdul[&#39;LAMBDA&#39;].copy())
+    result.append(hdul[&#39;XS&#39;].copy())
+    result.append(hdul[&#39;YS&#39;].copy())
+    result.append(hdul[&#39;RA&#39;].copy())
+    result.append(hdul[&#39;DEC&#39;].copy())
+    if &#39;ATRAN&#39; in hdul:
+        result.append(hdul[&#39;ATRAN&#39;].copy())
+    exthdr[&#39;BUNIT&#39;] = (&#39;adu/(Hz s Jy)&#39;, &#39;Data units&#39;)
+    result.append(fits.ImageHDU(resp_store, header=exthdr,
+                                name=&#39;RESPONSE&#39;))
+    if &#39;UNSMOOTHED_ATRAN&#39; in hdul:
+        result.append(hdul[&#39;UNSMOOTHED_ATRAN&#39;].copy())
+    return result</div>
+
+
+
+<div class="viewcode-block" id="flux_calibrate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.flux_calibrate.flux_calibrate.html#sofia_redux.instruments.fifi_ls.flux_calibrate.flux_calibrate">[docs]</a>
+def flux_calibrate(filename, response_file=None, write=False, outdir=None):
+    &quot;&quot;&quot;
+    Convert spectra to physical flux units.
+
+    The procedure is:
+
+        1. Identify response file to use.  Smooth it to the spectral resolution
+           of the input file.
+        2. Read the spectral data from the input file.
+        3. Loop over the spaxels.
+        4. For each spaxel, interpolate the response data onto the wavelengths
+           of the spexels and multiply the data at each point by the response
+           value and its associated wavelength.
+        5. Create a FITS file and (optionally) write results to disk.
+
+    The output FITS file matches the extensions and dimensions of the
+    input FITS file, with an additional RESPONSE extension attached,
+    containing the interpolated response correction.  The dimensions of
+    the RESPONSE array match the dimensions of the LAMBDA array.
+
+    Parameters
+    ----------
+    filename : str
+        FITS file to be flux calibrated.  Should have been created by
+        fifi_ls.combine_grating_scans or fifi_ls.telluric_correct.
+    response_file : str, optional
+        Response file to be used.  If not provided, a default file will
+        be used.  If provided, should be a FITS image file containing
+        wavelength, response data, and response error in an array
+        of three rows in the primary extension.
+    write : bool, optional
+        If True, write to disk and return the path to the output
+        file.  If False, return the HDUList.  The output filename is
+        created from the input filename, with the suffix &#39;SCM&#39; or &#39;TEL&#39;
+        replaced with &#39;CAL&#39;.
+    outdir : str, optional
+        Directory path to write output.  If None, output files
+        will be written to the same directory as the input files.
+
+    Returns
+    -------
+    fits.HDUList or str
+        Either the HDU (if write is False) or the filename of the output file
+        (if write is True)
+    &quot;&quot;&quot;
+    if isinstance(outdir, str):
+        if not os.path.isdir(outdir):
+            log.error(&quot;Output directory %s does not exist&quot; % outdir)
+            return
+
+    hdul = gethdul(filename, verbose=True)
+    if hdul is None:
+        return
+    if not isinstance(filename, str):
+        filename = hdul[0].header[&#39;FILENAME&#39;]
+    if not isinstance(outdir, str):
+        outdir = os.path.dirname(filename)
+
+    response = get_response(hdul[0].header, filename=response_file)
+    if response is None:
+        log.error(&#39;Failed to get response&#39;)
+        return
+
+    result = apply_response(hdul, response)
+    if result is None:
+        log.error(&#39;Failed to apply response&#39;)
+        return
+    if not write:
+        return result
+    else:
+        return write_hdul(result, outdir=outdir, overwrite=True)</div>
+
+
+
+def flux_calibrate_wrap_helper(_, kwargs, filename):
+    return flux_calibrate(filename, **kwargs)
+
+
+<div class="viewcode-block" id="wrap_flux_calibrate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.flux_calibrate.wrap_flux_calibrate.html#sofia_redux.instruments.fifi_ls.flux_calibrate.wrap_flux_calibrate">[docs]</a>
+def wrap_flux_calibrate(files, outdir=None, allow_errors=False,
+                        response_file=None, write=False,
+                        jobs=None):
+    &quot;&quot;&quot;
+    Wrapper for flux_calibrate over multiple files.
+
+    See `flux_calibrate` for full description of reduction on a single file.
+
+    Parameters
+    ----------
+    files : array_like of str
+        paths to files to be flux calibrated
+    outdir : str, optional
+        Directory path to write output.  If None, output files
+        will be written to the same directory as the input files.
+    allow_errors : bool, optional
+        If True, return all created files on error.  Otherwise, return None
+    response_file : str, optional
+        Response file to be used.  If not provided, a default file will
+        be used.  If provided, should be a FITS image file containing
+        wavelength, response data, and response error in an array
+        of three rows in the primary extension.
+    write : bool, optional
+        If True, write the output to disk and return the filename instead
+        of the HDU.
+    jobs : int, optional
+        Specifies the maximum number of concurrently running jobs.
+        Values of 0 or 1 will result in serial processing.  A negative
+        value sets jobs to `n_cpus + 1 + jobs` such that -1 would use
+        all cpus, and -2 would use all but one cpu.
+
+    Returns
+    -------
+    tuple of str
+        output filenames written to disk
+    &quot;&quot;&quot;
+    if isinstance(files, str):
+        files = [files]
+    if not hasattr(files, &#39;__len__&#39;):
+        log.error(&quot;Invalid input files type (%s)&quot; % repr(files))
+        return
+
+    clear_response_cache()
+
+    kwargs = {&#39;outdir&#39;: outdir, &#39;write&#39;: write,
+              &#39;response_file&#39;: response_file}
+
+    output = multitask(flux_calibrate_wrap_helper, files, None, kwargs,
+                       jobs=jobs)
+
+    failure = False
+    result = []
+    for x in output:
+        if x is None:
+            failure = True
+        else:
+            result.append(x)
+    if failure:
+        if len(result) &gt; 0:
+            if not allow_errors:
+                log.error(&quot;Errors were encountered but the following &quot;
+                          &quot;files were created:\n%s&quot; % &#39;\n&#39;.join(result))
+                return
+
+    return tuple(result)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

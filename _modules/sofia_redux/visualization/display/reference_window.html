@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.visualization.display.reference_window &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.visualization.display.reference_window</h1><div class="highlight"><pre>
+<span></span>
+import os
+from typing import Any
+
+from sofia_redux.visualization import log
+from sofia_redux.visualization.display.text_view import TextView
+
+try:
+    from PyQt5 import QtWidgets, QtGui, QtCore
+    from sofia_redux.visualization.display.ui import reference_data as rd
+except ImportError:  # pragma: no cover
+    HAS_PYQT5 = False
+    QtWidgets, QtGui, QtCore = None, None, None
+
+    class QtWidgets:
+        class QDialog:
+            pass
+
+    class rd:
+        class Ui_Dialog:
+            pass
+else:
+    HAS_PYQT5 = True
+
+
+__all__ = [&#39;ReferenceWindow&#39;]
+
+
+<div class="viewcode-block" id="ReferenceWindow">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.reference_window.ReferenceWindow.html#sofia_redux.visualization.display.reference_window.ReferenceWindow">[docs]</a>
+class ReferenceWindow(QtWidgets.QDialog, rd.Ui_Dialog):
+    &quot;&quot;&quot;
+    GUI framework for displaying spectral reference lines.
+
+    Creates a `Reference Data` window for user interaction. It includes
+    the following buttons:
+
+        - Load List: allows loading reference data files, one at a time.
+        - Clear Lists: removes all loaded files as well lines and
+          labels from plots.
+
+    Each loaded file can be examined by double-clicking on its listing
+    in the display window.
+
+    There are also two check boxes to control display preferences:
+
+        - Show labels: shows or hides text labels for the lines
+        - Show lines: shows or hides lines and any associated labels
+
+    Attributes
+    ----------
+    signals: sofia_redux.visualization.signals.Signals
+        Custom signals recognized by the Eye interface, used
+        to trigger callbacks from user events.
+    ref_models: reference_model.ReferenceData
+        The line list data.
+    visibility: dict
+        Keys are `ref_line` and `ref_label`. Values are boolean flags
+        matching the current  visibility of lines and labels, respectively.
+    textview: sofia_redux.visualization.display.text_view.TextView
+        Text viewer widget.
+    &quot;&quot;&quot;
+
+    def __init__(self, parent: Any) -&gt; None:
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for the Eye.&#39;)
+        super(self.__class__, self).__init__(parent)
+        self.setupUi(self)
+        self.setModal(0)
+        self.connections()
+
+        self.signals = parent.signals
+        self.ref_models = parent.reference_models
+        self.visibility = {&#39;ref_line&#39;: False,
+                           &#39;ref_label&#39;: False}
+        self.textview = None
+
+<div class="viewcode-block" id="ReferenceWindow.connections">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.reference_window.ReferenceWindow.html#sofia_redux.visualization.display.reference_window.ReferenceWindow.connections">[docs]</a>
+    def connections(self):
+        &quot;&quot;&quot;
+        Establish connections to callbacks.
+
+        The buttons connect to `load_lines` and `clear_lists`.
+        The checkboxes connect to `toggle_visibility`. Items
+        in the file list connect to `show_text`.
+        &quot;&quot;&quot;
+        self.load_file_button.clicked.connect(self.load_lines)
+        self.show_lines_box.toggled.connect(
+            lambda: self.toggle_visibility(&#39;ref_line&#39;))
+        self.show_labels_box.toggled.connect(
+            lambda: self.toggle_visibility(&#39;ref_label&#39;))
+        self.clear_lists_button.clicked.connect(self.clear_lists)
+        self.loaded_files_list.itemDoubleClicked.connect(self.show_text)</div>
+
+
+<div class="viewcode-block" id="ReferenceWindow.load_lines">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.reference_window.ReferenceWindow.html#sofia_redux.visualization.display.reference_window.ReferenceWindow.load_lines">[docs]</a>
+    def load_lines(self) -&gt; bool:
+        &quot;&quot;&quot;
+        Load reference lines from a file.
+
+        Returns
+        -------
+        result : bool
+            True if the file is successfully read in; otherwise False.
+        &quot;&quot;&quot;
+        try:
+            filename = QtWidgets.QFileDialog.getOpenFileName(
+                self, caption=&quot;Select Line List&quot;)[0]
+        except IndexError:
+            return False
+        if not filename:
+            return False
+        try:
+            result = self.ref_models.add_line_list(filename)
+        except IOError:
+            result = False
+        if result:
+            self.visibility[&#39;ref_line&#39;] = True
+            self.visibility[&#39;ref_label&#39;] = True
+            buttons = [self.show_lines_box,
+                       self.show_labels_box]
+            for button in buttons:
+                button.blockSignals(True)
+                button.setChecked(True)
+                button.blockSignals(False)
+
+            self.set_status(f&#39;Loaded {os.path.basename(filename)}&#39;)
+
+            # add file name to list widget
+            item = QtWidgets.QListWidgetItem(os.path.basename(filename))
+            item.setData(QtCore.Qt.UserRole, filename)
+            item.setToolTip(filename)
+            self.loaded_files_list.addItem(item)
+
+            self.signals.update_reference_lines.emit()
+        else:
+            self.set_status(f&#39;Unable to parse &#39;
+                            f&#39;{os.path.basename(filename)}&#39;)
+        return result</div>
+
+
+<div class="viewcode-block" id="ReferenceWindow.toggle_visibility">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.reference_window.ReferenceWindow.html#sofia_redux.visualization.display.reference_window.ReferenceWindow.toggle_visibility">[docs]</a>
+    def toggle_visibility(self, target):
+        &quot;&quot;&quot;
+        Toggle the visibility for lines or labels.
+
+        Parameters
+        ----------
+        target : {&#39;ref_line&#39;, &#39;ref_label&#39;}
+            The specific target for which the visibility should be toggled.
+            Use &#39;ref_line&#39; for the reference data lines and &#39;ref_label&#39;
+            for the reference data labels.
+        &quot;&quot;&quot;
+        if target == &#39;ref_line&#39;:
+            state = self.show_lines_box.checkState()
+            self.ref_models.set_visibility(target, state)
+            self.signals.update_reference_lines.emit()
+
+        elif target == &#39;ref_label&#39;:
+            state = self.show_labels_box.checkState()
+            self.ref_models.set_visibility(target, state)
+            self.signals.update_reference_lines.emit()
+
+        else:
+            state = None
+            log.debug(f&#39;Invalid visibility target {target}&#39;)
+
+        if state is not None:
+            log.debug(f&#39;Updated visibility of {target} to &#39;
+                      f&#39;{self.visibility[target]}&#39;)</div>
+
+
+<div class="viewcode-block" id="ReferenceWindow.show_text">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.reference_window.ReferenceWindow.html#sofia_redux.visualization.display.reference_window.ReferenceWindow.show_text">[docs]</a>
+    def show_text(self, item):
+        &quot;&quot;&quot;
+        Show the text of the loaded reference data file.
+
+        Parameters
+        ----------
+        item : QtWidgets.QListWidgetItem
+            The selected file in the list.
+        &quot;&quot;&quot;
+        if self.textview is None or not self.textview.isVisible():
+            self.textview = TextView(self)
+            self.textview.tableButton.hide()
+        filename = item.data(QtCore.Qt.UserRole)
+        with open(filename, &#39;r&#39;) as f:
+            lines = f.readlines()
+        lines = [ln.strip() for ln in lines]
+        self.textview.load(lines)
+        self.textview.show()
+        self.textview.raise_()
+        self.textview.setTitle(os.path.basename(filename))</div>
+
+
+<div class="viewcode-block" id="ReferenceWindow.set_status">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.reference_window.ReferenceWindow.html#sofia_redux.visualization.display.reference_window.ReferenceWindow.set_status">[docs]</a>
+    def set_status(self, message):
+        &quot;&quot;&quot;
+        Set a status message.
+
+        Parameters
+        ----------
+        message : str
+            The message to display.
+        &quot;&quot;&quot;
+        self.status.setText(message)</div>
+
+
+<div class="viewcode-block" id="ReferenceWindow.clear_status">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.reference_window.ReferenceWindow.html#sofia_redux.visualization.display.reference_window.ReferenceWindow.clear_status">[docs]</a>
+    def clear_status(self):
+        &quot;&quot;&quot;Reset the status bar.&quot;&quot;&quot;
+        self.status.setText(&#39;&#39;)</div>
+
+
+<div class="viewcode-block" id="ReferenceWindow.clear_lists">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.reference_window.ReferenceWindow.html#sofia_redux.visualization.display.reference_window.ReferenceWindow.clear_lists">[docs]</a>
+    def clear_lists(self):
+        &quot;&quot;&quot;Remove all lines and labels from display.&quot;&quot;&quot;
+        # unload data
+        self.signals.unload_reference_model.emit()
+
+        # reset visibility states
+        self.visibility[&#39;ref_line&#39;] = False
+        self.visibility[&#39;ref_label&#39;] = False
+        buttons = [self.show_lines_box, self.show_labels_box]
+        for button in buttons:
+            button.blockSignals(True)
+            button.setChecked(False)
+
+        # clear file list table
+        self.loaded_files_list.clear()
+
+        self.set_status(&#39;Cleared line lists&#39;)
+        self.signals.update_reference_lines.emit()</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.fifi_ls.make_header &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.fifi_ls.make_header</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from datetime import datetime
+import os
+import re
+
+from astropy import log, units
+from astropy.io import fits
+from astropy.time import Time
+import bottleneck as bn
+import numpy as np
+import pandas
+
+from sofia_redux.instruments import fifi_ls
+from sofia_redux.toolkit.utilities \
+    import (robust_bool, valid_num, goodfile,
+            natural_sort, date2seconds, hdinsert)
+
+__all__ = [&#39;create_requirements_table&#39;, &#39;clear_requirements_table&#39;,
+           &#39;get_keyword_comments&#39;, &#39;get_keyword_table&#39;,
+           &#39;get_keyword_comments_table&#39;, &#39;update_basehead&#39;,
+           &#39;order_headers&#39;, &#39;make_header&#39;]
+
+__requirements_table = None
+__requirements_file = None
+__keyword_comments_file = None
+__quick_comments = None
+
+
+<div class="viewcode-block" id="create_requirements_table">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.make_header.create_requirements_table.html#sofia_redux.instruments.fifi_ls.make_header.create_requirements_table">[docs]</a>
+def create_requirements_table(default_file=None, comment_file=None,
+                              reload=False):
+    &quot;&quot;&quot;
+    Create the header keyword requirements definition table.
+
+    Parameters
+    ----------
+    default_file : str, optional
+        File path to the keyword definition file.  The default is
+        fifi_ls/data/header_info/headerdef.dat
+    comment_file : str, optional
+        File path to the keyword comments file.  The default is
+        fifi_ls/data/header_info/headercomment.dat.
+    reload : bool, optional
+        If set, data in cache will be ignored and files will be
+        reloaded.
+    &quot;&quot;&quot;
+
+    global __requirements_table
+    global __requirements_file
+    global __keyword_comments_file
+    global __quick_comments
+
+    create_table = (reload
+                    or __requirements_table is None
+                    or __requirements_file != default_file
+                    or __keyword_comments_file != comment_file)
+
+    if not create_table:
+        return
+
+    log.debug(&quot;Creating FIFI-LS keyword requirements table&quot;)
+    clear_requirements_table()
+
+    try:
+        __requirements_table = get_keyword_table(filename=default_file).join(
+            get_keyword_comments_table(filename=comment_file))
+        __requirements_file = default_file
+        __keyword_comments_file = comment_file
+        __quick_comments = __requirements_table[&#39;comment&#39;].to_dict()
+        __requirements_table = __requirements_table.to_dict(&#39;index&#39;)
+    except Exception as err:
+        log.error(err)
+        raise ValueError(&quot;Could not create requirements table&quot;)</div>
+
+
+
+<div class="viewcode-block" id="clear_requirements_table">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.make_header.clear_requirements_table.html#sofia_redux.instruments.fifi_ls.make_header.clear_requirements_table">[docs]</a>
+def clear_requirements_table():
+    &quot;&quot;&quot;
+    Clear all data from the requirements cache.
+    &quot;&quot;&quot;
+    global __requirements_table
+    global __requirements_file
+    global __keyword_comments_file
+    global __quick_comments
+
+    __requirements_table = None
+    __requirements_file = None
+    __keyword_comments_file = None
+    __quick_comments = None</div>
+
+
+
+<div class="viewcode-block" id="get_keyword_comments">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.make_header.get_keyword_comments.html#sofia_redux.instruments.fifi_ls.make_header.get_keyword_comments">[docs]</a>
+def get_keyword_comments():
+    &quot;&quot;&quot;
+    Get the keyword comments table from the cache.
+    &quot;&quot;&quot;
+    global __quick_comments
+    return __quick_comments</div>
+
+
+
+<div class="viewcode-block" id="get_keyword_table">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.make_header.get_keyword_table.html#sofia_redux.instruments.fifi_ls.make_header.get_keyword_table">[docs]</a>
+def get_keyword_table(filename=None):
+    &quot;&quot;&quot;
+    Returns a dataframe containing the header requirements.
+
+    Parameters
+    ----------
+    filename : str, optional
+        File path to the keyword definition file.  The default is
+        fifi_ls/data/header_info/headerdef.dat
+
+    Returns
+    -------
+    pandas.DataFrame
+    &quot;&quot;&quot;
+    if filename is None:
+        filename = os.path.join(os.path.dirname(fifi_ls.__file__),
+                                &#39;data&#39;, &#39;header_info&#39;, &#39;headerdef.dat&#39;)
+    if not goodfile(filename, verbose=True, read=True):
+        raise ValueError(&quot;invalid header definition file: %s&quot; % filename)
+
+    log.debug(&#39;Using keyword file: %s&#39; % filename)
+
+    columns = [&#39;required&#39;, &#39;default&#39;, &#39;type&#39;, &#39;combine&#39;,
+               &#39;min&#39;, &#39;max&#39;, &#39;enum&#39;]
+    types = {&#39;int&#39;: int, &#39;integer&#39;: int, &#39;float&#39;: float, &#39;bool&#39;: robust_bool,
+             &#39;str&#39;: str, &#39;string&#39;: str, &#39;complex&#39;: complex}
+    converters = {
+        &#39;required&#39;: robust_bool,
+        &#39;default&#39;: lambda x: None if x == &#39;.&#39; else x,
+        &#39;type&#39;: lambda x: types.get(x),
+        &#39;combine&#39;: lambda x: &#39;&#39; if x == &#39;.&#39; else x,
+        &#39;min&#39;: lambda x: float(x) if x != &#39;.&#39; else None,
+        &#39;max&#39;: lambda x: float(x) if x != &#39;.&#39; else None,
+        &#39;enum&#39;: lambda x: x.split(&#39;|&#39;) if x != &#39;.&#39; else []
+    }
+    table = pandas.read_csv(
+        filename, delim_whitespace=True, comment=&#39;#&#39;,
+        index_col=0, names=columns, converters=converters)
+    table.index = table.index.str.upper().str.strip()
+    table.enum = table.apply(
+        lambda row: [row.type(x) for x in row.enum], axis=1)
+    table.default = table.apply(lambda row: row.type(row.default), axis=1)
+    table[&#39;key&#39;] = table.index
+
+    return table</div>
+
+
+
+<div class="viewcode-block" id="get_keyword_comments_table">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.make_header.get_keyword_comments_table.html#sofia_redux.instruments.fifi_ls.make_header.get_keyword_comments_table">[docs]</a>
+def get_keyword_comments_table(filename=None):
+    &quot;&quot;&quot;
+    Returns a dictionary containing header keyword comments.
+
+    Parameters
+    ----------
+    filename : str, optional
+        File path to the keyword comments file.  The default is
+        fifi_ls/data/header_info/headercomment.dat.
+
+    Returns
+    -------
+    pandas.DataFrame
+    &quot;&quot;&quot;
+    if filename is None:
+        filename = os.path.join(os.path.dirname(fifi_ls.__file__),
+                                &#39;data&#39;, &#39;header_info&#39;, &#39;headercomment.dat&#39;)
+    if not goodfile(filename, verbose=True, read=True):
+        raise ValueError(&quot;invalid header comment file: %s&quot; % filename)
+
+    log.debug(&quot;Using keyword comment file %s&quot; % filename)
+    table = pandas.read_csv(
+        filename, comment=&#39;#&#39;, index_col=0, names=[&#39;comment&#39;],
+        converters={&#39;comment&#39;: str.strip}, skipinitialspace=True)
+    table.index = table.index.str.upper().str.strip()
+    return table</div>
+
+
+
+def clear_values(table):
+    if table is None:
+        return
+    for row in table.values():
+        row[&#39;value&#39;] = None
+
+
+def set_defaults(table):
+    for row in table.values():
+        if row.get(&#39;value&#39;) is None:
+            row[&#39;value&#39;] = row[&#39;default&#39;]
+
+
+def get_keyword_values(basehead, headers,
+                       default_file=None, comment_file=None):
+
+    create_requirements_table(
+        default_file=default_file,
+        comment_file=comment_file,
+        reload=False)
+
+    global __requirements_table
+    table = __requirements_table
+    clear_values(table)
+
+    if table is None:
+        raise ValueError(&quot;Could not create requirements table&quot;)
+
+    for key, row in table.items():
+        table[key][&#39;value&#39;] = aggregate_key_value(basehead, headers, row)
+
+    return table
+
+
+def aggregate_key_value(basehead, headers, row):
+
+    combine = row[&#39;combine&#39;]
+
+    if combine == &#39;first&#39; or len(headers) == 1:
+        return value_from_header(basehead, row)
+
+    elif combine == &#39;last&#39;:
+        return value_from_header(headers[-1], row)
+
+    elif combine == &#39;default&#39;:
+        return row[&#39;default&#39;]
+
+    elif combine == &#39;and&#39;:
+        for header in headers:
+            if not value_from_header(header, row):
+                return False
+        else:
+            return True
+
+    elif combine == &#39;or&#39;:
+        for header in headers:
+            if value_from_header(header, row):
+                return True
+        else:
+            return False
+
+    elif combine == &#39;concatenate&#39;:
+        result = set()
+        for header in headers:
+            string_value = value_from_header(header, row)
+            if not string_value:
+                continue
+            values = [x.upper().strip() for x in str(string_value).split(&#39;,&#39;)]
+            for value in values:
+                result.add(value)
+
+        return &#39;,&#39;.join(natural_sort(list(result)))
+
+    elif combine == &#39;mean&#39;:
+        result = []
+        for header in headers:
+            value = value_from_header(header, row)
+            if value is not None:
+                result.append(value)
+        result = bn.nanmean(result)
+        if not np.isfinite(result):
+            result = row[&#39;default&#39;]
+        else:
+            result = row[&#39;type&#39;](result)
+
+        return result
+
+    elif combine == &#39;sum&#39;:
+        result = []
+        for header in headers:
+            value = value_from_header(header, row)
+            if value is not None:
+                result.append(value)
+        result = bn.nansum(result)
+        if not np.isfinite(result):
+            result = row[&#39;default&#39;]
+        else:
+            result = row[&#39;type&#39;](result)
+        return result
+
+    else:
+        # return basehead value again
+        return value_from_header(basehead, row)
+
+
+def value_from_header(header, row, default=None):
+    value = header.get(row[&#39;key&#39;])
+    if value is None:
+        if default is not None:
+            return default
+        else:
+            return None
+    else:
+        dtype = row[&#39;type&#39;]
+        try:
+            value = dtype(value)
+        except (ValueError, TypeError, AttributeError):
+            pass
+
+    return value
+
+
+def check_key(table, key):
+
+    row = table.get(key)
+    if row is None:
+        log.warning(&quot;%s key is not in the keyword definitions&quot; % key)
+        # let it through
+        return True
+
+    value = row.get(&#39;value&#39;)
+
+    if not row[&#39;required&#39;]:
+        return True
+
+    elif value is None:
+        log.error(&#39;Required keyword %s not found&#39; % key)
+        return False
+
+    dtype = row[&#39;type&#39;]
+    if dtype is robust_bool:
+        dtype = bool
+
+    if not isinstance(value, dtype):
+        log.error(
+            &quot;Required keyword %s has wrong type (value: %s). Should be %s&quot; %
+            (key, value, dtype))
+        return False
+
+    elif key == &#39;DATE-OBS&#39;:
+        # special check for UTC 0 date (a common FIFI-LS glitch)
+        try:
+            mjd = Time(value).mjd
+        except (ValueError, AttributeError, TypeError):
+            mjd = 40587
+        if int(mjd) == 40587:
+            log.error(&quot;Required keyword DATE-OBS has wrong value (%s)&quot;
+                      % value)
+            return False
+        return True
+
+    enum = row[&#39;enum&#39;]
+    if len(enum) &gt; 0:
+        if value not in enum:
+            log.error(
+                &quot;Required keyword %s has value (%s). Should be within [%s]&quot;
+                % (key, repr(value), &#39;,&#39;.join(str(x) for x in enum)))
+            return False
+
+    if not np.isnan(row[&#39;min&#39;]) and value &lt; row[&#39;min&#39;]:
+        log.error(&quot;Required keyword %s has wrong value. Should be &gt;= %s&quot; %
+                  (key, row[&#39;min&#39;]))
+        return False
+
+    if not np.isnan(row[&#39;max&#39;]) and value &gt; row[&#39;max&#39;]:
+        log.error(&quot;Required keyword %s has wrong value. Should be &lt;= %s&quot; %
+                  (key, row[&#39;max&#39;]))
+        return False
+
+    # If we got here it&#39;s all good
+    return True
+
+
+<div class="viewcode-block" id="update_basehead">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.make_header.update_basehead.html#sofia_redux.instruments.fifi_ls.make_header.update_basehead">[docs]</a>
+def update_basehead(basehead, table, headers):
+    &quot;&quot;&quot;
+    Update the base header with values that may be missing.
+
+    Parameters
+    ----------
+    basehead : fits.Header
+        FITS header to update
+    headers : array_like of fits.Header
+        List of headers from which to compile values
+    table : dict
+        Table of keywords and values
+
+    Returns
+    -------
+    fits.Header
+        Updated basehead
+    &quot;&quot;&quot;
+    set_defaults(table)
+    for key, row in table.items():
+        hdinsert(basehead, key, row[&#39;value&#39;], comment=row[&#39;comment&#39;])
+
+    comments = get_keyword_comments()
+
+    # Add some FITS standard keys
+    hdinsert(basehead, &#39;EQUINOX&#39;, 2000.0,
+             comment=&#39;Equinox of celestial CS&#39;)
+    hdinsert(basehead, &#39;RADESYS&#39;, &#39;FK5&#39;,
+             comment=&#39;Celestial CS convention&#39;)
+    hdinsert(basehead, &#39;TIMESYS&#39;, &#39;UTC&#39;,
+             comment=&#39;Time system&#39;)
+    hdinsert(basehead, &#39;TIMEUNIT&#39;, &#39;s&#39;,
+             comment=&#39;Time unit&#39;)
+    hdinsert(basehead, &#39;XPOSURE&#39;, basehead.get(&#39;EXPTIME&#39;, 0),
+             comment=&#39;Exposure time [s]&#39;)
+
+    dateobs = basehead.get(&#39;DATE-OBS&#39;, &#39;UNKNOWN&#39;)
+    utcstart = basehead.get(&#39;UTCSTART&#39;, &#39;00:00:00&#39;)
+    utcend = basehead.get(&#39;UTCEND&#39;, &#39;00:00:00&#39;)
+    datestr = str(dateobs).split(&#39;T&#39;)[0].strip()
+    datebeg = &#39;%sT%s&#39; % (datestr, utcstart)
+    dateend = &#39;%sT%s&#39; % (datestr, utcend)
+
+    try:
+        # Elapsed time in seconds
+        telapse = (Time(dateend) - Time(datebeg)).to(units.s).value
+    except ValueError:
+        log.warning(&quot;Could not determine TELAPSE&quot;)
+        telapse = 0.0
+
+    hdinsert(basehead, &#39;DATE-BEG&#39;, datebeg)
+    hdinsert(basehead, &#39;DATE-END&#39;, dateend)
+    # format necessary for floating point annoyances
+    hdinsert(basehead, &#39;TELAPSE&#39;, float(&quot;{:.5f}&quot;.format(telapse)))
+
+    # copy aor to assc_aor and missn-id to assc_msn if single header
+    if len(headers) == 1:
+        aor = str(basehead.get(&#39;AOR_ID&#39;, &#39;UNKNOWN&#39;)).strip().upper()
+        assc_aor = str(basehead.get(&#39;ASSC_AOR&#39;, &#39;UNKNOWN&#39;)).strip().upper()
+        if assc_aor == &#39;UNKNOWN&#39; and aor != &#39;UNKNOWN&#39;:
+            hdinsert(basehead, &#39;ASSC_AOR&#39;, aor,
+                     comment=comments[&#39;ASSC_AOR&#39;])
+        msn = str(basehead.get(&#39;MISSN-ID&#39;, &#39;UNKNOWN&#39;)).strip().upper()
+        assc_msn = str(basehead.get(&#39;ASSC_MSN&#39;, &#39;UNKNOWN&#39;)).strip().upper()
+        if assc_msn == &#39;UNKNOWN&#39; and msn != &#39;UNKNOWN&#39;:
+            hdinsert(basehead, &#39;ASSC_MSN&#39;, msn,
+                     comment=comments[&#39;ASSC_MSN&#39;])
+
+    # add the current date/time
+    utctime = Time(datetime.utcnow(), format=&#39;datetime&#39;).isot
+    hdinsert(basehead, &#39;DATE&#39;, utctime.split(&#39;.&#39;)[0],
+             comment=comments[&#39;DATE&#39;])
+
+    # set processing level to 2
+    procstat = str(basehead.get(&#39;PROCSTAT&#39;, &#39;UNKNOWN&#39;)).strip().upper()
+    if procstat not in [&#39;LEVEL_3&#39;, &#39;LEVEL_4&#39;]:
+        hdinsert(basehead, &#39;PROCSTAT&#39;, &#39;LEVEL_2&#39;,
+                 comment=&#39;Processing status&#39;)
+
+    # add raw file number
+    filenum = str(basehead.get(&#39;FILENUM&#39;, &#39;UNKNOWN&#39;))
+    filename = str(basehead.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;))
+    obsid = str(basehead.get(&#39;OBS_ID&#39;, &#39;UNKNOWN&#39;))
+    pattern = re.compile(r&#39;[BR]([0-9]+)&#39;)
+    match = pattern.findall(obsid)
+    if filenum == &#39;UNKNOWN&#39;:
+        if match and valid_num(match[-1]):
+            filenum = match[-1].strip()
+        else:
+            if len(filename) &gt;= 5:
+                test = filename[:5].strip()
+                if valid_num(test):
+                    filenum = test
+    if len(headers) &gt; 1:
+        filenums = [filenum]
+        for h in headers:
+            filenums.extend(str(h.get(&#39;FILENUM&#39;, &#39;UNKNOWN&#39;)).split(&#39;-&#39;))
+        filenums = natural_sort(list(np.unique(filenums)))
+        filenums = [f for f in filenums if valid_num(f)]
+        if len(filenums) &gt; 1:
+            filenum = filenums[0].strip() + &#39;-&#39; + filenums[-1].strip()
+        elif len(filenums) == 1:
+            filenum = filenums[0].strip()
+        else:
+            filenum = &#39;UNKNOWN&#39;
+
+    hdinsert(basehead, &#39;FILENUM&#39;, filenum,
+             comment=comments[&#39;FILENUM&#39;])
+
+    # Modify the obsid
+    obs = str(basehead.get(&#39;OBS_ID&#39;, &#39;UNKNOWN&#39;)).strip().upper()
+    if not obs.startswith(&#39;P_&#39;):
+        assc_obs = str(basehead.get(&#39;ASSC_OBS&#39;, &#39;UNKNOWN&#39;)).strip().upper()
+        if assc_obs == &#39;UNKNOWN&#39; and obs != &#39;UNKNOWN&#39;:
+            hdinsert(basehead, &#39;ASSC_OBS&#39;, obs,
+                     comment=comments[&#39;ASSC_OBS&#39;])
+        hdinsert(basehead, &#39;OBS_ID&#39;, &#39;P_&#39; + obs,
+                 comment=comments[&#39;OBS_ID&#39;])
+
+    # Set the pipeline name and version
+    hdinsert(basehead, &#39;PIPELINE&#39;, &#39;FIFI_LS_REDUX&#39;,
+             comment=comments[&#39;PIPELINE&#39;])
+    hdinsert(basehead, &#39;PIPEVERS&#39;, fifi_ls.__version__.replace(&#39;.&#39;, &#39;_&#39;),
+             comment=comments[&#39;PIPEVERS&#39;])</div>
+
+
+
+<div class="viewcode-block" id="order_headers">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.make_header.order_headers.html#sofia_redux.instruments.fifi_ls.make_header.order_headers">[docs]</a>
+def order_headers(headers):
+    &quot;&quot;&quot;
+    Order headers based on contents.
+
+    Return the earliest and the header list sorted by date
+
+    Parameters
+    ----------
+    headers : array_like of fits.Header
+
+    Returns
+    -------
+    2-tuple
+       fits.Header : earliest header
+       list of fits.Header : ordered headers
+    &quot;&quot;&quot;
+    nhead = len(headers)
+    if nhead == 1:
+        return headers[0].copy(), [headers[0]]
+    nodstyle = None
+    dateobs, nodbeam = [], []
+    for header in headers:
+
+        if nodstyle is None:
+            nodstyle = str(header.get(&#39;NODSTYLE&#39;))
+        dateobs.append(
+            date2seconds(
+                str(header.get(&#39;DATE-OBS&#39;, default=&#39;3000-01-01T00:00:00&#39;))))
+        nodbeam.append(str(header.get(&#39;NODBEAM&#39;, &#39;UNKNOWN&#39;)))
+
+    # If C2NC2, get the earliest A header as the basehead
+    # Otherwise, just use the earliest header
+    index = np.argsort(dateobs)
+    if nodstyle in [&#39;C2NC2&#39;, &#39;ASYMMETRIC&#39;] and &#39;A&#39; in nodbeam:
+        earliest_a = np.where(np.array(nodbeam)[index] == &#39;A&#39;)[0]
+        earliest_a = 0 if earliest_a.size == 0 else earliest_a[0]
+    else:
+        earliest_a = 0
+
+    earliest_idx = index[earliest_a]
+    basehead = headers[earliest_idx].copy()
+
+    # sort all headers by date-obs, including the basehead
+    # This is used for C2NC2 mode, to get &#39;last&#39; values, whether
+    # in A or B nod
+    sorted_headers = [headers[i] for i in index]
+
+    return basehead, sorted_headers</div>
+
+
+
+<div class="viewcode-block" id="make_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.make_header.make_header.html#sofia_redux.instruments.fifi_ls.make_header.make_header">[docs]</a>
+def make_header(headers=None, checkheader=False, default_file=None,
+                comment_file=None, check_all=False):
+    &quot;&quot;&quot;
+    Standardize and combine input headers.
+
+    Generates output headers for pipeline data products.
+
+    The procedure is:
+
+        1. Read the header keyword defaults and requirements from
+           data/headerdef.dat and their associated default comments from
+           data/headercomment.dat.
+        2. Copy the earliest header for symmetric mode, or earliest A
+           header for C2NC2 mode.  &quot;Earliest&quot; is defined by DATE-OBS.
+        3. Loop through all keywords defined in headerdef.dat
+            a. Get the value from the header as defined in the configuration
+               algorithm.  The combination options are: and (for booleans),
+               concatendate unique values with commas (for string values),
+               use default value, use last value (i.e. latest according to
+               DATE-OBS), or (for booleans), sum (for numerical values),
+               mean (for numerical values), use the first value.  The default
+               and most common case is to use the first value.  The
+               combined keyword value is written to the output header.
+            b. Check the value against requirements if desired.  Required
+               keywords are checked for presence, checked against a
+               specified data type (float, int, long, string, bool), and
+               may additionally be checked against an enumerated value or
+               min/max value range.  If requirements are not met, or if a
+               defined keyword is not found in the input header, it is set
+               to the default value in the output header.
+        4. Some additional values are added or modified in the output
+           header:
+
+               - ASSC_AOR is copied from AOR_ID if not present
+               - ASSC_MSN is copied from MISSN-ID if not present
+               - DATE is set to the current date/time
+               - PROCSTAT is set to LEVEL_2 (unless it is already LEVEL_3
+                 or LEVEL_4
+               - FILENUM is set from the raw filename if not present, or
+                 from the range of input file numbers (first-last)
+               - ASSC_OBS is copied from OBS_ID if not present
+               - OBS_ID is prepended with P\\_ if not already done
+
+    Parameters
+    ----------
+    headers : array_like of fits.Header, optional
+        array of input FITS headers
+    checkheader : bool, optional
+        If True, will check keywords against SOFIA requirements.  If
+        set, the return value will be a 2-tuple rather than a FITS
+        header (see Return values).
+    default_file : str, optional
+        Path to the header keyword default file
+    comment_file : str, optional
+        Path to the header keyword comment file
+    check_all : bool, optional
+        If `checkheader` is True and a failure was encountered, keep
+        checking the remainder of the keyword values and output warning
+        messages.  Otherwise, the default is to return failure at the
+        first bad keyword/value.
+
+    Returns
+    -------
+    fits.Header
+        a combined, standardized FITS header
+        if checkheader is True then the return value will be a 2-tuple.
+        The first element will be the header, and the second will be
+        a boolean value indicating whether the header was created
+        without any errors (False = errors were encountered).
+    &quot;&quot;&quot;
+    if headers is None:
+        headers = [fits.Header()]
+    elif isinstance(headers, fits.Header):
+        headers = [headers]
+    elif not hasattr(headers, &#39;__len__&#39;):
+        log.error(&quot;Invalid header&quot;)
+        return (None, False) if checkheader else None
+    elif len(headers) == 0:
+        log.error(&quot;Empty list of headers&quot;)
+        return (None, False) if checkheader else None
+
+    for header in headers:
+        if not isinstance(header, fits.Header):
+            log.error(&quot;Invalid header in header list&quot;)
+            return (None, False) if checkheader else None
+
+    basehead, headers = order_headers(headers)
+    table = get_keyword_values(basehead, headers,
+                               default_file=default_file,
+                               comment_file=comment_file)
+    success = True
+    if checkheader:
+        for key in table.keys():
+            if not check_key(table, key):
+                success = False
+                if not check_all:
+                    break
+
+    update_basehead(basehead, table, headers)
+
+    return (basehead, success) if checkheader else basehead</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

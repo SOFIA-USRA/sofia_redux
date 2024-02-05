@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.info.base &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.info.base</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC
+from astropy import units
+from copy import deepcopy
+import numpy as np
+
+from sofia_redux.scan.configuration.configuration import Configuration
+from sofia_redux.scan.utilities.bracketed_values import BracketedValues
+
+__all__ = [&#39;InfoBase&#39;]
+
+
+<div class="viewcode-block" id="InfoBase">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.base.InfoBase.html#sofia_redux.scan.info.base.InfoBase">[docs]</a>
+class InfoBase(ABC):
+
+    UNKNOWN_STRING_VALUE = &#39;UNKNOWN&#39;
+    UNKNOWN_INT_VALUE = -9999
+    UNKNOWN_FLOAT_VALUE = -9999.0
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize a basic informational object.
+
+        This provides the template from which all specific information
+        objects are founded.  All contain a configuration from which they
+        extract FITS header options and process accordingly.
+
+        Following a reduction, they should also be able to parse their
+        information back to a FITS header for inclusion in the final output
+        product and may or may not perform additional operation on scans.
+        &quot;&quot;&quot;
+        self.configuration = None
+        self.scan_applied = False
+        self.scan = None
+        self.configuration_applied = False
+
+    @property
+    def referenced_attributes(self):
+        &quot;&quot;&quot;
+        Return a set of attribute names that should be referenced during copy.
+
+        Returns
+        -------
+        set (str)
+        &quot;&quot;&quot;
+        return {&#39;configuration&#39;, &#39;scan&#39;}
+
+    @property
+    def log_id(self):
+        &quot;&quot;&quot;
+        Return the string log ID for the info.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;base&#39;
+
+    @property
+    def log_prefix(self):
+        &quot;&quot;&quot;
+        Return the log prefix of the information object.
+
+        This is used to specify table entries for extraction.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return f&#39;{self.log_id.lower().strip()}.&#39;
+
+<div class="viewcode-block" id="InfoBase.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.base.InfoBase.html#sofia_redux.scan.info.base.InfoBase.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a full copy of the information.
+
+        Returns
+        -------
+        InfoBase
+        &quot;&quot;&quot;
+        referenced_only = self.referenced_attributes
+        new = self.__class__()
+        for attribute, value in self.__dict__.items():
+            if attribute in referenced_only:
+                setattr(new, attribute, value)
+            elif hasattr(value, &#39;copy&#39;):
+                setattr(new, attribute, value.copy())
+            else:
+                setattr(new, attribute, deepcopy(value))
+        return new</div>
+
+
+    @property
+    def options(self):
+        &quot;&quot;&quot;
+        Return the FITS header options.
+
+        Returns
+        -------
+        FitsOptions
+        &quot;&quot;&quot;
+        if self.configuration is None or not self.configuration.fits.enabled:
+            return None
+        return self.configuration.fits
+
+<div class="viewcode-block" id="InfoBase.set_configuration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.base.InfoBase.html#sofia_redux.scan.info.base.InfoBase.set_configuration">[docs]</a>
+    def set_configuration(self, configuration):
+        &quot;&quot;&quot;
+        Set the configuration for the information.
+
+        Parameters
+        ----------
+        configuration : Configuration
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not isinstance(configuration, Configuration):
+            raise ValueError(f&quot;configuration must be a &quot;
+                             f&quot;{Configuration} instance.&quot;)
+        self.configuration = configuration
+        self.apply_configuration()
+        if self.scan_applied:
+            self.validate()</div>
+
+
+<div class="viewcode-block" id="InfoBase.set_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.base.InfoBase.html#sofia_redux.scan.info.base.InfoBase.set_scan">[docs]</a>
+    def set_scan(self, scan):
+        &quot;&quot;&quot;
+        Set the scan applicable to the information.
+
+        Parameters
+        ----------
+        scan : Scan
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.apply_scan(scan)
+        if self.configuration_applied:
+            self.validate()</div>
+
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the info base.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        s = &#39;&#39;
+        for key, value in self.__dict__.items():
+            s += f&#39;{key}: {value}\n&#39;
+        return s
+
+<div class="viewcode-block" id="InfoBase.apply_configuration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.base.InfoBase.html#sofia_redux.scan.info.base.InfoBase.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Apply the configuration to the information.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.configuration_applied = True</div>
+
+
+<div class="viewcode-block" id="InfoBase.apply_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.base.InfoBase.html#sofia_redux.scan.info.base.InfoBase.apply_scan">[docs]</a>
+    def apply_scan(self, scan):
+        &quot;&quot;&quot;
+        Apply scan information to the information.
+
+        Parameters
+        ----------
+        scan : Scan
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.scan_applied = True
+        self.scan = scan</div>
+
+
+<div class="viewcode-block" id="InfoBase.validate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.base.InfoBase.html#sofia_redux.scan.info.base.InfoBase.validate">[docs]</a>
+    def validate(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Validate the data obtained from FITS header and configuration
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="InfoBase.validate_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.base.InfoBase.html#sofia_redux.scan.info.base.InfoBase.validate_scan">[docs]</a>
+    def validate_scan(self, scan):  # pragma: no cover
+        &quot;&quot;&quot;
+        Validate scan information with *THIS* information.
+
+        Parameters
+        ----------
+        scan : Scan
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="InfoBase.parse_image_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.base.InfoBase.html#sofia_redux.scan.info.base.InfoBase.parse_image_header">[docs]</a>
+    def parse_image_header(self, header):  # pragma: no cover
+        &quot;&quot;&quot;
+        Apply settings from a FITS image header.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="InfoBase.edit_image_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.base.InfoBase.html#sofia_redux.scan.info.base.InfoBase.edit_image_header">[docs]</a>
+    def edit_image_header(self, header, scans=None):  # pragma: no cover
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The FITS header to edit.
+        scans : list (Scan), optional
+            A list of scans to use during editing.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="InfoBase.edit_scan_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.base.InfoBase.html#sofia_redux.scan.info.base.InfoBase.edit_scan_header">[docs]</a>
+    def edit_scan_header(self, header, scans=None):  # pragma: no cover
+        &quot;&quot;&quot;
+        Edit a scan header with available information.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The FITS header to edit.
+        scans : list (Scan), optional
+            A list of scans to use during editing.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="InfoBase.merge">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.base.InfoBase.html#sofia_redux.scan.info.base.InfoBase.merge">[docs]</a>
+    def merge(self, last):
+        &quot;&quot;&quot;
+        Set end of any range values to the last ranged end value.
+
+        Parameters
+        ----------
+        last : InfoBase
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for attribute, value in self.__dict__.items():
+            if isinstance(value, BracketedValues):
+                last_value = getattr(last, attribute, None)
+                if isinstance(last_value, BracketedValues):
+                    value.end = last_value.end</div>
+
+
+<div class="viewcode-block" id="InfoBase.valid_header_value">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.base.InfoBase.html#sofia_redux.scan.info.base.InfoBase.valid_header_value">[docs]</a>
+    @classmethod
+    def valid_header_value(cls, value):
+        &quot;&quot;&quot;
+        Check whether a header value is valid.
+
+        Parameters
+        ----------
+        value : None or bool or int or str or float or Quantity
+
+        Returns
+        -------
+        valid : bool
+        &quot;&quot;&quot;
+        if value is None:
+            return False
+        if isinstance(value, bool):
+            return True
+        elif isinstance(value, int):
+            return value != cls.UNKNOWN_INT_VALUE
+        elif isinstance(value, str):
+            return value != cls.UNKNOWN_STRING_VALUE
+        elif isinstance(value, float):
+            return (value != cls.UNKNOWN_FLOAT_VALUE) and np.isfinite(value)
+        elif isinstance(value, units.Quantity):
+            x = value.value
+            return (x != cls.UNKNOWN_FLOAT_VALUE) and np.isfinite(x)
+        else:
+            return False</div>
+
+
+<div class="viewcode-block" id="InfoBase.get_table_entry">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.base.InfoBase.html#sofia_redux.scan.info.base.InfoBase.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Given a name, return the parameter stored in the information object.
+
+        Note that names do not exactly match to attribute names.
+
+        Parameters
+        ----------
+        name : str
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        for key, value in self.__dict__.items():
+            if key == name:
+                return value
+        else:
+            return None</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

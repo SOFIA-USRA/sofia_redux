@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.basemap &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.basemap</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Mix-in class for mapping utilities.&quot;&quot;&quot;
+
+from astropy import wcs as astwcs
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.toolkit.utilities.func import stack
+
+__all__ = [&#39;BaseMap&#39;]
+
+
+<div class="viewcode-block" id="BaseMap">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.basemap.BaseMap.html#sofia_redux.instruments.hawc.steps.basemap.BaseMap">[docs]</a>
+class BaseMap(object):
+    &quot;&quot;&quot;
+    Mapping utilities for pipeline steps.
+
+    This class is designed to be used as mix-in for any pipeline step
+    class that requires mapping functionality.  It is assumed that the
+    pipeline step will handle data input and output, as well as appropriate
+    parameters.
+    &quot;&quot;&quot;
+    def __init__(self):
+        # placeholders for necessary attributes, to be
+        # defined in pipeline steps or assigned by local methods
+        self.datain = None
+        self.dataout = None
+        self.nhwp = 0
+        self.pdata = []
+        self.allhead = None
+        self.pmap = {}
+
+<div class="viewcode-block" id="BaseMap.getarg">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.basemap.BaseMap.html#sofia_redux.instruments.hawc.steps.basemap.BaseMap.getarg">[docs]</a>
+    def getarg(self, parname):
+        &quot;&quot;&quot;
+        Get input parameter.
+
+        This should be implemented by the pipeline step.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="BaseMap.addgap">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.basemap.BaseMap.html#sofia_redux.instruments.hawc.steps.basemap.BaseMap.addgap">[docs]</a>
+    def addgap(self, data, x, y):
+        &quot;&quot;&quot;
+        Adjust x and y pixel coordinates for the gap between subarrays.
+
+        Header keywords ALNGAPX, ALNGAPY, and ALNROTA are used to
+        determine the gap parameters.  The x and y arrays are updated
+        in place.
+
+        Parameters
+        ----------
+        data : DataFits
+            Input data to adjust
+        x : array-like
+            X coordinates for the input image.  Must be
+            2-dimensional (nrow x ncol).
+        y : array-like
+            Y coordinates for the input image.  Must be
+            2-dimensional (nrow x ncol).
+        &quot;&quot;&quot;
+        try:
+            gapx = data.getheadval(&quot;alngapx&quot;, errmsg=False)
+        except KeyError:
+            msg = &#39;Missing ALNGAPX, assuming equal to 0.0&#39;
+            log.debug(msg)
+            gapx = 0.0
+
+        try:
+            gapy = data.getheadval(&quot;alngapy&quot;, errmsg=False)
+        except KeyError:
+            msg = &#39;Missing ALNGAPY, assuming equal to 0.0&#39;
+            log.debug(msg)
+            gapy = 0.0
+
+        try:
+            gapangle = np.radians(data.getheadval(&quot;alnrota&quot;, errmsg=False))
+        except KeyError:
+            msg = &#39;Missing ALNROTA, assuming equal to 0.0&#39;
+            log.debug(msg)
+            gapangle = 0.0
+
+        if np.allclose([gapx, gapy, gapangle], 0):
+            return
+
+        # we assume that the sub-arrays are split across columns in the middle.
+        nrow, ncol = x.shape
+        ncol = ncol // 2
+
+        # pixel coordinates of sub-array, relative to center
+        suby, subx = np.mgrid[0:nrow, 0:ncol]
+
+        # center of data is (0,0)
+        subx = subx - ncol / 2. + 0.5
+        suby = suby - nrow / 2. + 0.5
+
+        # rotate sub-array by gapangle counterclockwise
+        tmp = np.cos(gapangle) * subx - np.sin(gapangle) * suby
+        suby = np.sin(gapangle) * subx + np.cos(gapangle) * suby
+        subx = tmp
+
+        # shift by gapx and gapy
+        suby += gapy
+        subx += gapx
+
+        # revert to 0,0 being bottom left
+        subx = subx - 0.5 + ncol / 2.
+        suby = suby - 0.5 + nrow / 2.
+
+        # update coordinates of right half of x,y
+        x[:, ncol:] = subx + ncol
+        y[:, ncol:] = suby</div>
+
+
+<div class="viewcode-block" id="BaseMap.checkvalid">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.basemap.BaseMap.html#sofia_redux.instruments.hawc.steps.basemap.BaseMap.checkvalid">[docs]</a>
+    def checkvalid(self):
+        &quot;&quot;&quot;
+        Check data consistency.
+
+        All input data are checked to make sure that SPECTEL1
+        and the number of HWP angles are the same across all input
+        files.  The number of HWP angles found is set as self.nhwp.
+        &quot;&quot;&quot;
+
+        log.debug(&#39;Started checking for valid input files&#39;)
+
+        nwave = len(set([d.getheadval(&#39;SPECTEL1&#39;) for d in self.datain]))
+        if nwave != 1:
+            msg = &quot;SPECTEL1 not the same among all input files!&quot;
+            log.error(msg)
+            raise ValueError(msg)
+
+        nhwp = set([d.getheadval(&#39;nhwp&#39;) for d in self.datain])
+        if len(nhwp) &gt; 1:
+            msg = &quot;Number of HWP angles not the same among all input files!&quot;
+            log.error(msg)
+            raise ValueError(msg)
+        self.nhwp = list(nhwp)[0]
+        log.debug(&#39;Finished checking valid input files&#39;)</div>
+
+
+<div class="viewcode-block" id="BaseMap.sumexptime">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.basemap.BaseMap.html#sofia_redux.instruments.hawc.steps.basemap.BaseMap.sumexptime">[docs]</a>
+    def sumexptime(self):
+        &quot;&quot;&quot;
+        Sum exposure time over input data.
+
+        The EXPTIME keyword in self.dataout is set to the summed value
+        as the total exposure time on-source.
+        &quot;&quot;&quot;
+        log.debug(&#39;Started summing exposure times for input files&#39;)
+        totexptime = sum([d.getheadval(&#39;EXPTIME&#39;) for d in self.datain])
+        self.dataout.setheadval(&#39;EXPTIME&#39;, totexptime,
+                                &#39;Total on-source exposure time [s]&#39;)
+        log.debug(&#39;Finished summing exposure times for input files&#39;)</div>
+
+
+<div class="viewcode-block" id="BaseMap.read_resample_data">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.basemap.BaseMap.html#sofia_redux.instruments.hawc.steps.basemap.BaseMap.read_resample_data">[docs]</a>
+    def read_resample_data(self, maxgoodpix):
+        &quot;&quot;&quot;
+        Read data from input images.
+
+        This function ingests the data from self.datain, storing in
+        the self.pdata list of dictionaries.  Keys for each data
+        dictionary are as follows; values are flattened arrays
+        corresponding to good pixels only.
+
+            - mask: bad pixel mask values
+            - ra: RA coordinates
+            - dec: Dec coordinates
+            - I: Stokes I flux values
+            - dI: Stokes I error values
+
+        The following additional keys are present only if self.nhwp &gt; 1:
+            - Q: Stokes Q flux values
+            - dQ: Stokes Q error values
+            - U: Stokes U flux values
+            - dU: Stokes U error values
+            - QIcov: Q-I covariance values
+            - UIcov: U-I covariance values
+            - QUcov: Q-U covariance values
+
+        Parameters
+        ----------
+        maxgoodpix : int
+            The maximum mask value to be considered good. If maxgoodpix=0,
+            only good pixels present in both R and T arrays are used for
+            stokes I. If maxgoodpix=2, widow pixels are also used for
+            stokes I.
+        &quot;&quot;&quot;
+
+        log.debug(&quot;starting read_resample_data()&quot;)
+
+        # We create self.pdata.  pdata will be a list of python
+        # dictionaries to contain all the data.
+        self.pdata = []
+
+        for i, f in enumerate(self.datain):
+            temp = {}
+            naxis1, naxis2 = f.getheadval(&#39;NAXIS1&#39;), f.getheadval(&#39;NAXIS2&#39;)
+            pix2, pix1 = np.mgrid[0:naxis2, 0:naxis1]
+            self.addgap(f, pix1, pix2)
+            tempwcs = astwcs.WCS(f.header)
+            ra, dec = tempwcs.wcs_pix2world(pix1, pix2, 0)
+
+            # convert the mask to a float so we can keep track of fractional
+            # overlap based on gaussian smoothing
+            if &#39;BAD PIXEL MASK&#39; in f.imgnames:
+                temp[&#39;mask&#39;] = f.imageget(&#39;BAD PIXEL MASK&#39;).astype(np.float64)
+            else:
+                temp[&#39;mask&#39;] = np.zeros((naxis2, naxis1), dtype=np.float64)
+
+            ngood = np.where(temp[&#39;mask&#39;] &lt;= maxgoodpix)
+            temp[&#39;mask&#39;] = temp[&#39;mask&#39;][ngood]
+
+            temp[&#39;ra&#39;] = ra[ngood]
+            temp[&#39;dec&#39;] = dec[ngood]
+
+            if &#39;STOKES I&#39; in f.imgnames:
+                temp[&#39;I&#39;] = f.imageget(&#39;STOKES I&#39;).astype(np.float64)[ngood]
+                temp[&#39;dI&#39;] = f.imageget(&#39;ERROR I&#39;).astype(np.float64)[ngood]
+            else:
+                temp[&#39;I&#39;] = f.imageget(&#39;PRIMARY IMAGE&#39;).astype(
+                    np.float64)[ngood]
+                temp[&#39;dI&#39;] = f.imageget(&#39;NOISE&#39;).astype(np.float64)[ngood]
+
+            if self.nhwp &gt; 1:
+                # polarization
+                for var in (&#39;Q&#39;, &#39;U&#39;):
+                    temp[var] = f.imageget(
+                        &#39;STOKES %s&#39; % var).astype(np.float64)[ngood]
+                    temp[&#39;d&#39; + var] = f.imageget(
+                        &#39;ERROR %s&#39; % var).astype(np.float64)[ngood]
+
+                temp[&#39;QIcov&#39;] = f.imageget(
+                    &#39;COVAR Q I&#39;).astype(np.float64)[ngood]
+                temp[&#39;UIcov&#39;] = f.imageget(
+                    &#39;COVAR U I&#39;).astype(np.float64)[ngood]
+                temp[&#39;QUcov&#39;] = f.imageget(
+                    &#39;COVAR Q U&#39;).astype(np.float64)[ngood]
+
+            log.debug(&#39;storing {} good pixels &#39;
+                      &#39;(out of {})&#39;.format(ngood[0].size,
+                                           naxis1 * naxis2))
+
+            self.pdata.append(temp)
+
+        log.debug(&quot;finished read_resample_data()&quot;)</div>
+
+
+<div class="viewcode-block" id="BaseMap.make_resample_map">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.basemap.BaseMap.html#sofia_redux.instruments.hawc.steps.basemap.BaseMap.make_resample_map">[docs]</a>
+    def make_resample_map(self, cdelt):
+        &quot;&quot;&quot;
+        Construct map parameters from input data.
+
+        The coordinate grid for the map is determined from the
+        range of the RA and Dec coordinates in the input data.
+        The grid and associated reference values are stored in
+        self.pmap, for use by the resampling algorithm.  A draft
+        header containing appropriate WCS information for the output
+        map is stored in self.allhead.
+
+        The &#39;proj&#39; parameter is used to set the projection type
+        in the output header.  The &#39;sizelimit&#39; argument is tested
+        against, to determine if the output map is too large.  This
+        error case is most likely due to inappropriately grouped
+        input files.  These parameters must be defined by the pipeline
+        step inheriting from this class.
+
+        Parameters
+        ----------
+        cdelt : float
+            The pixel scale for the output map, in arcsec.
+        &quot;&quot;&quot;
+
+        log.debug(&quot;starting make_resample_map()&quot;)
+        proj = self.getarg(&#39;proj&#39;)
+
+        ra = np.hstack([d[&#39;ra&#39;] for d in self.pdata])
+        dec = np.hstack([d[&#39;dec&#39;] for d in self.pdata])
+        base_ra = np.mean(ra)
+        base_dec = np.mean(dec)
+
+        # offsets in arcsec, with RA reversed
+        xs = -1 * (ra - base_ra) * np.cos(np.radians(base_dec)) * 3600.
+        ys = (dec - base_dec) * 3600.
+        coordinates = stack(xs, ys)
+
+        xmin = np.nanmin(xs)
+        xmax = np.nanmax(xs)
+        ymin = np.nanmin(ys)
+        ymax = np.nanmax(ys)
+        xrange = xmax - xmin
+        yrange = ymax - ymin
+
+        # size of x and y axes in pixels
+        naxis1 = int(np.ceil(xrange / cdelt))
+        naxis2 = int(np.ceil(yrange / cdelt))
+
+        # check for too large map
+        limit = self.getarg(&#39;sizelimit&#39;)
+        if naxis1 &gt; limit or naxis2 &gt; limit:
+            msg = &quot;Output map is too large (&gt; %.0f pixels)&quot; % limit
+            log.error(msg)
+            raise ValueError(msg)
+
+        # output grid in arcsec offsets
+        xout = np.arange(naxis1, dtype=float) * cdelt + xmin
+        yout = np.arange(naxis2, dtype=float) * cdelt + ymin
+        grid = xout, yout
+
+        # update crval to match an actual output pixel
+        crval2 = base_dec + (yout[naxis2 // 2] / 3600.)
+        crval1 = base_ra - (xout[naxis1 // 2]
+                            / (3600. * np.cos(np.radians(crval2))))
+
+        # draft an output header
+        allhead = fits.Header()
+        allhead[&#39;SIMPLE&#39;] = &#39;T&#39;
+        allhead[&#39;BITPIX&#39;] = -64
+
+        allhead[&#39;NAXIS&#39;] = 2
+        allhead[&#39;NAXIS1&#39;] = naxis1
+        allhead[&#39;NAXIS2&#39;] = naxis2
+        allhead[&#39;CDELT1&#39;] = -1 * cdelt / 3600.
+        allhead[&#39;CDELT2&#39;] = cdelt / 3600.
+        allhead[&#39;CRVAL1&#39;] = crval1
+        allhead[&#39;CRVAL2&#39;] = crval2
+        allhead[&#39;CRPIX1&#39;] = naxis1 // 2 + 1
+        allhead[&#39;CRPIX2&#39;] = naxis2 // 2 + 1
+        allhead[&#39;CTYPE1&#39;] = &#39;RA---%s&#39; % proj
+        allhead[&#39;CTYPE2&#39;] = &#39;DEC--%s&#39; % proj
+        allhead[&#39;EQUINOX&#39;] = self.datain[0].getheadval(&#39;EQUINOX&#39;)
+        allhead[&#39;NHWP&#39;] = self.nhwp
+
+        log.debug(&quot;make_resample_map: &quot;
+                  &quot;naxis1,naxis2 = %d,%d&quot; % (naxis1, naxis2))
+        self.allhead = allhead
+
+        # set the grid information in self.pmap
+        self.pmap = {
+            &#39;base_ra&#39;: base_ra, &#39;base_dec&#39;: base_dec,
+            &#39;xmin&#39;: xmin, &#39;xmax&#39;: xmax,
+            &#39;ymin&#39;: ymin, &#39;ymax&#39;: ymax,
+            &#39;shape&#39;: (ra.size, naxis2, naxis1),
+            &#39;xout&#39;: xout, &#39;yout&#39;: yout,
+            &#39;xrange&#39;: xrange, &#39;yrange&#39;: yrange,
+            &#39;delta&#39;: (cdelt, cdelt),
+            &#39;coordinates&#39;: coordinates,
+            &#39;grid&#39;: grid}
+
+        log.debug(&quot;finished make_resample_map()&quot;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

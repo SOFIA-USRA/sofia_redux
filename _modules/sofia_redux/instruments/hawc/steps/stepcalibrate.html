@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepcalibrate &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepcalibrate</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Flux calibration pipeline step.&quot;&quot;&quot;
+
+from astropy import log
+
+from sofia_redux.calibration.pipecal_util \
+    import apply_fluxcal, get_fluxcal_factor
+from sofia_redux.calibration.pipecal_config import pipecal_config
+from sofia_redux.instruments.hawc.stepparent import StepParent
+
+__all__ = [&#39;StepCalibrate&#39;]
+
+
+<div class="viewcode-block" id="StepCalibrate">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepcalibrate.StepCalibrate.html#sofia_redux.instruments.hawc.steps.stepcalibrate.StepCalibrate">[docs]</a>
+class StepCalibrate(StepParent):
+    &quot;&quot;&quot;
+    Flux calibrate Stokes images.
+
+    This step multiplies the flux in each image by a calibration
+    factor to convert to Jy/pixel units.
+
+    It is assumed that the input data have been opacity-corrected
+    to a reference altitude and zenith angle, and that the factors were
+    derived from flux standards that were similarly corrected. This
+    step should be run after the
+    `sofia_redux.instruments.hawc.steps.StepOpacity` pipeline step.
+
+    Calibration factors are tracked and applied by configuration files and
+    algorithms in the `sofia_redux.calibration` package:
+
+      - `sofia_redux.calibration.pipecal_config`: `pipecal_config`
+      - `sofia_redux.calibration.pipecal_util`:
+        `get_fluxcal_factor`, `apply_fluxcal`
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepCalibrate.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepcalibrate.StepCalibrate.html#sofia_redux.instruments.hawc.steps.stepcalibrate.StepCalibrate.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;calibrate&#39;, and are named with
+        the step abbreviation &#39;CAL&#39;.
+
+        No parameters are currently defined for this step.
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;calibrate&#39;
+        self.description = &#39;Calibrate Flux&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;cal&#39;
+
+        # Clear Parameter list
+        self.paramlist = []</div>
+
+
+<div class="viewcode-block" id="StepCalibrate.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepcalibrate.StepCalibrate.html#sofia_redux.instruments.hawc.steps.stepcalibrate.StepCalibrate.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        Because this step is single-in, single-out (SISO),
+        self.datain must be a DataFits object. The output
+        is also a DataFits object, stored in self.dataout.
+
+        The process is:
+
+        1. Retrieve a calibration factor from configuration files
+           stored in the `sofia_redux.calibration` package.
+        2. Multiply flux and error images by the calibration factor.
+           Multiply covariance images by the calibration factor squared.
+        3. Set the BUNIT keyword in each extension accordingly (to
+           &#39;Jy/pixel&#39; or &#39;Jy2/pixel2&#39; for covariances).
+        &quot;&quot;&quot;
+
+        # copy input to output
+        self.dataout = self.datain.copy()
+        header = self.dataout.header
+
+        # check obstype -- if standard, just continue
+        try:
+            obstype = header[&#39;OBSTYPE&#39;]
+        except KeyError:
+            obstype = &#39;UNKNOWN&#39;
+        if str(obstype).strip().upper() == &#39;STANDARD_FLUX&#39;:
+            log.info(&#39;Flux standard; not applying calibration.&#39;)
+            return
+
+        # Get pipecal config
+        cal_conf = pipecal_config(self.dataout.header)
+
+        # Assemble extensions to correct
+        imgnames = self.dataout.imgnames
+        if &#39;PRIMARY IMAGE&#39; in imgnames and &#39;NOISE&#39; in imgnames:
+            # for scan products
+            extnames = [&#39;PRIMARY IMAGE&#39;, &#39;NOISE&#39;]
+        else:
+            nhwp = self.dataout.getheadval(&#39;nhwp&#39;)
+            if nhwp == 1:
+                stokes = [&#39;I&#39;]
+            else:
+                stokes = [&#39;I&#39;, &#39;Q&#39;, &#39;U&#39;]
+
+            # flux, error, pixel covariances
+            extnames = []
+            for var in stokes:
+                extnames.append(&#39;STOKES %s&#39; % var)
+                extnames.append(&#39;ERROR %s&#39; % var)
+
+            # stokes covariances
+            if nhwp &gt; 1:
+                stokes = [&#39;Q I&#39;, &#39;U I&#39;, &#39;Q U&#39;]
+                for var in stokes:
+                    extnames.append(&#39;COVAR %s&#39; % var)
+
+        # Correct each extension
+        header = self.dataout.header
+        corrfac = None
+        for i, extname in enumerate(extnames):
+            data = self.dataout.imageget(extname)
+            hdr = self.dataout.getheader(extname)
+
+            if i == 0:
+                # correct data and write values to primary header
+                corrdata = apply_fluxcal(data, header, cal_conf)
+                corrfac, _ = get_fluxcal_factor(header, cal_conf)
+                if corrfac is None:
+                    log.warning(&#39;No calibration factor found; &#39;
+                                &#39;not calibrating data.&#39;)
+                else:
+                    log.info(&#39;Flux calibration factor: &#39;
+                             &#39;{:.4f}&#39;.format(corrfac))
+            else:
+                if corrfac is None:
+                    break
+                if &#39;VAR&#39; in extname:
+                    corrdata = data / corrfac ** 2
+                    hdr[&#39;BUNIT&#39;] = (&#39;Jy2/pixel2&#39;, &#39;Data units&#39;)
+                else:
+                    corrdata = data / corrfac
+                    hdr[&#39;BUNIT&#39;] = (&#39;Jy/pixel&#39;, &#39;Data units&#39;)
+
+            self.dataout.imageset(corrdata, extname)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

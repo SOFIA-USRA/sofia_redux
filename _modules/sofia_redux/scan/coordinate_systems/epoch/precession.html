@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.coordinate_systems.epoch.precession &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.coordinate_systems.epoch.precession</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC
+from astropy import units
+import numpy as np
+
+from sofia_redux.scan.coordinate_systems.epoch import \
+    precession_numba_functions as pnf
+
+__all__ = [&#39;Precession&#39;]
+
+
+<div class="viewcode-block" id="Precession">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.precession.Precession.html#sofia_redux.scan.coordinate_systems.epoch.precession.Precession">[docs]</a>
+class Precession(ABC):
+
+    JULIAN_CENTURY = 36525.0 * units.Unit(&#39;day&#39;)
+    YEAR = 365.24219879 * units.Unit(&#39;day&#39;)
+    YEAR_TO_CENTURY = (YEAR / JULIAN_CENTURY).decompose().value
+
+    def __init__(self, from_epoch, to_epoch):
+        &quot;&quot;&quot;
+        Initialize a precession object.
+
+        The precession object is used to precess equatorial coordinates from
+        one epoch to another using the procedure found in:
+
+        Lederle, T. and Schwan, H., &quot;Procedure for computing the apparent
+            places of fundamental stars (APFS) from 1984 onwards&quot;,
+            Astronomy and Astrophysics, vol. 134, no. 1, pp. 1–6, 1984.
+
+        Parameters
+        ----------
+        from_epoch : Epoch
+            The epoch to precess from.
+        to_epoch : Epoch
+            The epoch to precess to.
+        &quot;&quot;&quot;
+        self.from_epoch = from_epoch
+        self.to_epoch = to_epoch
+        self.p = None
+        if self.from_epoch != self.to_epoch:
+            self.calculate_matrix()
+
+<div class="viewcode-block" id="Precession.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.precession.Precession.html#sofia_redux.scan.coordinate_systems.epoch.precession.Precession.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the precession.
+
+        Returns
+        -------
+        Precession
+        &quot;&quot;&quot;
+        new = Precession(self.from_epoch.copy(), self.from_epoch)
+        new.to_epoch = self.to_epoch.copy()
+        if self.p is not None:
+            new.p = self.p.copy()
+        return new</div>
+
+
+    def __eq__(self, other):
+        &quot;&quot;&quot;
+        Check whether this precession is equal to another.
+
+        Parameters
+        ----------
+        other : Precession
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        if self is other:
+            return True
+        if other.__class__ != self.__class__:
+            return False
+        if self.from_epoch != other.from_epoch:
+            return False
+        if self.to_epoch != other.to_epoch:
+            return False
+        return True
+
+    @property
+    def singular_epoch(self):
+        &quot;&quot;&quot;
+        Return whether the precession consists of single time epochs.
+
+        Returns
+        -------
+        is_singular : bool
+        &quot;&quot;&quot;
+        return self.from_epoch.singular and self.to_epoch.singular
+
+<div class="viewcode-block" id="Precession.r2">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.precession.Precession.html#sofia_redux.scan.coordinate_systems.epoch.precession.Precession.r2">[docs]</a>
+    @staticmethod
+    def r2(phi):
+        &quot;&quot;&quot;
+        Calculate the R2 matrix.
+
+        The R2 matrix is a 3x3 array of the form:
+
+          [[cos(phi), 0, sin(phi)],
+           [0,        1, 0       ],
+           [sin(phi), 0, cos(phi)]]
+
+        Parameters
+        ----------
+        phi : astropy.units.Quantity
+            The phi angle.  Either a single value or an array of shape (shape,)
+            may be provided.
+
+        Returns
+        -------
+        R2 : numpy.ndarray (float)
+           The R2 matrix.  If a single `phi`` was provided, the array will
+           be of shape (3, 3).  Otherwise, it will be of shape
+           (phi.shape, 3, 3).
+        &quot;&quot;&quot;
+        if isinstance(phi, np.ndarray) and phi.shape != ():
+            singular = False
+        else:
+            singular = True
+
+        c = np.cos(phi).value
+        s = np.sin(phi).value
+
+        if singular:
+            return np.array(
+                [[c, 0, -s],
+                 [0, 1, 0],
+                 [s, 0, c]], dtype=float)
+
+        result = np.zeros(c.shape + (3, 3), dtype=float)
+        result[..., 0, 0] = c
+        result[..., 0, 2] = -s
+        result[..., 1, 1] = 1
+        result[..., 2, 0] = s
+        result[..., 2, 2] = c
+        return result</div>
+
+
+<div class="viewcode-block" id="Precession.r3">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.precession.Precession.html#sofia_redux.scan.coordinate_systems.epoch.precession.Precession.r3">[docs]</a>
+    @staticmethod
+    def r3(phi):
+        &quot;&quot;&quot;
+        Calculate the R3 matrix.
+
+        The R3 matrix is a 3x3 array of the form:
+
+          [[cos(phi),  sin(phi), 0],
+           [-sin(phi), cos(phi), 0],
+           [0,         0,        1]]
+
+        Parameters
+        ----------
+        phi : astropy.units.Quantity
+            The phi angle.
+
+        Returns
+        -------
+        R2 : numpy.ndarray (float)
+           The R3 matrix.  If a single `phi`` was provided, the array
+           will be of shape (3, 3).  Otherwise, it will be of shape
+           (phi.shape, 3, 3).
+        &quot;&quot;&quot;
+        if isinstance(phi, np.ndarray) and phi.shape != ():
+            singular = False
+        else:
+            singular = True
+
+        c = np.cos(phi).value
+        s = np.sin(phi).value
+
+        if singular:
+            return np.array(
+                [[c, s, 0],
+                 [-s, c, 0],
+                 [0, 0, 1]], dtype=float)
+
+        result = np.zeros(c.shape + (3, 3), dtype=float)
+        result[..., 0, 0] = c
+        result[..., 0, 1] = s
+        result[..., 1, 0] = -s
+        result[..., 1, 1] = c
+        result[..., 2, 2] = 1
+        return result</div>
+
+
+<div class="viewcode-block" id="Precession.calculate_matrix">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.precession.Precession.html#sofia_redux.scan.coordinate_systems.epoch.precession.Precession.calculate_matrix">[docs]</a>
+    def calculate_matrix(self):
+        &quot;&quot;&quot;
+        Precess the coordinates from the from_epoch to the to_epoch.
+
+        The precession matrix is a 3x3 matrix given by:
+
+            m = x1.x2.x3
+
+        where &quot;.&quot; indicates dot matrix multiplication and
+
+            x1 = |  cos(z) sin(z) 0 |
+                 | -sin(z) cos(z) 0 |
+                 |    0      0    1 |
+
+            x2 = | cos(theta) 0 sin(theta) |
+                 |     0      1     0      |
+                 | sin(theta) 0 cos(theta) |
+
+            x3 = |  cos(eta) sin(eta) 0 |
+                 | -sin(eta) cos(eta) 0 |
+                 |    0        0      1 |
+
+            z = ((2305.6997 + (1.39744 + 0.000060 * tau) * tau +
+                  (1.09543 + 0.000390 * tau + 0.018326 * t) * t) * t)
+
+            theta = ((2003.8746 - (0.85405 + 0.000370 * tau) * tau -
+                     (0.42707 + 0.000370 * tau + 0.041803 * t) * t) * t)
+
+            eta = ((2305.6997 + (1.39744 + 0.000060 * tau) * tau +
+                    (0.30201 - 0.000270 * tau + 0.017996 * t) * t) * t)
+
+            tau = (epoch1_year - 2000) * year_to_century
+
+            t = (epoch2_year - epoch1_year) * year_to_century
+
+            year_to_century = 365.24219879 / 36525
+
+        Note that z, theta and eta are in arcseconds.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        from_year = self.from_epoch.julian_year
+        to_year = self.to_epoch.julian_year
+        arcsec = units.Unit(&#39;arcsec&#39;)
+
+        tau = (from_year - 2000) * self.YEAR_TO_CENTURY
+        t = (to_year - from_year) * self.YEAR_TO_CENTURY
+        eta = ((2305.6997 + (1.39744 + 0.000060 * tau) * tau
+                + (0.30201 - 0.000270 * tau + 0.017996 * t) * t) * t)
+        z = ((2305.6997 + (1.39744 + 0.000060 * tau) * tau
+              + (1.09543 + 0.000390 * tau + 0.018326 * t) * t) * t)
+        theta = ((2003.8746 - (0.85405 + 0.000370 * tau) * tau
+                 - (0.42707 + 0.000370 * tau + 0.041803 * t) * t) * t)
+
+        x1 = self.r3(-z * arcsec)
+        x2 = self.r2(theta * arcsec)
+        x3 = self.r3(-eta * arcsec)
+        if self.singular_epoch:
+            self.p = x1.dot(x2).dot(x3)
+        else:
+            self.p = np.einsum(&#39;aij,ajk-&gt;aik&#39;, x1, x2)
+            self.p = np.einsum(&#39;aij,ajk-&gt;aik&#39;, self.p, x3)</div>
+
+
+<div class="viewcode-block" id="Precession.precess">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.precession.Precession.html#sofia_redux.scan.coordinate_systems.epoch.precession.Precession.precess">[docs]</a>
+    def precess(self, equatorial):
+        &quot;&quot;&quot;
+        Precess the coordinates in-place.
+
+        Parameters
+        ----------
+        equatorial : EquatorialCoordinates
+            The equatorial coordinates to precess.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.p is None:
+            return
+
+        ra = np.atleast_1d(equatorial.ra.to(&#39;radian&#39;).value)
+        dec = np.atleast_1d(equatorial.dec.to(&#39;radian&#39;).value)
+
+        if self.singular_epoch:
+            pnf.precess_single(
+                p=self.p, ra=ra, dec=dec,
+                cos_lat=np.atleast_1d(equatorial.cos_lat),
+                sin_lat=np.atleast_1d(equatorial.sin_lat))
+        else:
+            pnf.precess_times(
+                p=self.p, ra=ra, dec=dec,
+                cos_lat=np.atleast_1d(equatorial.cos_lat),
+                sin_lat=np.atleast_1d(equatorial.sin_lat))
+
+        if equatorial.singular:
+            ra = ra[0]
+            dec = dec[0]
+
+        equatorial.set_ra(ra * units.Unit(&#39;radian&#39;), copy=False)
+        equatorial.set_dec(dec * units.Unit(&#39;radian&#39;), copy=False)
+        equatorial.epoch = self.to_epoch</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

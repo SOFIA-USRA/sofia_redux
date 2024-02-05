@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.channels.division.division &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.channels.division.division</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC
+
+__all__ = [&#39;ChannelDivision&#39;]
+
+
+<div class="viewcode-block" id="ChannelDivision">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.division.division.ChannelDivision.html#sofia_redux.scan.channels.division.division.ChannelDivision">[docs]</a>
+class ChannelDivision(ABC):
+
+    def __init__(self, name, groups=None):
+        &quot;&quot;&quot;
+        Instantiates a channel division.
+
+        A Channel division is a collection of channel data groups.  Each group
+        name will be set to &lt;name&gt;-&lt;i&gt;, where &lt;i&gt; marks the index of a supplied
+        group.  A data group consists of only the data arrays belonging to the
+        master Channel object.
+
+        Parameters
+        ----------
+        name : str
+            The name of the division.
+        groups : list of ChannelGroup
+            A list of channel data groups to include in the division.
+        &quot;&quot;&quot;
+        self.name = name
+        if groups is None:
+            self.groups = []
+            return
+
+        if not hasattr(groups, &#39;__len__&#39;):
+            groups = [groups]
+        self.groups = []
+        for group in groups:
+            if group is not None:
+                self.groups.append(group)
+        self.set_default_names()
+
+    @property
+    def size(self):
+        &quot;&quot;&quot;
+        Return the number of channel groups in the channel division.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        if self.groups is None:
+            return 0
+        return len(self.groups)
+
+    @property
+    def fields(self):
+        &quot;&quot;&quot;
+        Returns the available fields for the division channel groups
+
+        Returns
+        -------
+        set (str)
+        &quot;&quot;&quot;
+        if self.size == 0:
+            return set([])
+        else:
+            return self[0].fields
+
+<div class="viewcode-block" id="ChannelDivision.set_default_names">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.division.division.ChannelDivision.html#sofia_redux.scan.channels.division.division.ChannelDivision.set_default_names">[docs]</a>
+    def set_default_names(self):
+        &quot;&quot;&quot;
+        Set the default names for each group in the channel division.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for i, group in enumerate(self.groups):
+            group.name = f&#39;{self.name}-{i + 1}&#39;</div>
+
+
+<div class="viewcode-block" id="ChannelDivision.validate_group_index">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.division.division.ChannelDivision.html#sofia_redux.scan.channels.division.division.ChannelDivision.validate_group_index">[docs]</a>
+    def validate_group_index(self, index_or_group_name):
+        &quot;&quot;&quot;
+        Return the valid index of a given group.
+
+        Raises an error if invalid.
+
+        Parameters
+        ----------
+        index_or_group_name : int or str
+           The name of the group, or the group index.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        if self.size == 0:
+            raise KeyError(&quot;No channel groups available in channel division.&quot;)
+
+        if isinstance(index_or_group_name, int):
+            index = index_or_group_name
+        elif isinstance(index_or_group_name, str):
+            index = self.get_group_name_index(index_or_group_name)
+            if index is None:
+                raise KeyError(f&quot;Group {index_or_group_name} &quot;
+                               f&quot;does not exist in division.&quot;)
+        else:
+            raise ValueError(f&quot;Invalid index type: &quot;
+                             f&quot;{type(index_or_group_name)}&quot;)
+
+        if index &lt; 0:
+            reverse_index = self.size + index
+            if reverse_index &lt; 0:
+                raise IndexError(f&quot;Cannot use index {index} &quot;
+                                 f&quot;with groups size {self.size}.&quot;)
+            index = reverse_index
+
+        if index &gt;= self.size:
+            raise IndexError(f&quot;Group {index_or_group_name} out of range. &quot;
+                             f&quot;Groups size = {self.size}.&quot;)
+        return index</div>
+
+
+<div class="viewcode-block" id="ChannelDivision.get_group_name_index">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.division.division.ChannelDivision.html#sofia_redux.scan.channels.division.division.ChannelDivision.get_group_name_index">[docs]</a>
+    def get_group_name_index(self, group_name):
+        &quot;&quot;&quot;
+        Given a group name, return its groups index.
+
+        Parameters
+        ----------
+        group_name : str
+            The name of the group.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        for index, group in enumerate(self.groups):
+            if group.name == group_name:
+                return index
+        else:
+            return None</div>
+
+
+    def __getitem__(self, index_or_group_name):
+        &quot;&quot;&quot;
+        Return a group from the channel division.
+
+        Parameters
+        ----------
+        index_or_group_name : int or str
+            The index or name of the group.
+
+        Returns
+        -------
+        ChannelGroup
+        &quot;&quot;&quot;
+        index = self.validate_group_index(index_or_group_name)
+        return self.groups[index]
+
+    def __setitem__(self, index_or_group_name, group):
+        &quot;&quot;&quot;
+        Set a channel group member of the division.
+
+        Parameters
+        ----------
+        index_or_group_name : int or str
+            The index or name of the group.
+        group : ChannelGroup
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        index = self.validate_group_index(index_or_group_name)
+        group_class = self.groups[index].__class__
+        if not isinstance(group, group_class):
+            raise ValueError(f&quot;Group must be of {group_class} type.&quot;)
+
+        self.groups[index] = group
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the channel division.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        class_name = self.__class__.__name__
+        result = f&quot;{class_name} ({self.name}): {self.size} group(s)&quot;
+        if self.size == 0:
+            return result
+        result += &#39;\n&#39; + &#39;\n&#39;.join([group.__str__() for group in self.groups])
+        return result</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

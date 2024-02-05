@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.info.chopping &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.info.chopping</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from sofia_redux.scan.info.base import InfoBase
+import numpy as np
+from astropy import units
+
+from sofia_redux.scan.utilities.utils import (
+    to_header_float, insert_info_in_header)
+
+__all__ = [&#39;SofiaChoppingInfo&#39;]
+
+
+<div class="viewcode-block" id="SofiaChoppingInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.chopping.SofiaChoppingInfo.html#sofia_redux.scan.custom.sofia.info.chopping.SofiaChoppingInfo">[docs]</a>
+class SofiaChoppingInfo(InfoBase):
+
+    volts_to_angle = 33.394 * units.Unit(&#39;arcsec&#39;) / units.Unit(&#39;V&#39;)
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize the SOFIA chopping information.
+
+        Contains information on the SOFIA chop parameters.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.chopping = None
+        self.frequency = np.nan * units.Unit(&#39;Hz&#39;)
+        self.profile_type = None
+        self.symmetry_type = None
+        self.amplitude = np.nan * units.Unit(&#39;arcsec&#39;)
+        self.amplitude2 = np.nan * units.Unit(&#39;arcsec&#39;)
+        self.coordinate_system = None
+        self.angle = np.nan * units.Unit(&#39;degree&#39;)
+        self.tip = np.nan * units.Unit(&#39;arcsec&#39;)
+        self.tilt = np.nan * units.Unit(&#39;arcsec&#39;)
+        self.phase = np.nan * units.Unit(&#39;ms&#39;)
+
+    @property
+    def log_id(self):
+        &quot;&quot;&quot;
+        Return the string log ID for the info.
+
+        The log ID is used to extract certain information from table data.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;chop&#39;
+
+<div class="viewcode-block" id="SofiaChoppingInfo.apply_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.chopping.SofiaChoppingInfo.html#sofia_redux.scan.custom.sofia.info.chopping.SofiaChoppingInfo.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Update chopping information with FITS header information.
+
+        Updates the chopping information by taking the following keywords from
+        the FITS header::
+
+          CHOPPING - Whether chopping is enabled for the scan (bool)
+          CHPFREQ - The chopping frequency in Hz
+          CHPPROF - The 2-POINT or 3-POINT point chopping profile (str)
+          CHPSYM - Whether the chopping is symmetrical or asymmetric (str)
+          CHPAMP1 - The first chop amplitude in arcseconds
+          CHPAMP2 - The second chop amplitude in arcseconds
+          CHPCRSYS - The MCCS chopping coordinate system (str)
+          CHPANGLE - The angle in the sky coordinate reference frame (degrees)
+          CHPTIP - The tip in the sky coordinate reference frame (arcseconds)
+          CHPTILT - The tilt in the sky coordinate reference frame (arcseconds)
+          CHPPHASE - The chopping phase in milliseconds.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        options = self.options
+        if options is None:
+            return
+
+        self.chopping = options.get_bool(&quot;CHOPPING&quot;)
+        self.frequency = options.get_float(&quot;CHPFREQ&quot;) * units.Unit(&#39;Hz&#39;)
+        self.profile_type = options.get_string(&quot;CHPPROF&quot;)
+        self.symmetry_type = options.get_string(&quot;CHPSYM&quot;)
+        self.amplitude = options.get_float(&quot;CHPAMP1&quot;) * units.Unit(&#39;arcsec&#39;)
+        self.amplitude2 = options.get_float(&quot;CHPAMP2&quot;) * units.Unit(&#39;arcsec&#39;)
+        self.coordinate_system = options.get_string(&quot;CHPCRSYS&quot;)
+        self.angle = options.get_float(&quot;CHPANGLE&quot;) * units.Unit(&#39;deg&#39;)
+        self.tip = options.get_float(&quot;CHPTIP&quot;) * units.Unit(&#39;arcsec&#39;)
+        self.tilt = options.get_float(&quot;CHPTILT&quot;) * units.Unit(&#39;arcsec&#39;)
+        self.phase = options.get_float(&quot;CHPPHASE&quot;) * units.Unit(&#39;ms&#39;)</div>
+
+
+<div class="viewcode-block" id="SofiaChoppingInfo.edit_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.chopping.SofiaChoppingInfo.html#sofia_redux.scan.custom.sofia.info.chopping.SofiaChoppingInfo.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        info = [
+            (&#39;COMMENT&#39;, &quot;&lt;------ SOFIA Chopping Data ------&gt;&quot;),
+            (&#39;CHPFREQ&#39;, to_header_float(self.frequency, &#39;Hz&#39;),
+             &#39;(Hz) Chop frequency.&#39;),
+            (&#39;CHPAMP1&#39;, to_header_float(self.amplitude, &#39;arcsec&#39;),
+             &#39;(arcsec) Chop amplitude on sky.&#39;),
+            (&#39;CHPAMP2&#39;, to_header_float(self.amplitude2, &#39;arcsec&#39;),
+             &#39;(arcsec) Second chop amplitude on sky.&#39;),
+            (&#39;CHPANGLE&#39;, to_header_float(self.angle, &#39;deg&#39;),
+             &#39;(deg) Chop angle on sky.&#39;),
+            (&#39;CHPTIP&#39;, to_header_float(self.tip, &#39;arcsec&#39;),
+             &#39;(arcsec) Chopper tip on sky.&#39;),
+            (&#39;CHPTILT&#39;, to_header_float(self.tilt, &#39;arcsec&#39;),
+             &#39;(arcsec) Chop tilt on sky.&#39;),
+            (&#39;CHPPROF&#39;, self.profile_type, &#39;Chop profile from MCCS.&#39;),
+            (&#39;CHPSYM&#39;, self.symmetry_type, &#39;Chop symmetry mode.&#39;),
+            (&#39;CHPCRSYS&#39;, self.coordinate_system, &#39;Chop coordinate system.&#39;),
+            (&#39;CHPPHASE&#39;, to_header_float(self.phase, &#39;ms&#39;), &#39;(ms) Chop phase.&#39;)
+        ]
+        insert_info_in_header(header, info, delete_special=True)</div>
+
+
+<div class="viewcode-block" id="SofiaChoppingInfo.get_table_entry">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.chopping.SofiaChoppingInfo.html#sofia_redux.scan.custom.sofia.info.chopping.SofiaChoppingInfo.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Given a name, return the parameter stored in the information object.
+
+        Note that names do not exactly match to attribute names.
+
+        Parameters
+        ----------
+        name : str
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        if name == &#39;flag&#39;:
+            if self.amplitude == 0 or np.isnan(self.amplitude):
+                return &#39;-&#39;
+            else:
+                return &#39;C&#39;
+        elif name == &#39;amp&#39;:
+            return self.amplitude.to(&#39;arcsec&#39;)
+        elif name == &#39;angle&#39;:
+            return self.angle.to(&#39;degree&#39;)
+        elif name == &#39;frequency&#39;:
+            return self.frequency.to(&#39;Hz&#39;)
+        elif name == &#39;tip&#39;:
+            return self.tip.to(&#39;arcsec&#39;)
+        elif name == &#39;tilt&#39;:
+            return self.tilt.to(&#39;arcsec&#39;)
+        elif name == &#39;profile&#39;:
+            return self.profile_type
+        elif name == &#39;sys&#39;:
+            return self.coordinate_system
+        else:
+            return super().get_table_entry(name)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

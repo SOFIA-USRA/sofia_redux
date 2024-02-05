@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.fifi_ls.scan.scan &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.fifi_ls.scan.scan</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from sofia_redux.scan.coordinate_systems.coordinate_2d1 import Coordinate2D1
+from sofia_redux.scan.custom.sofia.scan.scan import SofiaScan
+
+__all__ = [&#39;FifiLsScan&#39;]
+
+
+<div class="viewcode-block" id="FifiLsScan">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.html#sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan">[docs]</a>
+class FifiLsScan(SofiaScan):
+
+    def __init__(self, channels, reduction=None):
+        &quot;&quot;&quot;
+        Initialize a FIFI-LS scan.
+
+        Parameters
+        ----------
+        channels : sofia_redux.scan.custom.sofia.channels.camera.SofiaCamera
+            The instrument channels for the scan.
+        reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
+            The reduction to which this scan belongs.
+        &quot;&quot;&quot;
+        self.prior_pipeline_step = None
+        self.use_between_scans = False
+        super().__init__(channels, reduction=reduction)
+
+    @property
+    def info(self):
+        &quot;&quot;&quot;
+        Return the information object for the scan.
+
+        The information object contains the reduction configuration and various
+        parameters pertaining the this scan.
+
+        Returns
+        -------
+        FifiLsInfo
+        &quot;&quot;&quot;
+        return super().info
+
+<div class="viewcode-block" id="FifiLsScan.copy">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.html#sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the FifiLsScan.
+
+        Returns
+        -------
+        FifiLsScan
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+    @property
+    def astrometry(self):
+        &quot;&quot;&quot;
+        Return the scan astrometry information.
+
+        Returns
+        -------
+        info : FifiLsAstrometryInfo
+        &quot;&quot;&quot;
+        return super().astrometry
+
+<div class="viewcode-block" id="FifiLsScan.get_id">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.html#sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.get_id">[docs]</a>
+    def get_id(self):
+        &quot;&quot;&quot;
+        Return the scan ID.
+
+        FIFI-LS appends a &quot;-uncor&quot; to the ID if using uncorrected FLUX and
+        WAVELENGTH data for the reduction.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        scan_id = super().get_id()
+        if not self.configuration.get_bool(&#39;fifi_ls.uncorrected&#39;):
+            return scan_id
+        else:
+            return f&#39;{scan_id}-uncor&#39;</div>
+
+
+<div class="viewcode-block" id="FifiLsScan.get_integration_instance">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.html#sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.get_integration_instance">[docs]</a>
+    def get_integration_instance(self):
+        &quot;&quot;&quot;
+        Return an integration instance of the correct type for the scan.
+
+        Returns
+        -------
+        integration : FifiLsIntegration
+        &quot;&quot;&quot;
+        return super().get_integration_instance()</div>
+
+
+<div class="viewcode-block" id="FifiLsScan.get_first_integration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.html#sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.get_first_integration">[docs]</a>
+    def get_first_integration(self):
+        &quot;&quot;&quot;
+        Return the first integration of the scan.
+
+        Returns
+        -------
+        integration : FifiLsIntegration
+            Will be `None` if no integrations exist.
+        &quot;&quot;&quot;
+        return super().get_first_integration()</div>
+
+
+<div class="viewcode-block" id="FifiLsScan.get_last_integration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.html#sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.get_last_integration">[docs]</a>
+    def get_last_integration(self):
+        &quot;&quot;&quot;
+        Return the last integration of the scan.
+
+        Returns
+        -------
+        integration : FifiLsIntegration
+            Will be `None` if no integrations exist.
+        &quot;&quot;&quot;
+        return super().get_last_integration()</div>
+
+
+<div class="viewcode-block" id="FifiLsScan.get_first_frame">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.html#sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.get_first_frame">[docs]</a>
+    def get_first_frame(self):
+        &quot;&quot;&quot;
+        Return the first frame of the first integration.
+
+        Returns
+        -------
+        FifiLsFrames
+        &quot;&quot;&quot;
+        return super().get_first_frame()</div>
+
+
+<div class="viewcode-block" id="FifiLsScan.get_last_frame">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.html#sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.get_last_frame">[docs]</a>
+    def get_last_frame(self):
+        &quot;&quot;&quot;
+        Return the last frame of the last integration.
+
+        Returns
+        -------
+        FifiLsFrames
+        &quot;&quot;&quot;
+        return super().get_last_frame()</div>
+
+
+    def __getitem__(self, index):
+        &quot;&quot;&quot;
+        Return an integration(s) at the correct index.
+
+        Parameters
+        ----------
+        index : int or slice
+
+        Returns
+        -------
+        integration : FifiLsIntegration or list (FifiLsIntegration)
+        &quot;&quot;&quot;
+        return super().__getitem__(index)
+
+<div class="viewcode-block" id="FifiLsScan.edit_scan_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.html#sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.edit_scan_header">[docs]</a>
+    def edit_scan_header(self, header):
+        &quot;&quot;&quot;
+        Edit scan FITS header information.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The header to edit.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().edit_scan_header(header)
+        if self.prior_pipeline_step is not None:
+            header[&#39;PROCLEVL&#39;] = (
+                self.prior_pipeline_step,
+                &#39;Last processing step on input scan.&#39;)</div>
+
+
+<div class="viewcode-block" id="FifiLsScan.add_integrations_from_hdul">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.html#sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.add_integrations_from_hdul">[docs]</a>
+    def add_integrations_from_hdul(self, hdul):
+        &quot;&quot;&quot;
+        Add integrations to the scan integrations from an open HDUL.
+
+        Any &quot;timestream&quot; HDUs from the HDUList are read by the integration.
+
+        Parameters
+        ----------
+        hdul : astropy.io.fits.hdu.hdulist.HDUList
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.integrations is None:
+            self.integrations = []
+
+        integration = self.get_integration_instance()
+        integration.read(hdul)
+        self.integrations.append(integration)</div>
+
+
+<div class="viewcode-block" id="FifiLsScan.validate">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.html#sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.validate">[docs]</a>
+    def validate(self):
+        &quot;&quot;&quot;
+        Validate the scan after a read.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.use_between_scans = self.configuration.has_option(&#39;betweenscans&#39;)
+        super().validate()</div>
+
+
+<div class="viewcode-block" id="FifiLsScan.get_point_size">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.html#sofia_redux.scan.custom.fifi_ls.scan.scan.FifiLsScan.get_point_size">[docs]</a>
+    def get_point_size(self):
+        &quot;&quot;&quot;
+        Return the point size of the scan.
+
+        The point size will be the maximum of either the scan or source model
+        (if available).
+
+        Returns
+        -------
+        Coordinate2D1
+            The point size.
+        &quot;&quot;&quot;
+        point_size = self.info.instrument.get_point_size()
+        source_model = self.get_source_model()
+        if source_model is None:
+            return point_size
+
+        model_size = source_model.get_point_size()
+        return Coordinate2D1([max(point_size.x, model_size.x),
+                              max(point_size.y, model_size.y),
+                              max(point_size.z, model_size.z)])</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

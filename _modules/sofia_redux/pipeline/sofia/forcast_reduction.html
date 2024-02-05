@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.sofia.forcast_reduction &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.sofia.forcast_reduction</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;FORCAST Reduction pipeline steps&quot;&quot;&quot;
+
+import os
+import re
+import time
+import warnings
+
+import numpy as np
+from astropy import log
+from astropy.io import fits
+from astropy.wcs import WCS
+
+from sofia_redux.pipeline.sofia.sofia_exception import SOFIAImportError
+try:
+    import sofia_redux.instruments.forcast
+except ImportError:
+    raise SOFIAImportError(&#39;FORCAST modules not installed&#39;)
+
+import sofia_redux.instruments.forcast.configuration as dripconfig
+from sofia_redux.instruments.forcast.getcalpath import getcalpath
+from sofia_redux.instruments.forcast.readfits import readfits
+from sofia_redux.pipeline.reduction import Reduction
+from sofia_redux.pipeline.gui.qad_viewer import QADViewer
+from sofia_redux.pipeline.sofia.parameters.forcast_parameters \
+    import FORCASTParameters
+from sofia_redux.toolkit.utilities.fits import hdinsert, getheader
+
+__all__ = [&#39;FORCASTReduction&#39;]
+
+
+<div class="viewcode-block" id="FORCASTReduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.html#sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction">[docs]</a>
+class FORCASTReduction(Reduction):
+    &quot;&quot;&quot;
+    FORCAST reduction steps.
+
+    Primary image reduction algorithms are defined in the DRIP
+    package (`sofia_redux.instruments.forcast`).  Calibration-related
+    algorithms are pulled from the `sofia_redux.calibration` package, and
+    some utilities come from the `sofia_redux.toolkit` package.  This
+    reduction object requires that all three packages be installed.
+
+    This reduction object defines a method for each pipeline
+    step, that calls the appropriate algorithm from its source
+    packages.
+
+    Attributes
+    ----------
+    prodtype_map : dict
+        Maps the pipeline step to a product type, to assign
+        to the PRODTYPE key. Keys are pipeline step function names.
+    prodnames : dict
+        3-letter file type code, to assign to the output of a pipeline
+        step. Keys are the product types (as defined in prodtype_map).
+    step_map : dict
+        Inverse of the prodtype_map, for looking up pipeline
+        step names from product types.  Keys are the product types.
+    prodtypes : list
+        List of product types, corresponding to the currently
+        loaded recipe.  This list is populated whenever the recipe
+        attribute is set.
+    slit_image_recipe : list
+        Alternate processing recipe to use when input data is
+        marked as a slit image (SLIT!=NONE).  Calibration and
+        coaddition steps are skipped.
+    mosaic_recipe : list
+        Alternate processing recipe to use when input is telluric-
+        corrected or calibrated.  Only calibration, registration,
+        and coaddition are applied.
+    basehead : `astropy.io.fits.Header`
+        Header for the first raw input file loaded, used for calibration
+        configuration.
+    calres : dict-like
+        Reduction mode and auxiliary file configuration mapping,
+        as returned from the sofia_redux.instruments.forcast
+        `getcalpath` function.
+    cal_conf : dict-like
+        Flux calibration and atmospheric correction configuration,
+        as returned from the pipecal `pipecal_config` function.
+    &quot;&quot;&quot;
+    def __init__(self):
+        &quot;&quot;&quot;Initialize the reduction object.&quot;&quot;&quot;
+        super().__init__()
+
+        # descriptive attributes
+        self.name = &#39;DRIP&#39;
+        self.instrument = &#39;FORCAST&#39;
+        self.mode = &#39;&#39;
+        self.data_keys = [&#39;File Name&#39;, &#39;OBJECT&#39;, &#39;OBSTYPE&#39;,
+                          &#39;AOR_ID&#39;, &#39;MISSN-ID&#39;, &#39;DATE-OBS&#39;,
+                          &#39;INSTCFG&#39;, &#39;INSTMODE&#39;, &#39;SKYMODE&#39;, &#39;DETCHAN&#39;,
+                          &#39;DICHROIC&#39;, &#39;SPECTEL1&#39;, &#39;SPECTEL2&#39;,
+                          &#39;SLIT&#39;, &#39;ALTI_STA&#39;, &#39;ZA_START&#39;,
+                          &#39;EXPTIME&#39;, &#39;DTHINDEX&#39;, &#39;NODBEAM&#39;]
+
+        self.pipe_name = &quot;FORCAST_REDUX&quot;
+        self.pipe_version = \
+            sofia_redux.instruments.forcast.__version__.replace(&#39;.&#39;, &#39;_&#39;)
+
+        # associations: this will be instantiated on load
+        self.parameters = None
+
+        # product type definitions for FORCAST steps
+        self.prodtype_map = {&#39;checkhead&#39;: &#39;raw&#39;,
+                             &#39;clean&#39;: &#39;cleaned&#39;,
+                             &#39;droop&#39;: &#39;drooped&#39;,
+                             &#39;nonlin&#39;: &#39;linearized&#39;,
+                             &#39;stack&#39;: &#39;stacked&#39;}
+        self.prodnames = {&#39;raw&#39;: &#39;RAW&#39;,
+                          &#39;cleaned&#39;: &#39;CLN&#39;,
+                          &#39;drooped&#39;: &#39;DRP&#39;,
+                          &#39;linearized&#39;: &#39;LNZ&#39;,
+                          &#39;stacked&#39;: &#39;STK&#39;}
+
+        # invert the map for quick lookup of step from type
+        self.step_map = {v: k for k, v in self.prodtype_map.items()}
+
+        # this will be populated when the recipe is set
+        self.prodtypes = []
+
+        # default recipe and step names
+        self.recipe = [&#39;checkhead&#39;, &#39;clean&#39;, &#39;droop&#39;, &#39;nonlin&#39;,
+                       &#39;stack&#39;]
+        self.processing_steps = {
+            &#39;checkhead&#39;: &#39;Check Headers&#39;,
+            &#39;clean&#39;: &#39;Clean Images&#39;,
+            &#39;droop&#39;: &#39;Correct Droop&#39;,
+            &#39;nonlin&#39;: &#39;Correct Nonlinearity&#39;,
+            &#39;stack&#39;: &#39;Stack Chops/Nods&#39;,
+        }
+
+        # reduction information
+        self.check_input = True
+        self.output_directory = os.getcwd()
+        self.basehead = None
+        self.calres = None
+        self.filenum = []
+
+        # store some 1D spectrum types, for display and
+        # historical accommodation
+        self.spec1d_prodtype = [&#39;spectra_1d&#39;, &#39;merged_spectrum_1d&#39;,
+                                &#39;calibrated_spectrum_1d&#39;,
+                                &#39;combined_spectrum&#39;, &#39;combspec&#39;,
+                                &#39;calspec&#39;, &#39;mrgspec&#39;, &#39;mrgordspec&#39;]
+
+    def __setattr__(self, name, value):
+        &quot;&quot;&quot;Check if recipe is being set. If so, also set prodtypes.&quot;&quot;&quot;
+        if name == &#39;recipe&#39;:
+            # set the prodtype list
+            try:
+                self.prodtypes = [self.prodtype_map[step] for step in value]
+            except AttributeError:
+                self.prodtypes = []
+        super().__setattr__(name, value)
+
+<div class="viewcode-block" id="FORCASTReduction.getfilenum">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.html#sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.getfilenum">[docs]</a>
+    def getfilenum(self, filename):
+        &quot;&quot;&quot;
+        Get the file number from a file name.
+
+        Returns UNKNOWN if file number can&#39;t be parsed.
+
+        Parameters
+        ----------
+        filename : str
+            File name to parse.  Assumed to be \\*_[filenum].fits.
+
+        Returns
+        -------
+        str or list
+            File number(s), formatted to 4 digits.
+        &quot;&quot;&quot;
+        try:
+            numstr = re.split(&#39;[_.]&#39;, os.path.basename(filename))[-2]
+            try:
+                filenum = &#39;{0:04d}&#39;.format(int(numstr))
+            except ValueError:
+                filenum = [&#39;{0:04d}&#39;.format(int(n))
+                           for n in numstr.split(&#39;-&#39;)]
+        except (ValueError, IndexError):
+            filenum = &#39;UNKNOWN&#39;
+        return filenum</div>
+
+
+    def _catfilenum(self, filenum):
+        &quot;&quot;&quot;
+        Concatenate file numbers, first-last.
+
+        File numbers are sorted alphanumerically.
+
+        Parameters
+        ----------
+        filenum : str or list
+            File numbers to concatenate.
+
+        Returns
+        -------
+        str
+            Concatenated file number.
+        &quot;&quot;&quot;
+        # concatenate file numbers
+        if not isinstance(filenum, list):
+            filenum = [filenum]
+        filenums = []
+        for fn in filenum:
+            if isinstance(fn, list):
+                # one more layer of possible lists
+                for f in fn:
+                    if isinstance(f, list):
+                        filenums.extend(f)
+                    else:
+                        filenums.append(f)
+            else:
+                filenums.append(fn)
+        filenums = [str(fn) for fn in filenums]
+        if len(filenums) &gt; 1:
+            filenums.sort()
+            filenumstr = &#39;-&#39;.join([filenums[0], filenums[-1]])
+        else:
+            filenumstr = filenums[0]
+
+        return filenumstr
+
+<div class="viewcode-block" id="FORCASTReduction.getfilename">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.html#sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.getfilename">[docs]</a>
+    def getfilename(self, header, update=True, prodtype=&#39;RAW&#39;,
+                    filenum=&#39;UNKNOWN&#39;):
+        &quot;&quot;&quot;
+        Create an output filename from an input header.
+
+        Requires calibration data to be loaded (self.calres).
+
+        Parameters
+        ----------
+        header : astropy.io.fits.Header
+            Header to create filename from.
+        update : bool, optional
+            If set, FILENAME key will be added or updated
+            in the header.
+        prodtype : str, optional
+            Three letter product type designator.
+        filenum : str or list, optional
+            List of file numbers to concatenate for filename.
+
+        Returns
+        -------
+        str
+           The output name.
+        &quot;&quot;&quot;
+        if self.calres is None:
+            raise ValueError(&#39;Cannot generate name without &#39;
+                             &#39;loaded calibration paths.&#39;)
+
+        # get flight number
+        missn = header.get(&#39;MISSN-ID&#39;, &#39;UNKNOWN&#39;)
+        flight = missn.split(&#39;_&#39;)[-1].lstrip(&#39;F&#39;)
+        try:
+            flight = &#39;F{0:04d}&#39;.format(int(flight))
+        except ValueError:
+            flight = &#39;UNKNOWN&#39;
+
+        # get AOR_ID
+        aorid = header.get(&#39;AOR_ID&#39;, &#39;UNKNOWN&#39;)
+        aorid = aorid.replace(&#39;_&#39;, &#39;&#39;)
+
+        # get config from calres
+        spectel = self.calres[&#39;spectel&#39;].replace(&#39;_&#39;, &#39;&#39;)
+        if self.calres[&#39;gmode&#39;] != -1:
+            inst = &#39;FO_GRI&#39;
+        else:
+            inst = &#39;FO_IMA&#39;
+
+        filenumstr = self._catfilenum(filenum)
+
+        outname = &#39;_&#39;.join([flight, inst, aorid, spectel,
+                            prodtype, filenumstr]).upper()
+        outname = outname + &#39;.fits&#39;
+
+        if update:
+            hdinsert(header, &#39;FILENAME&#39;, outname,
+                     comment=&#39;File name&#39;)
+
+        return outname</div>
+
+
+<div class="viewcode-block" id="FORCASTReduction.set_display_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.html#sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.set_display_data">[docs]</a>
+    def set_display_data(self, raw=False, filenames=None):
+        &quot;&quot;&quot;
+        Store display data for QAD viewer.
+
+        Parameters
+        ----------
+        raw : bool
+            If True, display data is taken from self.rawfiles.
+            If False, display data is taken from self.input
+        filenames : list of str, optional
+            If provided and `raw` is False, file names will be
+            passed to QADViewer instead of self.input.
+        &quot;&quot;&quot;
+        self.display_data = {}
+        if raw:
+            data_list = self.raw_files
+        elif filenames is not None:
+            data_list = filenames
+        else:
+            data_list = self.input
+        self.display_data[&#39;QADViewer&#39;] = data_list</div>
+
+
+<div class="viewcode-block" id="FORCASTReduction.update_sofia_keys">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.html#sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.update_sofia_keys">[docs]</a>
+    def update_sofia_keys(self, header):
+        &quot;&quot;&quot;
+        Update required SOFIA header keywords.
+
+        Keywords added or updated are:
+
+            - PROCSTAT: set to LEVEL_2
+            - ASSC_AOR: copied from AOR_ID
+            - ASSC_OBS: copied from OBS_ID
+            - ASSC_MSN: copied from MISSN-ID
+            - OBS_ID: prepended with &#39;P\\_&#39;
+            - PIPELINE: set to pipe_name
+            - PIPEVERS: set to pipe_version
+
+        Parameters
+        ----------
+        header : `astropy.io.fits.Header`
+            Header to update.
+        &quot;&quot;&quot;
+        # update procstat if necessary
+        procstat = header.get(&#39;PROCSTAT&#39;, &#39;UNKNOWN&#39;).upper()
+        if procstat in [&#39;UNKNOWN&#39;, &#39;LEVEL_0&#39;, &#39;LEVEL_1&#39;]:
+            hdinsert(header, &#39;PROCSTAT&#39;, &#39;LEVEL_2&#39;,
+                     comment=&#39;Processing status&#39;)
+
+        # copy AOR_ID, OBS_ID, and MISSN-ID to ASSC* keys
+        # if not yet present
+        aorid = header.get(&#39;AOR_ID&#39;, &#39;UNKNOWN&#39;).upper()
+        assc_aor = header.get(&#39;ASSC_AOR&#39;, &#39;UNKNOWN&#39;).upper()
+        if assc_aor == &#39;UNKNOWN&#39;:
+            hdinsert(header, &#39;ASSC_AOR&#39;, aorid,
+                     comment=&#39;All input AOR-IDs&#39;)
+
+        obsid = header.get(&#39;OBS_ID&#39;, &#39;UNKNOWN&#39;).upper()
+        assc_obs = header.get(&#39;ASSC_OBS&#39;, &#39;UNKNOWN&#39;).upper()
+        if assc_obs == &#39;UNKNOWN&#39;:
+            hdinsert(header, &#39;ASSC_OBS&#39;, obsid,
+                     comment=&#39;All input OBS-IDs&#39;)
+
+        msnid = header.get(&#39;MISSN-ID&#39;, &#39;UNKNOWN&#39;).upper()
+        assc_msn = header.get(&#39;ASSC_MSN&#39;, &#39;UNKNOWN&#39;).upper()
+        if assc_msn == &#39;UNKNOWN&#39;:
+            hdinsert(header, &#39;ASSC_MSN&#39;, msnid,
+                     comment=&#39;All input MISSN-IDs&#39;)
+
+        # update OBS_ID if necessary
+        if obsid != &#39;UNKNOWN&#39; and not obsid.startswith(&#39;P_&#39;):
+            hdinsert(header, &#39;OBS_ID&#39;, &#39;P_&#39; + obsid)
+
+        # always update pipeline and pipevers info
+        hdinsert(header, &#39;PIPELINE&#39;, self.pipe_name,
+                 comment=&#39;Pipeline creating this file&#39;)
+        hdinsert(header, &#39;PIPEVERS&#39;, self.pipe_version,
+                 comment=&#39;Pipeline version&#39;)
+
+        # and the current date/time
+        hdinsert(header, &#39;DATE&#39;, time.strftime(&#39;%Y-%m-%dT%H:%M:%S&#39;),
+                 comment=&#39;Date of file creation&#39;)</div>
+
+
+<div class="viewcode-block" id="FORCASTReduction.update_output">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.html#sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.update_output">[docs]</a>
+    def update_output(self, hdul, filenum, prodtype):
+        &quot;&quot;&quot;
+        Update output FITS file after a pipeline step.
+
+        Sets the PRODTYPE key, adds a HISTORY message with
+        the pipeline step name, and updates the FILENAME
+        key with a new filename, appropriate to the prodtype.
+        The new filename is returned from the function.
+
+        Parameters
+        ----------
+        hdul : `astropy.io.fits.HDUList`
+           Output FITS HDUList.
+        filenum : str or list
+           File number(s) to use in the filename.
+        prodtype : str
+           Product type for the completed step.
+
+        Returns
+        -------
+        str
+            File base name for the output product.
+        &quot;&quot;&quot;
+        # update header with product type
+        hdinsert(hdul[0].header, &#39;PRODTYPE&#39;,
+                 prodtype, comment=&#39;Product type&#39;)
+
+        # add a history message with step name
+        step_name = self.step_map[prodtype]
+        step_display_name = self.processing_steps[step_name]
+        msg = &#39;-- Pipeline step: {}&#39;.format(step_display_name)
+        hdinsert(hdul[0].header, &#39;HISTORY&#39;, msg)
+
+        hdinsert(hdul[0].header, &#39;HISTORY&#39;, &#39;Parameters:&#39;)
+        params = self.get_parameter_set()
+        for param in params:
+            if params[param][&#39;hidden&#39;]:
+                # don&#39;t record hidden parameters
+                continue
+            msg = &quot;  {} = {}&quot;.format(param, params.get_value(param))
+            hdinsert(hdul[0].header, &#39;HISTORY&#39;, msg)
+
+        hdinsert(hdul[0].header, &#39;HISTORY&#39;, &#39;--&#39;)
+        hdinsert(hdul[0].header, &#39;HISTORY&#39;, &#39;&#39;)
+
+        outname = self.getfilename(hdul[0].header, update=True,
+                                   prodtype=self.prodnames[prodtype],
+                                   filenum=filenum)
+        return outname</div>
+
+
+<div class="viewcode-block" id="FORCASTReduction.write_output">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.html#sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.write_output">[docs]</a>
+    def write_output(self, hdul, outname):
+        &quot;&quot;&quot;
+        Write an output FITS file to disk.
+
+        Outname is joined to self.output_directory, before writing.
+
+        Parameters
+        ----------
+        hdul : `astropy.io.fits.HDUList`
+           FITS HDUList to write.
+        outname : str
+           File basename to write.
+
+        Returns
+        -------
+        str
+            Full path to the output file.
+        &quot;&quot;&quot;
+        outname = os.path.join(self.output_directory, outname)
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;)
+            hdul.writeto(outname, overwrite=True)
+        self.record_outfile(outname)
+        return outname</div>
+
+
+<div class="viewcode-block" id="FORCASTReduction.load">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.html#sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.load">[docs]</a>
+    def load(self, data, param_class=None):
+        &quot;&quot;&quot;
+        Load input data to make it available to reduction steps.
+
+        The process is:
+
+        - Call the parent load method to initialize data
+          reduction variables.
+        - Use the first loaded FITS header to determine and load
+          the DRIP configuration (`sofia_redux.instruments.forcast.getcalpath`,
+          `sofia_redux.instruments.forcast.configuration`).
+        - Use the loaded configuration and the product type in the
+          base header to determine the data processing recipe.
+        - Load parameters for all steps.
+        - Load the data immediately if starting from an intermediate
+          step; otherwise, just load the raw headers and defer loading
+          the data from the FITS files.
+
+        After this step, the input attribute is populated as required
+        for the first pipeline step in the recipe.
+
+        Parameters
+        ----------
+        data : list of str or str
+            Input file paths to load.
+        param_class : class, optional
+            Parameters to instantiate, if not FORCASTParameters.
+        &quot;&quot;&quot;
+        # call the parent method to initialize
+        # reduction variables
+        Reduction.load(self, data)
+
+        # read and save the first FITS header
+        self.basehead = getheader(self.raw_files[0])
+        self.calres = getcalpath(self.basehead)
+
+        log.debug(&#39;Full DRIP cal configuration:&#39;)
+        for key, value in self.calres.items():
+            log.debug(&#39;  {}: {}&#39;.format(key, value))
+
+        # load sofia_redux.instruments.forcast config
+        dripconfig.load(self.calres[&#39;conffile&#39;])
+
+        # get product type to determine recipe
+        intermediate = False
+        prodtype = self.basehead.get(&#39;PRODTYPE&#39;, &#39;UNKNOWN&#39;)
+
+        # get remaining recipe for input prodtype
+        if prodtype in self.prodtypes:
+            pidx = self.prodtypes.index(prodtype)
+            self.recipe = self.recipe[pidx + 1:]
+            if len(self.recipe) == 0:
+                msg = f&quot;No steps to run for prodtype &#39;{prodtype}&#39;.&quot;
+                log.error(msg)
+                raise ValueError(msg)
+
+        if str(prodtype).strip().upper() != &#39;UNKNOWN&#39;:
+            intermediate = True
+
+        if param_class is None:  # pragma: no cover
+            self.parameters = FORCASTParameters(
+                drip_cal_config=self.calres,
+                drip_config=dripconfig.configuration)
+        else:
+            self.parameters = param_class(
+                drip_cal_config=self.calres,
+                drip_config=dripconfig.configuration)
+
+        # load the files in immediately
+        self.load_fits(intermediate=intermediate)</div>
+
+
+    def _load_raw_data(self, datafile):
+        &quot;&quot;&quot;
+        Read raw FORCAST data and calculate errors.
+
+        Data is rearranged into FLUX and ERROR extensions.
+
+        Parameters
+        ----------
+        datafile : str
+            Input filename.
+
+        Returns
+        -------
+        fits.HDUList
+            Flux and error data, as a FITS HDU list.
+        &quot;&quot;&quot;
+        # use the sofia_redux.instruments.forcast function
+        # to read the data and calculate the error
+        hdul = readfits(datafile, fitshdul=True, stddev=True)
+
+        # add the config files to the header
+        header = hdul[0].header
+        conffile = self.calres[&#39;conffile&#39;].split(
+            self.calres[&#39;pathcal&#39;])[-1]
+        hdinsert(header, &#39;CONFFILE&#39;, conffile,
+                 comment=&#39;DRIP config file&#39;)
+        return hdul
+
+<div class="viewcode-block" id="FORCASTReduction.load_fits">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.html#sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.load_fits">[docs]</a>
+    def load_fits(self, intermediate=False):
+        &quot;&quot;&quot;
+        Load FITS data into memory.
+
+        Handles raw data, as well as intermediate data.  Intermediate
+        data may have been produced by the current pipeline version
+        (multiple HDUs expected), or from the v1 IDL pipeline
+        (single HDU expected).
+
+        Loaded data are stored in the input attribute.
+
+        Parameters
+        ----------
+        intermediate : bool
+            If False, the
+            `sofia_redux.instruments.forcast.readfits.readfits`
+            function will be used to read in the data and calculate
+            the associated error images.  If True, the data will
+            just be read in from disk.
+        &quot;&quot;&quot;
+        self.input = []
+        self.filenum = []
+        filenames = []
+        for i, datafile in enumerate(self.raw_files):
+            if not intermediate:
+                # load raw data and rearrange into appropriate
+                # extensions
+                hdul = self._load_raw_data(datafile)
+            else:
+                # otherwise, just read the data
+                input_hdul = fits.open(datafile, lazy_load_hdus=False,
+                                       memmap=False)
+
+                # touch the data to make sure it is in memory
+                # and store copies in a new HDUList
+                # (this avoids storing a file handle in the HDUList)
+                hdul = fits.HDUList()
+                for hdu in input_hdul:
+                    assert hdu.data[0] is not None
+                    hdul.append(hdu.copy())
+                input_hdul.close()
+
+                prodtype = str(hdul[0].header.get(&#39;PRODTYPE&#39;, &#39;UNKNOWN&#39;))
+                if len(hdul) == 1:
+                    if prodtype.strip().lower() in self.spec1d_prodtype or \
+                            prodtype.strip().lower() == &#39;response_spectrum&#39;:
+                        # 1D spectra:
+                        # leave as is and pass filenames to display instead
+                        filenames.append(datafile)
+                    else:
+                        # for legacy data
+                        data = hdul[0].data
+                        header = hdul[0].header
+                        hdinsert(header, &#39;EXTNAME&#39;, &#39;FLUX&#39;,
+                                 comment=&#39;extension name&#39;)
+                        primary = fits.PrimaryHDU(data=data[0, :, :],
+                                                  header=header)
+
+                        # make a basic extension header from
+                        # the WCS in the primary
+                        wcs = WCS(header)
+                        ehead = wcs.to_header(relax=True)
+                        err = fits.ImageHDU(data=np.sqrt(data[1, :, :]),
+                                            header=ehead, name=&#39;ERROR&#39;)
+                        if data.shape[0] &gt; 2:
+                            # same for exposure map
+                            expmap = fits.ImageHDU(
+                                data=data[2, :, :],
+                                header=ehead, name=&#39;EXPOSURE&#39;)
+                            hdul = fits.HDUList([primary, err, expmap])
+                        else:
+                            hdul = fits.HDUList([primary, err])
+
+            # get the file number from the filename
+            self.filenum.append(self.getfilenum(datafile))
+
+            # update required SOFIA keys if necessary
+            self.update_sofia_keys(hdul[0].header)
+
+            self.input.append(hdul)
+
+        # store the data in display variables
+        self.set_display_data(raw=(not intermediate), filenames=filenames)</div>
+
+
+<div class="viewcode-block" id="FORCASTReduction.register_viewers">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.html#sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.register_viewers">[docs]</a>
+    def register_viewers(self):
+        &quot;&quot;&quot;Return a new QADViewer.&quot;&quot;&quot;
+        viewers = [QADViewer()]
+        return viewers</div>
+
+
+<div class="viewcode-block" id="FORCASTReduction.checkhead">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.html#sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.checkhead">[docs]</a>
+    def checkhead(self):
+        &quot;&quot;&quot;
+        Check input headers.
+
+        Calls sofia_redux.instruments.forcast.hdcheck.hdcheck to
+        compare header keywords to requirements.  Halts reduction if
+        the abort parameter is True and the headers do not meet
+        requirements.
+        &quot;&quot;&quot;
+        from sofia_redux.instruments.forcast.hdcheck import hdcheck
+
+        # get parameters
+        param = self.get_parameter_set()
+
+        # check headers in files on disk
+        valid = hdcheck(self.raw_files, kwfile=self.calres[&#39;kwfile&#39;])
+        if not valid and param.get_value(&#39;abort&#39;):
+            msg = &#39;Invalid headers.&#39;
+            log.error(msg)
+            self.error = msg
+            self.input = []
+            return
+
+        # if passed validation,
+        # read fits files into memory for processing
+        self.load_fits()</div>
+
+
+<div class="viewcode-block" id="FORCASTReduction.clean">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.html#sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.clean">[docs]</a>
+    def clean(self):
+        &quot;&quot;&quot;
+        Clean bad pixels from image data.
+
+        Calls `sofia_redux.instruments.forcast.check_readout_shift`
+        to determine if the 16-pixel readout error is present,
+        and corrects for it if desired.
+
+        Calls `sofia_redux.instruments.forcast.clean` to clean bad
+        pixels identified in a bad pixel mask.  Bad pixels may be either
+        interpolated over or propagated as NaN values.
+        &quot;&quot;&quot;
+
+        # import from sofia_redux.instruments.forcast
+        from sofia_redux.instruments.forcast.clean import clean
+        from sofia_redux.instruments.forcast.check_readout_shift \
+            import check_readout_shift
+
+        # get parameters
+        param = self.get_parameter_set()
+        propagate_nan = not param.get_value(&#39;interpolate&#39;)
+
+        # readout shift parameters
+        shift_files = param.get_value(&#39;shiftfile&#39;)
+        do_files = [False] * len(self.input)
+        if shift_files.strip() != &#39;&#39;:
+            if shift_files.lower() == &#39;all&#39;:
+                do_files = [True] * len(self.input)
+            else:
+                try:
+                    file_nums = [int(f) for f in shift_files.split(&#39;;&#39;)]
+                except ValueError:
+                    msg = &quot;Shifted files must be semicolon-separated &quot; \
+                          &quot;integers or the word &quot; \
+                          &quot;&#39;all&#39;.  Input value: &#39;{}&#39;.&quot;.format(shift_files)
+                    log.error(msg)
+                    self.error = msg
+                    return
+
+                for fn in file_nums:
+                    try:
+                        do_files[fn - 1] = True
+                    except IndexError:
+                        msg = &quot;Shifted file value &#39;{}&#39; out of range &quot; \
+                              &quot;for loaded data&quot;.format(fn)
+                        log.error(msg)
+                        self.error = msg
+                        return
+            autoshift = False
+        else:
+            autoshift = param.get_value(&#39;autoshift&#39;)
+
+        badfile = param.get_value(&#39;badfile&#39;)
+        if os.path.isfile(badfile):
+            log.info(&#39;Using bad pixel file {}&#39;.format(badfile))
+            log.info(&#39;&#39;)
+            badmap_int = readfits(badfile)
+            badmap = (badmap_int &gt; 0)
+            badfile = badfile.split(self.calres[&#39;pathcal&#39;])[-1]
+        else:
+            log.warning(&#39;No bad pixel file provided.&#39;)
+            badfile = &#39;None&#39;
+            badmap = None
+
+        outdata = []
+        for i, hdul in enumerate(self.input):
+            header = hdul[0].header
+            data = hdul[&#39;FLUX&#39;].data
+            err = hdul[&#39;ERROR&#39;].data
+
+            # check for readout shift
+            if autoshift:
+                do_files[i] = check_readout_shift(data, header)
+
+            # do readout shift if necessary
+            if do_files[i]:
+                log.info(&#39;Shifting file {} ({}) by 16 pixels in x&#39;.format(
+                    i + 1, os.path.basename(self.raw_files[i])))
+
+                data = np.roll(data, -16, axis=-1)
+                err = np.roll(err, -16, axis=-1)
+
+            # clean bad pixels
+            result = clean(data, badmap, header,
+                           variance=err**2,
+                           propagate_nan=propagate_nan)
+            if result is None:
+                msg = &quot;Problem in sofia_redux.instruments.forcast.clean.&quot;
+                log.error(msg)
+                self.error = msg
+                return
+            else:
+                outimg, outvar = result
+
+            # add badfile to header
+            hdinsert(header, &#39;BDPXFILE&#39;, badfile,
+                     comment=&#39;Bad pixel mask&#39;)
+
+            # update hdul with result
+            # (header may be updated in place, but it&#39;s
+            # safer to make sure it&#39;s properly stored)
+            hdul[0].header = header
+            hdul[&#39;FLUX&#39;].data = outimg
+            hdul[&#39;ERROR&#39;].data = np.sqrt(outvar)
+
+            outname = self.update_output(
+                hdul, self.filenum[i], self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(hdul, outname)
+
+            outdata.append(hdul)
+
+        self.input = outdata
+
+        # set display data to input
+        self.set_display_data()</div>
+
+
+<div class="viewcode-block" id="FORCASTReduction.droop">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.html#sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.droop">[docs]</a>
+    def droop(self):
+        &quot;&quot;&quot;
+        Correct for &#39;droop&#39; detector response effect.
+
+        Calls `sofia_redux.instruments.forcast.droop.droop`.
+        The droop correction may be tuned with the fracdroop parameter.
+        &quot;&quot;&quot;
+
+        # import from sofia_redux.instruments.forcast
+        from sofia_redux.instruments.forcast.droop import droop
+
+        # get parameters
+        param = self.get_parameter_set()
+        droop_frac = param.get_value(&#39;fracdroop&#39;)
+
+        outdata = []
+        for i, hdul in enumerate(self.input):
+            header = hdul[0].header
+            data = hdul[&#39;FLUX&#39;].data
+            err = hdul[&#39;ERROR&#39;].data
+
+            # droop correct
+            result = droop(data, header, frac=droop_frac,
+                           variance=err**2)
+
+            if result is None:
+                msg = &quot;Problem in sofia_redux.instruments.forcast.droop.&quot;
+                log.error(msg)
+                self.error = msg
+                return
+            else:
+                outimg, outvar = result
+
+            # update hdul with result
+            hdul[0].header = header
+            hdul[&#39;FLUX&#39;].data = outimg
+            hdul[&#39;ERROR&#39;].data = np.sqrt(outvar)
+
+            outname = self.update_output(
+                hdul, self.filenum[i], self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(hdul, outname)
+
+            outdata.append(hdul)
+
+        self.input = outdata
+        self.set_display_data()</div>
+
+
+<div class="viewcode-block" id="FORCASTReduction.nonlin">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.html#sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.nonlin">[docs]</a>
+    def nonlin(self):
+        &quot;&quot;&quot;
+        Correct for detector nonlinearity.
+
+        Calls `sofia_redux.instruments.forcast.imgnonlin.imgnonlin`.
+        The image section that determines the background levels for the
+        correction may be specified in parameters.
+        &quot;&quot;&quot;
+
+        # import from sofia_redux.instruments.forcast
+        from sofia_redux.instruments.forcast.background import background
+        from sofia_redux.instruments.forcast.imgnonlin import imgnonlin
+
+        # get parameters
+        param = self.get_parameter_set()
+        secctr = param.get_value(&#39;secctr&#39;)
+        secsize = param.get_value(&#39;secsize&#39;)
+
+        # read section parameter
+        try:
+            cx, cy = [int(n) for n in secctr.split(&#39;,&#39;)]
+            sx, sy = [int(n) for n in secsize.split(&#39;,&#39;)]
+            data_section = (cx, cy, sx, sy)
+        except (ValueError, IndexError):
+            msg = &quot;Invalid background section specified.&quot;
+            log.error(msg)
+            self.error = msg
+            return
+
+        outdata = []
+        for i, hdul in enumerate(self.input):
+            header = hdul[0].header
+            data = hdul[&#39;FLUX&#39;].data
+            err = hdul[&#39;ERROR&#39;].data
+
+            # calculate median background values
+            bglevel = background(data, data_section, header, &#39;median&#39;)
+
+            # use background level to correct for nonlinearity
+            result = imgnonlin(data, header,
+                               siglev=bglevel, variance=err**2)
+
+            if result is None:
+                # just continue with input data, in this case
+                outimg = data
+                outerr = err
+            else:
+                outimg, outvar = result
+                outerr = np.sqrt(outvar)
+
+            # update hdul with result
+            hdul[0].header = header
+            hdul[&#39;FLUX&#39;].data = outimg
+            hdul[&#39;ERROR&#39;].data = outerr
+
+            outname = self.update_output(
+                hdul, self.filenum[i], self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(hdul, outname)
+
+            outdata.append(hdul)
+
+        self.input = outdata
+        self.set_display_data()</div>
+
+
+<div class="viewcode-block" id="FORCASTReduction.stack">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.html#sofia_redux.pipeline.sofia.forcast_reduction.FORCASTReduction.stack">[docs]</a>
+    def stack(self):
+        &quot;&quot;&quot;
+        Stack chop/nod frames.
+
+        Calls `sofia_redux.instruments.forcast.stack.stack`.
+        Images are chop- and nod-subtracted and cleaned of
+        &quot;jailbar&quot; artifacts.
+        &quot;&quot;&quot;
+
+        # import from sofia_redux.instruments.forcast
+        from sofia_redux.instruments.forcast.stack import stack
+
+        # get parameters
+        param = self.get_parameter_set()
+        add_frames = param.get_value(&#39;add_frames&#39;)
+        jbclean = param.get_value(&#39;jbclean&#39;)
+        bgscale = param.get_value(&#39;bgscale&#39;)
+        bgsub = param.get_value(&#39;bgsub&#39;)
+        secctr = param.get_value(&#39;secctr&#39;)
+        secsize = param.get_value(&#39;secsize&#39;)
+        bgstat = param.get_value(&#39;bgstat&#39;)
+
+        # read section parameter
+        try:
+            cx, cy = [int(n) for n in secctr.split(&#39;,&#39;)]
+            sx, sy = [int(n) for n in secsize.split(&#39;,&#39;)]
+            data_section = (cx, cy, sx, sy)
+        except (ValueError, IndexError):
+            msg = &quot;Invalid background section specified.&quot;
+            log.error(msg)
+            self.error = msg
+            return
+
+        # check for sky frame parameter
+        if add_frames:
+            log.info(&quot;All frames added, regardless of INSTMODE.&quot;)
+            bgscale = False
+            bgsub = False
+
+        # set parameter values in config
+        dripconfig.configuration[&#39;bgscale&#39;] = bgscale
+        dripconfig.configuration[&#39;bgsub&#39;] = bgsub
+        dripconfig.configuration[&#39;nlinsection&#39;] = data_section
+        if jbclean:
+            dripconfig.configuration[&#39;jbclean&#39;] = &#39;median&#39;
+        else:
+            dripconfig.configuration[&#39;jbclean&#39;] = &#39;none&#39;
+
+        outdata = []
+        for i, hdul in enumerate(self.input):
+            header = hdul[0].header
+            data = hdul[&#39;FLUX&#39;].data
+            err = hdul[&#39;ERROR&#39;].data
+
+            if add_frames:
+                header[&#39;INSTMODE&#39;] = &#39;STARE&#39;
+                header[&#39;SKYMODE&#39;] = &#39;STARE&#39;
+
+            # subtract chops and nods
+            result = stack(data, header, variance=err**2, stat=bgstat)
+
+            if result is None:
+                msg = &quot;Problem in drip.stack.&quot;
+                log.error(msg)
+                self.error = msg
+                return
+            else:
+                outimg, outvar = result
+
+            # update BUNIT keywords
+            hdinsert(header, &#39;BUNIT&#39;, &#39;Me/s&#39;, comment=&#39;Data units&#39;)
+            hdinsert(hdul[1].header, &#39;BUNIT&#39;, &#39;Me/s&#39;, comment=&#39;Data units&#39;)
+
+            # add exposure keywords
+            if self.calres[&#39;cnmode&#39;] == &#39;NMC&#39;:
+                nexp = 2
+            else:
+                nexp = 1
+            detitime = header.get(&#39;DETITIME&#39;, 0.0)
+            hdinsert(header, &#39;NEXP&#39;, nexp,
+                     comment=&#39;Approximate number of exposures&#39;)
+            hdinsert(header, &#39;EXPTIME&#39;, nexp * detitime / 2.0,
+                     comment=&#39;Nominal on-source integration time [s]&#39;)
+
+            # update hdul with result
+            hdul[0].header = header
+            hdul[&#39;FLUX&#39;].data = outimg
+            hdul[&#39;ERROR&#39;].data = np.sqrt(outvar)
+
+            outname = self.update_output(
+                hdul, self.filenum[i], self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(hdul, outname)
+
+            outdata.append(hdul)
+
+        self.input = outdata
+        self.set_display_data()</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

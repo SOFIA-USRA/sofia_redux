@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.simulation.scan_patterns.daisy &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.simulation.scan_patterns.daisy</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units
+import numpy as np
+
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.equatorial_coordinates import (
+    EquatorialCoordinates)
+from sofia_redux.scan.simulation.scan_patterns.constant_speed import (
+    to_constant_speed)
+
+__all__ = [&#39;daisy_pattern_offset&#39;, &#39;daisy_pattern_equatorial&#39;]
+
+
+<div class="viewcode-block" id="daisy_pattern_offset">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.simulation.scan_patterns.daisy.daisy_pattern_offset.html#sofia_redux.scan.simulation.scan_patterns.daisy.daisy_pattern_offset">[docs]</a>
+def daisy_pattern_offset(radius, radial_period, t_interval,
+                         n_oscillations=22, constant_speed=False):
+    &quot;&quot;&quot;
+    Create a daisy scan pattern in offset coordinates.
+
+    The daisy pattern has the following form in two dimensions::
+
+      x = r.sin(a).cos(b)
+      y = r.sin(a).sin(b)
+      a = 2.pi.t/radial_period + radial_phase
+      b = 2.t/radial_period + rotation_phase
+      rotation_phase = 2.n_oscillations
+      radial_phase = pi.rotation_phase
+
+    The time (t) is generated in the range 0 -&gt; n_oscillations * radial_period
+    in increments ot t_interval.  If `constant_speed` is `False`, the speed
+    of the pattern will be minimal near the edges of the petals and maximal
+    near the center.  Due to the fact that the radial and rotational phases
+    are auto-generated such that the pattern forms a closed shape, the samples
+    will also occur along increasingly separated concentric rings from the
+    origin.  Therefore, for better scanning coverage, `constant_speed` may
+    be set to `True` so that the physical distance between each sample are
+    approximately equal.
+
+    Parameters
+    ----------
+    radius : units.Quantity
+        The angular radius of the daisy pattern.
+    radial_period : units.Quantity
+        The time to complete a single radial oscillation.
+    t_interval : units.Quantity
+        The time interval between sampling points.
+    n_oscillations : int or float, optional
+        The number of oscillations in the pattern.  The default of 22 gives
+        a fully populated area for observation.
+    constant_speed : bool, optional
+        If `True`, return a pattern where the speed between each sample point
+        is equal.
+
+    Returns
+    -------
+    pattern : Coordinate2D
+        The elevation/cross-elevation scan pattern sampled at `t_interval`
+        in the units of `radius`.
+    &quot;&quot;&quot;
+    t_length = n_oscillations * radial_period
+    rotation_phase = 2 * n_oscillations * units.Unit(&#39;radian&#39;)
+    radial_phase = rotation_phase * np.pi
+    nt = int(np.ceil((t_length / t_interval).decompose().value))
+    t = np.arange(nt) * t_interval
+    tr = (t / radial_period).decompose().value * units.Unit(&#39;radian&#39;)
+    a = (2 * np.pi * tr) + radial_phase
+    b = (2 * tr) + rotation_phase
+    dx = radius * np.sin(a) * np.cos(b)
+    dy = radius * np.sin(a) * np.sin(b)
+
+    pattern = Coordinate2D(np.stack([dx, dy]))
+    if constant_speed:
+        pattern = to_constant_speed(pattern)
+
+    return pattern</div>
+
+
+
+<div class="viewcode-block" id="daisy_pattern_equatorial">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.simulation.scan_patterns.daisy.daisy_pattern_equatorial.html#sofia_redux.scan.simulation.scan_patterns.daisy.daisy_pattern_equatorial">[docs]</a>
+def daisy_pattern_equatorial(center, t_interval, **kwargs):
+    &quot;&quot;&quot;
+    Create a daisy scan pattern in equatorial coordinates.
+
+    The daisy pattern will be a perfect daisy about the equatorial
+    coordinates.
+
+    Parameters
+    ----------
+    center : units.Quantity or EquatorialCoordinates
+        The center of the pattern in equatorial coordinates.
+    t_interval : units.Quantity
+        The sampling interval between output points.
+
+    Returns
+    -------
+    pattern : EquatorialCoordinates
+        The equatorial scan pattern sampled at `t_interval`.
+    &quot;&quot;&quot;
+    if &#39;radius&#39; in kwargs:
+        radius = kwargs[&#39;radius&#39;]
+    else:
+        radius = 2 * units.Unit(&#39;arcmin&#39;)
+    if &#39;radial_period&#39; in kwargs:
+        radial_period = kwargs[&#39;radial_period&#39;]
+    else:
+        radial_period = 5 * units.Unit(&#39;second&#39;)
+    if &#39;n_oscillations&#39; in kwargs:
+        n_oscillations = kwargs[&#39;n_oscillations&#39;]
+    else:
+        n_oscillations = 22
+    if &#39;constant_speed&#39; in kwargs:
+        constant_speed = kwargs[&#39;constant_speed&#39;]
+    else:
+        constant_speed = False
+
+    equatorial_offset = daisy_pattern_offset(
+        radius, radial_period, t_interval, n_oscillations=n_oscillations,
+        constant_speed=constant_speed)
+    equatorial = EquatorialCoordinates(center)
+    equatorial.add(equatorial_offset)
+    return equatorial</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

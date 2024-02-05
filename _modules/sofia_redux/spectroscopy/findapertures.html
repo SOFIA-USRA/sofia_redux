@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.findapertures &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.findapertures</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy.stats import gaussian_fwhm_to_sigma, gaussian_sigma_to_fwhm
+import numpy as np
+
+from sofia_redux.toolkit.fitting.fitpeaks1d import fitpeaks1d
+from sofia_redux.toolkit.interpolate import tabinv
+
+__all__ = [&#39;find_apertures&#39;]
+
+
+<div class="viewcode-block" id="find_apertures">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.findapertures.find_apertures.html#sofia_redux.spectroscopy.findapertures.find_apertures">[docs]</a>
+def find_apertures(profiles, npeaks=1, orders=None, positions=None,
+                   fwhm=1.0, fix=False, **kwargs):
+    &quot;&quot;&quot;
+    Determine the position of the aperture(s) in a spatial profile.
+
+    Profiles expected are the median profiles produced by
+    `sofia_redux.spectroscopy.mkspatprof`.  Peaks are fit using a
+    Gaussian model, with initial estimates optionally provided by the user.
+
+    Any additional keyword arguments provided are passed to the
+    `sofia_redux.toolkit.fitting.fitpeaks1d` algorithm, used to fit
+    the Gaussian model to the profile.
+
+    Parameters
+    ----------
+    profiles : dict
+        order (int) -&gt; profile (numpy.ndarray)
+            (n_spatial, 2) spatial profile where profile[:, 0] = spatial
+            coordinate and profile[:, 1] = median spatial profile.
+    npeaks : int, optional
+        Number of peaks to find in each profile.
+    orders : list of int, optional
+        Orders to extract.  If not present, all orders in `profiles` will
+        be extracted.
+    positions : dict, optional
+        order (int) -&gt; list of float
+            Up to (npeaks) positions to use as the starting point(s)
+            for the fit.
+    fwhm : float, optional
+        Starting estimate for Gaussian FWHM of the spatial peak,
+        in arcsec up the slit.
+    fix : bool, optional
+        If set, apertures will be fixed to the input positions.  If input
+        positions are not specified, they will be fixed to the center of
+        the slit.
+
+    Returns
+    -------
+    apertures : dict
+        order (int) -&gt; list of dict
+            Keys and values are as follows:
+               position : float
+               fwhm : float
+               sign : {1, -1}
+    &quot;&quot;&quot;
+    apertures = {}
+    if orders is None:
+        orders = np.unique(list(profiles.keys())).astype(int)
+    else:
+        orders = np.unique(orders).astype(int)
+
+    # Gaussian width from FHWM
+    sigma = gaussian_fwhm_to_sigma * fwhm
+
+    for order in orders:
+        # x and y values: slit position vs. normalized profile value
+        x = profiles[order][0]
+        y = profiles[order][1]
+        dx = np.mean(x[1:] - x[:-1])
+
+        # guess positions if provided
+        if positions is None or order not in positions:
+            guess = None
+        else:
+            guess = positions[order]
+
+        if fix:
+            # if positions not specified, divide up the slit by npeaks
+            if guess is None:
+                guess = []
+                dx = len(x) / (npeaks + 1)
+                for i in range(1, npeaks + 1):
+                    idx = int(np.round(i * dx))
+                    guess.append(x[idx])
+
+            # set the guess positions as the apertures
+            # with the given FWHM and a sign derived from the profile
+            aplist = []
+            for pos in guess:
+                sign = 1 if y[int(tabinv(x, pos))] &gt; 0 else -1
+                aplist.append({&#39;position&#39;: pos,
+                               &#39;fwhm&#39;: fwhm,
+                               &#39;sign&#39;: sign})
+        else:
+            # find highest peaks in the profile
+
+            # bounds on fit position and FHWM: keep inside the slit
+            bounds = {}
+            for i in range(npeaks):
+                bounds[&#39;mean_{}&#39;.format(i)] = (x[0], x[-1])
+                bounds[&#39;stddev_{}&#39;.format(i)] = (dx, x[-1])
+
+            fit_peaks = fitpeaks1d(x, y, npeaks=npeaks, guess=guess,
+                                   stddev=sigma, bounds=bounds,
+                                   **kwargs)
+
+            # assuming the npeaks are the first n models in the output;
+            # background fit is last
+            aplist = []
+            for i in range(npeaks):
+                # fit position
+                fit_pos = fit_peaks[i].mean.value
+
+                # fit FHWM
+                fit_fwhm = fit_peaks[i].stddev.value * gaussian_sigma_to_fwhm
+
+                # sign at fit position
+                sign = 1 if y[int(tabinv(x, fit_pos))] &gt; 0 else -1
+
+                aplist.append({&#39;position&#39;: fit_pos,
+                               &#39;fwhm&#39;: fit_fwhm,
+                               &#39;sign&#39;: sign})
+
+        apertures[order] = sorted(aplist, key=lambda j: j[&#39;position&#39;])
+
+    return apertures</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Mask and NaN Image Filling &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Surface Fitting and Smoothing" href="smooth.html" />
+    <link rel="prev" title="Image Combination" href="combine.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li class="right">
+	<a href="smooth.html" title="Surface Fitting and Smoothing">
+	  next &raquo;
+	</a>
+      </li>
+      <li class="right">
+	<a href="combine.html" title="Image Combination">
+	  &laquo; previous
+	</a>
+	 |
+      </li>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" >SOFIA Redux</a> &#187;</li>
+      <li><a href="../index.html" >sofia_redux.toolkit: Shared Utilities for SOFIA Pipelines</a> &#187;</li>
+      <li><a href="index.html" accesskey="U">Image Algorithms (<code class="xref py py-obj docutils literal notranslate"><span class="pre">sofia_redux.toolkit.image</span></code>)</a> &#187;</li>
+      
+      <li>Mask and NaN Image Filling</li> 
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="mask-and-nan-image-filling">
+<h1>Mask and NaN Image Filling<a class="headerlink" href="#mask-and-nan-image-filling" title="Link to this heading">¶</a></h1>
+<p>There are two different algorithms for filling holes in an image.  Holes
+are defined by either a 2-D array mask of bool values, the same shape as the
+image, in which False indicates a hole or bad value, and True indicates a
+value that is valid.  The alternative is to use NaN values in the image itself
+to identify holes in the image that should be filled in.</p>
+<p>Aside from the functions mentioned here, the <code class="xref py py-mod docutils literal notranslate"><span class="pre">sofia_redux.toolkit.convolve</span></code>
+module contains classes and functions that would perform similarly.  However,
+the user would have to select the correct kernel for their purposes and
+ensure it is sufficiently large enough to cover the largest hole.</p>
+<section id="d-clough-tocher-interpolation-image-naninterp">
+<h2>2-D Clough-Tocher Interpolation (<a class="reference internal" href="../../../api/sofia_redux.toolkit.image.fill.image_naninterp.html#sofia_redux.toolkit.image.fill.image_naninterp" title="sofia_redux.toolkit.image.fill.image_naninterp"><code class="xref py py-func docutils literal notranslate"><span class="pre">image_naninterp()</span></code></a>)<a class="headerlink" href="#d-clough-tocher-interpolation-image-naninterp" title="Link to this heading">¶</a></h2>
+<p><a class="reference internal" href="../../../api/sofia_redux.toolkit.image.fill.image_naninterp.html#sofia_redux.toolkit.image.fill.image_naninterp" title="sofia_redux.toolkit.image.fill.image_naninterp"><code class="xref py py-func docutils literal notranslate"><span class="pre">image_naninterp()</span></code></a> implements the Clough-Tocher scheme which first creates
+a triangulation of the available (non-masked/finite) data values in the image.
+For a single triangle, a 12 term cubic polynomial is created consisting of
+the value and derivatives at each vertex (<span class="math notranslate nohighlight">\(f, f_x^\prime, f_y^\prime\)</span>)
+and the cross-boundary derivatives (<span class="math notranslate nohighlight">\(\partial f / \partial n\)</span>) at the
+edge midpoints.</p>
+<p>The final result can be evaluated fairly quickly as a piecewise polynomial,
+<span class="math notranslate nohighlight">\(C^1\)</span> surface with quadratic precision.  Unfortunately, since this is
+only generated for the convex hull of points, extrapolation beyond the convex
+hull is not possible.  Therefore, if a hole exist at the edge of the image, it
+may not be able to be filled using this method, or the same interpolation
+rules cannot be guaranteed.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">from</span> <span class="nn">sofia_redux.toolkit.image.fill</span> <span class="kn">import</span> <span class="n">image_naninterp</span>
+<span class="kn">from</span> <span class="nn">sofia_redux.toolkit.utilities.func</span> <span class="kn">import</span> <span class="n">julia_fractal</span>
+<span class="kn">from</span> <span class="nn">astropy.modeling.models</span> <span class="kn">import</span> <span class="n">Gaussian2D</span>
+
+<span class="n">image</span> <span class="o">=</span> <span class="n">julia_fractal</span><span class="p">(</span><span class="mi">300</span><span class="p">,</span> <span class="mi">300</span><span class="p">)</span>
+<span class="n">g</span> <span class="o">=</span> <span class="n">Gaussian2D</span><span class="p">(</span><span class="n">x_mean</span><span class="o">=</span><span class="mi">250</span><span class="p">,</span> <span class="n">y_mean</span><span class="o">=</span><span class="mi">250</span><span class="p">,</span> <span class="n">x_stddev</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">y_stddev</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">image</span> <span class="o">+=</span> <span class="n">g</span><span class="p">(</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">300</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">300</span><span class="p">)))</span>
+<span class="n">original</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+<span class="c1"># add a few single pixel holes</span>
+<span class="n">rand</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">(</span><span class="mi">41</span><span class="p">)</span>
+<span class="n">mask</span> <span class="o">=</span> <span class="n">rand</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="o">*</span><span class="n">image</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">])</span> <span class="o">&lt;</span> <span class="mf">0.1</span>
+<span class="n">image</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+
+<span class="c1"># add some larger holes</span>
+<span class="n">image</span><span class="p">[</span><span class="mi">210</span><span class="p">:</span><span class="mi">235</span><span class="p">,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">25</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>  <span class="c1"># edge example</span>
+<span class="n">image</span><span class="p">[</span><span class="mi">100</span><span class="p">:</span><span class="mi">140</span><span class="p">,</span> <span class="mi">160</span><span class="p">:</span><span class="mi">200</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>  <span class="c1"># large structure example</span>
+<span class="n">image</span><span class="p">[</span><span class="mi">230</span><span class="p">:</span><span class="mi">255</span><span class="p">,</span> <span class="mi">230</span><span class="p">:</span><span class="mi">255</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>  <span class="c1"># smooth example</span>
+<span class="n">bad</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+<span class="n">image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">image_naninterp</span><span class="p">(</span><span class="n">image</span><span class="p">),</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">nrows</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ncols</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">15</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+<span class="n">c</span> <span class="o">=</span> <span class="s1">&#39;cubehelix&#39;</span> <span class="c1">#&#39;jet&#39;</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">c</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;Original Image&quot;</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">bad</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">c</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;Holey Image&quot;</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">c</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;Corrected Image (image_naninterp)&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>(<a class="reference download internal" download="" href="../../../_downloads/4058915895c5429fcc45418a64c75e52/fill-1.py"><code class="xref download docutils literal notranslate"><span class="pre">Source</span> <span class="pre">code</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/77350ea10e18d2632271dc615e7757e7/fill-1.png"><code class="xref download docutils literal notranslate"><span class="pre">png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/dabc3f6fcec130f80962f46f82c26d49/fill-1.hires.png"><code class="xref download docutils literal notranslate"><span class="pre">hires.png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/97c68f9fcef92d470f073161943d1902/fill-1.pdf"><code class="xref download docutils literal notranslate"><span class="pre">pdf</span></code></a>)</p>
+<figure class="align-default">
+<img alt="../../../_images/fill-1.png" class="plot-directive" src="../../../_images/fill-1.png" />
+</figure>
+<p>In the above example it can be seen that all small holes were filled fairly
+well, but the larger holes near the left and middle of the image show obviously
+incorrect structure, with severe striations near the edge.  However, the
+smooth feature to the bottom-right was reconstructed nicely.  Bear in mind
+that <code class="xref py py-func docutils literal notranslate"><span class="pre">nan_interp()</span></code> can only fit to quadratic precision, so the missing
+section of the Gaussian near the bottom-right was fit adequately, but it
+would be impossible to correct for fine structure over a large scale.
+Therefore, care should be taken when using <code class="xref py py-func docutils literal notranslate"><span class="pre">nan_interp()</span></code> on noisy images
+or when prominent small scale features are present.</p>
+</section>
+<section id="iterative-filling-maskinterp">
+<h2>Iterative Filling (<a class="reference internal" href="../../../api/sofia_redux.toolkit.image.fill.maskinterp.html#sofia_redux.toolkit.image.fill.maskinterp" title="sofia_redux.toolkit.image.fill.maskinterp"><code class="xref py py-func docutils literal notranslate"><span class="pre">maskinterp()</span></code></a>)<a class="headerlink" href="#iterative-filling-maskinterp" title="Link to this heading">¶</a></h2>
+<p>The <a class="reference internal" href="../../../api/sofia_redux.toolkit.image.fill.maskinterp.html#sofia_redux.toolkit.image.fill.maskinterp" title="sofia_redux.toolkit.image.fill.maskinterp"><code class="xref py py-func docutils literal notranslate"><span class="pre">maskinterp()</span></code></a> function is a Python adaption of the IDL spextool
+function of the same name with added functionality.  The function takes an
+image in which bad values are marked by either NaNs, or a supplied mask, but
+not both.  Be careful if supplying a mask to an image containing NaNs where a
+mask value of True corresponds to a NaN value in the image.</p>
+<p>The algorithm works iteratively: Each bad pixel is corrected using the
+surrounding pixels within a circular aperture centered over the bad pixel.
+The function used for this task is up to the user (polynomial fit by default).
+There are three conditions that need to be met before a replacement value for
+the bad pixel is determined:</p>
+<blockquote>
+<div><p>1. There are enough good (finite/unmasked) pixels within the aperture to
+perform a successful fit.  For example, a 3rd order polynomial fit requires
+16 pixels (4 in the x and y directions).  The minimum number of points
+allowable is set by the <code class="xref py py-obj docutils literal notranslate"><span class="pre">minpoints</span></code> parameter.</p>
+<p>2. The bad pixel is within a certain distance from the center-of-mass of
+good pixels within the aperture.  For example, this would stop extrapolation
+in the case where there were enough good pixels to theoretically perform a
+fit, but they were all to one side of the bad pixel.  The default distance
+limit is 1 pixel and may be set with the <code class="xref py py-obj docutils literal notranslate"><span class="pre">cdis</span></code> parameter.</p>
+<p>3. The fraction of unmasked/finite pixels inside the aperture must be
+greater than <code class="xref py py-obj docutils literal notranslate"><span class="pre">minfrac</span></code> (default=0.2).</p>
+</div></blockquote>
+<p>(<a class="reference download internal" download="" href="../../../_downloads/ee75826e73a711c13295ffbe6e99f8e3/fill-2.py"><code class="xref download docutils literal notranslate"><span class="pre">Source</span> <span class="pre">code</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/8f119425f47d7f02a86dfcf5709e6f76/fill-2.png"><code class="xref download docutils literal notranslate"><span class="pre">png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/a7d6488a9d29683f2c0e6beb788eda55/fill-2.hires.png"><code class="xref download docutils literal notranslate"><span class="pre">hires.png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/eea224c5809f2b5ec52b5f49e5a52655/fill-2.pdf"><code class="xref download docutils literal notranslate"><span class="pre">pdf</span></code></a>)</p>
+<figure class="align-default">
+<img alt="../../../_images/fill-2.png" class="plot-directive" src="../../../_images/fill-2.png" />
+</figure>
+<p>If a fit cannot be performed due to one of the above limitations, the aperture
+radius is increased by <code class="xref py py-obj docutils literal notranslate"><span class="pre">apstep</span></code> pixels (default=1) and the procedure is
+repeated.  Iteration is halted once all bad values have been filled or the
+aperture radius is greater than <code class="xref py py-obj docutils literal notranslate"><span class="pre">maxap</span></code>.  If a pixel cannot be filled, it
+is replaced with <code class="xref py py-obj docutils literal notranslate"><span class="pre">cval</span></code> (NaN by default).</p>
+<section id="example">
+<h3>Example<a class="headerlink" href="#example" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">imageio</span>
+<span class="kn">from</span> <span class="nn">sofia_redux.toolkit.image.fill</span> <span class="kn">import</span> <span class="n">maskinterp</span>
+
+<span class="n">image</span> <span class="o">=</span> <span class="n">imageio</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="s1">&#39;imageio:camera.png&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+<span class="n">image</span> <span class="o">/=</span> <span class="n">image</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+<span class="n">original</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+<span class="n">rand</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">(</span><span class="mi">41</span><span class="p">)</span>
+<span class="n">badpix</span> <span class="o">=</span> <span class="n">rand</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">0.5</span>
+<span class="n">cut</span> <span class="o">=</span> <span class="n">image</span><span class="p">[</span><span class="mi">75</span><span class="p">:</span><span class="mi">175</span><span class="p">,</span> <span class="mi">180</span><span class="p">:</span><span class="mi">280</span><span class="p">]</span>
+<span class="n">cut</span><span class="p">[</span><span class="n">badpix</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">maskinterp</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">kx</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">ky</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">minpoints</span><span class="o">=</span><span class="mi">9</span><span class="p">)</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">nrows</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ncols</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">15</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+<span class="n">c</span> <span class="o">=</span> <span class="s1">&#39;copper&#39;</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">c</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;Original Image&quot;</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">c</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;Holey Image&quot;</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">c</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;Corrected Image (maskinterp)&quot;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">ax</span><span class="p">:</span>
+    <span class="n">a</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="mi">165</span><span class="p">,</span> <span class="mi">295</span><span class="p">)</span>
+    <span class="n">a</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="mi">190</span><span class="p">,</span> <span class="mi">60</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>(<a class="reference download internal" download="" href="../../../_downloads/115c861c55906d4667b98b645c575026/fill-3.py"><code class="xref download docutils literal notranslate"><span class="pre">Source</span> <span class="pre">code</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/99e6933c58fd2b63e50c015795e4ee91/fill-3.png"><code class="xref download docutils literal notranslate"><span class="pre">png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/619c39db3d77cc44ec488ff84550d0d1/fill-3.hires.png"><code class="xref download docutils literal notranslate"><span class="pre">hires.png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/4e100a61018e1177f2d09d33c436e810/fill-3.pdf"><code class="xref download docutils literal notranslate"><span class="pre">pdf</span></code></a>)</p>
+<figure class="align-default">
+<img alt="../../../_images/fill-3.png" class="plot-directive" src="../../../_images/fill-3.png" />
+</figure>
+<p>The above example fits a second order polynomial using the maskinterp
+algorithm.  We require that a minimum of 9 points is used to fit good points
+(3 in X * 3 in Y).</p>
+</section>
+<section id="maskinterp-fitting-function">
+<h3>Maskinterp Fitting Function<a class="headerlink" href="#maskinterp-fitting-function" title="Link to this heading">¶</a></h3>
+<p>The fitting function can be set with the <code class="xref py py-obj docutils literal notranslate"><span class="pre">func</span></code> parameter.  There are two
+types of function available:</p>
+<ol class="arabic simple">
+<li><p>Statistical: <code class="xref py py-obj docutils literal notranslate"><span class="pre">fit</span> <span class="pre">=</span> <span class="pre">f(pixel_values,</span> <span class="pre">**kwargs)</span></code></p></li>
+<li><p>Dependent: <code class="xref py py-obj docutils literal notranslate"><span class="pre">fit</span> <span class="pre">=</span> <span class="pre">f(pixel_values,</span> <span class="pre">cin,</span> <span class="pre">cout,</span> <span class="pre">**kwargs</span></code>)</p></li>
+</ol>
+<p>Statistical functions only require the pixel values within the aperture, while
+dependent functions require the input pixel coordinates and output pixel
+coordinates.  For <a class="reference internal" href="../../../api/sofia_redux.toolkit.image.fill.maskinterp.html#sofia_redux.toolkit.image.fill.maskinterp" title="sofia_redux.toolkit.image.fill.maskinterp"><code class="xref py py-func docutils literal notranslate"><span class="pre">maskinterp()</span></code></a> <code class="xref py py-obj docutils literal notranslate"><span class="pre">cin</span></code> and <code class="xref py py-obj docutils literal notranslate"><span class="pre">cout</span></code> must always be (N, 2)
+arrays where <code class="xref py py-obj docutils literal notranslate"><span class="pre">cin[:,</span> <span class="pre">0]</span></code> contains the y coordinates of the input pixels, and
+<code class="xref py py-obj docutils literal notranslate"><span class="pre">cin[:,</span> <span class="pre">1]</span></code> contains the x coordinates of the input pixels.  i.e., create a
+fit based on the data values and <code class="xref py py-obj docutils literal notranslate"><span class="pre">cin</span></code>, then interpolate onto any values
+contained in <code class="xref py py-obj docutils literal notranslate"><span class="pre">cout</span></code>.</p>
+<p>For example, the following function defines the default polynomial fitting
+function:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">spline_interp_2dfunc</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">cin</span><span class="p">,</span> <span class="n">cout</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">polyinterp2d</span><span class="p">(</span>
+        <span class="n">cin</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">cin</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">d</span><span class="p">,</span> <span class="n">cout</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">cout</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>A statistical function could be defined as shown in the following example:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">median_filled</span> <span class="o">=</span> <span class="n">maskinterp</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">func</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">,</span> <span class="n">statistical</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">median_filled</span><span class="p">[</span><span class="mi">60</span><span class="p">:</span><span class="mi">190</span><span class="p">,</span> <span class="mi">165</span><span class="p">:</span><span class="mi">295</span><span class="p">],</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;copper&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Maskinterp with user defined median function&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>(<a class="reference download internal" download="" href="../../../_downloads/2484c8ef55526480f6f3085bc72ca887/fill-4.py"><code class="xref download docutils literal notranslate"><span class="pre">Source</span> <span class="pre">code</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/b18ce390770bc8a68ca2cefa19f8a94b/fill-4.png"><code class="xref download docutils literal notranslate"><span class="pre">png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/7ed725d50bed660adb3ea21587259eaa/fill-4.hires.png"><code class="xref download docutils literal notranslate"><span class="pre">hires.png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/4f04e98abb5463e889fae48382506338/fill-4.pdf"><code class="xref download docutils literal notranslate"><span class="pre">pdf</span></code></a>)</p>
+<figure class="align-default">
+<img alt="../../../_images/fill-4.png" class="plot-directive" src="../../../_images/fill-4.png" />
+</figure>
+<p>In order to declare that the function being used does not rely on input/output
+coordinates, <code class="xref py py-obj docutils literal notranslate"><span class="pre">statistical=True</span></code> must be set.</p>
+</section>
+</section>
+<section id="performance">
+<h2>Performance<a class="headerlink" href="#performance" title="Link to this heading">¶</a></h2>
+<p>The processing time required for <a class="reference internal" href="../../../api/sofia_redux.toolkit.image.fill.maskinterp.html#sofia_redux.toolkit.image.fill.maskinterp" title="sofia_redux.toolkit.image.fill.maskinterp"><code class="xref py py-func docutils literal notranslate"><span class="pre">maskinterp()</span></code></a> is highly dependent on the
+number of masked points in an image, the scale of any holes (number of
+iterations), and the function used to fit.  <a class="reference internal" href="../../../api/sofia_redux.toolkit.image.fill.image_naninterp.html#sofia_redux.toolkit.image.fill.image_naninterp" title="sofia_redux.toolkit.image.fill.image_naninterp"><code class="xref py py-func docutils literal notranslate"><span class="pre">image_naninterp()</span></code></a> is only
+dependent on the size of the image.  Therefore, if performance is a
+consideration, testing is required.  Otherwise, the <code class="xref py py-mod docutils literal notranslate"><span class="pre">sofia_redux.toolkit.convolve</span></code>
+module also allows replacement of masked/NaN values through convolution of
+valid points with a given kernel including a Savitzky-Golay polynomial
+approximation.</p>
+</section>
+</section>
+<section id="polygon-filling">
+<h1>Polygon Filling<a class="headerlink" href="#polygon-filling" title="Link to this heading">¶</a></h1>
+<p>The <a class="reference internal" href="../../../api/sofia_redux.toolkit.image.fill.polyfillaa.html#sofia_redux.toolkit.image.fill.polyfillaa" title="sofia_redux.toolkit.image.fill.polyfillaa"><code class="xref py py-func docutils literal notranslate"><span class="pre">polyfillaa()</span></code></a> function is used find all pixels within a given polygon,
+or sets of multiple polygons.  It can optionally also return the area of the
+pixel enclosed by a/each polygon.</p>
+<section id="output-results">
+<h2>Output results<a class="headerlink" href="#output-results" title="Link to this heading">¶</a></h2>
+<p>By default all pixels on an infinite grid contained or partially contained
+by a polygon will be reported in the output results.  If this is not desired,
+the limits of the grid should be set by the <code class="xref py py-obj docutils literal notranslate"><span class="pre">xrange</span></code> and <code class="xref py py-obj docutils literal notranslate"><span class="pre">yrange</span></code> parameters.</p>
+<p>If a single polygon is supplied, the pixels contained within will be returned
+as an (N, 2) array of N total pixels where <code class="xref py py-obj docutils literal notranslate"><span class="pre">result[i,</span> <span class="pre">0]</span></code> corresponds to the
+y-coordinate of pixel i and <code class="xref py py-obj docutils literal notranslate"><span class="pre">result[i,</span> <span class="pre">1]</span></code> corresponds to the x-coordinate of
+pixel i.  If the area is returned, it will be reported as a 1-dimensional
+array of shape (N) where <code class="xref py py-obj docutils literal notranslate"><span class="pre">area[i]</span></code> is the area of pixel i enclosed by the
+polygon.</p>
+<p>If multiple polygons were supplied, the output result is a <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dict</span></code></a> where
+the key corresponds to the polygon index and the values are the same as those
+described for the single polygon output.  For example, <code class="xref py py-obj docutils literal notranslate"><span class="pre">result[0]</span></code> would
+contain the results for the first polygon specified by the user.</p>
+</section>
+<section id="single-polygons">
+<h2>Single Polygons<a class="headerlink" href="#single-polygons" title="Link to this heading">¶</a></h2>
+<p>The <code class="xref py py-obj docutils literal notranslate"><span class="pre">px</span></code> and <code class="xref py py-obj docutils literal notranslate"><span class="pre">py</span></code> arguments are used to pass in the x and y coordinates of the
+polygon vertices.  For example,</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">sofia_redux.toolkit.image.fill</span> <span class="kn">import</span> <span class="n">polyfillaa</span>
+
+<span class="c1"># Define a polygon</span>
+<span class="n">px</span> <span class="o">=</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">9</span><span class="p">]</span>
+<span class="n">py</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">]</span>
+
+<span class="n">pixels</span><span class="p">,</span> <span class="n">areas</span> <span class="o">=</span> <span class="n">polyfillaa</span><span class="p">(</span><span class="n">px</span><span class="p">,</span> <span class="n">py</span><span class="p">,</span> <span class="n">area</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">11</span><span class="p">,</span> <span class="mi">11</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+<span class="n">grid</span><span class="p">[</span><span class="n">pixels</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">pixels</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">areas</span>
+
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xticks</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_yticks</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xticklabels</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">11</span><span class="p">))</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_yticklabels</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">11</span><span class="p">))</span>
+
+<span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">which</span><span class="o">=</span><span class="s1">&#39;major&#39;</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="s1">&#39;both&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span>
+        <span class="n">color</span><span class="o">=</span><span class="s1">&#39;k&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">img</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">grid</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;cividis&#39;</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="s1">&#39;lower&#39;</span><span class="p">)</span>
+
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">px</span> <span class="o">+</span> <span class="p">[</span><span class="n">px</span><span class="p">[</span><span class="mi">0</span><span class="p">]])</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">py</span> <span class="o">+</span> <span class="p">[</span><span class="n">py</span><span class="p">[</span><span class="mi">0</span><span class="p">]])</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="s1">&#39;-o&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;Pixels within polygon and fractional area&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>(<a class="reference download internal" download="" href="../../../_downloads/f2795948e626b07f26811ed2c98b5c42/fill-5.py"><code class="xref download docutils literal notranslate"><span class="pre">Source</span> <span class="pre">code</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/61b41abb7f9241f2aa1e2cb9bc38610d/fill-5.png"><code class="xref download docutils literal notranslate"><span class="pre">png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/ea7029c67f92e8a793c1efeb5d714979/fill-5.hires.png"><code class="xref download docutils literal notranslate"><span class="pre">hires.png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/b4bc5cb0b6373b43abc5cf2915072c4b/fill-5.pdf"><code class="xref download docutils literal notranslate"><span class="pre">pdf</span></code></a>)</p>
+<figure class="align-default">
+<img alt="../../../_images/fill-5.png" class="plot-directive" src="../../../_images/fill-5.png" />
+</figure>
+<p>In the above plot, the fraction of pixel within the triangle is color coded.</p>
+</section>
+<section id="multiple-polygons">
+<h2>Multiple Polygons<a class="headerlink" href="#multiple-polygons" title="Link to this heading">¶</a></h2>
+<p>If multiple polygons are to be calculated, there are two ways of indicating
+which points belong to which polygons.  The first method allows <code class="xref py py-obj docutils literal notranslate"><span class="pre">px</span></code> and <code class="xref py py-obj docutils literal notranslate"><span class="pre">py</span></code>
+to still be provided as 1-dimensional arrays, but an additional parameter
+<code class="xref py py-obj docutils literal notranslate"><span class="pre">start_indices</span></code>, is used to provide the starting index of each polygon within.
+For example:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">px</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">14</span><span class="p">,</span> <span class="mi">14</span><span class="p">]</span>
+<span class="n">py</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span>  <span class="mi">4</span><span class="p">,</span>  <span class="mi">5</span><span class="p">,</span>  <span class="mi">5</span><span class="p">,</span>  <span class="mi">4</span><span class="p">]</span>
+<span class="c1">#    |-- 0 ----||--- 1 --||------2-------|</span>
+<span class="n">start_indices</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">7</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>The second method uses a 2-level nested list, where each sublist contains
+the points for a polygon.  For example:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">px</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">8</span><span class="p">],</span> <span class="p">[</span><span class="mi">12</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">14</span><span class="p">,</span> <span class="mi">14</span><span class="p">]]</span>
+<span class="n">py</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span>  <span class="mi">5</span><span class="p">,</span>  <span class="mi">5</span><span class="p">,</span>  <span class="mi">4</span><span class="p">]]</span>
+</pre></div>
+</div>
+<p>The above examples all define the same shapes.  The first is a square with
+vertices at (0, 0) (0, 2) (2, 2) (2 0), the second is a triangle (5, 2) (3, 9)
+(9, 5), and the list is a rectangle (100, 300) (100, 400) (200, 400) (200, 300).</p>
+<p>Results will be output as a <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dict</span></code></a> as discribed above.  For example:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">sofia_redux.toolkit.image.fill</span> <span class="kn">import</span> <span class="n">polyfillaa</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+
+<span class="n">px</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">8</span><span class="p">],</span> <span class="p">[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">12</span><span class="p">]]</span>
+<span class="n">py</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span>  <span class="mi">5</span><span class="p">,</span>  <span class="mi">5</span><span class="p">,</span>  <span class="mi">4</span><span class="p">]]</span>
+
+<span class="c1"># Add a pentagon</span>
+<span class="k">def</span> <span class="nf">mypoly</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">n</span><span class="p">):</span>
+    <span class="n">ang</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="n">n</span>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">r</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">ang</span><span class="p">)</span> <span class="o">+</span> <span class="n">x</span><span class="p">),</span> <span class="nb">list</span><span class="p">(</span><span class="n">r</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">ang</span><span class="p">)</span> <span class="o">+</span> <span class="n">y</span><span class="p">)</span>
+
+<span class="n">hx</span><span class="p">,</span> <span class="n">hy</span> <span class="o">=</span> <span class="n">mypoly</span><span class="p">(</span><span class="mf">10.5</span><span class="p">,</span> <span class="mf">10.5</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+<span class="n">px</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hx</span><span class="p">)</span>
+<span class="n">py</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hy</span><span class="p">)</span>
+
+<span class="n">result</span><span class="p">,</span> <span class="n">areas</span> <span class="o">=</span> <span class="n">polyfillaa</span><span class="p">(</span><span class="n">px</span><span class="p">,</span> <span class="n">py</span><span class="p">,</span> <span class="n">area</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">15</span><span class="p">,</span> <span class="mi">15</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">keys</span><span class="p">())):</span>
+    <span class="n">grid</span><span class="p">[</span><span class="n">result</span><span class="p">[</span><span class="n">i</span><span class="p">][:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">result</span><span class="p">[</span><span class="n">i</span><span class="p">][:,</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">areas</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xticks</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_yticks</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xticklabels</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">16</span><span class="p">))</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_yticklabels</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">16</span><span class="p">))</span>
+
+<span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">which</span><span class="o">=</span><span class="s1">&#39;major&#39;</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="s1">&#39;both&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span>
+        <span class="n">color</span><span class="o">=</span><span class="s1">&#39;k&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">img</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">grid</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;cividis&#39;</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="s1">&#39;lower&#39;</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">px</span><span class="p">)):</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">px</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">px</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">0</span><span class="p">]]</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">py</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">py</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">0</span><span class="p">]]</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">y</span><span class="p">)</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">,</span>
+            <span class="s1">&#39;-o&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">7</span><span class="p">)</span>
+
+<span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;Multiple polygons and fractional area&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>(<a class="reference download internal" download="" href="../../../_downloads/278bc97ebaf6ec5b45c5d0fc0241595f/fill-6.py"><code class="xref download docutils literal notranslate"><span class="pre">Source</span> <span class="pre">code</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/9396952d4f2f10fa589573ffe8be60ef/fill-6.png"><code class="xref download docutils literal notranslate"><span class="pre">png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/2af53268abacb8bf7dceaaf700f30582/fill-6.hires.png"><code class="xref download docutils literal notranslate"><span class="pre">hires.png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/45d3ebff76ac9e9f857109aabf4346e6/fill-6.pdf"><code class="xref download docutils literal notranslate"><span class="pre">pdf</span></code></a>)</p>
+<figure class="align-default">
+<img alt="../../../_images/fill-6.png" class="plot-directive" src="../../../_images/fill-6.png" />
+</figure>
+<p>Note, that the center of a pixel cell is defined at (x + 0.5, y + 0.5) while
+(x, y) is defined as the bottom-left corner of a pixel cell.
+<a class="reference external" href="https://matplotlib.org/stable/index.html#module-matplotlib" title="(in Matplotlib v3.8.2)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">matplotlib</span></code></a> defined (x, y) as the center of a cell, which is why there
+are various 0.5 corrections dotted throughout the examples above for plotting.</p>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+<ul>
+<li><a class="reference internal" href="#">Mask and NaN Image Filling</a><ul>
+<li><a class="reference internal" href="#d-clough-tocher-interpolation-image-naninterp">2-D Clough-Tocher Interpolation (<code class="xref py py-func docutils literal notranslate"><span class="pre">image_naninterp()</span></code>)</a></li>
+<li><a class="reference internal" href="#iterative-filling-maskinterp">Iterative Filling (<code class="xref py py-func docutils literal notranslate"><span class="pre">maskinterp()</span></code>)</a><ul>
+<li><a class="reference internal" href="#example">Example</a></li>
+<li><a class="reference internal" href="#maskinterp-fitting-function">Maskinterp Fitting Function</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#performance">Performance</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#polygon-filling">Polygon Filling</a><ul>
+<li><a class="reference internal" href="#output-results">Output results</a></li>
+<li><a class="reference internal" href="#single-polygons">Single Polygons</a></li>
+<li><a class="reference internal" href="#multiple-polygons">Multiple Polygons</a></li>
+</ul>
+</li>
+</ul>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right">
+    <a href="../../../_sources/sofia_redux/toolkit/image/fill.rst.txt"
+       rel="nofollow">Page Source</a> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

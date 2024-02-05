@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.steppolvec &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.steppolvec</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Polarization vector pipeline step.&quot;&quot;&quot;
+
+from astropy import log
+from astropy import wcs as astwcs
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.instruments.hawc.stepparent import StepParent
+
+__all__ = [&#39;StepPolVec&#39;]
+
+
+<div class="viewcode-block" id="StepPolVec">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.steppolvec.StepPolVec.html#sofia_redux.instruments.hawc.steps.steppolvec.StepPolVec">[docs]</a>
+class StepPolVec(StepParent):
+    r&quot;&quot;&quot;
+    Calculate polarization vectors.
+
+    This step uses the Stokes parameter images and associated
+    errors and covariances to compute the percent polarization
+    and angle for each pixel. It also computes the debiased
+    polarization and the rotated angle (for B-field directions).
+    These values are all stored in a FITS table extension named
+    &#39;Pol Data&#39;.
+
+    The input for this step is a DataFits object with images:
+    STOKES I, ERROR I, STOKES Q, STOKES U, COVAR Q I, COVAR U I,
+    COVAR Q U. This step is typically run after
+    `sofia_redux.instruments.hawc.steps.StepMerge`.
+
+    Output for this step contains the same image frames as the input
+    files, plus a table with the polarization vectors for each
+    pixel (POL DATA). Images of these data are also added as separate
+    extensions. The added extensions are named: PERCENT POL,
+    DEBIASED PERCENT POL, ERROR PERCENT POL, POL ANGLE, ROTATED POL
+    ANGLE, ERROR POL ANGLE, POL FLUX, ERROR POL FLUX, DEBIASED POL FLUX.
+    Finally, the PROCSTAT header keyword will be updated to LEVEL\_4
+    after this step.
+
+    Notes
+    -----
+    The standard equations are used to convert from Stokes
+    parameters to polarization percentage and angle:
+
+       .. math:: \theta = \frac{90}{\pi} arctan\Big(\frac{U}{Q}\Big)
+
+       .. math:: \sigma_\theta = \frac{90}{\pi (Q^2 + U^2)}
+                                 \sqrt{(U\sigma_Q)^2 +
+                                       (Q\sigma_U)^2 - 2 Q U \sigma_{QU}}.
+
+    The percent polarization (:math:`p`) and its error are calculated as
+
+       .. math:: p = 100 \sqrt{\Big(\frac{Q}{I}\Big)^2
+                               + \Big(\frac{U}{I}\Big)^2}
+
+       .. math:: \sigma_p = \frac{100}{I} \sqrt{\frac{1}{(Q^2 + U^2)}
+                            \Big[(Q \sigma_Q)^2
+                                 + (U \sigma_U)^2 + 2 Q U \sigma_{QU}\Big]
+                            + \Big[\Big(\frac{Q}{I}\Big)^2
+                                   + \Big(\frac{U}{I}\Big)^2\Big]
+                            \sigma_I^2 - 2 \frac{Q}{I}\sigma_{QI}
+                            - 2 \frac{U}{I} \sigma_{UI}}.
+
+    The debiased polarization percentage (:math:`p&#39;`)is also calculated, as:
+
+       .. math:: p&#39; = \sqrt{p^2 - \sigma_p^2}.
+
+    The polarization efficiency provided in the &#39;eff&#39; parameter is
+    applied to the Q and U values (and their associated errors and
+    covariances) after calculating :math:`\theta`, but before calculating
+    percent polarization.
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepPolVec.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.steppolvec.StepPolVec.html#sofia_redux.instruments.hawc.steps.steppolvec.StepPolVec.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;polvec&#39;, and are named with
+        the step abbreviation &#39;VEC&#39;.
+
+        Parameters defined for this step are:
+
+        eff : list of float
+            Telescope + instrument polarization efficiency. One
+            value per HAWC waveband.
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;polvec&#39;
+        self.description = &#39;Compute Vectors&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;vec&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+        # Append parameters
+        self.paramlist.append([&#39;eff&#39;, [1.0, 1.0, 1.0, 1.0, 1.0],
+                               &#39;telescope + instrument polarization &#39;
+                               &#39;efficiency for each waveband&#39;])</div>
+
+
+<div class="viewcode-block" id="StepPolVec.read_eff">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.steppolvec.StepPolVec.html#sofia_redux.instruments.hawc.steps.steppolvec.StepPolVec.read_eff">[docs]</a>
+    def read_eff(self):
+        &quot;&quot;&quot;
+        Read an efficiency value from the parameters.
+
+        The parameters are expected to be defined as a list, with
+        one entry for each HAWC band.  The correct value for the
+        input data is selected from the list.
+
+        Returns
+        -------
+        float
+            The polarization efficiency.
+        &quot;&quot;&quot;
+        waveband = self.datain.getheadval(&#39;spectel1&#39;)
+        bands = [&#39;A&#39;, &#39;B&#39;, &#39;C&#39;, &#39;D&#39;, &#39;E&#39;]
+        try:
+            idx = bands.index(waveband[-1])
+        except (ValueError, IndexError):
+            # waveband not in list
+            msg = &#39;Cannot parse waveband: %s&#39; % waveband
+            log.error(msg)
+            raise ValueError(msg)
+        try:
+            eff = self.getarg(&#39;eff&#39;)[idx]
+        except IndexError:
+            msg = &#39;Need efficiency values for all wavebands&#39;
+            log.error(msg)
+            raise IndexError(msg)
+        return eff</div>
+
+
+<div class="viewcode-block" id="StepPolVec.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.steppolvec.StepPolVec.html#sofia_redux.instruments.hawc.steps.steppolvec.StepPolVec.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        Because this step is single-in, single-out (SISO),
+        self.datain must be a DataFits object.  The output
+        is also a DataFits object, stored in self.dataout.
+
+        The process is:
+
+        1. Compute polarization vector magnitude and direction.
+           Propagate errors accordingly.
+        2. Store the data in tables and images.
+        &quot;&quot;&quot;
+        self.dataout = self.datain.copy()
+
+        nhwp = self.dataout.getheadval(&#39;nhwp&#39;)
+
+        # suppress warnings when I do stuff with NaN&#39;s or divide by zero
+        np.seterr(invalid=&#39;ignore&#39;, divide=&#39;ignore&#39;)
+
+        if nhwp == 1:
+            log.info(&#39;Only 1 HWP, so skipping step %s&#39; % self.name)
+        else:
+
+            si = self.dataout.imageget(&quot;STOKES I&quot;)
+            sq = self.dataout.imageget(&quot;STOKES Q&quot;)
+            su = self.dataout.imageget(&quot;STOKES U&quot;)
+            di = self.dataout.imageget(&quot;ERROR I&quot;)
+            dq = self.dataout.imageget(&quot;ERROR Q&quot;)
+            du = self.dataout.imageget(&quot;ERROR U&quot;)
+            covqi = self.dataout.imageget(&quot;COVAR Q I&quot;)
+            covui = self.dataout.imageget(&quot;COVAR U I&quot;)
+            covqu = self.dataout.imageget(&quot;COVAR Q U&quot;)
+
+            # Compute parameters
+
+            # theta = 90/pi * atan(U/Q)
+            # Vtheta = (90/pi)^2 *
+            #          (Q^2 + U^2)^-2 (U^2 VQ + Q^2VU - 2 Q U cov(Q,U))
+            # (arctan2 puts angle in right quadrant)
+            theta = (90. / np.pi) * np.arctan2(su, sq)
+            dtheta = (90. / (np.pi * (sq**2 + su**2))) * \
+                np.sqrt((su * dq)**2 + (sq * du)**2 - 2 * sq * su * covqu)
+            rot_theta = theta + 90
+            rot_theta[rot_theta &gt; 90] -= 180
+
+            # apply efficiency correction to Q and U
+            # (this gets propagated to p)
+            eff = self.read_eff()
+            sq /= eff
+            su /= eff
+            dq /= eff
+            du /= eff
+            covqi /= eff
+            covui /= eff
+            covqu /= eff**2
+
+            # polarized flux
+            # f = (Q^2 + U^2) ^ (1/2)
+            # Vf = (1/f^2)(Q^2 VQ + U^2 Vu + 2 Q U cov(Q,U))
+            pflux = np.sqrt(sq**2 + su**2)
+            dpflux = np.sqrt((sq * dq)**2
+                             + (su * du)**2
+                             + 2 * sq * su * covqu) / pflux
+
+            debias_pflux = pflux**2 - dpflux**2  # ricean debiasing
+            mask = np.where(debias_pflux &lt; 0)  # catch negative square roots
+            debias_pflux[mask] = 0
+            debias_pflux = np.sqrt(debias_pflux)
+
+            # polarization fraction
+            # p = (1/I) (Q^2 + U^2)^(1/2)
+            # Vp = (1/(I^4 p^2)) (Q^2 VQ + U^2 VU + 2 Q U cov(Q,U))
+            #      + 1/I^4 ((Q^2 + U^2) VI - 2 Q I cov(Q,I) - 2 U I cov(U,i))
+            p = np.sqrt((1 / si**2) * (sq**2 + su**2))
+            vp = (p**-2 * si**-4) * ((sq * dq)**2
+                                     + (su * du)**2
+                                     + 2 * sq * su * covqu) \
+                + (si**-4) * ((sq**2 + su**2) * di**2
+                              - 2 * sq * si * covqi
+                              - 2 * su * si * covui)
+            dp = np.sqrt(vp)
+
+            # convert p to percentage
+            p = 100 * p
+            dp = 100 * dp
+
+            # debias data
+            debias_p = p**2 - dp**2  # ricean debiasing
+            mask = np.where(debias_p &lt; 0)  # catch negative square roots
+            debias_p[mask] = 0
+            debias_p = np.sqrt(debias_p)
+
+            # Note that here we set x equal to columns and y equal to rows
+            ny, nx = si.shape
+            y, x = np.mgrid[0:ny, 0:nx] + 1
+            x = x.flatten()
+            y = y.flatten()
+
+            # Convert pixels to wcs
+            wcs = astwcs.WCS(self.datain.header)
+            ra, dec = wcs.wcs_pix2world(x, y, 1)  # zero-based input pixels
+
+            # create table columns
+            cols = [fits.Column(name=&quot;Pixel X&quot;, format=&#39;J&#39;, array=x),
+                    fits.Column(name=&quot;Pixel Y&quot;, format=&#39;J&#39;, array=y),
+                    fits.Column(name=&quot;Right Ascension&quot;, format=&#39;D&#39;,
+                                array=ra, unit=&#39;deg&#39;),
+                    fits.Column(name=&quot;Declination&quot;, format=&#39;D&#39;,
+                                array=dec, unit=&#39;deg&#39;),
+                    fits.Column(name=&quot;Percent Pol&quot;, format=&#39;D&#39;,
+                                array=p.flatten()),
+                    fits.Column(name=&quot;Debiased Percent Pol&quot;, format=&#39;D&#39;,
+                                array=debias_p.flatten()),
+                    fits.Column(name=&quot;Err. Percent Pol&quot;, format=&#39;D&#39;,
+                                array=dp.flatten()),
+                    fits.Column(name=&quot;Theta&quot;, format=&#39;D&#39;, unit=&#39;deg&#39;,
+                                array=theta.flatten()),
+                    fits.Column(name=&quot;Rotated Theta&quot;, format=&#39;D&#39;,
+                                unit=&#39;deg&#39;, array=rot_theta.flatten()),
+                    fits.Column(name=&quot;Err. Theta&quot;, format=&#39;D&#39;, unit=&#39;deg&#39;,
+                                array=dtheta.flatten())]
+            c = fits.ColDefs(cols)
+            tbhdu = fits.BinTableHDU.from_columns(c)
+            self.dataout.tableset(tbhdu.data, &quot;POL DATA&quot;,
+                                  tbhdu.header)
+
+            # creating header with wcs info to use in new HDU&#39;s
+            wcshead = fits.Header()
+            wcshead[&#39;CDELT1&#39;] = self.datain.header[&#39;CDELT1&#39;]
+            wcshead[&#39;CDELT2&#39;] = self.datain.header[&#39;CDELT2&#39;]
+            wcshead[&#39;CRVAL1&#39;] = self.datain.header[&#39;CRVAL1&#39;]
+            wcshead[&#39;CRVAL2&#39;] = self.datain.header[&#39;CRVAL2&#39;]
+            wcshead[&#39;CRPIX1&#39;] = self.datain.header[&#39;CRPIX1&#39;]
+            wcshead[&#39;CRPIX2&#39;] = self.datain.header[&#39;CRPIX2&#39;]
+            wcshead[&#39;CTYPE1&#39;] = self.datain.header[&#39;CTYPE1&#39;]
+            wcshead[&#39;CTYPE2&#39;] = self.datain.header[&#39;CTYPE2&#39;]
+            wcshead[&#39;EQUINOX&#39;] = self.datain.header[&#39;EQUINOX&#39;]
+            wcshead[&#39;NHWP&#39;] = self.datain.header[&#39;NHWP&#39;]
+
+            # now write out images of the relevant data so they can easily
+            # be viewed in something like ds9
+            # Q/U and its errors will overwrite the previous HDUs
+            # They now have pol. efficiency factor applied
+            # Also replace dI to make sure WCS is set
+            self.dataout.imageset(di, &quot;Error I&quot;, wcshead)
+            self.dataout.imageset(sq, &quot;Stokes Q&quot;, wcshead)
+            self.dataout.imageset(dq, &quot;Error Q&quot;, wcshead)
+            self.dataout.imageset(su, &quot;Stokes U&quot;, wcshead)
+            self.dataout.imageset(du, &quot;Error U&quot;, wcshead)
+            self.dataout.imageset(p, &quot;Percent Pol&quot;, wcshead)
+            self.dataout.imageset(debias_p, &quot;Debiased Percent Pol&quot;, wcshead)
+            self.dataout.imageset(dp, &quot;Error Percent Pol&quot;, wcshead)
+            self.dataout.imageset(theta, &quot;Pol Angle&quot;, wcshead)
+            self.dataout.imageset(rot_theta, &quot;Rotated Pol Angle&quot;, wcshead)
+            self.dataout.imageset(dtheta, &quot;Error Pol Angle&quot;, wcshead)
+            self.dataout.imageset(pflux, &quot;Pol Flux&quot;, wcshead)
+            self.dataout.imageset(dpflux, &quot;Error Pol Flux&quot;, wcshead)
+            self.dataout.imageset(debias_pflux, &quot;Debiased Pol Flux&quot;, wcshead)
+
+            # delete the covariance images -- they&#39;re no longer needed
+            self.dataout.imagedel(&quot;COVAR Q I&quot;)
+            self.dataout.imagedel(&quot;COVAR U I&quot;)
+            self.dataout.imagedel(&quot;COVAR Q U&quot;)
+
+            # set BUNIT appropriately for all extensions
+            for name in [&#39;Stokes I&#39;, &#39;Error I&#39;,
+                         &#39;Stokes Q&#39;, &#39;Error Q&#39;,
+                         &#39;Stokes U&#39;, &#39;Error U&#39;,
+                         &#39;Pol Flux&#39;, &#39;Error Pol Flux&#39;,
+                         &#39;Debiased Pol Flux&#39;]:
+                self.dataout.setheadval(&#39;BUNIT&#39;, &#39;Jy/pixel&#39;,
+                                        comment=&#39;Data units&#39;,
+                                        dataname=name)
+            for name in [&quot;Percent Pol&quot;, &quot;Debiased Percent Pol&quot;,
+                         &quot;Error Percent Pol&quot;]:
+                self.dataout.setheadval(&#39;BUNIT&#39;, &#39;percent&#39;,
+                                        comment=&#39;Data units&#39;,
+                                        dataname=name)
+            for name in [&quot;Pol Angle&quot;, &quot;Rotated Pol Angle&quot;,
+                         &quot;Error Pol Angle&quot;]:
+                self.dataout.setheadval(&#39;BUNIT&#39;, &#39;deg&#39;,
+                                        comment=&#39;Data units&#39;,
+                                        dataname=name)
+
+        self.dataout.setheadval(&#39;PROCSTAT&#39;, &#39;LEVEL_4&#39;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

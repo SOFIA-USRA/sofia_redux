@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.info.telescope &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.info.telescope</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+from astropy import units
+from astropy.time import Time
+
+from sofia_redux.scan.utilities.bracketed_values import BracketedValues
+from sofia_redux.scan.info.telescope import TelescopeInfo
+from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
+    EquatorialCoordinates
+from sofia_redux.scan.coordinate_systems.epoch.epoch import J2000, Epoch
+from sofia_redux.scan.utilities.utils import (
+    to_header_float, insert_info_in_header)
+
+__all__ = [&#39;SofiaTelescopeInfo&#39;]
+
+
+degree = units.Unit(&#39;degree&#39;)
+um = units.Unit(&#39;um&#39;)
+hourangle = units.Unit(&#39;hourangle&#39;)
+
+
+<div class="viewcode-block" id="SofiaTelescopeInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.telescope.SofiaTelescopeInfo.html#sofia_redux.scan.custom.sofia.info.telescope.SofiaTelescopeInfo">[docs]</a>
+class SofiaTelescopeInfo(TelescopeInfo):
+
+    telescope_diameter = 2.5 * units.Unit(&#39;m&#39;)
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize the SOFIA telescope information.
+
+        Contains information on the SOFIA specific telescope parameters such as
+        zenith angle, boresight coordinates, and tracking status.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.telescope = &quot;SOFIA 2.5m&quot;
+        self.tel_config = None
+        self.vpa = np.nan * degree
+        self.last_rewind = None
+        self.focus_t = BracketedValues(np.nan * um,
+                                       np.nan * um)
+        self.rel_elevation = np.nan * degree
+        self.cross_elevation = np.nan * degree
+        self.line_of_sight_angle = np.nan * degree
+        self.tascu_status = None
+        self.fbc_status = None
+        self.zenith_angle = BracketedValues(np.nan * degree,
+                                            np.nan * degree)
+        self.tracking_mode = None
+        self.has_tracking_error = False
+        self.is_tracking = False
+
+        self.epoch = J2000
+        self.boresight_equatorial = EquatorialCoordinates(
+            np.full(2, np.nan), unit=&#39;degree&#39;, epoch=self.epoch)
+
+        self.requested_equatorial = self.boresight_equatorial.copy()
+
+<div class="viewcode-block" id="SofiaTelescopeInfo.apply_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.telescope.SofiaTelescopeInfo.html#sofia_redux.scan.custom.sofia.info.telescope.SofiaTelescopeInfo.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Update telescope information with FITS header information.
+
+        Updates the information by taking the following keywords from the
+        FITS header::
+
+          TELESCOP - The observatory name (str)
+          TELVPA - The boresight position angle (degrees)
+          LASTREW - The UTC time of last telescope rewind (str)
+          FOCUS_ST - The focus T value at start (um)
+          FOCUS_EN - The focus T value at end (um)
+          TELEL - The telescope elevation in cavity (degrees)
+          TELXEL - The telescope cross elevation in cavity (degrees)
+          TELLOS - The telescope line-of-sight angle in cavity (degrees)
+          TSC-STAT - The TASCU system status at end (str)
+          FBC-STAT - The flexible body compensation system status at end (str)
+          ZA_START - The zenith angle at start (degrees)
+          ZA_END - The zenith angle at end (degrees)
+          TRACMODE - The SOFIA tracking mode (str)
+          TRACERR - Whether there was a tracking error in the scan (bool)
+          TELCONF - The telescope configuration (str)
+          EQUINOX - The coordinate epoch (year)
+          TELEQUI - The boresight epoch (year)
+          TELRA - The boresight RA (hourangle)
+          TELDEC - The boresight DEC (degrees)
+          OBSRA - The requested RA (hourangle)
+          OBSDEC - The requested DEC (degrees)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        options = self.options
+        if options is None:
+            return
+        self.telescope = options.get_string(&quot;TELESCOP&quot;, default=self.telescope)
+        self.vpa = options.get_float(&quot;TELVPA&quot;) * degree
+        self.last_rewind = options.get_string(&quot;LASTREW&quot;)
+        self.focus_t.start = options.get_float(&quot;FOCUS_ST&quot;) * um
+        self.focus_t.end = options.get_float(&quot;FOCUS_EN&quot;) * um
+        self.rel_elevation = options.get_float(&quot;TELEL&quot;) * degree
+        self.cross_elevation = options.get_float(&quot;TELXEL&quot;) * degree
+        self.line_of_sight_angle = options.get_float(&quot;TELLOS&quot;) * degree
+        self.tascu_status = options.get_string(&quot;TSC-STAT&quot;)
+        self.fbc_status = options.get_string(&quot;FBC-STAT&quot;)
+        self.zenith_angle.start = options.get_float(&quot;ZA_START&quot;) * degree
+        self.zenith_angle.end = options.get_float(&quot;ZA_END&quot;) * degree
+        self.tracking_mode = options.get_string(&quot;TRACMODE&quot;)
+        self.has_tracking_error = options.get_bool(&quot;TRACERR&quot;)
+        self.is_tracking = str(self.tracking_mode).strip().upper() != &#39;OFF&#39;
+
+        self.tel_config = options.get_string(&#39;TELCONF&#39;)
+
+        if &quot;EQUINOX&quot; in options:
+            self.epoch = Epoch(equinox=options.get_float(&quot;EQUINOX&quot;))
+
+        self.requested_equatorial = EquatorialCoordinates(
+            np.full(2, np.nan), epoch=self.epoch, unit=&#39;degree&#39;)
+        boresight_epoch = options.get_string(&#39;TELEQUI&#39;, default=None)
+
+        if (boresight_epoch is None
+            or (isinstance(boresight_epoch, str)
+                and boresight_epoch.lower().startswith(&#39;unk&#39;))):
+            boresight_epoch = self.epoch
+        else:
+            boresight_epoch = Epoch(equinox=boresight_epoch)
+        self.boresight_equatorial = EquatorialCoordinates(
+            np.full(2, np.nan), epoch=boresight_epoch, unit=&#39;degree&#39;)
+
+        if &quot;TELRA&quot; in options and &quot;TELDEC&quot; in options:
+            self.boresight_equatorial.ra = options.get_hms_time(
+                &#39;TELRA&#39;, angle=True)
+            self.boresight_equatorial.dec = options.get_dms_angle(&#39;TELDEC&#39;)
+
+        if &#39;OBSRA&#39; in options and &#39;OBSDEC&#39; in options:
+            self.requested_equatorial.ra = options.get_hms_time(
+                &#39;OBSRA&#39;, angle=True)
+            self.requested_equatorial.dec = options.get_dms_angle(&#39;OBSDEC&#39;)</div>
+
+
+<div class="viewcode-block" id="SofiaTelescopeInfo.get_telescope_name">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.telescope.SofiaTelescopeInfo.html#sofia_redux.scan.custom.sofia.info.telescope.SofiaTelescopeInfo.get_telescope_name">[docs]</a>
+    @staticmethod
+    def get_telescope_name():
+        &quot;&quot;&quot;
+        Return the telescope name.
+
+        Returns
+        -------
+        name : str
+        &quot;&quot;&quot;
+        return &quot;SOFIA&quot;</div>
+
+
+<div class="viewcode-block" id="SofiaTelescopeInfo.edit_image_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.telescope.SofiaTelescopeInfo.html#sofia_redux.scan.custom.sofia.info.telescope.SofiaTelescopeInfo.edit_image_header">[docs]</a>
+    def edit_image_header(self, header, scans=None):
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+        scans : list (Scan), optional
+            A list of scans to use during editing.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        header[&#39;TELESCOP&#39;] = self.get_telescope_name(), &#39;Telescope name.&#39;</div>
+
+
+<div class="viewcode-block" id="SofiaTelescopeInfo.edit_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.telescope.SofiaTelescopeInfo.html#sofia_redux.scan.custom.sofia.info.telescope.SofiaTelescopeInfo.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.boresight_equatorial is not None:
+            telra = self.boresight_equatorial.ra.to(hourangle).value
+            teldec = self.boresight_equatorial.dec.to(degree).value
+            tel_epoch = self.boresight_equatorial.epoch
+        else:
+            telra = teldec = np.nan
+            tel_epoch = None
+
+        if self.requested_equatorial is not None:
+            obsra = self.requested_equatorial.ra.to(hourangle)
+            obsdec = self.requested_equatorial.dec.to(degree)
+        else:
+            obsra = np.nan * hourangle
+            obsdec = np.nan * degree
+
+        info = [
+            (&#39;COMMENT&#39;, &quot;&lt;------ SOFIA Telescope Data ------&gt;&quot;),
+            (&#39;TELESCOP&#39;, self.telescope, &#39;Observatory name.&#39;),
+            (&#39;TELCONF&#39;, self.tel_config, &#39;Telescope configuration.&#39;),
+            (&#39;TELRA&#39;, to_header_float(telra, &#39;hourangle&#39;),
+             &#39;(hour) Boresight RA.&#39;),
+            (&#39;TELDEC&#39;, to_header_float(teldec, &#39;degree&#39;),
+             &#39;(deg) Boresight DEC.&#39;)]
+
+        if tel_epoch is not None:
+            info.append((&#39;TELEQUI&#39;, str(tel_epoch), &#39;Boresight epoch.&#39;))
+
+        info.extend([
+            (&#39;TELVPA&#39;, to_header_float(self.vpa, &#39;deg&#39;),
+             &#39;(deg) Boresight position angle.&#39;),
+            (&#39;LASTREW&#39;, self.last_rewind,
+             &#39;UTC time of last telescope rewind.&#39;),
+            (&#39;FOCUS_ST&#39;, to_header_float(self.focus_t.start, &#39;um&#39;),
+             &#39;(um) Focus T value at start.&#39;),
+            (&#39;FOCUS_EN&#39;, to_header_float(self.focus_t.end, &#39;um&#39;),
+             &#39;(um) Focus T value at end.&#39;),
+            (&#39;TELEL&#39;, to_header_float(self.rel_elevation, &#39;deg&#39;),
+             &#39;(deg) Telescope elevation in cavity.&#39;),
+            (&#39;TELXEL&#39;, to_header_float(self.cross_elevation, &#39;deg&#39;),
+             &#39;(deg) Telescope cross elevation in cavity.&#39;),
+            (&#39;TELLOS&#39;, to_header_float(self.line_of_sight_angle, &#39;deg&#39;),
+             &#39;(deg) Telescope line-of-sight angle in cavity.&#39;),
+            (&#39;TSC-STAT&#39;, self.tascu_status, &#39;TASCU system status at end.&#39;),
+            (&#39;FBC-STAT&#39;, self.fbc_status,
+             &#39;flexible body compensation system status at end&#39;),
+            (&#39;OBSRA&#39;, to_header_float(obsra, &#39;hourangle&#39;),
+             &#39;(hour) Requested RA.&#39;),
+            (&#39;OBSDEC&#39;, to_header_float(obsdec, &#39;deg&#39;), &#39;(deg) Requested DEC.&#39;),
+            (&#39;EQUINOX&#39;, Time(self.epoch.equinox, format=&#39;jyear&#39;).value,
+             &#39;(yr) The coordinate epoch.&#39;),
+            (&#39;ZA_START&#39;, to_header_float(self.zenith_angle.start, &#39;deg&#39;),
+             &#39;(deg) Zenith angle at start.&#39;),
+            (&#39;ZA_END&#39;, to_header_float(self.zenith_angle.end, &#39;deg&#39;),
+             &#39;(deg) Zenith angle at end.&#39;)
+        ])
+
+        if self.tracking_mode is not None:
+            info.extend([
+                (&#39;TRACMODE&#39;, self.tracking_mode, &#39;SOFIA tracking mode.&#39;),
+                (&#39;TRACERR&#39;, self.has_tracking_error,
+                 &#39;Was there a tracking error during the scan?&#39;)
+            ])
+        insert_info_in_header(header, info, delete_special=True)</div>
+
+
+<div class="viewcode-block" id="SofiaTelescopeInfo.get_table_entry">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.telescope.SofiaTelescopeInfo.html#sofia_redux.scan.custom.sofia.info.telescope.SofiaTelescopeInfo.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Return a parameter value for the given name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the parameter to retrieve.
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        if name == &#39;focus&#39;:
+            return self.focus_t.midpoint.to(&#39;um&#39;)
+        elif name == &#39;bra&#39;:
+            return self.boresight_equatorial.ra.to(&#39;hourangle&#39;)
+        elif name == &#39;bdec&#39;:
+            return self.boresight_equatorial.dec.to(&#39;degree&#39;)
+        elif name == &#39;rra&#39;:
+            return self.requested_equatorial.ra.to(&#39;hourangle&#39;)
+        elif name == &#39;rdec&#39;:
+            return self.requested_equatorial.dec.to(&#39;degree&#39;)
+        elif name == &#39;epoch&#39;:
+            return str(self.epoch)
+        elif name == &#39;vpa&#39;:
+            return self.vpa.to(&#39;degree&#39;)
+        elif name == &#39;za&#39;:
+            return self.zenith_angle.midpoint.to(&#39;degree&#39;)
+        elif name == &#39;los&#39;:
+            return self.line_of_sight_angle.to(&#39;degree&#39;)
+        elif name == &#39;el&#39;:
+            return self.rel_elevation.to(&#39;degree&#39;)
+        elif name == &#39;xel&#39;:
+            return self.cross_elevation.to(&#39;degree&#39;)
+        elif name == &#39;trkerr&#39;:
+            return self.has_tracking_error
+        elif name == &#39;trkmode&#39;:
+            return self.tracking_mode
+        elif name == &#39;cfg&#39;:
+            return self.tel_config
+        elif name == &#39;fbc&#39;:
+            return self.fbc_status
+        elif name == &#39;rew&#39;:
+            return self.last_rewind
+        else:
+            return super().get_table_entry(name)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

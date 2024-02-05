@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.fifi_ls.get_badpix &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.fifi_ls.get_badpix</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from datetime import datetime
+import os
+
+from astropy import log
+from astropy.io import fits
+from astropy.time import Time
+import numpy as np
+import pandas
+
+from sofia_redux.instruments import fifi_ls
+from sofia_redux.toolkit.utilities import hdinsert, goodfile
+
+__all__ = [&#39;clear_badpix_cache&#39;, &#39;get_badpix_from_cache&#39;,
+           &#39;store_badpix_in_cache&#39;, &#39;read_defaults_table&#39;,
+           &#39;get_badpix&#39;]
+
+__badpix_cache = {}
+
+
+<div class="viewcode-block" id="clear_badpix_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.get_badpix.clear_badpix_cache.html#sofia_redux.instruments.fifi_ls.get_badpix.clear_badpix_cache">[docs]</a>
+def clear_badpix_cache():
+    &quot;&quot;&quot;
+    Clear all data from the badpix cache.
+    &quot;&quot;&quot;
+    global __badpix_cache
+    __badpix_cache = {}</div>
+
+
+
+<div class="viewcode-block" id="get_badpix_from_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.get_badpix.get_badpix_from_cache.html#sofia_redux.instruments.fifi_ls.get_badpix.get_badpix_from_cache">[docs]</a>
+def get_badpix_from_cache(badpixfile):
+    &quot;&quot;&quot;
+    Retrieves bad pixel masks or default file from the badpix cache.
+
+    Checks to see if the file still exists, can be read, and has not
+    been altered since last time.  If the file has changed, it will be
+    deleted from the cache so that it can be re-read.
+
+    Parameters
+    ----------
+    badpixfile : str
+        File path to the badpix file
+
+    Returns
+    -------
+    badpix : numpy.ndarray or pandas.DataFrame
+        Bad pixel mask or defaults table
+    &quot;&quot;&quot;
+    global __badpix_cache
+
+    if badpixfile not in __badpix_cache:
+        return
+
+    if not goodfile(badpixfile):
+        try:
+            del __badpix_cache[badpixfile]
+        except KeyError:   # pragma: no cover
+            # could happen in race conditions in parallel processing
+            pass
+        return
+
+    modtime = str(os.path.getmtime(badpixfile))
+    if modtime not in __badpix_cache.get(badpixfile, {}):
+        return
+
+    log.debug(&quot;Retrieving data from badpix file (%s) in cache&quot; % badpixfile)
+    return __badpix_cache.get(badpixfile, {}).get(modtime)</div>
+
+
+
+<div class="viewcode-block" id="store_badpix_in_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.get_badpix.store_badpix_in_cache.html#sofia_redux.instruments.fifi_ls.get_badpix.store_badpix_in_cache">[docs]</a>
+def store_badpix_in_cache(badpixfile, badpix):
+    &quot;&quot;&quot;
+    Store badpix data in the badpix cache.
+
+    Parameters
+    ----------
+    badpixfile : str
+        File path to the badpix file
+    badpix : numpy.ndarray or pandas.DataFrame
+        Bad pixel mask or defaults table
+    &quot;&quot;&quot;
+    global __badpix_cache
+    log.debug(&quot;Storing data from badpix (%s) in cache&quot; % badpixfile)
+    __badpix_cache[badpixfile] = {}
+    modtime = str(os.path.getmtime(badpixfile))
+    __badpix_cache[badpixfile][modtime] = badpix</div>
+
+
+
+<div class="viewcode-block" id="read_defaults_table">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.get_badpix.read_defaults_table.html#sofia_redux.instruments.fifi_ls.get_badpix.read_defaults_table">[docs]</a>
+def read_defaults_table():
+    &quot;&quot;&quot;
+    Read the badpix defaults table.
+    &quot;&quot;&quot;
+
+    datapath = os.path.join(os.path.dirname(fifi_ls.__file__), &#39;data&#39;)
+    default_file = os.path.join(
+        datapath, &#39;badpix_files&#39;, &#39;badpix_default.txt&#39;)
+
+    defaults_table = get_badpix_from_cache(default_file)
+    if defaults_table is not None:
+        return defaults_table
+
+    log.debug(&quot;Reading badpix defaults file&quot;)
+    if not goodfile(default_file, verbose=True):
+        msg = &quot;Could not read badpix default file: {}&quot;.format(default_file)
+        log.error(msg)
+        raise ValueError(msg)
+
+    table = pandas.read_csv(
+        default_file, comment=&#39;#&#39;, delim_whitespace=True,
+        names=[&#39;date&#39;, &#39;channel&#39;, &#39;filename&#39;],
+        dtype={&#39;date&#39;: int},
+        converters={&#39;filename&#39;: lambda x: os.path.join(datapath, x),
+                    &#39;channel&#39;: lambda x: str(x).upper().strip()})
+
+    store_badpix_in_cache(default_file, table)
+    return table</div>
+
+
+
+<div class="viewcode-block" id="get_badpix">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.get_badpix.get_badpix.html#sofia_redux.instruments.fifi_ls.get_badpix.get_badpix">[docs]</a>
+def get_badpix(header, filename=None):
+    &quot;&quot;&quot;
+    Retrieve bad pixel data.
+
+    Badpix files are identified by a configuration file called
+    badpix_default.txt in the data/badpix_files directory.  This
+    file must contain 3 columns: end date (YYYYMMDD), channel
+    (b1, b2, or r), and filepath (relative to the data directory).
+
+    The procedure is:
+
+        1. Identify badpix file, unless override is provided
+        2. Read badpix data from file
+        3. Return badpix array
+
+    Parameters
+    ----------
+    header : fits.Header
+        FITS header from which to determine badpix file.  Will be
+        updated with BDPXFILE keyword.
+    filename : str, optional
+        Direct path to a badpix file (overrides header logic)
+
+    Returns
+    -------
+    numpy.ndarray
+        (n_values, (spexel number, spaxel_number))
+    &quot;&quot;&quot;
+    if isinstance(filename, str) and goodfile(filename, verbose=True):
+        badpix_file = filename[:]
+    else:
+        if not isinstance(header, fits.Header):
+            log.error(&quot;Invalid header&quot;)
+            return
+
+        dateobs = header.get(
+            &#39;DATE-OBS&#39;, Time(datetime.utcnow(), format=&#39;datetime&#39;).isot)
+        try:
+            yyyymmdd = int(dateobs.split(&#39;T&#39;)[0].replace(&#39;-&#39;, &#39;&#39;))
+        except (ValueError, IndexError):
+            log.warning(
+                &quot;Could not determine DATE-OBS - using most recent file&quot;)
+            yyyymmdd = 88888888
+        channel = header.get(&#39;CHANNEL&#39;, &#39;UNKNOWN&#39;).strip().upper()
+        channel = &#39;B&#39; if channel == &#39;BLUE&#39; else &#39;R&#39;
+
+        table = read_defaults_table()
+        badpix_file = table.loc[table[
+            (table[&#39;channel&#39;] == channel)
+            &amp; (table[&#39;date&#39;] &gt;= yyyymmdd)][&#39;date&#39;].idxmin()].filename
+
+    log.debug(&quot;Using badpix file %s&quot; % badpix_file)
+    data = get_badpix_from_cache(badpix_file)
+    if data is not None:
+        if isinstance(header, fits.Header):
+            hdinsert(header, &#39;BDPXFILE&#39;, os.path.basename(badpix_file))
+        return data
+
+    log.debug(&quot;Loading badpix file %s&quot; % badpix_file)
+
+    if isinstance(header, fits.Header):
+        hdinsert(header, &#39;BDPXFILE&#39;, os.path.basename(badpix_file))
+
+    try:
+        data = pandas.read_csv(
+            badpix_file, names=[&#39;spaxel&#39;, &#39;spexel&#39;],
+            dtype={&#39;spaxel&#39;: int, &#39;spexel&#39;: int},
+            comment=&#39;#&#39;, delim_whitespace=True).values
+    except ValueError:
+        msg = &quot;Invalid badpix file: {}&quot;.format(badpix_file)
+        log.error(msg)
+        return
+
+    if isinstance(data, np.ndarray) and len(data.shape) == 2:
+        # Convert coordinates to 0-based array coordinates
+        data -= 1
+
+    # flipping the axis here as it&#39;s used for indexing a numpy array
+    # (y, x) ordering, unlike file format
+    data = np.flip(data, axis=1)
+    store_badpix_in_cache(badpix_file, data)
+
+    return data</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

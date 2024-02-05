@@ -1,0 +1,2218 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.gui.qad.qad_imview &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.gui.qad.qad_imview</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;DS9 Image Viewer for QAD.&quot;&quot;&quot;
+
+import contextlib
+import io
+import os
+import re
+import tempfile
+import warnings
+
+from astropy.io import fits
+from astropy import log, modeling, stats, table, wcs
+import numpy as np
+from scipy.stats import gmean
+
+from sofia_redux.pipeline.gui.matplotlib_viewer import MatplotlibPlot
+from sofia_redux.toolkit.utilities.fits import set_log_level
+
+try:
+    from sofia_redux.calibration.pipecal_photometry import pipecal_photometry
+    from sofia_redux.calibration.pipecal_error import PipeCalError
+except ImportError:
+    HAS_PIPECAL = False
+    pipecal_photometry, PipeCalError = None, None
+else:
+    HAS_PIPECAL = True
+
+try:
+    from sofia_redux.visualization.redux_viewer import EyeViewer
+except ImportError:
+    HAS_EYE = False
+    EyeViewer = None
+else:
+    HAS_EYE = True
+
+try:
+    from PyQt5 import QtCore
+except ImportError:
+    HAS_PYQT5 = False
+
+    # duck type parents to allow class definition
+    class QtCore:
+        class QObject:
+            pass
+else:
+    HAS_PYQT5 = True
+
+try:
+    import regions as ar
+except ImportError:
+    HAS_REGIONS = False
+    ar = None
+else:
+    HAS_REGIONS = True
+
+
+__all__ = [&#39;QADImView&#39;]
+
+
+class ViewerSignals(QtCore.QObject):
+    make_radial_plot = QtCore.pyqtSignal()
+    make_histogram_plot = QtCore.pyqtSignal()
+    make_p2p_plot = QtCore.pyqtSignal()
+
+
+<div class="viewcode-block" id="QADImView">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView">[docs]</a>
+class QADImView(object):
+    &quot;&quot;&quot;
+    View FITS images in DS9.
+
+    Attributes
+    ----------
+    ds9 : pyds9.DS9
+        DS9 instance to display images to.
+    specviewer : EyeViewer
+        Eye instance to display spectra to.
+    plotviewer : MatplotlibPlot
+        Plot viewer widget.
+    files : list of str
+        Currently displayed FITS files.
+    regions : list of str
+        Currently displayed region files.
+    headers : dict
+        FITS file headers for currently displayed files.
+        Keys are filenames; values are lists of headers
+        (astropy.io.fits.Header)
+    radial_data : list of dict
+        Radial flux data, for the radial_plot method to display.
+    histogram_data : list of dict
+        Histogram data, for the histogram_plot method to display.
+    p2p_data : list of dict
+        Pixel-to-pixel data, for the p2p_plot method to display.
+    ptable : astropy.table.Table
+        Photometry data table.
+    disp_parameters : dict
+        Display settings.
+    phot_parameters : dict
+        Photometry settings.
+    plot_parameters : dict
+        Plot settings.
+    cs : {&#39;image&#39;, &#39;wcs&#39;, &#39;none&#39;}
+        Coordinate system for DS9 display and frame locks.
+    &quot;&quot;&quot;
+    def __init__(self):
+        &quot;&quot;&quot;Initialize the viewer.&quot;&quot;&quot;
+        self.ds9 = None
+        self.specviewer = None
+        self.plotviewer = None
+        self.break_loop = False
+        self.files = []
+        self.regions = []
+        self.headers = {}
+        self.radial_data = []
+        self.histogram_data = []
+        self.p2p_data = []
+        self.ptable = None
+        self.disp_parameters = self.default_parameters(&#39;display&#39;)
+        self.phot_parameters = self.default_parameters(&#39;photometry&#39;)
+        self.plot_parameters = self.default_parameters(&#39;plot&#39;)
+        self.cs = None
+
+        # useful for testing: flag to always break imexam loop
+        self.break_loop = False
+
+        # flag for viewer availability
+        self.HAS_DS9 = True
+        self.HAS_EYE = HAS_EYE
+        if not self.HAS_EYE:  # pragma: no cover
+            log.warning(&#39;Eye viewer is not available. Install &#39;
+                        &#39;sofia_redux.visualization for spectral display.&#39;)
+
+        # flag for photometry availability
+        self.HAS_PIPECAL = HAS_PIPECAL
+        if not self.HAS_PIPECAL:
+            log.warning(&#39;Photometry tools are not available. Install &#39;
+                        &#39;sofia_redux.calibration to enable photometry.&#39;)
+
+        # always set XPA_METHOD to local
+        os.environ[&quot;XPA_METHOD&quot;] = &quot;local&quot;
+
+        # signals for plot events
+        self.HAS_PYQT5 = HAS_PYQT5
+        if self.HAS_PYQT5:
+            self.signals = ViewerSignals()
+            self.signals.make_radial_plot.connect(self.radial_plot)
+            self.signals.make_histogram_plot.connect(self.histogram_plot)
+            self.signals.make_p2p_plot.connect(self.pix2pix_plot)
+        else:
+            log.warning(&#39;Plotting tools are not available. Install PyQt5 &#39;
+                        &#39;to enable plotting displays.&#39;)
+            self.signals = None
+
+    def _loaded_data(self):
+        &quot;&quot;&quot;Check for loaded FITS data in current frame.&quot;&quot;&quot;
+        try:
+            dsize = [int(d) for d
+                     in self.run(&#39;fits size&#39;, via=&#39;get&#39;).split()]
+        except (ValueError, TypeError, AttributeError) as err:
+            log.debug(f&#39;  FITS size error: {err}&#39;)
+            return False
+        else:
+            if 0 in dsize:
+                return False
+            else:
+                return True
+
+    def _run_internal(self, cmd, buf=None, via=&#39;set&#39;):
+        &quot;&quot;&quot;
+        Format commands to send to PyDS9.
+
+        Parameters
+        ----------
+        cmd : str
+            Command to send.
+        buf : list, str, or file-like; optional
+            Additional buffers to send.  May be a string or a file handler,
+            or a list of those.
+        via : {&#39;get&#39;, &#39;set&#39;}, optional
+            Command method.
+
+        Returns
+        -------
+        str
+            DS9 command exit status.
+        &quot;&quot;&quot;
+        log.debug(&#39;  Command: {}&#39;.format(str(cmd)))
+        retval = None
+        if str(via).lower().strip() == &#39;set&#39;:
+            if type(buf) is list:
+                retval = self.ds9.set(cmd, *buf)
+            else:
+                retval = self.ds9.set(cmd, buf)
+        elif str(via).lower().strip() == &#39;get&#39;:
+            # workaround for DS9 seg fault with empty frame
+            # and wcs requests
+            if &#39;wcs&#39; in cmd and not self._loaded_data():
+                log.debug(&#39;  No loaded data; skipping frame&#39;)
+                retval = &#39;&#39;
+            else:
+                try:
+                    retval = self.ds9.get(cmd)
+                except TypeError as err:
+                    log.error(&#39;Error in pyds9&#39;)
+                    log.debug(err)
+        else:
+            log.error(&#39;Unknown ds9 interaction command: &#39; + str(via))
+        return retval
+
+    def _region_mask(self, cs, all_regions, xctr, yctr, hwcs):
+        &quot;&quot;&quot;Compute a region mask at a cursor position.&quot;&quot;&quot;
+        if not HAS_REGIONS:
+            return None
+        ctr_coord = ar.PixCoord(xctr, yctr)
+        mask = None
+        for reg_str in all_regions:
+            # read ds9 string into a region class
+            try:
+                with set_log_level(&#39;CRITICAL&#39;):
+                    frame_regions = ar.Regions.parse(reg_str, format=&#39;ds9&#39;)
+            except Exception as err:
+                log.debug(f&#39;Region parser error: {err}&#39;)
+                continue
+            for fr in frame_regions:
+                if cs == &#39;wcs&#39;:
+                    # convert to a pixel region first
+                    try:
+                        with set_log_level(&#39;CRITICAL&#39;):
+                            fr = fr.to_pixel(hwcs)
+                    except Exception as err:  # pragma: no cover
+                        # error could be anything, since regions package
+                        # is in early development state
+                        log.debug(f&#39;Region WCS conversion error: {err}&#39;)
+                        continue
+
+                # check if cursor is contained in a region
+                # in any frame
+                with set_log_level(&#39;CRITICAL&#39;):
+                    contained = fr.contains(ctr_coord)
+                if hasattr(contained, &#39;__len__&#39;):
+                    # PolygonPixelRegion returns an array, currently
+                    # (regions v0.4)
+                    contained = contained[0]
+
+                if contained:
+                    # get mask from first matching region
+                    try:
+                        with set_log_level(&#39;CRITICAL&#39;):
+                            mask = fr.to_mask()
+                    except Exception as err:  # pragma: no cover
+                        # error could be anything, since regions package
+                        # is in early development state
+                        log.debug(f&#39;Region mask error: {err}&#39;)
+                        continue
+                    else:
+                        log.info(f&#39;Contained in {type(fr).__name__}&#39;)
+                        break
+            if mask is not None:
+                break
+
+        # reset active frame
+        return mask
+
+<div class="viewcode-block" id="QADImView.default_parameters">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.default_parameters">[docs]</a>
+    def default_parameters(self, ptype):
+        &quot;&quot;&quot;
+        Retrieve default display, photometry, and plot parameters.
+
+        Parameters
+        ----------
+        ptype : {&#39;display&#39;, &#39;photometry&#39;, &#39;plot&#39;}
+            Parameter type to retrieve.
+
+        Returns
+        -------
+        dict
+            Parameter settings dictionary.
+        &quot;&quot;&quot;
+        ptype = str(ptype).lower()
+        if ptype == &#39;photometry&#39;:
+            defaults = {&#39;model&#39;: &#39;moffat&#39;,
+                        &#39;window&#39;: 50.0,
+                        &#39;window_units&#39;: &#39;pixels&#39;,
+                        &#39;fwhm&#39;: 3.0,
+                        &#39;fwhm_units&#39;: &#39;arcsec&#39;,
+                        &#39;psf_radius&#39;: 12.0,
+                        &#39;aperture_units&#39;: &#39;pixels&#39;,
+                        &#39;bg_inner&#39;: 15.0,
+                        &#39;bg_width&#39;: 10.0,
+                        &#39;show_plots&#39;: False}
+        elif ptype == &#39;display&#39;:
+            defaults = {&#39;extension&#39;: &#39;first&#39;,
+                        &#39;lock_image&#39;: &#39;wcs&#39;,
+                        &#39;lock_slice&#39;: &#39;image&#39;,
+                        &#39;scale&#39;: &#39;zscale&#39;,
+                        &#39;cmap&#39;: &#39;none&#39;,
+                        &#39;zoom_fit&#39;: True,
+                        &#39;tile&#39;: True,
+                        &#39;s2n_range&#39;: None,
+                        &#39;eye_viewer&#39;: True,
+                        &#39;overplots&#39;: True,
+                        &#39;ds9_viewer&#39;: True,
+                        &#39;ds9_viewer_pipeline&#39;: False,
+                        &#39;ds9_viewer_qad&#39;: True}
+        elif ptype == &#39;plot&#39;:
+            defaults = {&#39;window&#39;: 50.0,
+                        &#39;window_units&#39;: &#39;pixels&#39;,
+                        &#39;color&#39;: &#39;tab10&#39;,
+                        &#39;share_axes&#39;: &#39;none&#39;,
+                        &#39;separate_plots&#39;: True,
+                        &#39;bin&#39;: &#39;fd&#39;,
+                        &#39;hist_limits&#39;: None,
+                        &#39;p2p_reference&#39;: 1,
+                        &#39;summary_stat&#39;: &#39;clipped median&#39;}
+        else:
+            defaults = {}
+
+        return defaults</div>
+
+
+<div class="viewcode-block" id="QADImView.histogram">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.histogram">[docs]</a>
+    def histogram(self, ctr1, ctr2):
+        &quot;&quot;&quot;
+        Create a histogram of pixel values at the selected location.
+
+        If the cursor is over an enclosed region (circle, box, etc.),
+        then the histogram is computed for the enclosed data.  Otherwise,
+        the histogram is computed for an analysis window centered on the
+        cursor position.  The window width can be set in the plot parameter
+        dialog; if set to a blank value, the entire image is used to compute
+        the histogram.  The binning strategy can also be set in the
+        parameters.  Accepted values are any string accepted by the
+        matplotlib hist function, or else an integer number of bins. The
+        range of data for the histogram can also be set in parameters,
+        as min,max values.
+
+        Parameters
+        ----------
+        ctr1 : float
+            RA (if DS9 coordinate system is &#39;wcs&#39;) or
+            x-position (if DS9 coordinate system is &#39;image&#39;)
+            at selected image location.
+        ctr2 : float
+            Dec (if DS9 coordinate system is &#39;wcs&#39;) or
+            y-position (if DS9 coordinate system is &#39;image&#39;)
+            at selected image location.
+        &quot;&quot;&quot;
+        # check for the current status of the viewer
+        # (tiling, aligned by wcs)
+        if self.run(&#39;tile&#39;, via=&#39;get&#39;) == &#39;yes&#39;:
+            allframes = True
+            frames = self.run(&#39;frame active&#39;, via=&#39;get&#39;).split()
+        else:
+            allframes = False
+            frames = [self.run(&#39;frame&#39;, via=&#39;get&#39;)]
+        if self.run(&#39;wcs align&#39;, via=&#39;get&#39;) == &#39;yes&#39;:
+            cs = &#39;wcs&#39;
+        else:
+            cs = &#39;image&#39;
+
+        # get any currently available regions
+        all_regions = self.run(f&#39;regions -system {cs}&#39;,
+                               allframes=allframes, via=&#39;get&#39;)
+        if not allframes:
+            all_regions = [all_regions]
+
+        param = self.plot_parameters
+        for frame in frames:
+            log.info(&#39;&#39;)
+            if allframes:
+                self.run(&#39;frame &#39; + frame)
+                # check for loaded data
+                if not self._loaded_data():
+                    continue
+
+            try:
+                results = self.retrieve_data(ctr1, ctr2, photometry=False)
+            except (ValueError, TypeError) as err:
+                log.debug(f&#39;Error in retrieving Frame {frame} data: {err}&#39;)
+                continue
+            fulldata = results[&#39;fulldata&#39;]
+            data = results[&#39;data&#39;]
+            wdw = results[&#39;window&#39;]
+            hwcs = results[&#39;wcs&#39;]
+            xctr = results[&#39;xctr&#39;]
+            yctr = results[&#39;yctr&#39;]
+            filename = results[&#39;filename&#39;]
+
+            # get file and ext name if possible
+            log.info(f&#39;Frame {frame}: {filename}&#39;)
+
+            log.info(f&#39;Histogram at x={ctr1}, y={ctr2} &#39;
+                     f&#39;(in {cs} coordinates)&#39;)
+
+            # get data from region mask or window
+            mask = self._region_mask(cs, all_regions, xctr, yctr, hwcs)
+            if mask is None:
+                if param[&#39;window&#39;] is None:
+                    log.info(&#39;Using the full image&#39;)
+                    reg_name = &#39;full image&#39;
+                    short_reg_name = &#39;full&#39;
+                    hist_data = fulldata
+                else:
+                    log.info(f&#39;Using the analysis window &#39;
+                             f&#39;(width: {wdw} pixels)&#39;)
+                    reg_name = f&#39;{wdw} pixel window&#39;
+                    short_reg_name = f&#39;x={xctr:.0f} y={yctr:.0f} {wdw}pix&#39;
+                    hist_data = data
+            else:
+                reg_name = &#39;DS9 region&#39;
+                short_reg_name = f&#39;x={xctr:.0f} y={yctr:.0f} region&#39;
+                hist_data = mask.multiply(fulldata)
+                if hist_data is None:  # pragma: no cover
+                    # condition occasionally but unreliably encountered
+                    # in testing
+                    log.warning(&#39;Region is too small; skipping histogram&#39;)
+                    continue
+                hist_data[hist_data == 0] = np.nan
+
+            hist_data = hist_data.ravel()
+            hist_minmax = (np.nanmin(hist_data), np.nanmax(hist_data),
+                           np.nansum(hist_data))
+            hist_stats = (np.nanmean(hist_data),
+                          np.nanmedian(hist_data),
+                          np.nanstd(hist_data))
+            nnan = np.isfinite(hist_data)
+            clip_stats = stats.sigma_clipped_stats(hist_data[nnan])
+            text_stats = [f&#39;Total pixels: {np.sum(nnan)}&#39;,
+                          f&#39;Min, max, sum: &#39;
+                          f&#39;{hist_minmax[0]:.5g}, {hist_minmax[1]:.5g}, &#39;
+                          f&#39;{hist_minmax[2]:.5g}&#39;,
+                          f&#39;Mean, median, stddev: &#39;
+                          f&#39;{hist_stats[0]:.5g}, {hist_stats[1]:.5g}, &#39;
+                          f&#39;{hist_stats[2]:.5g}&#39;,
+                          f&#39;Clipped mean, median, stddev: &#39;
+                          f&#39;{clip_stats[0]:.5g}, {clip_stats[1]:.5g}, &#39;
+                          f&#39;{clip_stats[2]:.5g}&#39;]
+            for t in text_stats:
+                log.info(t)
+
+            title = f&#39;Frame {frame}, x={xctr:.0f} y={yctr:.0f} in {reg_name}&#39;
+            l1 = f&#39;F{frame} {short_reg_name}&#39;
+            hist_kwargs = {&#39;bins&#39;: param[&#39;bin&#39;], &#39;label&#39;: l1, &#39;alpha&#39;: 0.8}
+            if param[&#39;hist_limits&#39;] is not None:
+                hist_kwargs[&#39;range&#39;] = (param[&#39;hist_limits&#39;][0],
+                                        param[&#39;hist_limits&#39;][1])
+            new_hist = {&#39;plot_type&#39;: &#39;histogram&#39;, &#39;args&#39;: [hist_data],
+                        &#39;kwargs&#39;: hist_kwargs}
+
+            if param[&#39;separate_plots&#39;] or len(self.histogram_data) &lt; 1:
+                # summary stat (mean, median, clipped mean, or clipped median)
+                summary_stat = str(param.get(&#39;summary_stat&#39;, &#39;mean&#39;)).lower()
+                if &#39;clip&#39; in summary_stat:
+                    se = clip_stats[2]
+                    if &#39;median&#39; in summary_stat:
+                        ss = clip_stats[1]
+                        ss_label = &#39;Clipped median&#39;
+                    else:
+                        ss = clip_stats[0]
+                        ss_label = &#39;Clipped mean&#39;
+                else:
+                    se = hist_stats[2]
+                    if &#39;median&#39; in summary_stat:
+                        ss = hist_stats[1]
+                        ss_label = &#39;Median&#39;
+                    else:
+                        ss = hist_stats[0]
+                        ss_label = &#39;Mean&#39;
+                l2 = f&#39;{ss_label} {ss:.3g} +/- {se:.3g}&#39;
+
+                overplots = [new_hist]
+                vlines = [ss, ss - se, ss + se]
+                vlabels = [l2, None, None]
+                vstyles = [&#39;-&#39;, &#39;:&#39;, &#39;:&#39;]
+                for vdata, vlabel, vstyle in zip(vlines, vlabels, vstyles):
+                    overplots.append({&#39;plot_type&#39;: &#39;vline&#39;,
+                                      &#39;args&#39;: [vdata],
+                                      &#39;kwargs&#39;: {&#39;label&#39;: vlabel,
+                                                 &#39;color&#39;: &#39;gray&#39;,
+                                                 &#39;linewidth&#39;: 1,
+                                                 &#39;linestyle&#39;: vstyle}})
+                overplots.append({&#39;plot_type&#39;: &#39;legend&#39;, &#39;args&#39;: []})
+
+                plot_data = {&#39;args&#39;: [],
+                             &#39;kwargs&#39;: {&#39;title&#39;: title,
+                                        &#39;xlabel&#39;: &#39;Flux&#39;,
+                                        &#39;ylabel&#39;: &#39;Count&#39;,
+                                        &#39;colormap&#39;: param[&#39;color&#39;]},
+                             &#39;plot_kwargs&#39;: {},
+                             &#39;overplot&#39;: overplots}
+                self.histogram_data.append(plot_data)
+            else:
+                # append new histogram to existing ones
+                plot_data = self.histogram_data[-1]
+                overplots = []
+                for plot in plot_data[&#39;overplot&#39;]:
+                    if plot[&#39;plot_type&#39;] == &#39;histogram&#39;:
+                        overplots.append(plot)
+                overplots.append(new_hist)
+                overplots.append({&#39;plot_type&#39;: &#39;legend&#39;, &#39;args&#39;: []})
+                plot_data[&#39;overplot&#39;] = overplots
+                plot_data[&#39;kwargs&#39;][&#39;title&#39;] = &#39;All histogram regions&#39;
+
+        if self.signals is not None:
+            self.signals.make_histogram_plot.emit()</div>
+
+
+<div class="viewcode-block" id="QADImView.histogram_plot">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.histogram_plot">[docs]</a>
+    def histogram_plot(self):
+        &quot;&quot;&quot;Plot radial fluxes in a separate window.&quot;&quot;&quot;
+        if not self.HAS_PYQT5:
+            return
+        data = self.histogram_data
+        if data is None or len(data) == 0:
+            return
+
+        # start up plot viewer if needed
+        if self.plotviewer is None or not self.plotviewer.isVisible():
+            self.plotviewer = MatplotlibPlot()
+
+        self.plotviewer.setWindowTitle(&#39;Histogram&#39;)
+        self.plotviewer.plot_layout = &#39;rows&#39;
+        self.plotviewer.share_axes = self.plot_parameters[&#39;share_axes&#39;]
+        self.plotviewer.plot(data)
+        self.plotviewer.set_scroll(&#39;bottom&#39;)
+        self.plotviewer.show()
+        self.plotviewer.raise_()</div>
+
+
+<div class="viewcode-block" id="QADImView.imexam">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.imexam">[docs]</a>
+    def imexam(self):
+        &quot;&quot;&quot;
+        Start event loop for photometry in DS9.
+
+        The following keypress values (over the DS9 window) are
+        accepted:
+
+        * a: Perform photometry at the cursor position.
+        * p: Plot a pixel-to-pixel comparison of all loaded
+          frames at the cursor location.
+        * s: Compute statistics and plot a histogram of the data
+          at the cursor location.
+        * c: Clear active plots and photometry data.
+        * h: Show a help message.
+        * q: Clear previous results and close the imexam event loop.
+        &quot;&quot;&quot;
+        if not self.HAS_DS9:  # pragma: no cover
+            return
+
+        usage_message = [
+            &#39;&#39;, &#39;Available options for ImExam:&#39;,
+            &#39;  a: Perform photometry at the cursor location.&#39;,
+            &#39;  p: Plot a pixel-to-pixel comparison of all &#39;
+            &#39;frames at the cursor location.&#39;,
+            &#39;  s: Compute statistics and plot a histogram of the data at the &#39;
+            &#39;cursor location.&#39;,
+            &#39;  c: Clear active plots and photometry data.&#39;,
+            &#39;  h: Show this message.&#39;,
+            &#39;  q: Quit ImExam.&#39;, &#39;&#39;]
+
+        for msg in usage_message:
+            log.info(msg)
+
+        keypress = &#39;none&#39;
+        while keypress != &#39;q&#39;:
+            # reset ptable if necessary
+            if self.ptable is None:
+                self.reset_ptable()
+
+            # get new imexam cursor
+            try:
+                if self.run(&#39;wcs align&#39;, via=&#39;get&#39;) == &#39;yes&#39;:
+                    cs = &#39;wcs&#39;
+                else:
+                    cs = &#39;image&#39;
+                uval = self.run(f&#39;imexam any coordinate {cs}&#39;, via=&#39;get&#39;)
+            except (ValueError, AttributeError):
+                log.debug(&#39;Error in ds9 wcs or imexam command&#39;)
+                log.error(&#39;Error in ImExam loop&#39;)
+                break
+
+            if str(uval).strip() == &#39;0&#39; or str(uval).strip() == &#39;&#39;:
+                # error condition -- break loop
+                log.debug(f&#39;ImExam returned: {uval}&#39;)
+                log.error(&#39;Error in ImExam loop&#39;)
+                break
+
+            if str(uval).lower().strip().startswith(&#39;q&#39;):
+                keypress = &#39;q&#39;
+                xcoord = None
+                ycoord = None
+            else:
+                uvallist = str(uval).split()
+                if len(uvallist) != 3:
+                    log.debug(f&#39;Imexam returned: {uval}&#39;)
+                    log.error(&#39;Error in ImExam loop&#39;)
+                    break
+                keypress, xcoord, ycoord = uvallist
+                keypress = keypress.lower().strip()
+                xcoord = float(xcoord)
+                ycoord = float(ycoord)
+
+            if keypress == &#39;a&#39;:
+                # perform profile fits/aperture photometry
+                self.photometry(xcoord, ycoord)
+
+                # show radial plot if desired
+                if self.phot_parameters[&#39;show_plots&#39;]:
+                    if self.signals is not None:
+                        self.signals.make_radial_plot.emit()
+            elif keypress == &#39;s&#39;:
+                self.histogram(xcoord, ycoord)
+            elif keypress == &#39;p&#39;:
+                self.pix2pix(xcoord, ycoord)
+            elif keypress == &#39;h&#39;:
+                # show help message
+                for msg in usage_message:
+                    log.info(msg)
+            elif keypress == &#39;c&#39; or keypress == &#39;q&#39;:
+                # reset imexam data
+                self.radial_data = []
+                self.histogram_data = []
+                self.p2p_data = []
+                self.ptable = None
+                if self.plotviewer is not None:
+                    self.plotviewer.clear()
+                    self.plotviewer.hide()
+
+                # check for tiling -- if tiled, delete regions
+                # from all active frames
+                if self.run(&#39;tile&#39;, via=&#39;get&#39;) == &#39;yes&#39;:
+                    tile = True
+                else:
+                    tile = False
+                self.run(&#39;regions group imexam delete&#39;, allframes=tile)
+
+            if self.break_loop:
+                # break loop if required
+                break</div>
+
+
+<div class="viewcode-block" id="QADImView.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.run">[docs]</a>
+    def run(self, cmd, buf=None, via=&#39;set&#39;, allframes=False):
+        &quot;&quot;&quot;
+        Send an XPA command to DS9.
+
+        Parameters
+        ----------
+        cmd : str
+            Command to send.
+        buf : list, str, or file-like; optional
+            Additional buffers to send.  May be a string or a file handler,
+            or a list of those.
+        via : {&#39;get&#39;, &#39;set&#39;}, optional
+            Command method.
+        allframes : bool
+            If True, the command should be run once for each active frame.
+
+        Returns
+        -------
+        str
+            DS9 command exit status.
+        &quot;&quot;&quot;
+        if self.ds9 is None:
+            self.startup()
+        if not self.HAS_DS9:  # pragma: no cover
+            return
+        if allframes:
+            fcmd = &#39;frame active&#39;
+        else:
+            fcmd = &#39;frame&#39;
+        try:
+            framenums = self._run_internal(fcmd, via=&#39;get&#39;).split()
+        except (TypeError, ValueError, AttributeError) as err:
+            msg = str(err)
+            if (msg.lower().startswith(&#39;ds9 is no longer running&#39;)
+                    or msg.lower().startswith(&#39;no response&#39;)):
+                self.startup()
+                framenums = self._run_internal(fcmd, via=&#39;get&#39;).split()
+            elif msg.lower().startswith(&quot;&#39;nonetype&#39; object has no attribute&quot;):
+                framenums = []
+            else:
+                raise
+
+        if allframes:
+            retvalarr = []
+            for frm in framenums:
+                fcmd = &#39;frame &#39; + frm
+                self._run_internal(fcmd)
+                retval = self._run_internal(cmd, buf, via)
+                retvalarr.append(retval)
+            return retvalarr
+        else:
+            retval = self._run_internal(cmd, buf, via)
+            return retval</div>
+
+
+<div class="viewcode-block" id="QADImView.get_extension_param">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.get_extension_param">[docs]</a>
+    def get_extension_param(self):
+        &quot;&quot;&quot;Retrieve the extension setting from the display parameters.&quot;&quot;&quot;
+        if &#39;frame&#39; in self.disp_parameters[&#39;extension&#39;]:
+            exten = &#39;all&#39;
+        elif &#39;cube&#39; in self.disp_parameters[&#39;extension&#39;]:
+            exten = &#39;all&#39;
+        elif &#39;first&#39; in self.disp_parameters[&#39;extension&#39;]:
+            exten = 0
+        else:
+            try:
+                exten = int(self.disp_parameters[&#39;extension&#39;])
+            except ValueError:
+                exten = str(self.disp_parameters[&#39;extension&#39;]).strip()
+        return exten</div>
+
+
+<div class="viewcode-block" id="QADImView.load">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.load">[docs]</a>
+    def load(self, fitsfiles, regfiles=None):
+        &quot;&quot;&quot;
+        Load FITS files into DS9.
+
+        Spectral files will be loaded into the Eye viewer
+        if possible.  Spectra are determined by the `spec_test` method.
+
+        If only headers are provided, they are just stored in the `headers`
+        attribute.
+
+        Otherwise, all images and region files are loaded into DS9.
+
+        Parameters
+        ----------
+        fitsfiles : list of str, `astropy.io.fits.HDUList`, \
+            or `astropy.io.fits.Header`
+            FITS file paths to load.  May also be HDUList instances
+            or just Header instances, if the data is already in memory.
+        regfiles : list of str, optional
+            DS9 region file paths to load.
+        &quot;&quot;&quot;
+        if type(fitsfiles) is not list:
+            fitsfiles = [fitsfiles]
+        if regfiles is None:
+            regfiles = []
+        elif type(regfiles) is not list:
+            regfiles = [regfiles]
+
+        # read fits files, categorizing into image and spectral files
+        good_files = []
+        img_files = []
+        imgdata = []
+        spec_files = []
+        specdata = []
+        regions = []
+        headers = {}
+        is_data = {}
+        data_type = {}
+        for j, ffile in enumerate(fitsfiles):
+            if isinstance(ffile, list) and \
+                    isinstance(ffile[0], fits.Header):
+                # header only: set aside for header viewing
+                hdr = ffile
+                try:
+                    ffile = hdr[0][&quot;FILENAME&quot;]
+                except KeyError:
+                    ffile = &quot;Array {}&quot;.format(j)
+                headers[ffile] = hdr
+                continue
+            elif isinstance(ffile, fits.HDUList):
+                hdul = ffile
+                hdr = hdul[0].header
+                try:
+                    ffile = hdr[&quot;FILENAME&quot;]
+                except KeyError:
+                    ffile = &quot;Array {}&quot;.format(j)
+                is_data[ffile] = True
+            elif os.path.exists(str(ffile)):
+                try:
+                    hdul = fits.open(ffile)
+                except IOError:
+                    log.warning(&#39;Cannot load {}; ignoring.&#39;.format(ffile))
+                    continue
+                is_data[ffile] = False
+            else:
+                log.warning(&#39;Cannot load {}; ignoring.&#39;.format(ffile))
+                continue
+            data_type[ffile] = self.spec_test(hdul)
+            if &#39;spec&#39; in data_type[ffile]:
+                spec_files.append(ffile)
+                specdata.append(hdul)
+            if data_type[ffile] != &#39;spectrum_only&#39;:
+                # Data that is not spectrum-only should also go to DS9
+                img_files.append(ffile)
+                imgdata.append(hdul)
+
+        # load spectral files into Eye if possible
+        if len(spec_files) &gt; 0:
+            if self.disp_parameters[&#39;eye_viewer&#39;] and self.HAS_EYE:
+                if self.specviewer is None:
+                    self.specviewer = EyeViewer()
+                    self.specviewer.start()
+
+                # send as data if any are not available as files,
+                # otherwise send as files
+                if any([is_data[ffile] for ffile in spec_files]):
+                    self.specviewer.update(specdata)
+                else:
+                    self.specviewer.update(spec_files)
+                self.specviewer.display()
+
+            # keep the headers even if the eye is closed
+            for j, ffile in enumerate(spec_files):
+                if data_type[ffile] == &#39;spectrum_only&#39;:
+                    # other data will be tracked in img_files section
+                    good_files.append(ffile)
+                    headers[ffile] = specdata[j][0].header
+
+        # keep headers for image files even if ds9 is unavailable
+        if len(img_files) &gt; 0:
+            for j, ffile in enumerate(img_files):
+                if is_data[ffile]:
+                    good_files.append(imgdata[j])
+                else:
+                    good_files.append(ffile)
+
+                headers[ffile] = []
+                for ext in imgdata[j]:
+                    headers[ffile].append(ext.header)
+
+        # also track good region files, regardless
+        for rfile in regfiles:
+            if os.path.exists(rfile):
+                regions.append(rfile)
+
+        # load image files into ds9
+        i = 0
+        if len(img_files) &gt; 0 and self.disp_parameters[&#39;ds9_viewer&#39;] \
+                and self.HAS_DS9:
+            log.info(&#39;&#39;)
+
+            self.set_defaults()
+            exten = &#39;&#39;
+            if &#39;frame&#39; in self.disp_parameters[&#39;extension&#39;]:
+                cmd = &#39;multiframe&#39;
+            elif &#39;cube&#39; in self.disp_parameters[&#39;extension&#39;]:
+                cmd = &#39;mecube&#39;
+            elif &#39;first&#39; in self.disp_parameters[&#39;extension&#39;]:
+                cmd = &#39;fits&#39;
+            else:
+                try:
+                    exten = int(self.disp_parameters[&#39;extension&#39;])
+                except ValueError:
+                    exten = str(self.disp_parameters[&#39;extension&#39;]).strip()
+                cmd = &#39;fits&#39;
+
+            for j, ffile in enumerate(img_files):
+                ds9_cmd = cmd
+
+                # automagic an S/N extension if desired
+                if str(exten).upper() == &#39;S/N&#39;:
+                    try:
+                        s2n = self._make_s2n(ffile, imgdata[j])
+                    except ValueError as err:
+                        log.error(err)
+                        continue
+                    is_data[ffile] = True
+                    imgdata[j] = s2n
+
+                try:
+                    frame_to_load = int(self.run(&#39;frame&#39;, via=&#39;get&#39;)) + 1
+                except ValueError:
+                    frame_to_load = 1
+                if exten != &#39;&#39;:
+                    extenstr = f&#39;[{exten}]&#39;
+                else:
+                    extenstr = &#39;&#39;
+                try:
+                    if not is_data[ffile]:
+                        if cmd == &#39;multiframe&#39;:
+                            ds9_cmd = &quot;{} {}{}&quot;.format(cmd, ffile, extenstr)
+                        else:
+                            ds9_cmd = &quot;{} new {}{}&quot;.format(cmd, ffile,
+                                                           extenstr)
+                        log.debug(&quot;Running DS9 command: {}&quot;.format(ds9_cmd))
+                        status = self.run(ds9_cmd)
+                    else:
+                        self.run(&#39;frame new&#39;)
+
+                        # display FILENAME keyword in addition to filename
+                        self.run(&#39;view keyvalue &quot;{}&quot;&#39;.format(&quot;&#39;FILENAME&#39;&quot;))
+                        self.run(&#39;view keyword yes&#39;)
+
+                        if exten != &#39;&#39; and str(exten).upper() != &#39;S/N&#39;:
+                            try:
+                                phu = imgdata[j][0].copy()
+                                phu.data = None
+                                data = fits.HDUList([phu, imgdata[j][exten]])
+                            except KeyError as err:
+                                log.error(err)
+                                raise ValueError(err)
+                        else:
+                            data = imgdata[j]
+
+                        # try to stream the data to DS9.  If that fails,
+                        # try to write it to disk, then load it
+                        try:
+                            log.debug(&quot;Loading from memory&quot;)
+                            status = self._load_from_memory(cmd, ffile, data)
+                        except ValueError:
+                            log.debug(&quot;Loading from tempfile&quot;)
+                            status = self._load_from_tempfile(cmd, ffile, data)
+
+                    log.info(f&#39;Loaded frame {frame_to_load}: &#39;
+                             f&#39;{os.path.basename(ffile)}{extenstr}&#39;)
+
+                except ValueError as err:
+                    msg = str(err)
+                    if exten != &#39;&#39;:
+                        if str(exten).lower() in msg.lower():
+                            log.warning(f&#39;Error loading extension &#39;
+                                        f&#39;{exten} for file &#39;
+                                        f&#39;{os.path.basename(ffile)}&#39;)
+                            continue
+                        else:
+                            status = 0
+                            log.error(f&#39;Error in XPA command: {ds9_cmd}&#39;)
+                            log.error(msg)
+                    else:
+                        status = 0
+                        log.error(f&#39;Error in XPA command: {ds9_cmd}&#39;)
+                        log.error(msg)
+                if status == 1 and self.disp_parameters[&#39;overplots&#39;]:
+                    # overlay photometric and/or spectroscopic apertures
+                    self.overlay()
+                    if len(specdata) &gt; 0:
+                        nspec = len(specdata)
+                        if i &gt;= nspec:
+                            hdr = specdata[0][0].header
+                        else:
+                            hdr = specdata[i][0].header
+                        try:
+                            with set_log_level(&#39;ERROR&#39;):
+                                hwcs = wcs.WCS(headers[ffile][0])
+                        except (ValueError, IndexError, MemoryError,
+                                AttributeError, TypeError):
+                            hwcs = None
+                        try:
+                            self.overlay_aperture(hdr, hwcs=hwcs)
+                        except ValueError:  # pragma: no cover
+                            # may be encountered with extensions with
+                            # unexpected WCSs
+                            pass
+                i += 1
+
+            if str(self.cs).strip().lower() != &#39;none&#39;:
+                self.run(&#39;match frame &#39; + self.cs)
+            if self.disp_parameters[&#39;zoom_fit&#39;]:
+                frames = self.run(&#39;frame active&#39;, via=&#39;get&#39;).split()
+                if len(frames) &gt; 0:
+                    self.run(f&#39;frame {frames[0]}&#39;)
+                self.run(&#39;zoom to fit&#39;)
+            if self.disp_parameters[&#39;cmap&#39;].lower() != &#39;none&#39;:
+                self.run(&#39;cmap &#39; + self.disp_parameters[&#39;cmap&#39;].lower())
+            if self.disp_parameters[&#39;scale&#39;].lower() != &#39;none&#39;:
+                self.run(&#39;scale &#39; + self.disp_parameters[&#39;scale&#39;].lower())
+
+            if len(regfiles) &gt; 0:
+                frames = self.run(&#39;frame active&#39;, via=&#39;get&#39;).split()
+                nframes = len(frames)
+                if nframes == len(regfiles):
+                    for reg_i, rfile in enumerate(regfiles):
+                        if os.path.exists(rfile):
+                            self.run(&#39;frame {}&#39;.format(frames[reg_i]))
+                            self.run(&#39;region load {}&#39;.format(rfile))
+                else:
+                    for rfile in regfiles:
+                        if os.path.exists(rfile):
+                            self.run(&#39;region load all &#39; + rfile)
+
+            # reset the photometry table
+            self.ptable = None
+            self.radial_data = []
+            self.histogram_data = []
+            self.p2p_data = []
+            self.run(&#39;raise&#39;)
+
+        # keep track of the files loaded into ds9, for reloading
+        # if ds9 is closed
+        self.files = good_files
+        self.regions = regions
+        self.headers = headers</div>
+
+
+    def _load_from_tempfile(self, cmd, ffile, data):
+        &quot;&quot;&quot;Write a tempfile and load it into DS9.&quot;&quot;&quot;
+        with tempfile.NamedTemporaryFile(delete=False) as \
+                new_file:
+            new_name = new_file.name
+        try:
+            data.writeto(new_name, overwrite=True)
+            ds9_cmd = &quot;{} {}&quot;.format(cmd, new_name)
+            log.debug(&quot;Running DS9 command: {}&quot;.format(ds9_cmd))
+            status = self.run(ds9_cmd)
+            os.remove(new_name)
+        except (TypeError, OSError, ValueError):
+            log.warning(&quot;Cannot load image {} &quot;
+                        &quot;from tempfile&quot;.format(ffile))
+            status = 0
+        return status
+
+    def _load_from_memory(self, cmd, ffile, data):
+        &quot;&quot;&quot;Use BytesIO to stream HDU data to DS9.&quot;&quot;&quot;
+        status = 0
+        with contextlib.closing(io.BytesIO()) as new_file:
+            new_file.name = ffile
+            try:
+                data.writeto(new_file, overwrite=True)
+                new_fits = new_file.getvalue()
+
+                log.debug(&quot;Running DS9 command: {}&quot;.format(cmd))
+                status = self.run(cmd, buf=[new_fits,
+                                            len(new_fits)])
+            except (TypeError, ValueError):
+                msg = &quot;Cannot load image {} &quot; \
+                      &quot;from memory&quot;.format(ffile)
+                log.warning(msg)
+                raise ValueError(msg)
+        return status
+
+    def _make_s2n(self, ffile, hdul):
+        &quot;&quot;&quot;Retrieve or make an S/N image.&quot;&quot;&quot;
+        bname = os.path.basename(ffile)
+        phu = hdul[0].copy()
+        phu.data = None
+        if &#39;S/N&#39; in hdul:
+            hdu = hdul[&#39;S/N&#39;]
+        else:
+            if &#39;FLUX&#39; in hdul and &#39;ERROR&#39; in hdul:
+                log.debug(f&#39;Making S/N image from FLUX and ERROR &#39;
+                          f&#39;extensions for {bname}.&#39;)
+                hdu = fits.ImageHDU(hdul[&#39;FLUX&#39;].data,
+                                    hdul[&#39;FLUX&#39;].header)
+                s = hdul[&#39;FLUX&#39;].data
+                n = hdul[&#39;ERROR&#39;].data
+            elif &#39;FLUX&#39; in hdul and &#39;STDDEV&#39; in hdul:
+                log.debug(f&#39;Making S/N image from FLUX and STDDEV &#39;
+                          f&#39;extensions for {bname}.&#39;)
+                hdu = fits.ImageHDU(hdul[&#39;FLUX&#39;].data,
+                                    hdul[&#39;FLUX&#39;].header)
+                s = hdul[&#39;FLUX&#39;].data
+                n = hdul[&#39;STDDEV&#39;].data
+            elif &#39;STOKES I&#39; in hdul and &#39;ERROR I&#39; in hdul:
+                log.debug(f&#39;Making S/N image from STOKES I and &#39;
+                          f&#39;ERROR I extensions for {bname}.&#39;)
+                hdu = fits.ImageHDU(hdul[&#39;STOKES I&#39;].data,
+                                    hdul[&#39;STOKES I&#39;].header)
+                s = hdul[&#39;STOKES I&#39;].data
+                n = hdul[&#39;ERROR I&#39;].data
+            else:
+                raise ValueError(f&#39;Cannot determine S/N from extensions &#39;
+                                 f&#39;in file {bname}&#39;)
+
+            hdu.data = s / n
+            hdu.header[&#39;EXTNAME&#39;] = &#39;S/N&#39;
+            hdu.header[&#39;BUNIT&#39;] = &#39;&#39;
+
+        # blank out data outside of range
+        try:
+            low, high = self.disp_parameters[&#39;s2n_range&#39;]
+            hdu.data[hdu.data &lt; float(low)] = np.nan
+            hdu.data[hdu.data &gt; float(high)] = np.nan
+        except (ValueError, AttributeError, IndexError, TypeError):
+            pass
+
+        s2n = fits.HDUList([phu, hdu])
+        return s2n
+
+<div class="viewcode-block" id="QADImView.lock">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.lock">[docs]</a>
+    def lock(self, cs=None, ltype=None, off=False):
+        &quot;&quot;&quot;
+        Lock DS9 frames to the desired coordinate system.
+
+        Parameters
+        ----------
+        cs : {&#39;image&#39;, &#39;wcs&#39;, &#39;none&#39;}, optional
+            Coordinate system to lock to.  Display parameters
+            will be used if not provided.
+        ltype : {&#39;frame&#39;, &#39;crosshair&#39;, &#39;crop&#39;, &#39;slice&#39;, \
+            &#39;bin&#39;, &#39;scale&#39;, &#39;colorbar&#39;, &#39;smooth&#39;}, optional
+            Lock type.  If not provided, all will be locked.
+        off : bool
+            If True, locks will be turned off.
+        &quot;&quot;&quot;
+        icstypes = [&#39;frame&#39;, &#39;crosshair&#39;, &#39;crop&#39;]
+        scstypes = [&#39;slice&#39;]
+        booltypes = [&#39;bin&#39;, &#39;scale&#39;, &#39;colorbar&#39;, &#39;smooth&#39;]
+        if off:
+            cs = &#39;none&#39;
+            bval = &#39;no&#39;
+        else:
+            bval = &#39;yes&#39;
+
+        if cs is None:
+            ics = self.disp_parameters[&#39;lock_image&#39;]
+            scs = self.disp_parameters[&#39;lock_slice&#39;]
+        else:
+            ics = cs
+            scs = cs
+
+        if ltype is not None:
+            ltypes = [ltype.lower().strip()]
+        else:
+            # lock all
+            ltypes = icstypes + scstypes + booltypes
+        for ltype in ltypes:
+            if ltype in icstypes:
+                self.run(&#39;lock &#39; + ltype + &#39; &#39; + ics)
+            elif ltype in scstypes:
+                self.run(&#39;lock &#39; + ltype + &#39; &#39; + scs)
+            elif ltype in booltypes:
+                self.run(&#39;lock &#39; + ltype + &#39; &#39; + bval)
+        self.cs = ics</div>
+
+
+<div class="viewcode-block" id="QADImView.overlay">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.overlay">[docs]</a>
+    def overlay(self):
+        &quot;&quot;&quot;
+        Overlay photometry aperture regions.
+
+        Aperture parameters are read from the SRCPOSX/Y,
+        STCENTX/Y, PHOTAPER, PHOTSKAP, STAPFLX, and
+        STAPSKY header keywords in the FITS data in the
+        currently displayed frame.
+        &quot;&quot;&quot;
+        # retrieve header for photometry keywords
+        # from current frame only
+        hdr_str = self.run(&#39;fits header&#39;, via=&#39;get&#39;)
+
+        # read it in to a fits header
+        phdr = fits.Header()
+        hdr = phdr.fromstring(hdr_str, sep=&#39;\n&#39;)
+
+        try:
+            srcposx = hdr[&#39;SRCPOSX&#39;] + 1
+            srcposy = hdr[&#39;SRCPOSY&#39;] + 1
+            s1 = &#39;point({:f} {:f}) # &#39; \
+                 &#39;point=x &#39; \
+                 &#39;color=blue tag={{srcpos}} &#39;\
+                 &#39;text=SRCPOS&#39;.format(srcposx, srcposy)
+            self.run(&#39;regions&#39;, s1)
+        except (KeyError, ValueError):
+            pass
+        try:
+            stcentx = hdr[&#39;STCENTX&#39;] + 1
+            stcenty = hdr[&#39;STCENTY&#39;] + 1
+            photaper = hdr[&#39;PHOTAPER&#39;]
+            photskap = [float(x) for x in hdr[&#39;PHOTSKAP&#39;].split(&#39;,&#39;)]
+            s1 = &#39;point({:f} {:f}) # &#39; \
+                 &#39;point=x &#39; \
+                 &#39;color=cyan tag={{srcpos}}&#39;.format(stcentx, stcenty)
+            self.run(&#39;regions&#39;, s1)
+            s2 = &#39;circle({:f} {:f} {:f}) # &#39; \
+                 &#39;color=cyan tag={{srcpos}}&#39;.format(
+                     stcentx, stcenty, photaper)
+            self.run(&#39;regions&#39;, s2)
+            s3 = &#39;annulus({:f} {:f} {:f} {:f}) # &#39; \
+                 &#39;color=cyan tag={{srcpos}} text=STCENT&#39;.format(
+                     stcentx, stcenty, photskap[0], photskap[1])
+            self.run(&#39;regions&#39;, s3)
+        except (KeyError, ValueError):
+            pass
+        try:
+            stcentx = hdr[&#39;STCENTX&#39;] + 1
+            stcenty = hdr[&#39;STCENTY&#39;] + 1
+            flux = hdr[&#39;STAPFLX&#39;]
+            sky = hdr[&#39;STAPSKY&#39;]
+            s1 = &#39;text({:f} {:f}) # color=cyan &#39; \
+                 &#39;text=&quot;Flux={:.2f}, Sky={:.2f}&quot;&#39;.format(
+                     stcentx, stcenty - 40, flux, sky)
+            self.run(&#39;regions&#39;, s1)
+        except (KeyError, ValueError):
+            pass
+
+        # try overlaying apertures as well
+        try:
+            self.overlay_aperture(hdr)
+        except ValueError:  # pragma: no cover
+            # may be encountered with extensions with
+            # unexpected WCSs
+            pass</div>
+
+
+<div class="viewcode-block" id="QADImView.overlay_aperture">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.overlay_aperture">[docs]</a>
+    def overlay_aperture(self, hdr, hwcs=None):
+        &quot;&quot;&quot;
+        Overlay spectroscopic aperture regions.
+
+        Aperture parameters are determined from the FITS header
+        keywords APPOSO01, APRADO01, PSFRAD01, and BGR. A primary
+        spectral WCS is required.
+
+        Parameters
+        ----------
+        hdr : `astropy.io.fits.Header`
+            FITS header to read apertures from.
+        &quot;&quot;&quot;
+        # test for appropriately sized data
+        if hwcs is None:
+            try:
+                with set_log_level(&#39;ERROR&#39;):
+                    hwcs = wcs.WCS(hdr)
+            except (ValueError, IndexError, MemoryError,
+                    AttributeError, TypeError):
+                return
+        naxis = hwcs.pixel_shape
+        if not naxis or len(naxis) != 2:
+            return
+
+        minval = hwcs.wcs_pix2world([[1, 1]], 1)[0][0]
+        maxval = hwcs.wcs_pix2world([[naxis[0], 1]], 1)[0][0]
+
+        regions = []
+        width = 1
+        try:
+            appos = hdr[&#39;APPOSO01&#39;].split(&#39;,&#39;)
+            if &#39;APRADO01&#39; in hdr:
+                aprad = hdr[&#39;APRADO01&#39;].split(&#39;,&#39;)
+            else:
+                aprad = None
+            if &#39;PSFRAD01&#39; in hdr:
+                psfrad = hdr[&#39;PSFRAD01&#39;].split(&#39;,&#39;)
+            else:
+                psfrad = None
+            line_template = &#39;wcs; linear; line({:f} {:f} {:f} {:f}) # &#39; \
+                            &#39;color={:s} tag={{aperture}} &#39;\
+                            &#39;width={:d}&#39;
+            for j in range(len(appos)):
+                pos = float(appos[j])
+                s1 = line_template.format(minval, pos,
+                                          maxval, pos, &#39;cyan&#39;, width)
+                regions.extend([s1])
+
+                if aprad is not None:
+                    try:
+                        apr = float(aprad[j])
+                        s2 = line_template.format(minval, pos + apr, maxval,
+                                                  pos + apr, &#39;green&#39;, width)
+                        s3 = line_template.format(minval, pos - apr, maxval,
+                                                  pos - apr, &#39;green&#39;, width)
+                        regions.extend([s2, s3])
+                    except IndexError:
+                        pass
+
+                if psfrad is not None:
+                    try:
+                        psf = float(psfrad[j])
+                        s4 = line_template.format(minval, pos + psf, maxval,
+                                                  pos + psf, &#39;blue&#39;, width)
+                        s5 = line_template.format(minval, pos - psf, maxval,
+                                                  pos - psf, &#39;blue&#39;, width)
+                        regions.extend([s4, s5])
+                    except IndexError:
+                        pass
+            bgr = hdr.get(&#39;BGR&#39;)
+            if not bgr:
+                bgr = hdr.get(&#39;BGR_O01&#39;)
+            if bgr:
+                bgreg = re.split(&#39;[,;]&#39;, bgr)
+                for bg in bgreg:
+                    r1, r2 = bg.split(&#39;-&#39;)
+                    s6 = line_template.format(minval, float(r1), maxval,
+                                              float(r1), &#39;red&#39;, width)
+                    s7 = line_template.format(minval, float(r2), maxval,
+                                              float(r2), &#39;red&#39;, width)
+                    regions.extend([s6, s7])
+
+        except (KeyError, ValueError):
+            pass
+
+        for reg in regions:
+            try:
+                self.run(&#39;regions&#39;, reg)
+            except ValueError:
+                # A bad WCS in the ds9 image will cause the
+                # region set to fail -- in this case, don&#39;t continue
+                # to try region
+                break</div>
+
+
+<div class="viewcode-block" id="QADImView.photometry">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.photometry">[docs]</a>
+    def photometry(self, ctr1, ctr2):
+        &quot;&quot;&quot;
+        Perform aperture photometry at a selected position.
+
+        For each active frame, the following steps are performed:
+
+        * A window around the selected position is extracted from the
+          FITS image.
+        * NaNs in the extracted data are removed, the absolute value
+          of the extracted data is taken, and the median value of
+          the extracted data is subtracted.
+        * The brightest peak in the window is located.
+        * A model is fit to the extracted data, centered at the
+          peak location.  The model is either a 2-D Moffat or
+          Gaussian, depending on the current photometry parameters.
+        * A circular aperture and sky annulus are placed at the fit
+          position, and fluxes are extracted.
+        * Model fit parameters (centroid, FWHM, etc.) and fluxes
+          are printed to the log at INFO level.
+
+        Parameters
+        ----------
+        ctr1 : float
+            RA (if DS9 coordinate system is &#39;wcs&#39;) or
+            x-position (if DS9 coordinate system is &#39;image&#39;)
+            at selected image location.
+        ctr2 : float
+            Dec (if DS9 coordinate system is &#39;wcs&#39;) or
+            y-position (if DS9 coordinate system is &#39;image&#39;)
+            at selected image location.
+        &quot;&quot;&quot;
+        if not self.HAS_PIPECAL:
+            log.warning(&#39;Photometry is not available. The &#39;
+                        &#39;sofia_redux.calibration package is required.&#39;)
+            return
+
+        # reset photometry table if necessary
+        if self.ptable is None:
+            self.reset_ptable()
+
+        # get photometry parameters
+        param = self.phot_parameters
+
+        # check for the current status of the viewer
+        # (tiling, aligned by wcs)
+        if self.run(&#39;tile&#39;, via=&#39;get&#39;) == &#39;yes&#39;:
+            allframes = True
+            frames = self.run(&#39;frame active&#39;, via=&#39;get&#39;).split()
+        else:
+            allframes = False
+            frames = [self.run(&#39;frame&#39;, via=&#39;get&#39;)]
+        if self.run(&#39;wcs align&#39;, via=&#39;get&#39;) == &#39;yes&#39;:
+            cs = &#39;wcs&#39;
+        else:
+            cs = &#39;image&#39;
+
+        # log input values
+        log.info(f&#39;Photometry at x={ctr1}, y={ctr2} (in {cs} coordinates)&#39;)
+        log.info(&#39;Parameters:&#39;)
+        log.info(f&quot;    Model: {param[&#39;model&#39;]}&quot;)
+        log.info(f&quot;    Window: {param[&#39;window&#39;]} {param[&#39;window_units&#39;]}&quot;)
+        log.info(f&quot;    Starting FWHM: {param[&#39;fwhm&#39;]} {param[&#39;fwhm_units&#39;]}&quot;)
+        log.info(f&quot;    Aperture: {param[&#39;psf_radius&#39;]} &quot;
+                 f&quot;{param[&#39;aperture_units&#39;]}&quot;)
+        log.info(f&quot;    Background: radius {param[&#39;bg_inner&#39;]} &quot;
+                 f&quot;{param[&#39;aperture_units&#39;]}, width {param[&#39;bg_width&#39;]} &quot;
+                 f&quot;{param[&#39;aperture_units&#39;]}&quot;)
+        log.info(&#39;&#39;)
+
+        for frame in frames:
+            if allframes:
+                log.debug(&#39;Selecting frame &#39; + frame)
+                self.run(&#39;frame &#39; + frame)
+
+            try:
+                results = self.retrieve_data(ctr1, ctr2)
+            except (ValueError, TypeError) as err:
+                log.debug(f&#39;Error in retrieving Frame {frame} data: {err}&#39;)
+                continue
+            ps = results[&#39;pix_scale&#39;]
+            data = results[&#39;data&#39;]
+            fulldata = results[&#39;fulldata&#39;]
+            hwcs = results[&#39;wcs&#39;]
+            wdw = results[&#39;window&#39;]
+            xstart = results[&#39;xstart&#39;]
+            ystart = results[&#39;ystart&#39;]
+            xctr = results[&#39;xctr&#39;]
+            yctr = results[&#39;yctr&#39;]
+            filename = results[&#39;filename&#39;]
+
+            log.info(f&#39;Frame {frame}: {filename}&#39;)
+
+            # check for reasonable data
+            if np.sum(np.isfinite(data)) &lt; 3:
+                continue
+
+            default_fwhm = param[&#39;fwhm&#39;]
+            if param[&#39;fwhm_units&#39;] == &#39;arcsec&#39;:
+                default_fwhm /= ps
+            try:
+                psfr = float(param[&#39;psf_radius&#39;])
+                if param[&#39;aperture_units&#39;] == &#39;arcsec&#39;:
+                    psfr /= ps
+            except ValueError:
+                # auto radius
+                psfr = 2.15 * default_fwhm
+
+            if (param[&#39;bg_inner&#39;] is None
+                    or param[&#39;bg_width&#39;] is None):
+                do_bg = False
+                skyrad = (0., 0.)
+            else:
+                do_bg = True
+                try:
+                    bgrin = float(param[&#39;bg_inner&#39;])
+                    if param[&#39;aperture_units&#39;] == &#39;arcsec&#39;:
+                        bgrin /= ps
+                except ValueError:
+                    bgrin = psfr + 0.2 * default_fwhm
+                try:
+                    bgwid = float(param[&#39;bg_width&#39;])
+                    if param[&#39;aperture_units&#39;] == &#39;arcsec&#39;:
+                        bgwid /= ps
+                    bgrout = bgrin + bgwid
+                except ValueError:
+                    bgrout = bgrin + 2.0 * default_fwhm
+
+                if bgrout &gt; bgrin:
+                    skyrad = (bgrin, bgrout)
+                else:
+                    skyrad = (0., 0.)
+
+            try:
+                phot_par = pipecal_photometry(
+                    fulldata, np.full_like(fulldata, np.nan),
+                    srcpos=(xctr, yctr), fitsize=wdw, fwhm=default_fwhm,
+                    profile=param[&#39;model&#39;], aprad=psfr,
+                    skyrad=skyrad, stamp_center=False, allow_badfit=True)
+            except PipeCalError as err:
+                log.warning(&#39;  Bad fit.&#39;)
+                log.warning(f&#39;  {err}&#39;)
+                continue
+
+            peak, xcent, ycent, ra, dec, xfwhm, yfwhm, ellip, \
+                pa, pw_law, final_sum, bg_avg, bg_std = [np.nan] * 13
+            bg_fit = 0.0
+            for pp in phot_par:
+                if pp[&#39;key&#39;] == &#39;STPEAK&#39;:
+                    peak = pp[&#39;value&#39;][0]
+                elif pp[&#39;key&#39;] == &#39;STCENTX&#39;:
+                    xcent = pp[&#39;value&#39;][0]
+                elif pp[&#39;key&#39;] == &#39;STCENTY&#39;:
+                    ycent = pp[&#39;value&#39;][0]
+                elif pp[&#39;key&#39;] == &#39;STFWHMX&#39;:
+                    xfwhm = pp[&#39;value&#39;][0]
+                elif pp[&#39;key&#39;] == &#39;STFWHMY&#39;:
+                    yfwhm = pp[&#39;value&#39;][0]
+                elif pp[&#39;key&#39;] == &#39;STANGLE&#39;:
+                    pa = pp[&#39;value&#39;][0]
+                elif pp[&#39;key&#39;] == &#39;STPWLAW&#39;:
+                    pw_law = pp[&#39;value&#39;][0]
+                elif pp[&#39;key&#39;] == &#39;STAPFLX&#39;:
+                    final_sum = pp[&#39;value&#39;][0]
+                elif pp[&#39;key&#39;] == &#39;STAPSKY&#39; and do_bg:
+                    bg_avg = pp[&#39;value&#39;][0]
+                elif pp[&#39;key&#39;] == &#39;STAPSSTD&#39; and do_bg:
+                    bg_std = pp[&#39;value&#39;]
+                elif pp[&#39;key&#39;] == &#39;STBKG&#39;:
+                    bg_fit = pp[&#39;value&#39;][0]
+
+            # check whether source is already in table
+            limit = 2. * default_fwhm
+            present = (int(frame) == self.ptable[&#39;Frame&#39;]) \
+                &amp; (np.abs(self.ptable[&#39;X&#39;] - (xcent + 1)) &lt; limit) \
+                &amp; (np.abs(self.ptable[&#39;Y&#39;] - (ycent + 1)) &lt; limit)
+            if np.any(present):
+                log.info(&#39;  Source already measured.&#39;)
+                continue
+
+            # check whether source is unreasonably large or small
+            badfit = False
+            with warnings.catch_warnings():
+                warnings.simplefilter(&#39;ignore&#39;)
+                mfwhm = gmean([xfwhm, yfwhm])
+            if np.isnan(mfwhm) or mfwhm &gt; 20 or mfwhm &lt; 1.0:
+                log.warning(&#39;  Bad fit.&#39;)
+                log.warning(&#39;  Calculated FWHM: {:.2f} pixels&#39;.format(mfwhm))
+                badfit = True
+                mfwhm = np.nan
+                ellip = np.nan
+                pa = np.nan
+            else:
+                # calculate ellipticity and fix PA
+                if xfwhm &gt;= yfwhm:
+                    ellip = 1 - yfwhm / xfwhm
+                else:
+                    ellip = 1 - xfwhm / yfwhm
+                    if pa &lt;= 0:
+                        pa += 90
+                    else:
+                        pa -= 90
+
+            # track flux by radial distance
+            if param[&#39;show_plots&#39;]:
+                y, x = np.mgrid[:wdw, :wdw]
+                r = np.sqrt((x - xcent + xstart) ** 2
+                            + (y - ycent + ystart) ** 2)
+                if badfit:
+                    moddata = None
+                else:
+                    # get the equivalent 1D model from the profile fit
+                    # for plotting
+                    if param[&#39;model&#39;] == &#39;gaussian&#39;:
+                        eqw = mfwhm * stats.gaussian_fwhm_to_sigma
+                        rmodel = modeling.models.Gaussian1D(peak, 0.0, eqw)
+                    else:
+                        n_1 = 1 / pw_law
+                        eqw = mfwhm / (2 * np.sqrt(2 ** n_1 - 1))
+                        rmodel = modeling.models.Moffat1D(
+                            peak, 0.0, eqw, pw_law)
+                    rmodel += modeling.models.Const1D(bg_fit)
+                    moddata = rmodel(r)
+
+                # data for matplotlib viewer: primary is model;
+                # scatter data and h/v lines are overplots
+                rflat = r.ravel()
+                dflat = data.ravel()
+                sortidx = np.argsort(rflat)
+                xdata = rflat[sortidx]
+                overplots = [{&#39;plot_type&#39;: &#39;scatter&#39;,
+                              &#39;args&#39;: [rflat, dflat],
+                              &#39;kwargs&#39;: {&#39;marker&#39;: &#39;*&#39;,
+                                         &#39;c&#39;: dflat,
+                                         &#39;label&#39;: &#39;Flux data&#39;}},
+                             {&#39;plot_type&#39;: &#39;hline&#39;,
+                              &#39;args&#39;: [0.0],
+                              &#39;kwargs&#39;: {&#39;linestyle&#39;: &#39;:&#39;,
+                                         &#39;linewidth&#39;: 1,
+                                         &#39;color&#39;: &#39;lightgray&#39;}}]
+                if moddata is not None:
+                    ydata = moddata.ravel()[sortidx]
+                    overplots.append({&#39;plot_type&#39;: &#39;vline&#39;,
+                                      &#39;args&#39;: [mfwhm / 2.0],
+                                      &#39;kwargs&#39;: {
+                                          &#39;linestyle&#39;: &#39;:&#39;,
+                                          &#39;linewidth&#39;: 1,
+                                          &#39;color&#39;: &#39;#ff7f0e&#39;,
+                                          &#39;label&#39;: &#39;Fit HWHM&#39;}})
+                    overplots.append({&#39;plot_type&#39;: &#39;vline&#39;,
+                                      &#39;args&#39;: [mfwhm],
+                                      &#39;kwargs&#39;: {
+                                          &#39;linestyle&#39;: &#39;:&#39;,
+                                          &#39;linewidth&#39;: 1,
+                                          &#39;color&#39;: &#39;#d62728&#39;,
+                                          &#39;label&#39;: &#39;Fit FWHM&#39;}})
+                else:
+                    ydata = np.full_like(xdata, np.nan)
+
+                title = f&#39;Frame {frame}, x={xcent:.0f} y={ycent:.0f}&#39;
+                overplots.append({&#39;plot_type&#39;: &#39;legend&#39;,
+                                  &#39;args&#39;: []})
+                plot_data = {&#39;args&#39;: [xdata, ydata],
+                             &#39;kwargs&#39;: {
+                                 &#39;title&#39;: title,
+                                 &#39;xlabel&#39;: &#39;Distance (pixels)&#39;,
+                                 &#39;ylabel&#39;: &#39;Flux&#39;},
+                             &#39;plot_kwargs&#39;: {
+                                 &#39;linestyle&#39;: &#39;-&#39;,
+                                 &#39;color&#39;: &#39;gray&#39;,
+                                 &#39;label&#39;: f&quot;{param[&#39;model&#39;].title()} profile&quot;},
+                             &#39;overplot&#39;: overplots}
+                self.radial_data.append(plot_data)
+
+            # add DS9 start index back into centroid and convert to RA/Dec
+            xcent += 1
+            ycent += 1
+            if hwcs is not None:
+                try:
+                    radec = hwcs.wcs_pix2world([[xcent, ycent, 1]], 1)
+                except ValueError:
+                    try:
+                        radec = hwcs.wcs_pix2world([[xcent, ycent]], 1)
+                    except ValueError:
+                        radec = np.array([[None, None]])
+            else:
+                radec = np.array([[None, None]])
+
+            # set region
+            b0 = &#39;point({:f} {:f}) # &#39; \
+                 &#39;point=x &#39; \
+                 &#39;color=green tag={{imexam}}&#39;.format(xcent, ycent)
+            self.run(&#39;regions&#39;, b0)
+            b1 = &#39;circle({:f} {:f} {:f}) # &#39; \
+                &#39;color=green tag={{imexam}}&#39;.format(xcent, ycent, psfr)
+            self.run(&#39;regions&#39;, b1)
+            if do_bg:
+                b2 = &#39;annulus({:f} {:f} {:f} {:f}) # &#39; \
+                    &#39;color=red &#39; \
+                     &#39;tag={{imexam}}&#39;.format(xcent, ycent,
+                                             skyrad[0], skyrad[1])
+                self.run(&#39;regions&#39;, b2)
+
+            self.ptable.add_row([frame, peak, xcent, ycent,
+                                 radec[0, 0], radec[0, 1],
+                                 mfwhm, mfwhm * ps, ellip, pa,
+                                 final_sum, bg_avg, bg_std])
+
+        self.ptable.sort([&#39;Frame&#39;, &#39;Peak&#39;])
+        print_str = &#39;\n&#39;.join(
+            self.ptable.pformat(max_lines=-1, max_width=-1))
+        log.info(f&#39;\nResults:\n{print_str}\n&#39;)</div>
+
+
+<div class="viewcode-block" id="QADImView.pix2pix">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.pix2pix">[docs]</a>
+    def pix2pix(self, ctr1, ctr2):
+        &quot;&quot;&quot;
+        Create a comparison of pixel values at the selected location.
+
+        Two or more frames must be loaded to generate a pixel comparison
+        plot.  The reference frame is Frame 1 by default, but can be
+        changed in the plot parameters.
+
+        If the cursor is over an enclosed region (circle, box, etc.),
+        then the comparison is computed for the enclosed data.  Otherwise,
+        the comparison is computed for an analysis window centered on the
+        cursor position.  The window width can be set in the plot parameter
+        dialog; if set to a blank value, the entire image is used to compute
+        the comparison.
+
+        Parameters
+        ----------
+        ctr1 : float
+            RA (if DS9 coordinate system is &#39;wcs&#39;) or
+            x-position (if DS9 coordinate system is &#39;image&#39;)
+            at selected image location.
+        ctr2 : float
+            Dec (if DS9 coordinate system is &#39;wcs&#39;) or
+            y-position (if DS9 coordinate system is &#39;image&#39;)
+            at selected image location.
+        &quot;&quot;&quot;
+        # check for the current status of the viewer
+        # (tiling, aligned by wcs)
+        if self.run(&#39;tile&#39;, via=&#39;get&#39;) == &#39;yes&#39;:
+            allframes = True
+            frames = self.run(&#39;frame active&#39;, via=&#39;get&#39;).split()
+        else:
+            allframes = False
+            frames = [self.run(&#39;frame&#39;, via=&#39;get&#39;)]
+        if self.run(&#39;wcs align&#39;, via=&#39;get&#39;) == &#39;yes&#39;:
+            cs = &#39;wcs&#39;
+        else:
+            cs = &#39;image&#39;
+
+        if len(frames) &lt; 2:
+            log.info(&#39;&#39;)
+            log.info(&#39;Pixel comparison requires 2 or more &#39;
+                     &#39;frames to be shown.&#39;)
+            return
+
+        # get any currently available regions
+        all_regions = self.run(f&#39;regions -system {cs}&#39;,
+                               allframes=allframes, via=&#39;get&#39;)
+        if not allframes:  # pragma: no cover
+            # this shouldn&#39;t be reachable, since frames &gt;= 2
+            all_regions = [all_regions]
+
+        param = self.plot_parameters
+        p2p_data_sets = {}
+        label = {}
+        reg_name = {}
+        for frame in frames:
+            log.info(&#39;&#39;)
+            if allframes:
+                self.run(&#39;frame &#39; + frame)
+                # check for loaded data
+                if not self._loaded_data():
+                    continue
+
+            try:
+                results = self.retrieve_data(ctr1, ctr2, photometry=False)
+            except (ValueError, TypeError) as err:
+                log.debug(f&#39;Error in retrieving Frame {frame} data: {err}&#39;)
+                continue
+            fulldata = results[&#39;fulldata&#39;]
+            data = results[&#39;data&#39;]
+            wdw = results[&#39;window&#39;]
+            hwcs = results[&#39;wcs&#39;]
+            xctr = results[&#39;xctr&#39;]
+            yctr = results[&#39;yctr&#39;]
+            filename = results[&#39;filename&#39;]
+
+            # get file and ext name if possible
+            log.info(f&#39;Frame {frame}: {filename}&#39;)
+
+            log.info(f&#39;Pixel comparison at x={ctr1}, y={ctr2} &#39;
+                     f&#39;(in {cs} coordinates)&#39;)
+
+            # get data from region mask or window
+            mask = self._region_mask(cs, all_regions, xctr, yctr, hwcs)
+            if mask is None:
+                if param[&#39;window&#39;] is None:
+                    log.info(&#39;Using the full image&#39;)
+                    reg_name[frame] = &#39;full image&#39;
+                    short_reg_name = &#39;full&#39;
+                    p2p_data = fulldata
+                else:
+                    log.info(f&#39;Using the analysis window &#39;
+                             f&#39;(width: {wdw} pixels)&#39;)
+                    reg_name[frame] = f&#39;{wdw} pixel window&#39;
+                    short_reg_name = f&#39;x={xctr:.0f} y={yctr:.0f} {wdw}pix&#39;
+                    p2p_data = data
+            else:
+                reg_name[frame] = &#39;DS9 region&#39;
+                short_reg_name = f&#39;x={xctr:.0f} y={yctr:.0f} region&#39;
+                p2p_data = mask.multiply(fulldata)
+                p2p_data[p2p_data == 0] = np.nan
+
+            p2p_data = p2p_data.ravel()
+            p2p_data_sets[frame] = p2p_data
+            label[frame] = f&#39;F{frame} {short_reg_name}&#39;
+
+        log.info(&#39;&#39;)
+        ref_frame = str(param[&#39;p2p_reference&#39;])
+        log.info(f&#39;Reference frame: {ref_frame}&#39;)
+        if ref_frame in p2p_data_sets:
+
+            ref_data = p2p_data_sets[ref_frame]
+            mp = (np.nanmean(ref_data), np.nanmean(ref_data))
+            overplots = []
+            for f in p2p_data_sets:
+                if f != ref_frame:
+                    if p2p_data_sets[f].size == ref_data.size:
+                        new_p2p = {&#39;plot_type&#39;: &#39;plot&#39;,
+                                   &#39;args&#39;: [ref_data, p2p_data_sets[f]],
+                                   &#39;kwargs&#39;: {&#39;label&#39;: label[f],
+                                              &#39;alpha&#39;: 0.8,
+                                              &#39;linestyle&#39;: &#39;&#39;,
+                                              &#39;marker&#39;: &#39;.&#39;}}
+                        overplots.append(new_p2p)
+                    else:  # pragma: no cover
+                        # todo: this clause and the next are unreachable
+                        #  with current mock test fixture, since it
+                        #  returns the same data array for all frames
+                        log.warning(f&#39;Data pixelation mismatch; &#39;
+                                    f&#39;skipping frame {f}&#39;)
+            if len(overplots) &lt; 1:  # pragma: no cover
+                log.info(&#39;No data to plot.&#39;)
+                return
+
+            title = f&#39;Pixel comparison to Frame {ref_frame}, &#39; \
+                    f&#39;{reg_name[ref_frame]}&#39;
+            legend = {&#39;plot_type&#39;: &#39;legend&#39;, &#39;args&#39;: []}
+            line = {&#39;plot_type&#39;: &#39;line&#39;, &#39;args&#39;: [mp],
+                    &#39;kwargs&#39;: {&#39;linestyle&#39;: &#39;:&#39;, &#39;color&#39;: &#39;gray&#39;,
+                               &#39;slope&#39;: 1.0}}
+            if param[&#39;separate_plots&#39;] or len(self.p2p_data) &lt; 1:
+                overplots.extend([line, legend])
+                plot_data = {&#39;args&#39;: [],
+                             &#39;kwargs&#39;: {&#39;title&#39;: title,
+                                        &#39;xlabel&#39;: &#39;Reference flux&#39;,
+                                        &#39;ylabel&#39;: &#39;Comparison flux&#39;,
+                                        &#39;colormap&#39;: param[&#39;color&#39;]},
+                             &#39;plot_kwargs&#39;: {},
+                             &#39;overplot&#39;: overplots}
+                self.p2p_data.append(plot_data)
+            else:
+                # append new dataset to existing ones
+                plot_data = self.p2p_data[-1]
+                old_overplots = []
+                for plot in plot_data[&#39;overplot&#39;]:
+                    if plot[&#39;plot_type&#39;] == &#39;plot&#39;:
+                        old_overplots.append(plot)
+                old_overplots.extend(overplots)
+                old_overplots.extend([line, legend])
+                plot_data[&#39;overplot&#39;] = old_overplots
+                plot_data[&#39;kwargs&#39;][&#39;title&#39;] = &#39;All pixel comparisons&#39;
+
+            if self.signals is not None:
+                self.signals.make_p2p_plot.emit()
+        else:
+            log.warning(f&#39;Reference frame {ref_frame} is not loaded&#39;)</div>
+
+
+<div class="viewcode-block" id="QADImView.pix2pix_plot">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.pix2pix_plot">[docs]</a>
+    def pix2pix_plot(self):
+        &quot;&quot;&quot;Plot pixel-to-pixel comparison in a separate window.&quot;&quot;&quot;
+        if not self.HAS_PYQT5:
+            return
+        data = self.p2p_data
+        if data is None or len(data) == 0:
+            return
+
+        # start up plot viewer if needed
+        if self.plotviewer is None or not self.plotviewer.isVisible():
+            self.plotviewer = MatplotlibPlot()
+
+        self.plotviewer.setWindowTitle(&#39;Pixel-to-Pixel Comparison&#39;)
+        self.plotviewer.plot_layout = &#39;rows&#39;
+        self.plotviewer.share_axes = self.plot_parameters[&#39;share_axes&#39;]
+        self.plotviewer.plot(data)
+        self.plotviewer.set_scroll(&#39;bottom&#39;)
+        self.plotviewer.show()
+        self.plotviewer.raise_()</div>
+
+
+<div class="viewcode-block" id="QADImView.radial_plot">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.radial_plot">[docs]</a>
+    def radial_plot(self):
+        &quot;&quot;&quot;Plot radial fluxes in a separate window.&quot;&quot;&quot;
+        if not self.HAS_PYQT5:
+            return
+        data = self.radial_data
+        if data is None or len(data) == 0:
+            return
+
+        # start up plot viewer if needed
+        if self.plotviewer is None or not self.plotviewer.isVisible():
+            self.plotviewer = MatplotlibPlot()
+
+        self.plotviewer.setWindowTitle(&#39;Radial Profiles&#39;)
+        self.plotviewer.plot_layout = &#39;rows&#39;
+        self.plotviewer.share_axes = self.plot_parameters[&#39;share_axes&#39;]
+        self.plotviewer.plot(data)
+        self.plotviewer.set_scroll(&#39;bottom&#39;)
+        self.plotviewer.show()
+        self.plotviewer.raise_()</div>
+
+
+<div class="viewcode-block" id="QADImView.reload">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.reload">[docs]</a>
+    def reload(self):
+        &quot;&quot;&quot;Reload previously loaded FITS files.&quot;&quot;&quot;
+        if len(self.files) &gt; 0:
+            self.load(self.files, regfiles=self.regions)</div>
+
+
+<div class="viewcode-block" id="QADImView.reset">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.reset">[docs]</a>
+    def reset(self):
+        &quot;&quot;&quot;Reset to starting state.&quot;&quot;&quot;
+        self.files = []
+        self.regions = []
+        self.headers = {}
+        self.radial_data = []
+        self.histogram_data = []
+        self.p2p_data = []
+        self.ptable = None</div>
+
+
+<div class="viewcode-block" id="QADImView.reset_ptable">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.reset_ptable">[docs]</a>
+    def reset_ptable(self):
+        self.ptable = table.Table(names=[&#39;Frame&#39;, &#39;Peak&#39;, &#39;X&#39;, &#39;Y&#39;,
+                                         &#39;RA&#39;, &#39;Dec&#39;,
+                                         &#39;FWHM (px)&#39;, &#39;FWHM (&quot;)&#39;,
+                                         &#39;Ellip.&#39;, &#39;PA&#39;, &#39;Flux&#39;, &#39;BG/pix&#39;,
+                                         &#39;BG Std.&#39;],
+                                  dtype=[int, float, float, float,
+                                         float, float, float, float,
+                                         float, float, float, float,
+                                         float])
+        flt_col = [&#39;Peak&#39;, &#39;X&#39;, &#39;Y&#39;, &#39;FWHM (px)&#39;, &#39;FWHM (&quot;)&#39;,
+                   &#39;Ellip.&#39;, &#39;PA&#39;, &#39;Flux&#39;, &#39;BG/pix&#39;, &#39;BG Std.&#39;]
+        for col in flt_col:
+            self.ptable[col].format = &#39;.4g&#39;
+        self.ptable[&#39;RA&#39;].format = &#39;.7g&#39;
+        self.ptable[&#39;Dec&#39;].format = &#39;.7g&#39;</div>
+
+
+<div class="viewcode-block" id="QADImView.retrieve_data">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.retrieve_data">[docs]</a>
+    def retrieve_data(self, ctr1, ctr2, cube=False, photometry=True):
+        &quot;&quot;&quot;
+        Extract a sub region from the active frame.
+
+        Parameters
+        ----------
+        ctr1 : float
+            RA (if DS9 coordinate system is &#39;wcs&#39;) or
+            x-position (if DS9 coordinate system is &#39;image&#39;)
+            at selected image location.
+        ctr2 : float
+            Dec (if DS9 coordinate system is &#39;wcs&#39;) or
+            y-position (if DS9 coordinate system is &#39;image&#39;)
+            at selected image location.
+        cube : bool, optional
+            If True, extract a region from the full data cube.
+            Otherwise, extract from the current slice only.
+        photometry : bool, optional
+            If True, the photometry parameters are used to determine
+            the data window. Otherwise, the plot parameters are used.
+
+        Returns
+        -------
+        dict
+            Extracted data for the current frame.  Keys are:
+            &#39;cs&#39;, &#39;pix_scale&#39;, &#39;wcs&#39;, &#39;window&#39;, &#39;xstart&#39;,
+            &#39;ystart&#39;, &#39;xctr&#39;, &#39;yctr&#39;, &#39;data&#39;, &#39;fulldata&#39;,
+            &#39;header&#39;
+        &quot;&quot;&quot;
+        if photometry:
+            param = self.phot_parameters
+        else:
+            param = self.plot_parameters
+        if self.run(&#39;wcs align&#39;, via=&#39;get&#39;) == &#39;yes&#39;:
+            cs = &#39;wcs&#39;
+        else:
+            cs = &#39;image&#39;
+
+        # retrieve header for wcs from current frame
+        hdr_str = self.run(&#39;fits header&#39;, via=&#39;get&#39;)
+        phdr = fits.Header()
+        hdr = phdr.fromstring(hdr_str, sep=&#39;\n&#39;)
+
+        try:
+            with set_log_level(&#39;ERROR&#39;):
+                hwcs = wcs.WCS(hdr)
+                psd2 = wcs.utils.proj_plane_pixel_scales(hwcs.celestial)
+            with warnings.catch_warnings():
+                warnings.simplefilter(&#39;ignore&#39;)
+                ps = np.mean(psd2) * 3600
+        except (ValueError, IndexError, MemoryError,
+                AttributeError, TypeError):
+            log.warning(&#39;Error reading WCS.  Setting plate scale to 1.0.&#39;)
+            hwcs = None
+            ps = 1.0
+        if np.isnan(ps):
+            log.warning(&#39;Error reading WCS.  Setting plate scale to 1.0.&#39;)
+            hwcs = None
+            ps = 1.0
+
+        # get file/ext name if possible
+        filename = hdr.get(&#39;FILENAME&#39;, &#39;&#39;)
+        extname = hdr.get(&#39;EXTNAME&#39;, None)
+        if extname is not None:
+            filename = f&#39;{filename} [{extname}]&#39;
+
+        # convert RA/Dec to pix if necessary
+        if cs == &#39;wcs&#39; and hwcs is not None:
+            if hwcs.naxis == 2:
+                ctr = [[ctr1, ctr2]]
+            else:
+                ctr = [[ctr1, ctr2, 1]]
+            with set_log_level(&#39;ERROR&#39;):
+                pixctr = hwcs.wcs_world2pix(ctr, 1)
+
+            # occasionally, values get returned as pixels instead
+            # of RA/Dec - eg. when there is an empty frame around
+            if np.any(np.isnan(pixctr)):
+                log.debug(&#39;WCS position retrieval failed; &#39;
+                          &#39;assuming pixel postions&#39;)
+                xctr = ctr1
+                yctr = ctr2
+            else:
+                xctr = pixctr[0, 0]
+                yctr = pixctr[0, 1]
+        else:
+            xctr = ctr1
+            yctr = ctr2
+
+        # subtract 1 for numpy indexing
+        xctr -= 1
+        yctr -= 1
+
+        # retrieve data from current slice from viewer
+        try:
+            pdata = self.ds9.get_arr2np()
+        except ValueError:
+            log.warning(&#39;Displayed data cannot be retrieved as an array.&#39;)
+            log.warning(&#39;Try turning off cube display for &#39;
+                        &#39;multi-extension files.&#39;)
+            raise
+        dim = pdata.shape
+        if len(dim) &gt; 2:
+            zdim, ydim, xdim = dim
+        else:
+            ydim, xdim = dim
+            zdim = 0
+        dslice = int(self.run(&#39;cube&#39;, via=&#39;get&#39;))
+
+        # set fitting window and retrieve subimage
+        if param[&#39;window&#39;] is None:
+            pix_wdw = np.inf
+        elif param[&#39;window_units&#39;] == &#39;arcsec&#39;:
+            pix_wdw = param[&#39;window&#39;] / ps
+        else:
+            pix_wdw = param[&#39;window&#39;]
+        wdw = int(np.min([pix_wdw, xdim, ydim]))
+        xstart = int(xctr - wdw / 2.0)
+        ystart = int(yctr - wdw / 2.0)
+        if xstart &lt; 0:
+            xstart = 0
+        elif xstart + wdw &gt; xdim:
+            xstart = xdim - wdw
+        if ystart &lt; 0:
+            ystart = 0
+        elif ystart + wdw &gt; ydim:
+            ystart = ydim - wdw
+        if zdim &gt;= dslice:
+            if not cube:
+                log.debug(f&#39;Retrieving slice {dslice}&#39;)
+                fulldata = pdata[dslice - 1, :, :]
+                data = pdata[dslice - 1,
+                             ystart:ystart + wdw,
+                             xstart:xstart + wdw]
+            else:
+                fulldata = pdata
+                data = pdata[:, ystart:ystart + wdw, xstart:xstart + wdw]
+        elif zdim &gt; 0:
+            fulldata = pdata[0, :, :]
+            data = pdata[0, ystart:ystart + wdw, xstart:xstart + wdw]
+        else:
+            fulldata = pdata
+            data = pdata[ystart:ystart + wdw, xstart:xstart + wdw]
+
+        results = {&#39;cs&#39;: cs,
+                   &#39;pix_scale&#39;: ps,
+                   &#39;wcs&#39;: hwcs,
+                   &#39;window&#39;: wdw,
+                   &#39;xstart&#39;: xstart,
+                   &#39;ystart&#39;: ystart,
+                   &#39;xctr&#39;: xctr,
+                   &#39;yctr&#39;: yctr,
+                   &#39;data&#39;: data,
+                   &#39;fulldata&#39;: fulldata,
+                   &#39;header&#39;: hdr,
+                   &#39;filename&#39;: filename}
+
+        return results</div>
+
+
+<div class="viewcode-block" id="QADImView.set_defaults">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.set_defaults">[docs]</a>
+    def set_defaults(self):
+        &quot;&quot;&quot;Reset DS9 configuration from display parameters.&quot;&quot;&quot;
+        if not self.HAS_DS9:  # pragma: no cover
+            return
+        self.run(&#39;frame delete all&#39;)
+        self.run(&#39;wcs degrees&#39;)
+        if self.disp_parameters[&#39;tile&#39;]:
+            self.run(&#39;tile yes&#39;)
+        else:
+            self.run(&#39;tile no&#39;)
+        self.cs = str(self.disp_parameters[&#39;lock_image&#39;]).lower()
+        self.lock()</div>
+
+
+<div class="viewcode-block" id="QADImView.spec_test">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.spec_test">[docs]</a>
+    def spec_test(self, hdul):
+        &quot;&quot;&quot;
+        Test for a spectrum the Eye can display.
+
+        The data is considered spectral if a &#39;spectral_flux&#39;
+        extension is present.  It is &#39;spectrum_only&#39;
+        if NAXIS1 is greater than 0 and NAXIS2 is less than 6.
+        Otherwise, it is &#39;image&#39;.
+
+        Parameters
+        ----------
+        header : `astropy.io.fits.Header`
+            FITS header to test.
+
+        Returns
+        -------
+        str
+            &#39;spectrum&#39;, &#39;spectrum_only&#39;, or &#39;image&#39;.
+        &quot;&quot;&quot;
+        # check for mixed spectral product in
+        # single spectral extension or multi-order spectra
+        # (may be SPECTRAL_FLUX or SPECTRAL_FLUX_ORDER_*)
+        for hdu in hdul:
+            extname = str(hdu.header.get(&#39;EXTNAME&#39;, &#39;UNKNOWN&#39;)).lower()
+            if &#39;spectral_flux&#39; in extname:
+                return &#39;spectrum&#39;
+
+        header = hdul[0].header
+        if &#39;NAXIS1&#39; in header:
+            xdim = header[&#39;NAXIS1&#39;]
+        else:
+            xdim = 0
+        if &#39;NAXIS2&#39; in header:
+            ydim = header[&#39;NAXIS2&#39;]
+        else:
+            ydim = 0
+        if xdim &gt; 0 and ydim &lt; 6:
+            return &#39;spectrum_only&#39;
+        else:
+            return &#39;image&#39;</div>
+
+
+<div class="viewcode-block" id="QADImView.startup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.startup">[docs]</a>
+    def startup(self):
+        &quot;&quot;&quot;Start up DS9.&quot;&quot;&quot;
+        log.debug(&#39;Starting DS9.&#39;)
+
+        # lazy import pyds9 because it has non-trivial startup behavior
+        try:
+            import pyds9
+        except (ImportError, ValueError):
+            # PyDS9 sometimes fails to import for internal reasons.
+            log.error(&#39;Cannot import PyDS9. DS9 display &#39;
+                      &#39;will not be available.&#39;)
+            self.HAS_DS9 = False
+            return
+        else:
+            self.HAS_DS9 = True
+
+        try:
+            self.ds9 = pyds9.DS9()
+        except (TypeError, ValueError):
+            raise ValueError(&#39;DS9 is not accessible.&#39;) from None
+
+        # reset files and regions instead
+        self.files = []
+        self.regions = []</div>
+
+
+<div class="viewcode-block" id="QADImView.quit">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_imview.QADImView.html#sofia_redux.pipeline.gui.qad.qad_imview.QADImView.quit">[docs]</a>
+    def quit(self):
+        &quot;&quot;&quot;Quit DS9.&quot;&quot;&quot;
+        self.break_loop = True
+        try:
+            self._run_internal(&#39;quit&#39;)
+        except Exception:
+            pass</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

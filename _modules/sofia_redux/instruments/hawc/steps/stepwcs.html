@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepwcs &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepwcs</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;WCS registration pipeline step.&quot;&quot;&quot;
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.instruments.hawc.stepparent import StepParent
+
+__all__ = [&#39;StepWcs&#39;]
+
+
+<div class="viewcode-block" id="StepWcs">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepwcs.StepWcs.html#sofia_redux.instruments.hawc.steps.stepwcs.StepWcs">[docs]</a>
+class StepWcs(StepParent):
+    &quot;&quot;&quot;
+    Add world coordinate system definitions.
+
+    This pipeline step will add WCS keywords to the header, accounting for
+    vertical position angle (VPA) and position offsets. The reference
+    position is taken to be the boresight pixel position (SIBS_X, SIBS_Y) with
+    RA and Dec coordinates taken from TELRA and TELDEC.
+
+    The following header keywords are set by this step:
+
+        - TEL_AZ : telescope azimuth
+        - TEL_ELEV : telescope elevation
+        - VPOS_ANG : array VPA
+        - CROTA2 : image rotation, relative to North (set from -1 * VPA)
+        - CRVAL1 : boresight RA (set from TELRA)
+        - CRVAL2 : boresight Dec (set from TELDEC)
+        - CRPIX1 : boresight x position (set from SIBS_X)
+        - CRPIX2 : boresight y position (set from SIBS_Y)
+        - CDELT1 : pixel scale (set from PIXSCAL)
+        - CDELT2 : pixel scale (set from PIXSCAL)
+        - CTYPE1 : WCS projection (set to &#39;RA---TAN&#39;)
+        - CTYPE2 : WCS projection (set to &#39;DEC--TAN&#39;)
+
+    Input for this step is a DataFits containing Stokes images and
+    associated errors, as produced by
+    `sofia_redux.instruments.hawc.steps.StepStokes`.
+
+    Output is the same as the input file, with the above header keywords
+    set in the primary header.
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepWcs.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepwcs.StepWcs.html#sofia_redux.instruments.hawc.steps.stepwcs.StepWcs.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;wcs&#39;, and are named with
+        the step abbreviation &#39;WCS&#39;.
+
+        Parameters defined for this step are:
+
+        add180vpa : bool
+            If set, 180 degrees is added to the VPA derived from
+            the &#39;Array VPA&#39; data column, before setting VPOS_ANG.
+        offsibs_x : list of float
+            Offset in pixels to add to SIBS_X to correct for
+            actual target position. One value for each HAWC waveband.
+        offsibs_y : list of float
+            Offset in pixels to add to SIBS_Y to correct for
+            actual target position. One value for each HAWC waveband.
+        labmode : bool
+            If set, telescope data will be ignored and placeholder
+            astrometry values will be added to the header.
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;wcs&#39;
+        self.description = &#39;Add WCS&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;wcs&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+
+        # Append parameters
+        self.paramlist.append([&#39;add180vpa&#39;, True,
+                               &#39;Add 180 degrees to the SIBS_VPA&#39;])
+        self.paramlist.append([&#39;offsibs_x&#39;, [0.0, 0.0, 0.0, 0.0, 0.0],
+                               &#39;Small offset (in pixels along X) between &#39;
+                               &#39;SIBS_X and actual target position&#39;])
+        self.paramlist.append([&#39;offsibs_y&#39;, [0.0, 0.0, 0.0, 0.0, 0.0],
+                               &#39;Small offset (in pixels along Y) between &#39;
+                               &#39;SIBS_Y and actual target position&#39;])
+        self.paramlist.append([&#39;labmode&#39;, False,
+                               &#39;If labmode = True, will ignore keywords &#39;
+                               &#39;and input parameters and create fake &#39;
+                               &#39;astrometry&#39;])</div>
+
+
+<div class="viewcode-block" id="StepWcs.read_sibs">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepwcs.StepWcs.html#sofia_redux.instruments.hawc.steps.stepwcs.StepWcs.read_sibs">[docs]</a>
+    def read_sibs(self):
+        &quot;&quot;&quot;
+        Read an offset value from the parameters.
+
+        The parameters are expected to be defined as a list, with
+        one entry for each HAWC band. The correct value for the
+        input data is selected from the list.
+
+        Returns
+        -------
+        float
+            The SIBS offset value.
+        &quot;&quot;&quot;
+        offsibs_x = self.getarg(&#39;offsibs_x&#39;)
+        offsibs_y = self.getarg(&#39;offsibs_y&#39;)
+
+        waveband = self.datain.getheadval(&#39;spectel1&#39;)
+        bands = [&#39;A&#39;, &#39;B&#39;, &#39;C&#39;, &#39;D&#39;, &#39;E&#39;]
+        try:
+            idx = bands.index(waveband[-1])
+        except (ValueError, IndexError):
+            # waveband not in list
+            msg = &#39;Cannot parse waveband: %s&#39; % waveband
+            log.error(msg)
+            raise ValueError(msg)
+        try:
+            offsibs_x = offsibs_x[idx]
+            offsibs_y = offsibs_y[idx]
+        except IndexError:
+            msg = &#39;Need offsibs_x/y values for all wavebands&#39;
+            log.error(msg)
+            raise IndexError(msg)
+
+        return offsibs_x, offsibs_y</div>
+
+
+<div class="viewcode-block" id="StepWcs.compute_wcs">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepwcs.StepWcs.html#sofia_redux.instruments.hawc.steps.stepwcs.StepWcs.compute_wcs">[docs]</a>
+    def compute_wcs(self):
+        &quot;&quot;&quot;
+        Compute WCS parameters from telescope data.
+
+        Corrects for chop offsets between SIBS and source
+        position.
+
+        Returns
+        -------
+        crval1, crval2, crpix1, crpix2 : tuple of float
+            WCS reference position values.
+        &quot;&quot;&quot;
+        # Assign keyword values of TELRA and TELDEC to
+        # crval1/2. These consist in the RA/DEC position
+        # of the chopper midpoint (relative to the SI
+        # boresight), and already contain dithering offsets.
+
+        # convert RA from hours to degrees
+        crval1 = self.dataout.getheadval(&quot;TELRA&quot;) * 15.0
+        crval2 = self.dataout.getheadval(&quot;TELDEC&quot;)
+
+        # SIBS_X and SIBS_Y are SOFIA keywords for
+        # the boresight pixel in the array.
+        # Here we are assuming any transformation
+        # needed between the logical coordinate
+        # system and the index coordinate system has
+        # already been done before (in StepShift).
+        # Offsibs_x/y account for small offsets between
+        # the SIBS and the actual target position
+        # The &quot;+1&quot; is to account for the difference
+        # in the SIBS array coordinate system
+        # (1st pixel is 0, 0) and the CRPIX convention
+        # (1st pixel is 1, 1)
+        offsibs_x, offsibs_y = self.read_sibs()
+        crpix1 = self.dataout.getheadval(&quot;SIBS_X&quot;) + offsibs_x + 1.0
+        crpix2 = self.dataout.getheadval(&quot;SIBS_Y&quot;) + offsibs_y + 1.0
+
+        # TelRA and TelDEC refer to the midpoint
+        # of the chopper, while the SIBS coincides
+        # with the minus beam (in nod A). That means a correction
+        # needs to be made to match crpix1/2 to crval1/2.
+        # If coord_sys = SIRF, procedure below will correct
+        # the values of crpix1/2
+        # If coord_sys = ERF, procedure below will correct
+        # the values of crval1/2
+        coord_sys = self.dataout.getheadval(&quot;CHPCRSYS&quot;)
+        chpamp = self.dataout.getheadval(&quot;CHPAMP1&quot;)
+        chpangle = self.dataout.getheadval(&quot;CHPANGLE&quot;)
+        pixscale_arcsec = self.dataout.getheadval(&quot;pixscal&quot;)
+        if coord_sys == &#39;sirf&#39;:
+            # if SIRF, we move the X, Y minus beam
+            # pixel to the chopper midpoint pixel
+            crpix1 = crpix1 - (chpamp / pixscale_arcsec) * \
+                np.sin(np.radians(chpangle))
+            crpix2 = crpix2 + (chpamp / pixscale_arcsec) * \
+                np.cos(np.radians(chpangle))
+        elif coord_sys == &#39;erf&#39;:
+            # if ERF, we move the RA/DEC chopper midpoint
+            # position to the minus beam position
+            corr_dec = np.cos(np.radians(crval2))
+            chpamp_deg = chpamp / 3600.
+            crval1 = crval1 - (chpamp_deg / corr_dec) * \
+                np.sin(np.radians(chpangle))
+            crval2 = crval2 + chpamp_deg * \
+                np.cos(np.radians(chpangle))
+        else:
+            msg = &#39;%s is not a valid chopping coordinate &#39; \
+                  &#39;system (CHPCRSYS header keyword)&#39; % coord_sys
+            log.warning(msg)
+            raise ValueError(msg)
+
+        # NOTE (by NLC): I&#39;m making an assumption here that the shift is small
+        # enough that cdelt1 and cdelt2 don&#39;t change. I made a test file and
+        # shifted crval1, crval2 by 1 degree, and the change in cdelt appeared
+        # to be 0.03 arcseconds, so I think this assumption is okay.
+
+        return crval1, crval2, crpix1, crpix2</div>
+
+
+<div class="viewcode-block" id="StepWcs.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepwcs.StepWcs.html#sofia_redux.instruments.hawc.steps.stepwcs.StepWcs.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        Because this step is single-in, single-out (SISO),
+        self.datain must be a DataFits object. The output
+        is also a DataFits object, stored in self.dataout.
+
+        The process is:
+
+        1. Compute the VPA from the &#39;Array VPA&#39; data column.
+           Add 180 degrees if necessary.
+        2. Compute reference positions from SIBS boresight
+           and chop offset information.
+        3. Store header keywords.
+        &quot;&quot;&quot;
+        self.dataout = self.datain.copy()
+        labmode = self.getarg(&#39;labmode&#39;)
+
+        if not labmode:
+            # real data, astrometry relies on keywords and inputs
+            add180vpa = self.getarg(&#39;add180vpa&#39;)
+
+            try:
+                vpa = self.dataout.table[&#39;Array VPA&#39;][0]
+            except TypeError:
+                msg = &#39;No valid table in input data&#39;
+                log.error(msg)
+                raise ValueError(msg)
+            originalvpa = vpa.copy()
+            if add180vpa:
+                vpa = vpa + 180.
+                # Keep vpa between 0 and 360
+                if vpa &gt; 360:
+                    vpa = vpa - 360.
+                log.debug(&#39;Added 180 deg to SIBS_VPA to &#39;
+                          &#39;correct for rotation. Changed from &#39;
+                          &#39;%s to %s&#39; % (originalvpa, vpa))
+
+            elev = self.dataout.table[&#39;Elevation&#39;][0]
+
+            # to get rotations according to Attila&#39;s Geometry Memo
+            crota2 = -1. * vpa
+
+            self.dataout.setheadval(&quot;TEL_AZ&quot;, self.dataout.table[&#39;Azimuth&#39;][0],
+                                    &quot;Average Azimuth over file&quot;)
+            self.dataout.setheadval(&quot;TEL_ELEV&quot;, elev,
+                                    &quot;Average Elevation over file&quot;)
+            self.dataout.setheadval(&quot;VPOS_ANG&quot;, vpa,
+                                    &quot;Average Array VPA over file&quot;)
+            self.dataout.setheadval(&quot;CROTA2&quot;, crota2,
+                                    &quot;Rotation angle of wcs&quot;)
+
+            # Sets reference RA/DEC position (CRVAL)
+            # as well as the coresponding pixel position (CRPIX)
+            crval1, crval2, crpix1, crpix2 = self.compute_wcs()
+            self.dataout.setheadval(&quot;CRVAL1&quot;, crval1,
+                                    &quot;Right Ascension of reference pixel&quot;)
+            self.dataout.setheadval(&quot;CRVAL2&quot;, crval2,
+                                    &quot;Declination of reference pixel&quot;)
+            self.dataout.setheadval(&#39;CRPIX1&#39;, crpix1)
+            self.dataout.setheadval(&#39;CRPIX2&#39;, crpix2)
+
+            # set pixel size
+            # convert to degrees
+            pixscale = self.dataout.getheadval(&quot;pixscal&quot;) / 3600.
+            # to get X axis orientation according to Attila&#39;s memo
+            self.dataout.setheadval(&quot;CDELT1&quot;, pixscale,
+                                    &quot;Pixel size in x at center [deg]&quot;)
+            self.dataout.setheadval(&quot;CDELT2&quot;, pixscale,
+                                    &quot;Pixel size in y at center [deg]&quot;)
+
+            # assume tangent projection
+            self.dataout.setheadval(&#39;CTYPE1&#39;, &#39;RA---TAN&#39;, &#39;WCS Projection&#39;)
+            self.dataout.setheadval(&#39;CTYPE2&#39;, &#39;DEC--TAN&#39;, &#39;WCS Projection&#39;)
+
+            # now that we have a proper image, need to switch datatype
+            self.dataout.setheadval(&#39;datatype&#39;, &#39;IMAGE&#39;)
+
+        else:
+            # lab data: create fake astrometry to make
+            # sure other steps still work
+
+            self.dataout.setheadval(&quot;TEL_AZ&quot;, 0.,
+                                    &quot;Average Azimuth over file&quot;)
+            self.dataout.setheadval(&quot;TEL_ELEV&quot;, 0.,
+                                    &quot;Average Elevation over file&quot;)
+            self.dataout.setheadval(&quot;VPOS_ANG&quot;, 0.,
+                                    &quot;Average Array VPA over file&quot;)
+            self.dataout.setheadval(&quot;CROTA2&quot;, 0.,
+                                    &quot;Rotation angle of wcs&quot;)
+            self.dataout.setheadval(&quot;CRVAL1&quot;, 1.0,
+                                    &quot;Right Ascension of reference pixel&quot;)
+            self.dataout.setheadval(&quot;CRVAL2&quot;, 2.0,
+                                    &quot;Declination of reference pixel&quot;)
+            self.dataout.setheadval(&#39;CRPIX1&#39;, 31.5)
+            self.dataout.setheadval(&#39;CRPIX2&#39;, 19.5)
+            pixscale = self.dataout.getheadval(&quot;pixscal&quot;) / 3600.
+            self.dataout.setheadval(&quot;CDELT1&quot;, pixscale,
+                                    &quot;Pixel size in x at center [deg]&quot;)
+            self.dataout.setheadval(&quot;CDELT2&quot;, pixscale,
+                                    &quot;Pixel size in y at center [deg]&quot;)
+            self.dataout.setheadval(&#39;CTYPE1&#39;, &#39;RA---TAN&#39;, &#39;WCS Projection&#39;)
+            self.dataout.setheadval(&#39;CTYPE2&#39;, &#39;DEC--TAN&#39;, &#39;WCS Projection&#39;)
+            self.dataout.setheadval(&#39;datatype&#39;, &#39;IMAGE&#39;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

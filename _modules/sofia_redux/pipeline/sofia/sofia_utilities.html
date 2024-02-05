@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.sofia.sofia_utilities &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.sofia.sofia_utilities</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+
+__all__ = [&#39;parse_apertures&#39;, &#39;parse_bg&#39;]
+
+
+<div class="viewcode-block" id="parse_apertures">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.sofia_utilities.parse_apertures.html#sofia_redux.pipeline.sofia.sofia_utilities.parse_apertures">[docs]</a>
+def parse_apertures(input_position, nfiles, error_message=None,
+                    allow_empty=False):
+    &quot;&quot;&quot;
+    Parse aperture parameters from input string.
+
+    Parameters
+    ----------
+    input_position : str
+        Input parameter string.
+    nfiles : int
+        Number of input files expected.
+    error_message : list of str, optional
+        Error message to display if parsing fails.
+    allow_empty : bool
+        If set, an empty list is allowed for some files.
+
+    Returns
+    -------
+    list
+        List of length `nfiles`, containing lists of floating point
+        aperture values.
+    &quot;&quot;&quot;
+    if error_message is None:
+        error_message = [&#39;Could not read input_position &#39;
+                         f&quot;parameter: &#39;{input_position}&#39;&quot;,
+                         &#39;Aperture positions should be comma-separated &#39;
+                         &#39;values, in arcsec up the slit. &#39;,
+                         &#39;To specify different values for different &#39;
+                         &#39;input files, provide a semi-colon separated &#39;
+                         &#39;list matching the number of input files.&#39;]
+
+    apertures = []
+    filepos = list(str(input_position).split(&#39;;&#39;))
+    if len(filepos) == 1:
+        filepos = filepos * nfiles
+    elif len(filepos) != nfiles:
+        for msg in error_message:
+            log.error(msg)
+        raise ValueError(&#39;Invalid position parameter.&#39;)
+    for fp in filepos:
+        if allow_empty and fp.strip() == &#39;&#39;:
+            apertures.append([])
+        else:
+            pos = list(fp.split(&#39;,&#39;))
+            try:
+                pos = [float(ap) for ap in pos]
+            except (ValueError, TypeError):
+                for msg in error_message:
+                    log.error(msg)
+                raise ValueError(&#39;Invalid position parameter.&#39;) from None
+            apertures.append(pos)
+    return apertures</div>
+
+
+
+<div class="viewcode-block" id="parse_bg">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.sofia_utilities.parse_bg.html#sofia_redux.pipeline.sofia.sofia_utilities.parse_bg">[docs]</a>
+def parse_bg(bg_string, nfiles):
+    &quot;&quot;&quot;
+    Parse background parameters from input string.
+
+    Parameters
+    ----------
+    bg_string : str
+        Input parameter string.
+    nfiles : int
+        Number of input files expected.
+
+    Returns
+    -------
+    list
+        List of length `nfiles`, containing lists of floating point
+        background start, stop values.
+    &quot;&quot;&quot;
+    bad_msg = [&#39;Could not read background region &#39;
+               f&quot;parameter: &#39;{bg_string}&#39;&quot;,
+               &#39;Background regions should be comma-separated &#39;
+               &#39;values, in arcsec up the slit, as start-stop. &#39;,
+               &#39;To specify different values for different &#39;
+               &#39;input files, provide a semi-colon separated &#39;
+               &#39;list matching the number of input files.&#39;]
+    bgr = []
+    filepos = list(str(bg_string).split(&#39;;&#39;))
+    if len(filepos) == 1:
+        filepos = filepos * nfiles
+    elif len(filepos) != nfiles:
+        for msg in bad_msg:
+            log.error(msg)
+        raise ValueError(&#39;Invalid background region parameter.&#39;)
+    for fp in filepos:
+        bg_set = list(fp.split(&#39;,&#39;))
+        bg_list = []
+        for bg_reg in bg_set:
+            bg_range = bg_reg.split(&#39;-&#39;)
+            if len(bg_range) == 1 and str(bg_range[0]).strip() == &#39;&#39;:
+                # allow empty set for background regions
+                bg_list.append([])
+            else:
+                try:
+                    start, stop = bg_range
+                    bg_list.append((float(start), float(stop)))
+                except (ValueError, TypeError):
+                    for msg in bad_msg:
+                        log.error(msg)
+                    raise ValueError(&#39;Invalid background &#39;
+                                     &#39;region parameter.&#39;) from None
+        bgr.append(bg_list)
+    return bgr</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

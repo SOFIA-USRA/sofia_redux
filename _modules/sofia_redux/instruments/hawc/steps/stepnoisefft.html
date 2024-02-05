@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepnoisefft &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepnoisefft</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Noise FFT pipeline step.&quot;&quot;&quot;
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.instruments.hawc.datafits import DataFits
+from sofia_redux.instruments.hawc.stepparent import StepParent
+
+__all__ = [&#39;StepNoiseFFT&#39;]
+
+
+<div class="viewcode-block" id="StepNoiseFFT">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepnoisefft.StepNoiseFFT.html#sofia_redux.instruments.hawc.steps.stepnoisefft.StepNoiseFFT">[docs]</a>
+class StepNoiseFFT(StepParent):
+    &quot;&quot;&quot;
+    Take the FFT of diagnostic noise data.
+
+    The input to this step is lab data taken with CALMODE = &#39;NOISE&#39;.
+    The output is a FITS file containing the power spectrum image
+    with pixels arrayed along the y-axis and frequencies arrayed
+    along the x-axis.  Frequency values are stored in WCS keywords
+    in the header. The full FFT with linear frequencies is stored
+    in the primary image.  Subsequent extensions contain binned
+    frequencies, in linear and log scales.
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepNoiseFFT.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepnoisefft.StepNoiseFFT.html#sofia_redux.instruments.hawc.steps.stepnoisefft.StepNoiseFFT.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;noisefft&#39;, and are named with
+        the step abbreviation &#39;FFT&#39;.
+
+        Parameters defined for this step are:
+
+        truncate : bool
+            If set, will truncate to an integer power of 2 number of
+            samples before taking the FFT.
+
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;noisefft&#39;
+        self.description = &#39;Noise FFT&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;fft&#39;
+
+        # Clear parameter list
+        self.paramlist = []
+
+        # add default parameters
+        self.paramlist.append([&#39;truncate&#39;, False,
+                               &#39;Truncate time samples&#39;])</div>
+
+
+<div class="viewcode-block" id="StepNoiseFFT.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepnoisefft.StepNoiseFFT.html#sofia_redux.instruments.hawc.steps.stepnoisefft.StepNoiseFFT.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        Because this step is single-in, single-out (SISO),
+        self.datain must be a DataFits object.  The output
+        is also a DataFits object, stored in self.dataout.
+
+        The process is:
+
+        1. Convert the flux data to Amps/rtHz.
+        2. Take the FFT of the flux data for each pixel.
+        3. Bin the frequencies and average flux values within
+           each bin.
+        4. Store the data.
+
+        &quot;&quot;&quot;
+        # get arguments
+        truncate = self.getarg(&#39;truncate&#39;)
+
+        # make new output data
+        self.dataout = DataFits(config=self.config)
+        self.dataout.filename = self.datain.filename
+        self.dataout.header = self.datain.header.copy()
+
+        # get raw flux data and reshape it
+        r_data = self.datain.table[&#39;R array&#39;]
+        t_data = self.datain.table[&#39;T array&#39;]
+        f_data = np.concatenate([r_data, t_data], axis=2)
+
+        nsamp, nrow, ncol = f_data.shape
+        npix = nrow * ncol
+
+        # magic numbers from hawcp_powspec IDL script,
+        # originally developed by J. Vaillancourt, 2011
+
+        # use value from IV curves
+        dac2squid = 12600.  # counts / phi0
+        coil2squid = 3e-6  # Amp / phi0
+        inv_gain = coil2squid / dac2squid  # Amp / count
+
+        # remove bottom 4 bits
+        inv_gain /= 4096.
+
+        # invert for proper gain
+        gain = 1.0 / inv_gain  # counts / Amp
+
+        # unfiltered
+        gain /= 3.361
+
+        # convert counts to Amps
+        acdata = f_data / gain
+
+        # sample rate from header
+        samprate = self.dataout.getheadval(&#39;SMPLFREQ&#39;)
+
+        # time in seconds from first sample
+        time = np.arange(nsamp, dtype=float) / samprate
+        log.info(f&#39;Total record time in file: {time[-1]} seconds&#39;)
+
+        # reshape data to 2D
+        acdata = acdata.reshape(nsamp, npix)
+
+        # truncate to integer power of 2 number of samples
+        # This was originally intended to make FFT more efficient
+        # in the IDL implementation, but numpy FFT is plenty fast,
+        # so it may no longer be needed.
+        if truncate:
+            tr = int(np.log(nsamp) / np.log(2))
+            nsamp = 2 ** tr
+            acdata = acdata[:nsamp, :]
+            time = time[:nsamp]
+            log.info(f&#39;Truncating total time record to {time[-1]}&#39;)
+
+        # frequency vector
+        fmax = samprate / 2.0
+        df = samprate / nsamp
+        fmin = 10.0 * df
+        frange = [fmin, fmax]
+        freq = np.arange(nsamp, dtype=float) * df
+
+        # hanning window with discrete correction
+        h = 0.5 * (1 - np.cos(2 * np.pi
+                              * (np.arange(nsamp, dtype=float) + 1.) / nsamp))
+        wss = (1. / nsamp) * np.sum(h ** 2)
+
+        # fft of samples for all channels, matching IDL norm convention
+        ft = np.fft.fft(h[:, None] * acdata, axis=0, norm=&#39;forward&#39;)
+
+        # linear frequency fft
+        psd = np.abs(ft) / np.sqrt(wss * df) * np.sqrt(2)
+        nsamp2 = nsamp // 2
+        psd = psd[0:nsamp2, :]
+        freq = freq[0:nsamp2]
+
+        # bin linear frequencies
+        nbin = 512
+        hist, edges = np.histogram(freq, bins=nbin, range=frange)
+        freq2 = np.empty(nbin)
+        signal = np.empty((nbin, npix))
+        for i in range(nbin):
+            freq2[i] = (edges[i] + edges[i + 1]) / 2
+            f_ind = (freq &gt;= edges[i]) &amp; (freq &lt; edges[i + 1])
+            signal[i, :] = np.sum(psd[f_ind, :], axis=0) / np.sum(f_ind)
+
+        # bin log frequencies
+        logf_unbin = np.log10(freq)
+        hist, edges = np.histogram(logf_unbin, bins=nbin,
+                                   range=np.log10(frange))
+        logfreq = np.empty(nbin)
+        logsignal = np.empty((nbin, npix))
+        for i in range(nbin):
+            logfreq[i] = (edges[i] + edges[i + 1]) / 2
+            f_ind = (logf_unbin &gt;= edges[i]) &amp; (logf_unbin &lt; edges[i + 1])
+            logsignal[i, :] = np.sum(psd[f_ind, :], axis=0) / np.sum(f_ind)
+
+        # take the log of the signal too
+        loglogsignal = np.log10(logsignal)
+        loglogsignal[~np.isfinite(logsignal)] = np.nan
+
+        # save images in dataout
+
+        # linear frequency x pixels
+        psd_header = fits.Header({
+            &#39;EXTNAME&#39;: &#39;FULL_FFT&#39;,
+            &#39;CTYPE1&#39;: &#39;FREQ&#39;, &#39;CTYPE2&#39;: &#39;Pixels&#39;,
+            &#39;CUNIT1&#39;: &#39;Hz&#39;, &#39;CUNIT2&#39;: &#39;pixel&#39;,
+            &#39;CRPIX1&#39;: 1, &#39;CRPIX2&#39;: 1,
+            &#39;CRVAL1&#39;: freq[0], &#39;CRVAL2&#39;: 1,
+            &#39;CDELT1&#39;: df, &#39;CDELT2&#39;: 1,
+            &#39;BUNIT&#39;: &#39;Amps/rtHz&#39;})
+        self.dataout.header.update(psd_header)
+        self.dataout.imageset(psd.T, imagename=&#39;FULL_FFT&#39;)
+
+        # binned linear frequency x pixels
+        signal_header = fits.Header({
+            &#39;EXTNAME&#39;: &#39;LINEARFREQ&#39;,
+            &#39;CTYPE1&#39;: &#39;FREQ&#39;, &#39;CTYPE2&#39;: &#39;Pixels&#39;,
+            &#39;CUNIT1&#39;: &#39;Hz&#39;, &#39;CUNIT2&#39;: &#39;pixel&#39;,
+            &#39;CRPIX1&#39;: 1, &#39;CRPIX2&#39;: 1,
+            &#39;CRVAL1&#39;: freq2[0], &#39;CRVAL2&#39;: 1,
+            &#39;CDELT1&#39;: freq2[1] - freq2[0], &#39;CDELT2&#39;: 1,
+            &#39;BUNIT&#39;: &#39;Amps/rtHz&#39;})
+        self.dataout.imageset(signal.T, imagename=&#39;LINEARFREQ&#39;,
+                              imageheader=signal_header)
+
+        # binned log frequency x pixels
+        logsignal_header = fits.Header({
+            &#39;EXTNAME&#39;: &#39;LOGFREQ&#39;,
+            &#39;CTYPE1&#39;: &#39;FREQ-LOG&#39;, &#39;CTYPE2&#39;: &#39;Pixels&#39;,
+            &#39;CUNIT1&#39;: &#39;Hz&#39;, &#39;CUNIT2&#39;: &#39;pixel&#39;,
+            &#39;CRPIX1&#39;: 1, &#39;CRPIX2&#39;: 1,
+            &#39;CRVAL1&#39;: logfreq[0], &#39;CRVAL2&#39;: 1,
+            &#39;CDELT1&#39;: logfreq[1] - logfreq[0], &#39;CDELT2&#39;: 1,
+            &#39;BUNIT&#39;: &#39;Amps/rtHz&#39;})
+        self.dataout.imageset(logsignal.T, imagename=&#39;LOGFREQ&#39;,
+                              imageheader=logsignal_header)
+
+        # binned log signal, log freq
+        loglogsignal_header = fits.Header({
+            &#39;EXTNAME&#39;: &#39;LOGFREQ_LOGSIGNAL&#39;,
+            &#39;CTYPE1&#39;: &#39;FREQ-LOG&#39;, &#39;CTYPE2&#39;: &#39;Pixels&#39;,
+            &#39;CUNIT1&#39;: &#39;Hz&#39;, &#39;CUNIT2&#39;: &#39;pixel&#39;,
+            &#39;CRPIX1&#39;: 1, &#39;CRPIX2&#39;: 1,
+            &#39;CRVAL1&#39;: logfreq[0], &#39;CRVAL2&#39;: 1,
+            &#39;CDELT1&#39;: logfreq[1] - logfreq[0], &#39;CDELT2&#39;: 1,
+            &#39;BUNIT&#39;: &#39;log(Amps/rtHz)&#39;})
+        self.dataout.imageset(loglogsignal.T, imagename=&#39;LOGFREQ_LOGSIGNAL&#39;,
+                              imageheader=loglogsignal_header)
+
+        # update SOFIA mandated keywords (since this is first pipe step)
+        obsid = &#39;P_&#39; + self.dataout.getheadval(&#39;OBS_ID&#39;)
+        self.dataout.setheadval(&#39;OBS_ID&#39;, obsid)
+        self.dataout.setheadval(&#39;PROCSTAT&#39;, &#39;LEVEL_2&#39;)
+        self.dataout.setheadval(&#39;PIPELINE&#39;, &#39;HAWC_DRP&#39;,
+                                &#39;Data processing pipeline&#39;)
+
+        # set ASSC_AOR and ASSC_MSN value in output header
+        try:
+            self.dataout.setheadval(&#39;ASSC_AOR&#39;,
+                                    self.dataout.getheadval(&#39;AOR_ID&#39;),
+                                    &#39;Associated AORs&#39;)
+        except KeyError:  # pragma: no cover
+            pass
+        try:
+            self.dataout.setheadval(&#39;ASSC_MSN&#39;,
+                                    self.dataout.getheadval(&#39;MISSN-ID&#39;),
+                                    &#39;Associated Mission IDs&#39;)
+        except KeyError:  # pragma: no cover
+            pass</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.fifi_ls.info.detector_array &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.fifi_ls.info.detector_array</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units, log
+from astropy.time import Time
+import numpy as np
+import os
+import pandas as pd
+
+from sofia_redux.scan.custom.sofia.info.detector_array import (
+    SofiaDetectorArrayInfo)
+from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
+    EquatorialCoordinates
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.utilities.utils import to_header_float
+
+__all__ = [&#39;FifiLsDetectorArrayInfo&#39;]
+
+arcsec = units.Unit(&#39;arcsec&#39;)
+degree = units.Unit(&#39;degree&#39;)
+mm = units.Unit(&#39;mm&#39;)
+um = units.Unit(&#39;um&#39;)
+
+
+<div class="viewcode-block" id="FifiLsDetectorArrayInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.html#sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo">[docs]</a>
+class FifiLsDetectorArrayInfo(SofiaDetectorArrayInfo):
+
+    tel_sim_to_detector = 0.842
+    n_spexel = 16
+    n_spaxel = 25
+    pixels = n_spexel * n_spaxel
+    spaxel_rows = 5
+    spaxel_cols = 5
+    default_boresight_offset = Coordinate2D([0.0, 0.0], unit=&#39;arcsec&#39;)
+    center_spaxel = 12
+    pixel_indices = np.arange(pixels)
+    spexel_indices = pixel_indices // n_spaxel
+    spaxel_indices = pixel_indices % n_spaxel
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize the FIFI-LS detector array information.
+
+        Contains information specific to the FIFI-LS detector array.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.plate_scale = np.nan * arcsec / mm
+        self.pixel_sizes = Coordinate2D([np.nan, np.nan], unit=&#39;arcsec&#39;)
+        self.equatorial = EquatorialCoordinates([np.nan, np.nan],
+                                                unit=&#39;degree&#39;)
+        self.boresight_equatorial = self.equatorial.copy()
+        self.obs_equatorial = self.equatorial.copy()
+        self.delta_map = Coordinate2D([0, 0], unit=&#39;arcsec&#39;)
+        self.delta_map_rotated = Coordinate2D([0, 0], unit=&#39;arcsec&#39;)
+        self.sky_angle = np.nan * degree
+        self.detector_angle = np.nan * degree
+        self.spatial_file = None
+        self.pixel_positions = None
+        self.pixel_offsets = None
+        self.pixel_width = None
+        self.date_obs = None
+        self.channel = &#39;UNKNOWN&#39;
+        self.prime_array = &#39;UNKNOWN&#39;
+        self.dichroic = np.nan * um
+        self.coefficients_1 = None
+        self.coefficients_2 = None
+        self.flip_sign = False
+        self.rotation = 0 * degree
+        self.boresight_equatorial_offset = self.default_boresight_offset.copy()
+        self.native_boresight_offset = self.default_boresight_offset.copy()
+        self.boresight_index = Coordinate2D([0.0, 0.0])
+
+    @property
+    def ch(self):
+        &quot;&quot;&quot;
+        Return the single letter representation of the channel.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return self.channel[0].lower()
+
+    @property
+    def int_date(self):
+        &quot;&quot;&quot;
+        Return the observation date as an integer of the form YYYYMMDD
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        if not isinstance(self.date_obs, Time):
+            return -1
+        return int(self.date_obs.isot.split(&#39;T&#39;)[0].replace(&#39;-&#39;, &#39;&#39;))
+
+<div class="viewcode-block" id="FifiLsDetectorArrayInfo.apply_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.html#sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Update detector array information with FITS header information.
+
+        Updates the detector information by taking the following keywords from
+        the FITS header::
+
+           stuff
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.options is None:
+            return
+
+        self.plate_scale = self.options.get_float(&#39;PLATSCAL&#39;) * arcsec / mm
+        self.date_obs = Time(self.options.get_string(&#39;DATE-OBS&#39;))
+
+        ra = self.options.get_hms_time(&#39;OBSRA&#39;, angle=True)
+        dec = self.options.get_dms_angle(&#39;OBSDEC&#39;)
+        self.equatorial = EquatorialCoordinates([ra, dec], unit=&#39;degree&#39;)
+        self.boresight_equatorial = self.equatorial.copy()
+
+        obs_lambda = self.options.get_float(&#39;OBSLAM&#39;, default=0) * degree
+        obs_beta = self.options.get_float(&#39;OBSBET&#39;, default=0) * degree
+        self.obs_equatorial = EquatorialCoordinates(
+            [obs_lambda, obs_beta])
+
+        map_d_lambda = self.options.get_float(&#39;DLAM_MAP&#39;, default=0) * arcsec
+        map_d_beta = self.options.get_float(&#39;DBET_MAP&#39;, default=0) * arcsec
+        self.delta_map = Coordinate2D([map_d_lambda, map_d_beta])
+        self.boresight_equatorial.subtract_offset(self.delta_map)
+
+        self.sky_angle = self.options.get_float(&#39;SKY_ANGL&#39;, default=0) * degree
+        self.detector_angle = self.options.get_float(
+            &#39;DET_ANGL&#39;, default=0) * degree
+
+        if self.sky_angle == 0:
+            self.rotation = self.detector_angle
+        else:
+            self.rotation = 0 * degree
+
+        self.channel = self.options.get_string(
+            &#39;CHANNEL&#39;, default=&#39;BLUE&#39;).upper().strip()
+        if self.channel == &#39;RED&#39;:
+            self.pixel_width = 3 * mm
+        else:
+            self.pixel_width = 1.5 * mm
+
+        self.flip_sign = self.int_date &lt; 20150501  # May, 2015
+        self.pixel_size = self.plate_scale * self.pixel_width
+        self.pixel_sizes = Coordinate2D([self.pixel_size, self.pixel_size])
+        self.dichroic = self.options.get_float(&#39;DICHROIC&#39;) * um
+        self.prime_array = self.options.get_string(&#39;PRIMARAY&#39;).strip().upper()
+        self.calculate_delta_coefficients()
+        self.set_boresight()
+        self.calculate_pixel_offsets()</div>
+
+
+<div class="viewcode-block" id="FifiLsDetectorArrayInfo.calculate_pixel_offsets">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.html#sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.calculate_pixel_offsets">[docs]</a>
+    def calculate_pixel_offsets(self):
+        &quot;&quot;&quot;
+        Calculate the pixel offsets on the detector in arcseconds.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        default_file = self.configuration.priority_file(
+            os.path.join(&#39;spatial_cal&#39;, &#39;poscal_default.txt&#39;))
+        if default_file is None:
+            raise ValueError(
+                &quot;Could not locate default date spatial calibration file.&quot;)
+        df = pd.read_csv(
+            default_file, comment=&#39;#&#39;, names=[&#39;date&#39;, &#39;ch&#39;, &#39;file&#39;],
+            delim_whitespace=True, dtype={&#39;date&#39;: int})
+
+        ch = self.ch
+        date_int = self.int_date
+        spatial_file = self.configuration.priority_file(
+            df[(df[&#39;ch&#39;] == ch) &amp; (df[&#39;date&#39;] &gt;= date_int)].iloc[0].file)
+        if spatial_file is None:  # pragma: no cover
+            raise ValueError(
+                &quot;Could not locate spatial calibration file.&quot;)
+
+        self.spatial_file = spatial_file
+        df = pd.read_csv(spatial_file, names=[&#39;x&#39;, &#39;y&#39;], dtype=float,
+                         delim_whitespace=True, comment=&#39;#&#39;)
+        self.pixel_positions = Coordinate2D([df[&#39;x&#39;].values, df[&#39;y&#39;].values],
+                                            unit=&#39;mm&#39;)
+        self.pixel_offsets = Coordinate2D(
+            self.pixel_positions.coordinates * self.plate_scale)</div>
+
+
+<div class="viewcode-block" id="FifiLsDetectorArrayInfo.calculate_delta_coefficients">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.html#sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.calculate_delta_coefficients">[docs]</a>
+    def calculate_delta_coefficients(self):
+        &quot;&quot;&quot;
+        Used to derive offsets of the telescope boresight from the instrument.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.coefficients_1 = None
+        self.coefficients_2 = None
+        coefficient_file = self.configuration.priority_file(
+            os.path.join(&#39;spatial_cal&#39;, &#39;FIFI_LS_DeltaVector_Coeffs.txt&#39;))
+        if coefficient_file is None:
+            raise ValueError(f&quot;Could not find file: {coefficient_file}&quot;)
+
+        df = pd.read_csv(
+            coefficient_file, comment=&#39;#&#39;, delim_whitespace=True,
+            names=[&#39;dt&#39;, &#39;ch&#39;, &#39;dch&#39;, &#39;bx&#39;, &#39;ax&#39;, &#39;rx&#39;, &#39;by&#39;, &#39;ay&#39;, &#39;ry&#39;])
+
+        dichroic = int(self.dichroic.value)
+        try:
+            rows = df[(df[&#39;dt&#39;] &gt;= self.int_date)
+                      &amp; (df[&#39;ch&#39;] == self.prime_array[0].lower())
+                      &amp; (df[&#39;dch&#39;] == dichroic)].sort_values(&#39;dt&#39;)
+        except TypeError:  # pragma: no cover
+            rows = []
+        if len(rows) == 0:
+            raise ValueError(f&quot;No boresight offsets for {self.date_obs}&quot;)
+
+        c = rows.iloc[0]
+        self.coefficients_1 = np.zeros((2, 3))
+        scale = self.tel_sim_to_detector
+        self.coefficients_1[0] = c[&#39;ax&#39;] * scale, c[&#39;bx&#39;] * scale, c[&#39;rx&#39;]
+        self.coefficients_1[1] = c[&#39;ay&#39;] * scale, c[&#39;by&#39;] * scale, c[&#39;ry&#39;]
+
+        if self.prime_array[0].lower() == self.ch:
+            return
+
+        # Otherwise the prime array is not the channel and we need two sets
+        # of coefficients
+
+        rows = df[(df[&#39;dt&#39;] &gt;= self.int_date)
+                  &amp; (df[&#39;ch&#39;] == self.ch)
+                  &amp; (df[&#39;dch&#39;] == dichroic)].sort_values(&#39;dt&#39;).reset_index()
+        c = rows.iloc[0]
+        self.coefficients_2 = np.zeros((2, 3))
+        self.coefficients_2[0] = c[&#39;ax&#39;] * scale, c[&#39;bx&#39;] * scale, c[&#39;rx&#39;]
+        self.coefficients_2[1] = c[&#39;ay&#39;] * scale, c[&#39;by&#39;] * scale, c[&#39;ry&#39;]</div>
+
+
+<div class="viewcode-block" id="FifiLsDetectorArrayInfo.set_boresight">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.html#sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.set_boresight">[docs]</a>
+    def set_boresight(self):
+        &quot;&quot;&quot;
+        Set the boresight index of the detector array.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        prime_ch = self.prime_array[0].upper()
+        i0 = self.options.get_float(f&#39;G_STRT_{prime_ch}&#39;)  # prime inductosyn
+        cx0, cy0 = self.coefficients_1
+        dx = cx0[1] + (cx0[0] * i0) - cx0[2]
+        dy = cy0[1] - (cy0[0] * i0) - cy0[2]
+
+        if self.coefficients_2 is not None:
+            # grating inductosyn
+            i1 = self.options.get_float(f&#39;G_STRT_{self.ch.upper()}&#39;)
+            cx1, cy1 = self.coefficients_2
+            dx += (cx1[1] - cx0[1]) + (cx1[0] * i1 - cx0[0] * i0)
+            dy -= (cy1[1] - cy0[1]) + (cy1[0] * i1 - cy0[0] * i0)
+
+        cos_a, sin_a = np.cos(self.detector_angle), np.sin(self.detector_angle)
+        map_dx = (cos_a * self.delta_map.x) - (sin_a * self.delta_map.y)
+        map_dy = (sin_a * self.delta_map.x) + (cos_a * self.delta_map.y)
+        self.delta_map_rotated = Coordinate2D([map_dx, map_dy], unit=arcsec)
+        bx = self.plate_scale * dx * mm
+        by = -self.plate_scale * dy * mm
+        self.native_boresight_offset = Coordinate2D([bx, by], unit=arcsec)
+        self.boresight_equatorial_offset = Coordinate2D(
+            [bx + map_dx, by + map_dy])
+
+        if not self.flip_sign:
+            self.boresight_equatorial_offset.invert()
+
+        if self.rotation != 0:
+            self.boresight_equatorial_offset.rotate(self.rotation)
+
+        log.info(f&#39;Derived Boresight --&gt; {self.native_boresight_offset}&#39;)
+        log.info(f&#39;Derived equatorial boresight offset --&gt; &#39;
+                 f&#39;{self.boresight_equatorial_offset}&#39;)</div>
+
+
+<div class="viewcode-block" id="FifiLsDetectorArrayInfo.get_boresight_equatorial">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.html#sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.get_boresight_equatorial">[docs]</a>
+    def get_boresight_equatorial(self, xs, ys):
+        &quot;&quot;&quot;
+        Get the boresight equatorial trajectory given input detector
+        coordinates.
+
+        Parameters
+        ----------
+        xs : units.Quantity
+            The x-coordinates of shape (n, n_pixels)
+        ys : units.Quantity
+            The y-coordinates of shape (n, n_pixels)
+
+        Returns
+        -------
+        boresight_equatorial : EquatorialCoordinates
+        &quot;&quot;&quot;
+        return self.detector_coordinates_to_equatorial(
+            self.get_boresight_trajectory(xs, ys))</div>
+
+
+<div class="viewcode-block" id="FifiLsDetectorArrayInfo.get_boresight_trajectory">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.html#sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.get_boresight_trajectory">[docs]</a>
+    def get_boresight_trajectory(self, xs, ys):
+        &quot;&quot;&quot;
+        Given x and y FIFI-LS coordinates, return the boresight trajectory.
+
+        Parameters
+        ----------
+        xs : units.Quantity
+            The x-coordinates of shape (n, n_pixels), (n_pixels,),
+            (n_spexels, n_spaxels) or (n, n_spexels, n_spaxels)
+        ys : units.Quantity
+            The y-coordinates of shape (n, n_pixels)
+
+        Returns
+        -------
+        detector_offsets : Coordinate2D
+        &quot;&quot;&quot;
+        # This is for the center spaxel and zeroth spexel
+        if xs.ndim == 3:
+            x = xs[:, 0, self.center_spaxel]
+            y = ys[:, 0, self.center_spaxel]
+        elif xs.ndim == 2:
+            if xs.shape[1] == self.pixels:
+                x = xs[:, self.center_spaxel]
+                y = ys[:, self.center_spaxel]
+            else:
+                x = xs[0, self.center_spaxel]
+                y = ys[0, self.center_spaxel]
+        elif xs.ndim == 1:
+            x = xs[self.center_spaxel]
+            y = ys[self.center_spaxel]
+        else:
+            raise ValueError(f&quot;Incorrect xs and ys input shape: {xs.shape}&quot;)
+
+        center_offset = self.pixel_offsets[self.center_spaxel]
+        pixel_coordinates = Coordinate2D([x, y])
+        rotate = isinstance(self.rotation, units.Quantity
+                            ) and self.rotation != 0
+
+        if not center_offset.is_null():
+            if rotate:
+                pixel_coordinates.rotate(-self.rotation)
+
+            if not self.flip_sign:
+                pixel_coordinates.invert()
+
+            pixel_coordinates.subtract(self.delta_map_rotated)
+            pixel_coordinates.invert_y()
+
+            bx, by = pixel_coordinates.coordinates.copy()
+            bx -= center_offset.x
+            by += center_offset.y
+
+            boresight = Coordinate2D([bx, by])  # Native coordinates
+            boresight.invert_y()
+            boresight.add(self.delta_map_rotated)
+
+            if not self.flip_sign:
+                boresight.invert()
+            if rotate:
+                boresight.rotate(self.rotation)
+
+        else:
+            boresight = pixel_coordinates.copy()
+
+        return boresight</div>
+
+
+<div class="viewcode-block" id="FifiLsDetectorArrayInfo.initialize_channel_data">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.html#sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.initialize_channel_data">[docs]</a>
+    def initialize_channel_data(self, data):
+        &quot;&quot;&quot;
+        Apply this information to create and populate the channel data.
+
+        The following attributes are determined from the detector::
+
+          - col: The column on the array
+          - row: The row on the array
+          - spexel: The spexel index
+          - spaxel: The spaxel index
+          - position: The spaxel offset on the array (arcseconds)
+          - wavelength : The spexel wavelength (um). Set to NaN.
+
+        Additionally, the channel string ID is set to::
+
+          &lt;CHANNEL&gt;[&lt;spexel&gt;,&lt;spaxel&gt;]
+
+        where spexel and spaxel are described above and CHANNEL may be one of
+        {B, R} for the RED and BLUE channels respectively.
+
+        Parameters
+        ----------
+        data : FifiLsChannelData
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        index = np.arange(self.pixels)
+        data.fixed_index = index
+        data.set_default_values()
+        data.spexel = self.spexel_indices.copy()
+        data.spaxel = self.spaxel_indices.copy()
+        data.flag = np.zeros(self.pixels, dtype=int)
+        data.col = data.spaxel // self.spaxel_cols
+        data.row = data.spaxel % self.spaxel_cols
+        data.channel_id = np.array(
+            [f&#39;{self.ch.upper()}[{x[0]},{x[1]}]&#39;
+             for x in zip(data.spexel, data.spaxel)])</div>
+
+
+<div class="viewcode-block" id="FifiLsDetectorArrayInfo.detector_coordinates_to_equatorial_offsets">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.html#sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.detector_coordinates_to_equatorial_offsets">[docs]</a>
+    def detector_coordinates_to_equatorial_offsets(self, coordinates):
+        &quot;&quot;&quot;
+        Convert detector coordinates to equatorial offsets.
+
+        Parameters
+        ----------
+        coordinates : Coordinate2D
+
+        Returns
+        -------
+        equatorial_offsets : Coordinate2D
+        &quot;&quot;&quot;
+        rotation = self.sky_angle
+        offsets = coordinates.copy()
+        if rotation != 0:
+            offsets.rotate(rotation)
+        offsets.invert_x()
+        return offsets</div>
+
+
+<div class="viewcode-block" id="FifiLsDetectorArrayInfo.equatorial_offsets_to_detector_coordinates">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.html#sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.equatorial_offsets_to_detector_coordinates">[docs]</a>
+    def equatorial_offsets_to_detector_coordinates(self, offsets):
+        &quot;&quot;&quot;
+        Convert equatorial offsets to detector coordinates.
+
+        Parameters
+        ----------
+        offsets : Coordinate2D
+
+        Returns
+        -------
+        detector_coordinates : Coordinate2D
+        &quot;&quot;&quot;
+        coordinates = offsets.copy()
+        coordinates.invert_x()
+        rotation = self.sky_angle
+        if rotation != 0:
+            coordinates.rotate(-rotation)
+        return coordinates</div>
+
+
+<div class="viewcode-block" id="FifiLsDetectorArrayInfo.detector_coordinates_to_equatorial">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.html#sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.detector_coordinates_to_equatorial">[docs]</a>
+    def detector_coordinates_to_equatorial(self, coordinates):
+        &quot;&quot;&quot;
+        Convert detector coordinates to equatorial coordinates.
+
+        Parameters
+        ----------
+        coordinates : Coordinate2D
+
+        Returns
+        -------
+        equatorial : EquatorialCoordinates
+        &quot;&quot;&quot;
+        equatorial = self.boresight_equatorial.copy()
+        equatorial.add_offset(
+            self.detector_coordinates_to_equatorial_offsets(coordinates))
+        return equatorial</div>
+
+
+<div class="viewcode-block" id="FifiLsDetectorArrayInfo.equatorial_to_detector_coordinates">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.html#sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.equatorial_to_detector_coordinates">[docs]</a>
+    def equatorial_to_detector_coordinates(self, equatorial):
+        &quot;&quot;&quot;
+        Convert equatorial coordinates to detector coordinates.
+
+        Parameters
+        ----------
+        equatorial : EquatorialCoordinates
+
+        Returns
+        -------
+        detector_coordinates : Coordinate2D
+        &quot;&quot;&quot;
+        offset = equatorial.get_offset_from(self.boresight_equatorial)
+        return self.equatorial_offsets_to_detector_coordinates(offset)</div>
+
+
+<div class="viewcode-block" id="FifiLsDetectorArrayInfo.find_pixel_positions">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.html#sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.find_pixel_positions">[docs]</a>
+    def find_pixel_positions(self, detector_xy):
+        &quot;&quot;&quot;
+        Calculate the pixel positions based on inputs.
+
+        Parameters
+        ----------
+        detector_xy : Coordinate2D
+            The raw XY detector coordinates of shape (n, n_pixels) or
+            (n, n_spexels, n_spaxels).
+
+        Returns
+        -------
+        pixel_positions : Coordinate2D
+        &quot;&quot;&quot;
+        x = np.atleast_2d(detector_xy.x.copy())
+        y = np.atleast_2d(detector_xy.y.copy())
+        if x.ndim == 3:
+            x = x[..., self.spexel_indices, self.spaxel_indices]
+            y = y[..., self.spexel_indices, self.spaxel_indices]
+
+        boresight_trajectory = self.get_boresight_trajectory(x, y)
+        x -= boresight_trajectory.x[:, None]
+        y -= boresight_trajectory.y[:, None]
+        dx = np.nanmean(x, axis=0)
+        dy = np.nanmean(y, axis=0)
+
+        positions = Coordinate2D([dx, dy])
+        rotation = self.rotation
+        if rotation != 0:
+            if not isinstance(rotation, units.Quantity):
+                rotation *= units.Unit(&#39;radian&#39;)
+            positions.rotate(-rotation)
+        return positions</div>
+
+
+<div class="viewcode-block" id="FifiLsDetectorArrayInfo.edit_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.html#sofia_redux.scan.custom.fifi_ls.info.detector_array.FifiLsDetectorArrayInfo.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().edit_header(header)
+        header[&#39;CROTA2&#39;] = (to_header_float(-self.sky_angle, &#39;degree&#39;),
+                            &#39;Rotation angle (deg)&#39;)
+        header[&#39;CTYPE3&#39;] = &#39;WAVE&#39;, &#39;Axis 3 type and projection&#39;
+        header[&#39;SPECSYS&#39;] = &#39;BARYCENT&#39;, &#39;Spectral reference frame&#39;</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

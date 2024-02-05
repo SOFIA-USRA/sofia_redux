@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.calibration.pipecal_util &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.calibration.pipecal_util</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Utility and convenience functions for common pipecal use cases.&quot;&quot;&quot;
+
+import warnings
+
+from astropy import log
+import numpy as np
+import photutils
+
+from sofia_redux.calibration.pipecal_calfac import pipecal_calfac
+from sofia_redux.calibration.pipecal_error import PipeCalError
+from sofia_redux.calibration.pipecal_photometry import pipecal_photometry
+from sofia_redux.calibration.pipecal_rratio import pipecal_rratio
+from sofia_redux.toolkit.utilities.fits import hdinsert
+
+
+__all__ = [&#39;average_za&#39;, &#39;average_alt&#39;, &#39;average_pwv&#39;,
+           &#39;guess_source_position&#39;, &#39;add_calfac_keys&#39;,
+           &#39;add_phot_keys&#39;, &#39;get_fluxcal_factor&#39;,
+           &#39;apply_fluxcal&#39;, &#39;get_tellcor_factor&#39;, &#39;apply_tellcor&#39;,
+           &#39;run_photometry&#39;]
+
+
+<div class="viewcode-block" id="average_za">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_util.average_za.html#sofia_redux.calibration.pipecal_util.average_za">[docs]</a>
+def average_za(header):
+    &quot;&quot;&quot;
+    Robust average of zenith angle from FITS header.
+
+    Keys used are ZA_START and ZA_END.  If both are good
+    (&gt;= 0), they will be averaged.  If only one is good,
+    it will be returned.  If both are bad, a PipeCalError
+    will be raised.
+
+    Parameters
+    ----------
+    header : `astropy.io.fits.header.Header`
+        FITS header containing ZA keys.
+
+    Returns
+    -------
+    float
+        The ZA value
+
+    Raises
+    ------
+    PipeCalError
+        If no valid ZA is found.
+    &quot;&quot;&quot;
+    try:
+        zasta = float(header[&#39;ZA_START&#39;])
+    except (ValueError, TypeError, KeyError):
+        zasta = -9999
+    try:
+        zaend = float(header[&#39;ZA_END&#39;])
+    except (ValueError, TypeError, KeyError):
+        zaend = -9999
+    if zasta &gt; 0 and zaend &lt; 0:
+        za = zasta
+    elif zasta &lt; 0 and zaend &gt; 0:
+        za = zaend
+    elif zasta &lt; 0 and zaend &lt; 0:
+        msg = &#39;Bad ZA value in header&#39;
+        log.error(msg)
+        raise PipeCalError(msg)
+    else:
+        za = (zasta + zaend) / 2
+    return za</div>
+
+
+
+<div class="viewcode-block" id="average_alt">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_util.average_alt.html#sofia_redux.calibration.pipecal_util.average_alt">[docs]</a>
+def average_alt(header):
+    &quot;&quot;&quot;
+    Robust average of altitude from FITS header.
+
+    Keys used are ALTI_STA and ALTI_END.  If both are good
+    (&gt;= 0), they will be averaged.  If only one is good,
+    it will be returned.  If both are bad, a PipeCalError
+    will be raised.
+
+    Input values are expected in feet; return value is in
+    kilo-feet, i.e. input values are divided by 1000 before
+    returning.
+
+    Parameters
+    ----------
+    header : `astropy.io.fits.header.Header`
+        FITS header containing altitude keys.
+
+    Returns
+    -------
+    float
+        The altitude value, in kilo-feet
+
+    Raises
+    ------
+    PipeCalError
+        If no valid altitude is found.
+    &quot;&quot;&quot;
+    try:
+        altsta = float(header[&#39;ALTI_STA&#39;])
+    except (ValueError, TypeError, KeyError):
+        altsta = -9999
+    try:
+        altend = float(header[&#39;ALTI_END&#39;])
+    except (ValueError, TypeError, KeyError):
+        altend = -9999
+    if altsta &gt; 0 and altend &lt; 0:
+        alt = altsta
+    elif altsta &lt; 0 and altend &gt; 0:
+        alt = altend
+    elif altsta &lt; 0 and altend &lt; 0:
+        msg = &#39;Bad altitude value in header&#39;
+        log.error(msg)
+        raise PipeCalError(msg)
+    else:
+        alt = (altsta + altend) / 2
+
+    alt /= 1000
+    return alt</div>
+
+
+
+<div class="viewcode-block" id="average_pwv">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_util.average_pwv.html#sofia_redux.calibration.pipecal_util.average_pwv">[docs]</a>
+def average_pwv(header):
+    &quot;&quot;&quot;
+    Robust average of precipitable water vapor from FITS header.
+
+    Header key used is WVZ_OBS only. WVZ_STA and WVZ_END may be present
+    in header, but are considered unreliable.
+
+    Parameters
+    ----------
+    header : `astropy.io.fits.header.Header`
+        FITS header containing PWV keys.
+
+    Returns
+    -------
+    float
+        The PWV value
+
+    Raises
+    ------
+    PipeCalError
+        If no valid PWV is found.
+    &quot;&quot;&quot;
+    try:
+        pwv = float(header[&#39;WVZ_OBS&#39;])
+    except (ValueError, TypeError, KeyError):
+        pwv = -9999
+
+    if pwv &lt; 0:
+        msg = &#39;Bad PWV value in header&#39;
+        log.error(msg)
+        raise PipeCalError(msg)
+
+    return pwv</div>
+
+
+
+<div class="viewcode-block" id="guess_source_position">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_util.guess_source_position.html#sofia_redux.calibration.pipecal_util.guess_source_position">[docs]</a>
+def guess_source_position(header, image, srcpos=None):
+    &quot;&quot;&quot;
+    Estimate the position of a standard source in the image.
+
+    The following information sources are checked in order:
+
+        1. The srcpos parameter
+        2. SRCPOSX and SRCPOSY keywords in the header
+        3. The brightest peak found by photutils.find_peaks.
+        4. CRPIX1 and CRPIX2 keywords in the header.
+
+    If a successful value is found at any stage, no further
+    checks are done.
+
+    Parameters
+    ----------
+    header : `astropy.io.fits.header.Header`
+        FITS header corresponding to the image.
+    image : array
+        2D image data to check for peaks.
+    srcpos : list or tuple, optional
+        If provided, should be the desired source
+        position, listed as (x,y), indexed from 0.
+
+    Returns
+    -------
+    list, or None
+        The estimated source position, as (x,y), zero-indexed.
+        None is returned if no valid source positions could be found.
+    &quot;&quot;&quot;
+    # Check the srcpos input. If it isn&#39;t provided, fill it
+    # with info from the header
+    if not srcpos:
+        if &#39;SRCPOSX&#39; in header and &#39;SRCPOSY&#39; in header:
+            if header[&#39;SRCPOSX&#39;] == 0 and header[&#39;SRCPOSY&#39;] == 0:
+                srcpos = None
+            else:
+                srcpos = [header[&#39;SRCPOSX&#39;], header[&#39;SRCPOSY&#39;]]
+                log.debug(&#39;Found SRCPOS in header: {}&#39;.format(srcpos))
+
+    # if still no srcpos, try find_peaks
+    if not srcpos:
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;)
+            peak = photutils.find_peaks(image, np.nanmedian(image), npeaks=1)
+        try:
+            srcpos = [peak[&#39;x_peak&#39;][0], peak[&#39;y_peak&#39;][0]]
+            log.debug(&#39;SRCPOS from find_peaks: {}&#39;.format(srcpos))
+        except (TypeError, IndexError):
+            srcpos = None
+
+    # if *still* no srcpos, try CRPIX
+    if not srcpos:
+        if &#39;CRPIX1&#39; in header and &#39;CRPIX2&#39; in header:
+            srcpos = [header[&#39;CRPIX1&#39;], header[&#39;CRPIX2&#39;]]
+            log.debug(&#39;SRCPOS from CRPIX: {}&#39;.format(srcpos))
+        else:
+            srcpos = None
+            log.debug(&#39;SRCPOS not found&#39;)
+
+    return srcpos</div>
+
+
+
+<div class="viewcode-block" id="add_calfac_keys">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_util.add_calfac_keys.html#sofia_redux.calibration.pipecal_util.add_calfac_keys">[docs]</a>
+def add_calfac_keys(header, config):
+    &quot;&quot;&quot;
+    Add calibration-related keywords to a header.
+
+    The following keys are added or updated:
+    PROCSTAT, BUNIT, CALFCTR, ERRCALF, LAMREF, LAMPIVOT,
+    COLRCORR, REFCALZA, REFCALAW, REFCALWV, and REFCALF3.
+
+    Parameters
+    ----------
+    header : `astropy.io.fits.header.Header`
+        The FITS header to update.
+    config : dict-like
+        Calibration configuration values, as produced by
+        `pipecal.pipecal_config.pipecal_config`.
+    &quot;&quot;&quot;
+    # assume all necessary values are present in config
+    runits = config[&#39;runits&#39;]
+    f3 = config[&#39;refcal_file&#39;].partition(config[&#39;caldata&#39;])[-1]
+    try:
+        pstat = str(header[&#39;PROCSTAT&#39;]).strip().upper()
+    except KeyError:
+        pstat = &#39;UNKNOWN&#39;
+
+    if pstat != &#39;LEVEL_4&#39;:
+        hdinsert(header, &#39;PROCSTAT&#39;, &#39;LEVEL_3&#39;, &#39;Processing status&#39;)
+    hdinsert(header, &#39;BUNIT&#39;, &#39;Jy/pixel&#39;, &#39;Data units&#39;)
+
+    hdinsert(header, &#39;CALFCTR&#39;, config[&#39;calfac&#39;],
+             &#39;Calibration factor ({}/Jy)&#39;.format(runits))
+    hdinsert(header, &#39;ERRCALF&#39;, config[&#39;ecalfac&#39;],
+             &#39;Calibration factor uncertainty ({}/Jy)&#39;.format(runits))
+    hdinsert(header, &#39;LAMREF&#39;, config[&#39;wref&#39;],
+             &#39;Reference wavelength (microns)&#39;)
+    hdinsert(header, &#39;LAMPIVOT&#39;, config[&#39;lpivot&#39;],
+             &#39;Pivot wavelength (microns)&#39;)
+    hdinsert(header, &#39;COLRCORR&#39;, config[&#39;color_corr&#39;],
+             &#39;Color correction factor&#39;)
+    hdinsert(header, &#39;REFCALZA&#39;, config[&#39;rfit_am&#39;][&#39;zaref&#39;],
+             &#39;Reference calibration zenith angle&#39;)
+    hdinsert(header, &#39;REFCALAW&#39;, config[&#39;rfit_alt&#39;][&#39;altwvref&#39;],
+             &#39;Reference calibration altitude&#39;)
+    hdinsert(header, &#39;REFCALWV&#39;, config[&#39;rfit_pwv&#39;][&#39;altwvref&#39;],
+             &#39;Reference calibration PWV&#39;)
+    hdinsert(header, &#39;REFCALF3&#39;, f3,
+             &#39;Calibration reference file&#39;)</div>
+
+
+
+<div class="viewcode-block" id="add_phot_keys">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_util.add_phot_keys.html#sofia_redux.calibration.pipecal_util.add_phot_keys">[docs]</a>
+def add_phot_keys(header, phot, config=None, srcpos=None):
+    &quot;&quot;&quot;
+    Add photometry-related keywords to a header.
+
+    The primary input for this function (`phot`) should be the data
+    structure returned by the pipecal_photometry function.
+    All keys in this structure are added to the FITS header.
+
+    In addition, the following keys may be added or updated,
+    from the `config` or `srcpos` input:
+    SRCPOSX, SRCPOSY, MODLFLX, MODLFLXE, REFSTD1, REFSTD2,
+    REFSTD3, LAMREF, LAMPIVOT, COLRCORR, REFCALZA,
+    REFCALAW, REFCALWV, AVGCALFC, AVGCALER, and RUNITS.
+
+    Parameters
+    ----------
+    header : `astropy.io.fits.header.Header`
+        The FITS header to update.
+    phot : list
+        Photometry values, as produced by
+        `pipecal.pipecal_photometry.pipecal_photometry`.
+    config : dict-like, optional
+        Calibration configuration values, as produced by
+        `pipecal.pipecal_config.pipecal_config`.
+    srcpos : list-like, optional
+        The starting position estimate for photometry, as
+        (x,y), zero-indexed.  If provided, will be set in the
+        SRCPOSX and SRCPOSY keywords.
+    &quot;&quot;&quot;
+    # add the starting guess position
+    if srcpos is not None:
+        hdinsert(header, &#39;SRCPOSX&#39;, srcpos[0],
+                 &#39;Initial source position for photometry (x)&#39;)
+        hdinsert(header, &#39;SRCPOSY&#39;, srcpos[1],
+                 &#39;Initial source position for photometry (y)&#39;)
+
+    # add photometry keys
+    if phot is None:
+        phot = []
+    for i in range(len(phot)):
+        entry = phot[i]
+        key = entry[&#39;key&#39;]
+        val = entry[&#39;value&#39;]
+        com = entry[&#39;comment&#39;]
+        if isinstance(val, list):
+            hdinsert(header, key, val[0], com)
+            hdinsert(header, key + &#39;E&#39;, val[1], &#39;Error in {}&#39;.format(com))
+        else:
+            hdinsert(header, key, val, com)
+
+    # add other standard values from config
+    if config is not None:
+        # try the model flux keys; pass if not present
+        try:
+            mflux = config[&#39;std_flux&#39;]
+            mfluxe = mflux * config[&#39;std_eflux&#39;] / 100
+            hdinsert(header, &#39;MODLFLX&#39;, mflux, &#39;Model flux (Jy)&#39;)
+            hdinsert(header, &#39;MODLFLXE&#39;, mfluxe, &#39;Model flux error (Jy)&#39;)
+        except KeyError:
+            pass
+
+        # same for the standard reference files
+        try:
+            f1 = config[&#39;filterdef_file&#39;].partition(config[&#39;caldata&#39;])[-1]
+            f2 = config[&#39;stdflux_file&#39;].partition(config[&#39;caldata&#39;])[-1]
+            f3 = config[&#39;stdeflux_file&#39;].partition(config[&#39;caldata&#39;])[-1]
+            hdinsert(header, &#39;REFSTD1&#39;, f1, &#39;Standard reference file&#39;)
+            hdinsert(header, &#39;REFSTD2&#39;, f2, &#39;Standard reference file&#39;)
+            hdinsert(header, &#39;REFSTD3&#39;, f3, &#39;Standard reference file&#39;)
+        except KeyError:
+            pass
+
+        # assume basic reference values are present together
+        if &#39;wref&#39; in config:
+            hdinsert(header, &#39;LAMREF&#39;, config[&#39;wref&#39;],
+                     &#39;Reference wavelength (microns)&#39;)
+            hdinsert(header, &#39;LAMPIVOT&#39;, config[&#39;lpivot&#39;],
+                     &#39;Pivot wavelength (microns)&#39;)
+            hdinsert(header, &#39;COLRCORR&#39;, config[&#39;color_corr&#39;],
+                     &#39;Color correction factor&#39;)
+            hdinsert(header, &#39;REFCALZA&#39;, config[&#39;rfit_am&#39;][&#39;zaref&#39;],
+                     &#39;Reference calibration zenith angle&#39;)
+            hdinsert(header, &#39;REFCALAW&#39;, config[&#39;rfit_alt&#39;][&#39;altwvref&#39;],
+                     &#39;Reference calibration altitude&#39;)
+            hdinsert(header, &#39;REFCALWV&#39;, config[&#39;rfit_pwv&#39;][&#39;altwvref&#39;],
+                     &#39;Reference calibration PWV&#39;)
+
+        # check for an average cal factor
+        if &#39;avgcalfc&#39; in config:
+            hdinsert(header, &#39;AVGCALFC&#39;, config[&#39;avgcalfc&#39;],
+                     &#39;Average calibration factor&#39;)
+            hdinsert(header, &#39;AVGCALER&#39;, config[&#39;avgcaler&#39;],
+                     &#39;Average cal factor error&#39;)
+            try:
+                f4 = config[&#39;avgcal_file&#39;].partition(config[&#39;caldata&#39;])[-1]
+                hdinsert(header, &#39;AVCLFILE&#39;, f4,
+                         &#39;Average calibration reference file&#39;)
+            except KeyError:  # pragma: no cover
+                pass
+
+        # add the raw units for the instrument
+        if &#39;runits&#39; in config:
+            hdinsert(header, &#39;RUNITS&#39;, config[&#39;runits&#39;],
+                     &#39;Raw data units (before calibration)&#39;)</div>
+
+
+
+<div class="viewcode-block" id="get_fluxcal_factor">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_util.get_fluxcal_factor.html#sofia_redux.calibration.pipecal_util.get_fluxcal_factor">[docs]</a>
+def get_fluxcal_factor(header, config,
+                       update=False, write_history=False):
+    &quot;&quot;&quot;
+    Retrieve a flux calibration factor from configuration.
+
+    The returned factor is intended to divide raw image data
+    in order to calibrate it to physical units (Jy/pixel).
+    That is::
+
+       calibrated = flux / cal_factor.
+
+    The input header may be updated with FITS keywords,
+    via `add_calfac_keys`, if desired.  A history message
+    may also be added to the header, if desired.
+
+    Parameters
+    ----------
+    header : `astropy.io.fits.header.Header`
+        The FITS header to update.
+    config : dict-like
+        Calibration configuration values, as produced by
+        `pipecal.pipecal_config.pipecal_config`.
+    update : bool, optional
+        If set, calibration keywords will be updated.
+    write_history : bool, optional
+        If set, and update is also True, a history message
+        will be added to the header.
+
+    Returns
+    -------
+    float, float
+        The calibration factor and its associated error.
+
+    &quot;&quot;&quot;
+    if not update:
+        write_history = False
+
+    if &#39;calfac&#39; not in config:
+        if write_history:
+            msg1 = &#39;No reference flux calibration available&#39;
+            try:
+                msg2 = &#39;for SPECTEL={}, ALTCFG1={}, &#39; \
+                       &#39;DATE={}. &#39;.format(config[&#39;spectel&#39;],
+                                          config[&#39;altcfg1&#39;],
+                                          config[&#39;date&#39;])
+            except KeyError:
+                msg2 = &#39;. &#39;
+            msg3 = &#39;Data is not calibrated.&#39;
+            log.warning(msg1 + msg2 + msg3)
+
+            header[&#39;HISTORY&#39;] = &#39;  &#39;
+            header[&#39;HISTORY&#39;] = msg1
+            if len(msg2) &gt; 2:
+                header[&#39;HISTORY&#39;] = msg2
+            header[&#39;HISTORY&#39;] = msg3
+            header[&#39;HISTORY&#39;] = &#39;  &#39;
+        calfac, ecalfac = None, None
+    else:
+        f1 = config[&#39;refcal_file&#39;].partition(config[&#39;caldata&#39;])[-1]
+        calfac = config[&#39;calfac&#39;]
+        ecalfac = config[&#39;ecalfac&#39;]
+
+        # write relevant keys to header
+        if update:
+            add_calfac_keys(header, config)
+
+        if write_history:
+            header[&#39;HISTORY&#39;] = &#39;  &#39;
+            header[&#39;HISTORY&#39;] = &#39;Flux calibration information:&#39;
+            header[&#39;HISTORY&#39;] = &#39;  Using reference file: {}&#39;.format(f1)
+            header[&#39;HISTORY&#39;] = &#39;  Average reference calibration factor:&#39;
+            header[&#39;HISTORY&#39;] = &#39;    {} +/- {}&#39;.format(calfac, ecalfac)
+            header[&#39;HISTORY&#39;] = &#39;Data has been divided by cal &#39; \
+                                &#39;factor to convert&#39;
+            header[&#39;HISTORY&#39;] = &#39;  from {} to Jy&#39;.format(config[&#39;runits&#39;])
+            header[&#39;HISTORY&#39;] = &#39;  &#39;
+
+    return calfac, ecalfac</div>
+
+
+
+<div class="viewcode-block" id="apply_fluxcal">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_util.apply_fluxcal.html#sofia_redux.calibration.pipecal_util.apply_fluxcal">[docs]</a>
+def apply_fluxcal(data, header, config,
+                  variance=None, covariance=None, write_history=True):
+    &quot;&quot;&quot;
+    Apply a flux calibration factor to an image.
+
+    The image is calibrated as::
+
+        calibrated = flux / cal_factor
+
+    If provided, the variance and/or covariance are propagated
+    as well, as::
+
+        calibrated_variance = variance / cal_factor^2
+        calibrated_covariance = covariance / cal_factor^2
+
+    The provided header is also updated with calibration keys and,
+    optionally, a history message.
+
+    Parameters
+    ----------
+    data : array
+        Image to calibrate.
+    header : `astropy.io.fits.header.Header`
+        FITS header to update.
+    config : dict-like
+        Calibration configuration values, as produced by
+        `pipecal.pipecal_config.pipecal_config`.
+    variance : array, optional
+        Variance image to propagate, if desired.
+    covariance : array, optional
+        Covariance image to propagate, if desired.
+    write_history : bool, optional
+        If set, a history message will be added to the header.
+
+    Returns
+    -------
+    array, or 2- or 3-length tuple
+        If only data is provided, it is returned as an array.
+        If variance is provided, the return value is (data, variance).
+        If covariance is provided, the return value is
+        (data, variance, covariance); if the variance was not provided,
+        it will be set to None.
+    &quot;&quot;&quot;
+
+    calfac, _ = get_fluxcal_factor(header, config, update=True,
+                                   write_history=write_history)
+
+    if calfac is None:
+        corrdata, corrvar, corrcovar = data, variance, covariance
+    else:
+        # apply factor to data
+        # do not propagate error on calfactor to variance
+        corrdata = data / calfac
+        if variance is not None:
+            corrvar = variance / calfac ** 2
+        else:
+            corrvar = None
+        if covariance is not None:
+            corrcovar = covariance / calfac ** 2
+        else:
+            corrcovar = None
+
+    if covariance is not None:
+        return corrdata, corrvar, corrcovar
+    elif variance is not None:
+        return corrdata, corrvar
+    else:
+        return corrdata</div>
+
+
+
+<div class="viewcode-block" id="get_tellcor_factor">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_util.get_tellcor_factor.html#sofia_redux.calibration.pipecal_util.get_tellcor_factor">[docs]</a>
+def get_tellcor_factor(header, config, update=False, use_wv=False):
+    &quot;&quot;&quot;
+    Retrieve a telluric correction factor from configuration.
+
+    The correction factor is calculated from the ratio of the R
+    value at the reference ZA and altitude/PWV to the R value
+    at the observed ZA and altitude/PWV.  R values are
+    calculated by `pipecal.pipecal_rratio.pipecal_rratio`.
+    The returned value is intended to be multiplied into the
+    data, in order to correct it to the reference values.
+
+    Observed values for ZA and altitude or PWV are read from the
+    FITS header.
+
+    Parameters
+    ----------
+    header : `astropy.io.fits.header.Header`
+        The FITS header to update.
+    config : dict-like
+        Calibration configuration values, as produced by
+        `pipecal.pipecal_config.pipecal_config`.
+    update : bool, optional
+        If set, calibration keywords will be updated.
+    use_wv : bool, optional
+        If set, precipitable water vapor will be used as the
+        reference value, instead of altitude.
+
+    Returns
+    -------
+    float
+        The telluric correction factor.
+    &quot;&quot;&quot;
+    # get ALT, ZA, PWV from header
+    altwv = -9999.
+    if use_wv:
+        altwv = average_pwv(header)
+        if altwv &lt; 0 or altwv &gt; 50:
+            log.warning(f&#39;Bad WV value: {altwv}&#39;)
+            log.warning(&#39;Using altitude instead.&#39;)
+            use_wv = False
+        else:
+            log.debug(f&#39;Using WV value {altwv}&#39;)
+    if not use_wv:
+        altwv = average_alt(header)
+        log.debug(f&#39;Using Alt value {altwv}&#39;)
+    za = average_za(header)
+
+    # reference files
+    f1 = config[&#39;rfitam_file&#39;].partition(config[&#39;caldata&#39;])[-1]
+
+    zaref = config[&#39;rfit_am&#39;][&#39;zaref&#39;]
+    if use_wv:
+        # R ratio for precipitable water vapor (PWV) reference
+        altwv_str = &#39;PWV&#39;
+        f2 = config[&#39;rfitpwv_file&#39;].partition(config[&#39;caldata&#39;])[-1]
+        altwvref = config[&#39;rfit_pwv&#39;][&#39;altwvref&#39;]
+
+        rratio = pipecal_rratio(za, altwv, zaref, altwvref,
+                                config[&#39;rfit_am&#39;][&#39;coeff&#39;],
+                                config[&#39;rfit_pwv&#39;][&#39;coeff&#39;],
+                                pwv=True)
+        ref_rratio = pipecal_rratio(zaref, altwvref, zaref, altwvref,
+                                    config[&#39;rfit_am&#39;][&#39;coeff&#39;],
+                                    config[&#39;rfit_pwv&#39;][&#39;coeff&#39;],
+                                    pwv=True)
+    else:
+        # R ratio for altitude reference
+        altwv_str = &#39;altitude&#39;
+        f2 = config[&#39;rfitalt_file&#39;].partition(config[&#39;caldata&#39;])[-1]
+        altwvref = config[&#39;rfit_alt&#39;][&#39;altwvref&#39;]
+
+        rratio = pipecal_rratio(za, altwv, zaref, altwvref,
+                                config[&#39;rfit_am&#39;][&#39;coeff&#39;],
+                                config[&#39;rfit_alt&#39;][&#39;coeff&#39;],
+                                pwv=False)
+        ref_rratio = pipecal_rratio(zaref, altwvref, zaref, altwvref,
+                                    config[&#39;rfit_am&#39;][&#39;coeff&#39;],
+                                    config[&#39;rfit_alt&#39;][&#39;coeff&#39;],
+                                    pwv=False)
+
+    # correction factor to reference Alt/ZA
+    corr_fac = ref_rratio / rratio
+
+    # update header with keywords
+    if update:
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;)
+            hdinsert(header, &#39;TELCORR&#39;, corr_fac,
+                     &#39;Telluric correction factor to ZA/{}&#39;.format(altwv_str))
+            hdinsert(header, &#39;REFCALZA&#39;, zaref,
+                     &#39;Reference calibration zenith angle&#39;)
+            if use_wv:
+                hdinsert(header, &#39;REFCALWV&#39;, altwvref,
+                         &#39;Reference calibration PWV&#39;)
+            else:
+                hdinsert(header, &#39;REFCALAW&#39;, altwvref,
+                         &#39;Reference calibration altitude&#39;)
+            hdinsert(header, &#39;REFCALF1&#39;, f1,
+                     &#39;Calibration reference file&#39;)
+            hdinsert(header, &#39;REFCALF2&#39;, f2,
+                     &#39;Calibration reference file&#39;)
+
+        # update header with history
+        header[&#39;HISTORY&#39;] = &#39;Using reference files:&#39;
+        header[&#39;HISTORY&#39;] = &#39;  {}&#39;.format(f1)
+        header[&#39;HISTORY&#39;] = &#39;  {}&#39;.format(f2)
+        header[&#39;HISTORY&#39;] = &#39;Reference ZA={}, &#39; \
+                            &#39;{}={}&#39;.format(zaref, altwv_str, altwvref)
+        header[&#39;HISTORY&#39;] = &#39;Telluric correction factor for ZA={:.2f}, &#39; \
+                            &#39;{}={}:&#39;.format(za, altwv_str, altwv)
+        header[&#39;HISTORY&#39;] = &#39;  {}&#39;.format(corr_fac)
+
+    return corr_fac</div>
+
+
+
+<div class="viewcode-block" id="apply_tellcor">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_util.apply_tellcor.html#sofia_redux.calibration.pipecal_util.apply_tellcor">[docs]</a>
+def apply_tellcor(data, header, config, variance=None, covariance=None,
+                  use_wv=False):
+    &quot;&quot;&quot;
+    Apply a telluric correction factor to an image.
+
+    The image is corrected as::
+
+        corrected = flux * tel_factor
+
+    If provided, the variance and/or covariance are propagated
+    as well, as::
+
+        corrected_variance = variance * tel_factor^2
+        corrected_covariance = covariance / tel_factor^2
+
+    The provided header is also updated with relevant keywords and
+    a history message.
+
+    Parameters
+    ----------
+    data : array
+        Image to correct.
+    header : `astropy.io.fits.header.Header`
+        FITS header to update.
+    config : dict-like
+        Calibration configuration values, as produced by
+        `pipecal.pipecal_config.pipecal_config`.
+    variance : array, optional
+        Variance image to propagate, if desired.
+    covariance : array, optional
+        Covariance image to propagate, if desired.
+    use_wv : bool, optional
+        If set, precipitable water vapor will be used as the
+        reference value, instead of altitude.
+
+    Returns
+    -------
+    array, or 2- or 3-length tuple
+        If only data is provided, it is returned as an array.
+        If variance is provided, the return value is (data, variance).
+        If covariance is provided, the return value is
+        (data, variance, covariance); if the variance was not provided,
+        it will be set to None.
+
+    Raises
+    ------
+    PipeCalError
+        If no valid telluric correction factor is found.
+    &quot;&quot;&quot;
+
+    # correction factor to reference Alt/ZA/WV
+    try:
+        corr_fac = get_tellcor_factor(header, config,
+                                      update=True, use_wv=use_wv)
+    except (KeyError, AttributeError, ValueError, TypeError) as err:
+        log.debug(str(err))
+        raise PipeCalError(&#39;Response data not found; cannot apply &#39;
+                           &#39;telluric correction&#39;) from None
+
+    # correct data and variance
+    corrdata = data * corr_fac
+    if variance is not None:
+        corrvar = variance * corr_fac**2
+    else:
+        corrvar = None
+    if covariance is not None:
+        corrcovar = covariance * corr_fac**2
+    else:
+        corrcovar = None
+
+    if covariance is not None:
+        return corrdata, corrvar, corrcovar
+    elif variance is not None:
+        return corrdata, corrvar
+    else:
+        return corrdata</div>
+
+
+
+<div class="viewcode-block" id="run_photometry">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_util.run_photometry.html#sofia_redux.calibration.pipecal_util.run_photometry">[docs]</a>
+def run_photometry(data, header, var, config, **kwargs):
+    &quot;&quot;&quot;
+    Run photometry on an image of a standard source.
+
+    Input images are assumed to be telluric-corrected
+    (e.g. by the apply_tellcor function).
+
+    If the image is uncalibrated, and a model flux is known for
+    the source, values from aperture photometry
+    will be used to attempt to calculate and record a reference
+    calibration factor.  This value and its associated error
+    will be recorded in REFCALFC and REFCALER, respectively.
+
+    If the image is previously calibrated, and a model flux is
+    known, the values will be compared, and a log message will
+    display the percent difference from the model.
+
+    If a model flux is unknown, the source flux will be reported
+    and recorded in the FITS header, but no further calculations
+    will be performed.
+
+    Parameters
+    ----------
+    data : array
+        Image to correct.
+    header : `astropy.io.fits.header.Header`
+        FITS header to update.
+    var : array
+        Variance image to propagate, if desired.
+    config : dict-like
+        Calibration configuration values, as produced by
+        `pipecal.pipecal_config.pipecal_config`.
+    kwargs : dict-like, optional
+        Extra parameters to provide to the photometry function
+        If not provided, but values are available in
+        `config`, the configuration values will be used as
+        the default.  If parameters are still not present,
+        defaults defined by the pipecal_photometry function will
+        be used.
+    &quot;&quot;&quot;
+    # get provided parameters, or reasonable defaults
+    if &#39;srcpos&#39; not in kwargs:
+        kwargs[&#39;srcpos&#39;] = guess_source_position(header, data)
+    if &#39;aprad&#39; not in kwargs:
+        if &#39;aprad&#39; in config:
+            kwargs[&#39;aprad&#39;] = config[&#39;aprad&#39;]
+    if &#39;skyrad&#39; not in kwargs:
+        try:
+            kwargs[&#39;skyrad&#39;] = [config[&#39;bgin&#39;], config[&#39;bgout&#39;]]
+        except KeyError:
+            pass
+    if &#39;fwhm&#39; not in kwargs:
+        if &#39;fwhm&#39; in config:
+            kwargs[&#39;fwhm&#39;] = config[&#39;fwhm&#39;]
+    if &#39;fitsize&#39; not in kwargs:
+        if &#39;fitsize&#39; in config:
+            kwargs[&#39;fitsize&#39;] = config[&#39;fitsize&#39;]
+    if &#39;runits&#39; not in kwargs:
+        if &#39;runits&#39; in config:
+            kwargs[&#39;runits&#39;] = config[&#39;runits&#39;]
+
+    phot = pipecal_photometry(data, var, **kwargs)
+
+    # update header
+    add_phot_keys(header, phot, config, kwargs[&#39;srcpos&#39;])
+
+    if (&#39;BUNIT&#39; in header and &#39;jy&#39; in
+            str(header[&#39;BUNIT&#39;]).lower().strip()):
+        calib = True
+    else:
+        calib = False
+
+    # log the position and flux
+    try:
+        log.info(&#39;Source: {}&#39;.format(config[&#39;object&#39;]))
+    except KeyError:
+        pass
+    try:
+        log.info(&#39;Source Position (x,y): &#39;
+                 &#39;{:.2f}, {:.2f}&#39;.format(header[&#39;STCENTX&#39;],
+                                         header[&#39;STCENTY&#39;]))
+        if calib:
+            log.info(&#39;Source Flux: &#39;
+                     &#39;{:.2f} +/- {:.2f} Jy&#39;.format(header[&#39;STAPFLX&#39;],
+                                                   header[&#39;STAPFLXE&#39;]))
+        else:
+            try:
+                runits = kwargs[&#39;runits&#39;]
+            except KeyError:
+                runits = &#39;counts&#39;
+            log.info(&#39;Source Flux: &#39;
+                     &#39;{:.2f} +/- {:.2f} {}&#39;.format(header[&#39;STAPFLX&#39;],
+                                                   header[&#39;STAPFLXE&#39;],
+                                                   runits))
+    except KeyError:
+        log.warning(&#39;Photometry failed.&#39;)
+        return
+
+    # if model flux is available, calculate ref cal factor
+    if &#39;std_flux&#39; not in config:
+        log.warning(&#39;No model flux available; not calculating &#39;
+                    &#39;reference cal factor.&#39;)
+    else:
+        flux = header[&#39;STAPFLX&#39;]
+        flux_err = header[&#39;STAPFLXE&#39;]
+
+        # log the model flux
+        try:
+            modlflx = header[&#39;MODLFLX&#39;]
+            log.info(&#39;Model Flux: &#39;
+                     &#39;{:.3f} +/- {:.3f} Jy&#39;.format(modlflx,
+                                                   header[&#39;MODLFLXE&#39;]))
+            if calib:
+                log.info(&#39;Percent difference: &#39;
+                         &#39;{:.1f}%&#39;.format(100 * (flux - modlflx) / modlflx))
+        except KeyError:
+            pass
+
+        try:
+            ref_calfac, ref_ecalfac = \
+                pipecal_calfac(flux, flux_err, config)
+            hdinsert(header, &#39;REFCALFC&#39;, ref_calfac,
+                     &#39;Reference calibration factor&#39;)
+            hdinsert(header, &#39;REFCALER&#39;, ref_ecalfac,
+                     &#39;Reference calibration factor error&#39;)
+            if not calib:
+                log.info(&#39;Calculated calibration factor: &#39;
+                         &#39;{:.4f}&#39;.format(ref_calfac))
+        except ValueError:
+            log.warning(&#39;Bad flux; not adding REFCALFC.&#39;)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

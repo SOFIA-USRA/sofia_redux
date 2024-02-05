@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.visualization.display.blitting &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.visualization.display.blitting</h1><div class="highlight"><pre>
+<span></span>#  Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+from sofia_redux.visualization import log
+from sofia_redux.visualization.display.gallery import Gallery
+
+
+__all__ = [&#39;BlitManager&#39;]
+
+
+<div class="viewcode-block" id="BlitManager">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.blitting.BlitManager.html#sofia_redux.visualization.display.blitting.BlitManager">[docs]</a>
+class BlitManager(object):
+    &quot;&quot;&quot;
+    Manage drawing for background and animated artists.
+
+    Parameters
+    ----------
+    canvas : FigureCanvasAgg
+        The canvas to work with, this only works for sub-classes of the Agg
+        canvas which have the `~FigureCanvasAgg.copy_from_bbox` and
+        `~FigureCanvasAgg.restore_region` methods.
+    gallery : sofia_redux.visualization.display.artist.Gallery
+        Gallery instance that tracks all artists to draw.
+    signals : sofia_redux.visualization.signals.Signals
+        Collection of PyQt signals for passing on information to
+        other parts of the Eye.
+
+    Attributes
+    ----------
+    draw_cid : int
+        The matplotlib event CID for the draw_event signal.
+    &quot;&quot;&quot;
+    def __init__(self, canvas: FigureCanvasAgg, gallery: Gallery,
+                 signals) -&gt; None:
+        self._canvas = canvas
+        self._gallery = gallery
+        self._background = None
+        self._signals = signals
+        self.draw_cid = self._canvas.mpl_connect(&#39;draw_event&#39;,
+                                                 self.update_all)
+
+<div class="viewcode-block" id="BlitManager.reset_background">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.blitting.BlitManager.html#sofia_redux.visualization.display.blitting.BlitManager.reset_background">[docs]</a>
+    def reset_background(self) -&gt; None:
+        &quot;&quot;&quot;Reset the canvas background.&quot;&quot;&quot;
+        self._background = None</div>
+
+
+<div class="viewcode-block" id="BlitManager.safe_draw">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.blitting.BlitManager.html#sofia_redux.visualization.display.blitting.BlitManager.safe_draw">[docs]</a>
+    def safe_draw(self) -&gt; None:
+        &quot;&quot;&quot;
+        Draw the canvas.
+
+        Disconnect the draw event signal before drawing, and
+        reconnect it afterward.
+        &quot;&quot;&quot;
+        self._canvas.mpl_disconnect(self.draw_cid)
+        self._canvas.draw()
+        self.draw_cid = self._canvas.mpl_connect(&#39;draw_event&#39;,
+                                                 self.update_all)</div>
+
+
+<div class="viewcode-block" id="BlitManager.update_background">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.blitting.BlitManager.html#sofia_redux.visualization.display.blitting.BlitManager.update_background">[docs]</a>
+    def update_background(self) -&gt; None:
+        &quot;&quot;&quot;Update the canvas background.&quot;&quot;&quot;
+        self.safe_draw()
+        self._background = self._canvas.copy_from_bbox(
+            self._canvas.fig.bbox)</div>
+
+
+<div class="viewcode-block" id="BlitManager.update_animated">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.blitting.BlitManager.html#sofia_redux.visualization.display.blitting.BlitManager.update_animated">[docs]</a>
+    def update_animated(self) -&gt; None:
+        &quot;&quot;&quot;Update all animated artists.&quot;&quot;&quot;
+        self.blit()</div>
+
+
+<div class="viewcode-block" id="BlitManager.update_all">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.blitting.BlitManager.html#sofia_redux.visualization.display.blitting.BlitManager.update_all">[docs]</a>
+    def update_all(self, event=None) -&gt; None:
+        &quot;&quot;&quot;Update the background and artists.&quot;&quot;&quot;
+        self.update_background()
+        self._draw_animated()
+        self._catch_overlaps()</div>
+
+
+<div class="viewcode-block" id="BlitManager.blit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.blitting.BlitManager.html#sofia_redux.visualization.display.blitting.BlitManager.blit">[docs]</a>
+    def blit(self) -&gt; None:
+        &quot;&quot;&quot;
+        Blit the canvas.
+
+        Restore the background without updating it, then update
+        the animated artists on top of the restored background.
+        &quot;&quot;&quot;
+        self._canvas.restore_region(self._background)
+        self._draw_animated()
+        self._canvas.blit(self._canvas.fig.bbox)
+        self._canvas.flush_events()</div>
+
+
+    def _draw_animated(self) -&gt; None:
+        &quot;&quot;&quot;Draw all animated artists.&quot;&quot;&quot;
+        artists = self._gallery.gather_artists(mode=&#39;viable&#39;)
+        log.debug(f&#39;Drawing {len(artists)} artists&#39;)
+        for artist in artists:
+            self._canvas.figure.draw_artist(artist)
+
+    def _catch_overlaps(self):
+        renderer = self._canvas.get_renderer()
+        updated = self._gallery.catch_label_overlaps(renderer)
+        if updated:
+            self._signals.atrophy_bg_partial.emit()</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

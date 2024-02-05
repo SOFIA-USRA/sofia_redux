@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepstokes &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepstokes</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Chop/nod mode Stokes parameters pipeline step.&quot;&quot;&quot;
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.instruments.hawc.datafits import DataFits
+from sofia_redux.instruments.hawc.stepparent import StepParent
+
+__all__ = [&#39;StepStokes&#39;]
+
+
+<div class="viewcode-block" id="StepStokes">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepstokes.StepStokes.html#sofia_redux.instruments.hawc.steps.stepstokes.StepStokes">[docs]</a>
+class StepStokes(StepParent):
+    r&quot;&quot;&quot;
+    Compute Stokes parameters for chop/nod polarimetry data.
+
+    This step derives Stokes I, Q, and U images with associated
+    uncertainties and covariances from R and T array images.
+    If the data only has one HWP angle, then only Stokes I is
+    computed.
+
+    Input for this step is a DataFits object, as produced by the
+    `sofia_redux.instruments.hawc.steps.StepNodPolSub` pipeline step:
+    R-T and R+T images for each HWP angle, with associated errors, and
+    variance images for R and T arrays.
+
+    Output for this step contains the following image extensions:
+    STOKES I, ERROR I, STOKES Q, ERROR Q, STOKES U, ERROR U,
+    COVAR Q I, COVAR U I, COVAR Q U. Also, a table named TABLE DATA is
+    created, and BAD PIXEL MASK is copied from the input file.
+    For Nod-Pol data, the value of the initial HWP angle is saved as a
+    header keyword (HWPINIT), to be read by
+    `sofia_redux.instruments.hawc.steps.StepRotate`.
+
+    Notes
+    -----
+    Stokes I is computed by averaging the R+T signal over
+    all HWP angles (where N is the number of HWP angles):
+
+       .. math:: I = \frac{1}{N} \sum_{\phi=1}^N (R+T)_{\phi}
+
+       .. math:: \sigma_I = \frac{1}{N}
+                            \sqrt{\sum_{\phi=1}^N \sigma_{R+T,\phi}^2}.
+
+    The associated uncertainty in I is generally propagated from the
+    previously calculated errors for R+T as above, but may be inflated by
+    the median of the standard deviation of the R+T values across the HWP
+    angles if necessary. In the most common case of four HWP angles at 0,
+    45, 22.5, and 67.5 degrees, Stokes Q and U are computed as:
+
+      .. math:: Q = \frac{1}{2} [(R-T)_{0} - (R-T)_{45}]
+
+      .. math:: U = \frac{1}{2} [(R-T)_{22.5} - (R-T)_{67.5}]
+
+    where :math:`(R-T)_{\phi}` is the differential R-T flux at the HWP
+    angle :math:`\phi`. Uncertainties in Q and U are propagated from the
+    input error values on R-T:
+
+       .. math:: \sigma_Q = \frac{1}{2} \sqrt{\sigma_{R-T,0}^2
+                                              + \sigma_{R-T,45}^2}
+
+       .. math:: \sigma_U = \frac{1}{2} \sqrt{\sigma_{R-T,22.5}^2
+                                              + \sigma_{R-T,67.5}^2}.
+
+    Covariances between the Stokes parameters are derived from the
+    variances in R and T as follows:
+
+       .. math:: \sigma_{QI} = \frac{1}{8} [\sigma_{R,0}^2
+                                            - \sigma_{R,45}^2
+                                            - \sigma_{T,0}^2
+                                            + \sigma_{T,45}^2]
+
+       .. math:: \sigma_{UI} = \frac{1}{8} [\sigma_{R,22.5}^2
+                                            - \sigma_{R,67.5}^2
+                                            - \sigma_{T,22.5}^2
+                                            + \sigma_{T,67.5}^2]
+
+    The covariance between Q and U (:math:`\sigma_{QU}`) is zero at this
+    stage, since they are derived from data for different HWP angles.
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepStokes.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepstokes.StepStokes.html#sofia_redux.instruments.hawc.steps.stepstokes.StepStokes.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;scanstokes&#39;, and are named with
+        the step abbreviation &#39;STK&#39;.
+
+        Parameters defined for this step are:
+
+        hwp_tol : float
+            Tolerance for difference from expected values for HWP
+            angles. HWP angles for Stokes parameters must differ
+            by no more than 45 +/- hwp_tol degrees.
+        erri : str
+            Inflation method for Stokes I errors.  May be
+            &#39;median&#39;, &#39;mean&#39;, or &#39;none&#39;.
+        erripolmethod : str
+            Method for calculating Stokes I error.  Options are
+            &#39;hwpstddev&#39;, to compute them as a standard deviation
+            across the HWP angles, or &#39;meansigma&#39;, to propagate
+            them from the input errors (recommended).
+        removeR1stokesi : bool
+            If set, the R1 subarray for Stokes I is removed from
+            the output.
+        override_hwp_order : bool
+            If set, then the first two HWP angles will be used
+            for Q, last two for U, regardless of value.  This is
+            necessary in the case where the HWP value is incorrectly
+            recorded, but the HWP position as observed was correct.
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;stokes&#39;
+        self.description = &#39;Compute Stokes&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;stk&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+
+        # Append parameters
+        self.paramlist.append([&#39;hwp_tol&#39;, 5.0,
+                               &#39;HWP angles for Stokes parameters must &#39;
+                               &#39;differ by no more than 45+-hwp_tol &#39;
+                               &#39;degrees&#39;])
+        self.paramlist.append([&#39;erri&#39;, &#39;median&#39;,
+                               &#39;How to inflate errors in I.  Can be &#39;
+                               &#39;median, mean, or none&#39;])
+        self.paramlist.append([&#39;erripolmethod&#39;, &#39;meansigma&#39;,
+                               &#39;Options are &quot;hwpstddev&quot; or &quot;meansigma&quot;&#39;])
+        self.paramlist.append([&#39;removeR1stokesi&#39;, True,
+                               &#39;Remove R1 subarray for Stokes I&#39;])
+        self.paramlist.append([&#39;override_hwp_order&#39;, False,
+                               &#39;If True, the first two HWP angles &#39;
+                               &#39;will be used for Q, last two for U, &#39;
+                               &#39;regardless of value&#39;])</div>
+
+
+<div class="viewcode-block" id="StepStokes.stokes">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepstokes.StepStokes.html#sofia_redux.instruments.hawc.steps.stepstokes.StepStokes.stokes">[docs]</a>
+    def stokes(self, idx1, idx2, rmt_data, rmt_sigma, r_var, t_var):
+        &quot;&quot;&quot;
+        Compute stokes Q and U.
+
+        The index parameters control which Stokes parameter image
+        is computed
+
+        Parameters
+        ----------
+        idx1 : `list` of int
+            Index for angle 1.
+        idx2 : `list` of int
+            Index for angle 2.
+        rmt_data : array-like
+            R - T flux data array. Should have three dimensions,
+            where the first dimension indexes the HWP angle.
+        rmt_sigma : array-like.
+            R - T error data array. Dimensions should match rmt_data.
+        r_var : array-like
+            Variance for the R array. Dimensions should match rmt_data.
+        t_var : array-like
+            Variance for the T array. Dimensions should match rmt_data.
+
+        Returns
+        -------
+        stokes : array-like
+            The Stokes Q or U flux image.
+        dstokes : array-like
+            The error on the Stokes Q or U flux.
+        stokes_icov : array-like
+            The covariance on the Stokes Q or U image, with respect
+            to the Stokes I image.
+        &quot;&quot;&quot;
+
+        # propagation equations:
+        # (for the most common 4 HWP case)
+        # Q = (1/2) (R1 - R3 - T1 + T3)
+        # U = (1/2) (R2 - R4 - T2 + T4)
+        # VQ = (1/4) (VR1 + VR3 + VT1 + VT3)
+        # VU = (1/4) (VR2 + VR4 + VT2 + VT4)
+        # cov(Q, I) = (1/8) (VR1 - VR3 - VT1 + VT3)
+        # cov(U, I) = (1/8) (VR2 - VR4 - VT2 + VT4)
+        # cov(Q, U) = 0
+
+        count = float(2 * len(idx1))
+        stokes = (rmt_data[idx1].sum(axis=0)
+                  - rmt_data[idx2].sum(axis=0)) / count
+        dstokes = np.sqrt(np.sum(rmt_sigma[idx1 + idx2] ** 2, axis=0)) / count
+        stokes_icov = np.sum(r_var[idx1] - r_var[idx2]
+                             - t_var[idx1] + t_var[idx2],
+                             axis=0) / (2 * count**2)
+        return stokes, dstokes, stokes_icov</div>
+
+
+<div class="viewcode-block" id="StepStokes.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepstokes.StepStokes.html#sofia_redux.instruments.hawc.steps.stepstokes.StepStokes.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        Because this step is single-in, single-out (SISO),
+        self.datain must be a DataFits object. The output
+        is also a DataFits object, stored in self.dataout.
+
+        The process is:
+
+        1. Compute Stokes I from R+T at all angles.
+           Propagate or recalculate errors on Stokes I.
+        2. Compute Stokes Q and U from R-T at angles separated
+           by 45 degrees.  Propagate associated errors
+           and covariances.
+        &quot;&quot;&quot;
+        self.dataout = DataFits(config=self.datain.config)
+        self.dataout.filename = self.datain.filename
+        self.dataout.setheader(self.datain.header)
+
+        nhwp = self.datain.getheadval(&#39;nhwp&#39;)
+        hwp_tol = abs(self.getarg(&#39;hwp_tol&#39;))
+        erri_inflate = self.getarg(&#39;erri&#39;).lower()
+        erripolmethod = self.getarg(&#39;erripolmethod&#39;).lower()
+        remove_r1stokesi = self.getarg(&#39;removeR1stokesi&#39;)
+        override_hwp = self.getarg(&#39;override_hwp_order&#39;)
+
+        if erri_inflate not in [&#39;median&#39;, &#39;mean&#39;, &#39;none&#39;]:
+            msg = &#39;errI parameter value must be MEDIAN, MEAN, or NONE&#39;
+            log.error(msg)
+            raise ValueError(msg)
+        if erripolmethod not in [&#39;hwpstddev&#39;, &#39;meansigma&#39;]:
+            msg = &#39;Method to calculate Error I for polarization &#39; \
+                  &#39;data must be HWPSTDDEV or MEANSIGMA&#39;
+            log.error(msg)
+            raise ValueError(msg)
+
+        # Number of HWP angles is 1, or a multiple of 4 and
+        # less than 16.  This assumes
+        # that HWP angles will always be separated by 22.5 deg
+        # if they are taken in multiples of 4.
+        # Initial angle must be 0.
+        if nhwp != 1 and nhwp % 4 != 0:
+            msg = &#39;Number of HWP angles must be multiple &#39; \
+                  &#39;of 4.&#39;
+            log.error(msg)
+            raise ValueError(msg)
+        if nhwp &gt; 16:
+            msg = &#39;Maximum number of HWP angles is 16&#39;
+            log.error(msg)
+            raise ValueError(msg)
+
+        # arrays to contain the data and errors for each HWP angle
+        rpt_data = np.array([self.datain.imageget(&#39;Data R+T HWP%d&#39; % hwp)
+                             for hwp in range(nhwp)])
+        rpt_sigma = np.array([self.datain.imageget(&#39;ERROR R+T HWP%d&#39; % hwp)
+                              for hwp in range(nhwp)])
+
+        if nhwp &gt; 1:
+            rmt_data = np.array([self.datain.imageget(&#39;Data R-T HWP%d&#39; % hwp)
+                                 for hwp in range(nhwp)])
+            rmt_sigma = np.array([self.datain.imageget(&#39;ERROR R-T HWP%d&#39; % hwp)
+                                  for hwp in range(nhwp)])
+            r_var = np.array([self.datain.imageget(&#39;VAR R HWP%d&#39; % hwp)
+                              for hwp in range(nhwp)])
+            t_var = np.array([self.datain.imageget(&#39;VAR T HWP%d&#39; % hwp)
+                              for hwp in range(nhwp)])
+        else:
+            rmt_data = None
+            rmt_sigma = None
+            r_var = None
+            t_var = None
+
+        table = [self.datain.tableget(&#39;TABLE HWP%d&#39; % hwp)
+                 for hwp in range(nhwp)]
+        hwplist = [(table[hwp].field(&#39;HWP Angle&#39;)[0], hwp)
+                   for hwp in range(nhwp)]
+
+        # Always Compute Stokes I
+        stokes_i = rpt_data.sum(axis=0) / float(nhwp)
+        if nhwp == 1:
+            err_i = rpt_sigma[0]
+        else:
+            # if more than 1 HWP, use std. dev. of fluxes (hwpsttedv)
+            # or mean of sigmas (meansigma)
+            if erripolmethod == &#39;hwpstddev&#39;:
+                err_i = rpt_data.std(ddof=1, axis=0)
+            else:
+                err_i = np.sqrt((rpt_sigma ** 2).sum(axis=0)
+                                / float(nhwp ** 2))
+
+        # inflate errors in I
+        if erri_inflate == &#39;median&#39;:
+            med = np.nanmedian(err_i.flatten())
+            mask = np.where(err_i &lt; med)
+            err_i[mask] = med
+        elif erri_inflate == &#39;mean&#39;:
+            mean = np.nanmean(err_i.flatten())
+            mask = np.where(err_i &lt; mean)
+            err_i[mask] = mean
+
+        # Check for angle pairs
+        if nhwp != 1:
+            # method using pairs 1/3 and 2/4 of HWP angles
+
+            hwpinit = hwplist[0][0]
+
+            # Write header keyword for the &#39;actual&#39;
+            # value of the initial HWP angle
+            self.dataout.setheadval(&quot;HWPINIT&quot;, hwpinit,
+                                    &#39;Actual value of the initial HWP angle&#39;)
+
+            # check HWP angles
+            if override_hwp:
+                # assume the currently most common observing method:
+                # Stokes Q are the first two angles,
+                # Stokes U are the next two
+                qidx1 = [hwplist[i][1] for i in range(0, nhwp, 4)]
+                qidx2 = [hwplist[i][1] for i in range(1, nhwp, 4)]
+                uidx1 = [hwplist[i][1] for i in range(2, nhwp, 4)]
+                uidx2 = [hwplist[i][1] for i in range(3, nhwp, 4)]
+            else:
+                # otherwise, sort by value
+                sort_hwp = sorted(hwplist)
+                log.debug(&#39;Sorted HWP list: {}&#39;.format(sort_hwp))
+                qidx1 = [sort_hwp[i][1] for i in range(0, nhwp, 4)]
+                qidx2 = [sort_hwp[i][1] for i in range(2, nhwp, 4)]
+                uidx1 = [sort_hwp[i][1] for i in range(1, nhwp, 4)]
+                uidx2 = [sort_hwp[i][1] for i in range(3, nhwp, 4)]
+            for i in range(nhwp // 2 - 1):
+                log.info(&#39;&#39;)
+                log.info(&#39;Stokes Q:&#39;)
+                log.info(&#39;HWP indices are: %d, %d&#39; %
+                         (qidx1[i], qidx2[i]))
+                log.info(&#39;Values are: %.1f, %.1f&#39; %
+                         (hwplist[qidx1[i]][0], hwplist[qidx2[i]][0]))
+
+                diff = abs(hwplist[qidx1[i]][0] - hwplist[qidx2[i]][0])
+                if abs(diff - 45) &gt; hwp_tol:
+                    log.warning(&#39;Stokes Q: HWP angles differ &#39;
+                                &#39;by %.1f degrees (should be 45)&#39; % diff)
+                if qidx2[i] - qidx1[i] != 1:
+                    # warn for data sets not taken next to each other
+                    log.warning(&#39;Unexpected indices for Stokes Q &#39;
+                                &#39;angles. Check HWP angle timestream.&#39;)
+
+                log.info(&#39;&#39;)
+                log.info(&#39;Stokes U:&#39;)
+                log.info(&#39;HWP indices are: %d, %d&#39; %
+                         (uidx1[i], uidx2[i]))
+                log.info(&#39;Values are: %.1f, %.1f&#39; %
+                         (hwplist[uidx1[i]][0], hwplist[uidx2[i]][0]))
+
+                diff = abs(hwplist[uidx1[i]][0] - hwplist[uidx2[i]][0])
+                if abs(diff - 45) &gt; hwp_tol:
+                    log.warning(&#39;Stokes U: HWP angles differ &#39;
+                                &#39;by %.1f degrees (should be 45)&#39; % diff)
+                if uidx2[i] - uidx1[i] != 1:
+                    # warn for data sets not taken next to each other
+                    log.warning(&#39;Unexpected indices for Stokes U &#39;
+                                &#39;angles. Check HWP angle timestream.&#39;)
+
+            # Compute Stokes Parameters
+            stokes_q, err_q, cov_qi = self.stokes(qidx1, qidx2,
+                                                  rmt_data, rmt_sigma,
+                                                  r_var, t_var)
+
+            stokes_u, err_u, cov_ui = self.stokes(uidx1, uidx2,
+                                                  rmt_data, rmt_sigma,
+                                                  r_var, t_var)
+        else:
+            stokes_q, err_q, cov_qi = None, None, None
+            stokes_u, err_u, cov_ui = None, None, None
+
+        # Assigning pixels to NaNs
+        badmask = self.datain.imageget(&#39;BAD PIXEL MASK&#39;)
+
+        # Option to reject R1 subarray (assign to strictly
+        # bad pixels) or not
+        if remove_r1stokesi:
+            badmask[:, 32:] = 3
+
+        # Stokes I pixels with strictly bad pixels
+        # (mask = 3) are assigned to NaNs
+        badpix_i = np.where(badmask &gt; 2)
+        stokes_i[badpix_i] = np.nan
+        err_i[badpix_i] = np.nan
+
+        if nhwp != 1:
+            # Stokes Q/U pixels with bad and widow
+            # pixels (mask != 0) are assigned to NaNs
+            badpix_qu = np.where(badmask != 0)
+            stokes_q[badpix_qu] = np.nan
+            err_q[badpix_qu] = np.nan
+            cov_qi[badpix_qu] = np.nan
+
+            stokes_u[badpix_qu] = np.nan
+            err_u[badpix_qu] = np.nan
+            cov_ui[badpix_qu] = np.nan
+
+            # Since T1 is not present, for pol-nod the second half
+            # of the array is ALWAYS assigned to NaNs
+            stokes_q[:, 32:] = np.nan
+            err_q[:, 32:] = np.nan
+
+            stokes_u[:, 32:] = np.nan
+            err_u[:, 32:] = np.nan
+
+        # Write out images
+        self.dataout.imageset(stokes_i, &quot;STOKES I&quot;)
+        self.dataout.imageset(err_i, &quot;ERROR I&quot;)
+
+        tbhdu = self.dataout.tablemergetables(table)
+        if nhwp != 1:
+            self.dataout.imageset(stokes_q, &quot;STOKES Q&quot;)
+            self.dataout.imageset(err_q, &quot;ERROR Q&quot;)
+
+            self.dataout.imageset(stokes_u, &quot;STOKES U&quot;)
+            self.dataout.imageset(err_u, &quot;ERROR U&quot;)
+
+            self.dataout.imageset(cov_qi, &quot;COVAR Q I&quot;)
+            self.dataout.imageset(cov_ui, &quot;COVAR U I&quot;)
+            self.dataout.imageset(np.zeros_like(cov_qi), &quot;COVAR Q U&quot;)
+
+        self.dataout.tableset(tbhdu.data, &#39;Table Data&#39;, tbhdu.header)
+
+        self.dataout.copydata(self.datain, &#39;Bad Pixel Mask&#39;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

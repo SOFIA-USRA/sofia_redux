@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.calibration.standard_model.horizons &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.calibration.standard_model.horizons</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Query the Horizons database at JPL for object information&quot;&quot;&quot;
+
+import sys
+
+try:
+    import astroquery.jplhorizons as aj
+except ImportError:  # pragma: no cover
+    print(&#39;\nAstroquery.jplhorizons not found.&#39;)
+    print(&#39;Install with:&#39;)
+    print(&#39;\tconda install -c conda-forge astroquery\n&#39;)
+    sys.exit()
+
+from astropy.time import Time
+
+
+<div class="viewcode-block" id="asteroid_query">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.horizons.asteroid_query.html#sofia_redux.calibration.standard_model.horizons.asteroid_query">[docs]</a>
+def asteroid_query(target, date, time):
+    &quot;&quot;&quot;
+    Queries the JPL Horizons database for asteroid information.
+
+    Asteroids require additional handling beyond what&#39;s needed
+    for planets, so they need a separate function.
+
+    Parameters
+    ----------
+    target : str
+        Name of asteroid
+    date : datetime.Date, str
+        Date of observation (UTC)
+    time : datetime.Time, str
+        Time of observation (UTC)
+
+    Returns
+    -------
+    params : dict
+        Dictionary a of query results. Keys incude:
+            - julian : Julian date of observation
+            - albedo : Geometric albedo
+            - gmag : Magnitude slope parameter
+            - radius : Radius of the asteroid [km]
+            - delta : Distance between asteroid and Earth [AU]
+            - r : Distance between asteroid and Sun [AU]
+            - phi : Phase angle (S-E-O) [deg]
+    &quot;&quot;&quot;
+
+    configure_astroquery()
+
+    obj, timepoint = horizons_object(target, date, time)
+
+    elements = get_elements(obj)
+
+    ephem = get_ephemerides(obj)
+
+    returned_name = verify_object_name(obj)
+    print(f&#39;\nQuery: {date}, {time}, Target = {returned_name}&#39;)
+
+    params = parse_elements(elements, ephem, timepoint)
+
+    return params</div>
+
+
+
+<div class="viewcode-block" id="simple_query">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.horizons.simple_query.html#sofia_redux.calibration.standard_model.horizons.simple_query">[docs]</a>
+def simple_query(target, date, time):
+    &quot;&quot;&quot;
+    Query the JPL Horizons database to get the distance to the target.
+
+    Parameters
+    ----------
+    target : str
+        Name of the object
+    date : str
+        Date of observation (UTC)
+    time : time
+        Time of observation (UTC)
+
+    Returns
+    -------
+    params : dict
+        Dictionary of results. Keys included:
+            - julian : Julian date of obsevation
+            - delta : Distance between Earth and target [AU]
+    &quot;&quot;&quot;
+
+    configure_astroquery()
+
+    t = Time(f&#39;{date}T{time}&#39;, format=&#39;isot&#39;, scale=&#39;utc&#39;)
+
+    # Set up the query
+    # To avoid all confusions, use the id number for each target
+    codes = dict()
+    codes[&#39;uranus&#39;] = &#39;799&#39;
+    codes[&#39;neptune&#39;] = &#39;899&#39;
+    codes[&#39;ganymede&#39;] = &#39;503&#39;
+    codes[&#39;callisto&#39;] = &#39;504&#39;
+    if target.lower() in codes:
+        code = codes[target.lower()]
+    else:
+        print(&#39;Unknown target. Attempting anyways, but verify&#39;)
+        print(&#39;output before using it.&#39;)
+        code = target
+    obj = aj.Horizons(id=code, location=&#39;399&#39;, epochs=t.jd)
+
+    # Get the orbital elements and ephemerides
+    ephem = obj.ephemerides()
+
+    # Parse out the distance from Earth to the target, which is
+    # in a table section whose start is denoted by $$SOE and end
+    # is denoted by $$EOE
+    delta = ephem[&#39;delta&#39;].data[0]
+
+    params = dict()
+    params[&#39;julian&#39;] = t.jd
+    params[&#39;delta&#39;] = delta
+
+    return params</div>
+
+
+
+<div class="viewcode-block" id="configure_astroquery">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.horizons.configure_astroquery.html#sofia_redux.calibration.standard_model.horizons.configure_astroquery">[docs]</a>
+def configure_astroquery():
+    &quot;&quot;&quot;
+    Configure query to JPL Hoizons.
+
+    This sets up what quantities are returned:
+    1 = Astrometric RA &amp; DEC
+    9 = Visual mag &amp; surface brightness
+    19 = Heliocentric range and range rate
+    20 = Observer range and range rate
+    24 = Sun-Target-Observer phase angle
+    43 = Phase angle and bisector
+
+    Returns
+    -------
+    None
+
+    &quot;&quot;&quot;
+    # Set up the query for JPL Horizons
+    aj.Conf.eph_quantities = &#39;&quot;1,9,19,20,23,24,43&quot;&#39;</div>
+
+
+
+<div class="viewcode-block" id="horizons_object">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.horizons.horizons_object.html#sofia_redux.calibration.standard_model.horizons.horizons_object">[docs]</a>
+def horizons_object(target, date, time):
+    &quot;&quot;&quot;
+    Configure an object to query Horizons.
+
+    Parameters
+    ----------
+    target : str
+        Name of the astronomical object.
+    date : str, timedate.date
+        Date of observation.
+    time : str, timdate.time
+        Time of observation.
+
+    Returns
+    -------
+    obj : astroquery.jplhorizons.core.HorizonsClass
+        Horizons object ready for query.
+    t : astropy.time.core.Time
+        Time of observation in ISO format.
+
+    &quot;&quot;&quot;
+    timestring = f&#39;{date}T{time}&#39;
+    t = Time(timestring, format=&#39;isot&#39;, scale=&#39;utc&#39;)
+
+    # Set up the query
+    if &#39;ceres&#39; in target.lower():
+        target = &#39;Ceres&#39;
+    elif &#39;vesta&#39; in target.lower():
+        target = &#39;Vesta&#39;
+    elif &#39;juno&#39; in target.lower():
+        target = &#39;Juno;&#39;
+    obj = aj.Horizons(id=target, location=&#39;399&#39;, epochs=t.jd)
+    return obj, t</div>
+
+
+
+<div class="viewcode-block" id="get_elements">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.horizons.get_elements.html#sofia_redux.calibration.standard_model.horizons.get_elements">[docs]</a>
+def get_elements(obj):
+    &quot;&quot;&quot;
+    Query Horizons for orbital elements.
+
+    Parameters
+    ----------
+    obj : astroquery.jplhorizons.core.HorizonsClass
+        Horizons object ready for query.
+
+    Returns
+    -------
+    elements : str
+        Raw output of query.
+
+    &quot;&quot;&quot;
+    elements = obj.elements(get_raw_response=True)
+    return elements</div>
+
+
+
+<div class="viewcode-block" id="get_ephemerides">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.horizons.get_ephemerides.html#sofia_redux.calibration.standard_model.horizons.get_ephemerides">[docs]</a>
+def get_ephemerides(obj):
+    &quot;&quot;&quot;
+    Query Horizons for ephemerides.
+
+    Parameters
+    ----------
+    obj : astroquery.jplhorizons.core.HorizonsClass
+        Horizons object ready for query.
+
+    Returns
+    -------
+    ephem : astropy.table.table.Table
+        Ephemerides of object at observation.
+
+    &quot;&quot;&quot;
+    ephem = obj.ephemerides()
+    return ephem</div>
+
+
+
+<div class="viewcode-block" id="verify_object_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.horizons.verify_object_name.html#sofia_redux.calibration.standard_model.horizons.verify_object_name">[docs]</a>
+def verify_object_name(obj):
+    &quot;&quot;&quot;
+    Double-check that the Horizons query was for the correct object.
+
+    Parameters
+    ----------
+    obj : astroquery.jplhorizons.core.HorizonsClass
+        Horizons object ready for query.
+
+    Returns
+    -------
+    returned_name : str
+        Name of object pulled from query.
+
+    &quot;&quot;&quot;
+    # Get the target name and print it for user verification
+    aj.Conf.eph_quantities = &#39;&quot;1,9,19,20,23,24&quot;&#39;
+    e = obj.ephemerides()
+    returned_name = e[&#39;targetname&#39;].data[0]
+    return returned_name</div>
+
+
+
+<div class="viewcode-block" id="parse_property">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.horizons.parse_property.html#sofia_redux.calibration.standard_model.horizons.parse_property">[docs]</a>
+def parse_property(elements, prop):
+    &quot;&quot;&quot;
+    Parse orbital elements for physical property.
+
+    Parameters
+    ----------
+    elements : str
+        Raw output of query to Horizons for orbital elements.
+    prop : str
+        Name of the property to search for.
+
+    Returns
+    -------
+    value : float
+        Value of `prop` contained in `elements`.
+
+    &quot;&quot;&quot;
+    lines = [ln for ln in elements.split(&#39;\n&#39;)
+             if f&#39; {prop.lower()}=&#39; in ln.lower()]
+    value = float(lines[0].split(f&#39;{prop.upper()}=&#39;)[1].split()[0])
+    return value</div>
+
+
+
+<div class="viewcode-block" id="parse_elements">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.horizons.parse_elements.html#sofia_redux.calibration.standard_model.horizons.parse_elements">[docs]</a>
+def parse_elements(elements, ephem, timepoint):
+    &quot;&quot;&quot;
+    Parse out key fields from Horzions query results.
+
+    Parameters
+    ----------
+    elements : str
+        Raw output of query to Horizons for orbital elements.
+    ephem : astropy.table.table.Table
+        Output of query to Horizons for ephemerides.
+    timepoint : astropy.time.core.Time
+        Timepoint of observation.
+
+    Returns
+    -------
+    params : dict
+        Key values of interest needed for generating a
+        thermal model of the object.
+
+    &quot;&quot;&quot;
+
+    # Parse out albedo
+    albedo = parse_property(elements, &#39;albedo&#39;)
+    gmag = parse_property(elements, &#39;g&#39;)
+    radius = parse_property(elements, &#39;rad&#39;)
+
+    # r, delta, and phi are in a table section whose start
+    # is denoted by $$SOE and end is denoted by $$EOE
+    r = ephem[&#39;r&#39;].data[0]
+    delta = ephem[&#39;delta&#39;].data[0]
+    phi = ephem[&#39;alpha&#39;].data[0]
+
+    params = dict()
+    params[&#39;julian&#39;] = timepoint.jd
+    params[&#39;albedo&#39;] = albedo
+    params[&#39;gmag&#39;] = gmag
+    params[&#39;radius&#39;] = radius
+    params[&#39;delta&#39;] = delta
+    params[&#39;r&#39;] = r
+    params[&#39;phi&#39;] = phi
+
+    return params</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

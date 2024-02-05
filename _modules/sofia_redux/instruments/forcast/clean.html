@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.clean &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.clean</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+from astropy.io.fits.header import Header
+import numpy as np
+
+from sofia_redux.toolkit.utilities.fits import add_history_wrap
+from sofia_redux.toolkit.image.fill import maskinterp
+
+from sofia_redux.instruments.forcast.getpar import getpar
+from sofia_redux.instruments.forcast.jbclean import jbclean
+
+addhist = add_history_wrap(&#39;Clean&#39;)
+
+__all__ = [&#39;clean&#39;]
+
+
+<div class="viewcode-block" id="clean">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.clean.clean.html#sofia_redux.instruments.forcast.clean.clean">[docs]</a>
+def clean(data, badmap=None, header=None, variance=None,
+          propagate_nan=False, **kwargs):
+    &quot;&quot;&quot;
+    Replaces bad pixels in an image with approximate values
+
+    Interpolates over bad values.  If the clean method used for jailbar
+    pattern removal is FFT, it is applied here.  If it is median, it is
+    applied to the science in `stack` or to the calibrations in `getcal`.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        Input data array (nimage, nrow, ncol)
+    badmap : numpy.ndarray, optional
+        Bad pixel map (nrow, ncol) of bools.
+        False = good pixel, True = bad pixel
+    header : astropy.io.fits.header.Header
+        Input header, will be updated with HISTORY messages
+    variance : numpy.ndarray, optional
+        Variance array (nimage, ncol, nrow) to update in parallel
+        with the data array
+    propagate_nan : bool, optional
+        If set, bad pixels will be set to NaN instead of interpolated
+        over.
+    kwargs
+        Optional parameters to pass into mask interp.  The most relevant
+        default settings are maxap=6, order=3.  See interpolate.maskinterp
+        for further details
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        Cleaned data array (nimage, ncol, nrow)
+        Propagated variance array (nimage, ncol, nrow)
+    &quot;&quot;&quot;
+    if not isinstance(header, Header):
+        header = Header()
+        addhist(header, &#39;Created header&#39;)
+
+    var = variance.copy() if isinstance(variance, np.ndarray) else None
+
+    if not isinstance(data, np.ndarray) or len(data.shape) not in [2, 3]:
+        addhist(header, &#39;Did not clean bad pixels (Invalid data)&#39;)
+        log.error(&quot;data is not a valid array: %s&quot; % type(data))
+        return
+    cleaned = data.copy()
+
+    dovar = isinstance(var, np.ndarray) and var.shape == data.shape
+    var = None if not dovar else var
+    if variance is not None and not dovar:
+        addhist(header, &#39;Not propagating variance (Invalid variance)&#39;)
+        log.warning(&quot;Variance must match data: %s&quot; % type(variance))
+
+    if not isinstance(badmap, np.ndarray) or len(badmap.shape) != 2 or \
+            badmap.shape != data.shape[-2:]:
+        addhist(header, &#39;Did not clean bad pixels (Invalid mask)&#39;)
+        log.warning(&quot;bad pixel map is not a valid array - will not clean&quot;)
+        badmap = None
+    else:
+        badmap = badmap.astype(bool)
+
+    nimage = 1 if len(data.shape) == 2 else data.shape[0]
+    if nimage == 1:
+        cleaned = np.array([cleaned])
+        var = np.array([var])
+    elif not dovar:
+        var = np.array([None] * nimage)
+
+    # Set NaNs for bad pixels
+    if badmap is not None:
+        for frame, v in zip(cleaned, var):
+            frame[badmap] = np.nan
+            if dovar:
+                v[badmap] = np.nan
+
+    # better results if JBCLEAN is called before maskinterp
+    jbmethod = getpar(header, &#39;JBCLEAN&#39;, dtype=str, default=None,
+                      comment=&#39;Jail bar cleaning algorithm&#39;)
+    jbmethod = jbmethod.strip().upper()
+    addhist(header, &#39;Jailbar cleaning method is %s&#39; % jbmethod)
+    if jbmethod == &#39;FFT&#39;:
+        for idx in range(nimage):
+            cleaning = jbclean(cleaned[idx], header=header, variance=var[idx])
+            if cleaning is not None:
+                cleaned[idx], var[idx] = cleaning
+                log.info(&#39;Jailbars cleaned from frame %i&#39; % (idx + 1))
+            else:
+                addhist(header, &#39;failed on frame %i&#39; % (idx + 1))
+                log.error(&#39;Jailbar cleaning failed on frame %i&#39; % (idx + 1))
+
+    if badmap is not None:
+        if not propagate_nan:
+            addhist(header, &#39;Interpolate using maskinterp&#39;)
+        else:
+            addhist(header, &#39;Masking bad values with NaN&#39;)
+        for idx in range(nimage):
+            if not propagate_nan:
+                mask = ~badmap.astype(bool) &amp; ~np.isnan(cleaned[idx])
+                cleaned[idx] = maskinterp(cleaned[idx],
+                                          mask=mask, **kwargs)
+                if dovar:
+                    mask = ~badmap.astype(bool) &amp; ~np.isnan(var[idx])
+                    var[idx] = maskinterp(var[idx],
+                                          mask=mask, **kwargs)
+            else:
+                cleaned[idx][badmap.astype(bool)] = np.nan
+                if dovar:
+                    var[idx][badmap.astype(bool)] = np.nan
+
+    # The original code states that the top line is corrupted by clean.
+    # It seems that the data is already bad - clean is not responsible.
+    # We replace the top line by the second from top line
+    ny = data.shape[1]
+    if not propagate_nan:
+        cleaned[:, ny - 1, :] = cleaned[:, ny - 2, :].copy()
+        if dovar:
+            var[:, ny - 1, :] = var[:, ny - 2, :].copy()
+    else:
+        cleaned[:, ny - 1, :] = np.nan
+        if dovar:
+            var[:, ny - 1, :] = np.nan
+
+    if nimage == 1:
+        cleaned = cleaned[0]
+        var = var[0]
+    elif None in var:
+        var = None
+
+    return cleaned, var</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

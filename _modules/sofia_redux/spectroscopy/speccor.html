@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.speccor &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.speccor</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+from sofia_redux.toolkit.stats import medcomb
+from sofia_redux.toolkit.convolve.kernel import savitzky_golay
+
+__all__ = [&#39;speccor&#39;]
+
+
+<div class="viewcode-block" id="speccor">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.speccor.speccor.html#sofia_redux.spectroscopy.speccor.speccor">[docs]</a>
+def speccor(stack, fwidth=4, err_stack=None, refspec=None, select=None,
+            window=11, info=None):
+    &quot;&quot;&quot;
+    Correct a _stack of spectra for shape differences
+
+    Returns an array of spectra corrected to the reference spectrum
+
+    Parameters
+    ----------
+    stack : array_like of (int or float)
+        (n_spectra, n_wave) array of spectra to be corrected.
+    fwidth : (int or float), optional
+        FFT filter width
+    err_stack : array_like of (int or float)
+        (n_spectra, n_wave) array of errors corresponding to the _stack.
+        If given, the corrected error array is given as a second output.
+    refspec : array_like of (int or float)
+        (n_wave,) reference spectrum that the spectra in the _stack
+        are corrected to.
+    select : array_like of (int or bool)
+        (n_spectra,) array denoting which spectra to use to determine
+        the reference spectrum.  However, all the spectra in the _stack
+        are scaled to the reference spectrum (True = good, False = bad).
+    window : int, optional
+        Positive odd integer defining the width of the Savitzky-Golay used
+        to smooth each spectra before FFT.
+    info : dict, optional
+        If supplied will be updated with mask and corrections
+
+    Returns
+    -------
+    numpy.ndarray or (numpy.ndarray, numpy.ndarray)
+        (n_spectra, n_wave) array of spectra corrected to the reference
+        spectrum.  If `err_stack` is supplied, it will be returned as
+        a second array.
+    &quot;&quot;&quot;
+    stack = np.array(stack)
+    if stack.ndim &lt; 2:
+        log.error(&quot;Invalid _stack input&quot;)
+        return
+    if err_stack is not None:
+        err_stack = np.array(err_stack)
+        if err_stack.shape[:2] != stack.shape[:2]:
+            log.error(&quot;Error _stack does not match input _stack&quot;)
+            return
+        doerr = True
+    else:
+        doerr = False
+    n_spec, n_wave = stack.shape[:2]
+    if select is None:
+        goodspec = np.arange(n_spec)
+    else:
+        goodspec = np.where(select)[0]
+
+    goodpix = np.all(np.isfinite(stack), axis=0)
+    npoints = goodpix.sum()
+
+    if not goodpix.all():
+        badidx = np.arange(n_spec), np.argwhere(~goodpix)
+        stack[badidx] = np.nan
+
+    # Get shape reference spectrum
+    if refspec is not None:
+        rspec = refspec
+    else:
+        rspec, _ = medcomb(stack[goodspec], axis=0)
+
+    # Create filter
+    ffilter = np.empty(npoints)
+    mid, mod2 = np.divmod(npoints, 2)[:2]
+    ffilter[:mid + mod2] = np.arange(mid + mod2)
+    ffilter[mid + mod2:] = np.arange(mid)[::-1]
+    ffilter = 1 / (1 + (ffilter / fwidth) ** 10)
+
+    # Filter the reference spectrum
+    ref_low_freq = np.fft.ifft(np.fft.fft(rspec[goodpix]) * ffilter).real
+
+    update = isinstance(info, dict)
+    if update:
+        info[&#39;corrections&#39;] = np.zeros((n_spec, npoints))
+        info[&#39;correction_mask&#39;] = goodpix
+    x = np.arange(n_wave).astype(float)
+    for i, spectrum in enumerate(stack):
+        # Smooth to remove bad pixels that interfere with the FFT
+        spec_sg = savitzky_golay(
+            x, spectrum, window, robust=5, eps=0.1)
+        low_freq = np.fft.ifft(np.fft.fft(spec_sg[goodpix]) * ffilter).real
+        correction = ref_low_freq / low_freq
+        stack[i, goodpix] *= correction
+        if update:
+            info[&#39;corrections&#39;][i] = correction
+        if doerr:
+            err_stack[i, goodpix] *= correction
+
+    if doerr:
+        return stack, err_stack
+    else:
+        return stack</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.info.detector_array &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.info.detector_array</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units, log
+import numpy as np
+
+from sofia_redux.scan.info.base import InfoBase
+from sofia_redux.scan.utilities.utils import to_header_float
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.grid.grid_2d import Grid2D
+from sofia_redux.scan.utilities.utils import insert_info_in_header
+
+__all__ = [&#39;SofiaDetectorArrayInfo&#39;]
+
+
+<div class="viewcode-block" id="SofiaDetectorArrayInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.detector_array.SofiaDetectorArrayInfo.html#sofia_redux.scan.custom.sofia.info.detector_array.SofiaDetectorArrayInfo">[docs]</a>
+class SofiaDetectorArrayInfo(InfoBase):
+
+    subarrays = 0
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize the SOFIA detector array information.
+
+        Contains information on the generic detector array for SOFIA
+        instruments.  All SOFIA detectors are given a boresight index, a grid
+        (type assigned from FITS header information), and pixel size
+        information.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.detector_name = None
+        self.detector_size_string = None
+        self.pixel_size = np.nan * units.Unit(&#39;arcsec&#39;)
+        self.subarray_size = None
+        self.boresight_index = Coordinate2D()
+        self.grid = None
+
+    @property
+    def log_id(self):
+        &quot;&quot;&quot;
+        Return the string log ID for the info.
+
+        The log ID is used to extract certain information from table data.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;sofscan/array&#39;
+
+<div class="viewcode-block" id="SofiaDetectorArrayInfo.apply_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.detector_array.SofiaDetectorArrayInfo.html#sofia_redux.scan.custom.sofia.info.detector_array.SofiaDetectorArrayInfo.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Update detector array information with FITS header information.
+
+        Updates the detector information by taking the following keywords from
+        the FITS header::
+
+          DETECTOR - The name of the detector (str)
+          DETSIZE - The size of the detector (str)
+          PIXSCAL - The pixel size on the sky (arcsec)
+          SUBARRNO - The number of subarrays (int)
+          SIBS_X - The position of the boresight in the x-direction (pixels)
+          SIBS_Y - The position of the boresight in the y-direction (pixels)
+          CTYPE1/CTYPE2 - If both are present, determines the grid (str)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        options = self.options
+        if options is None:
+            return
+        self.detector_name = options.get_string(&quot;DETECTOR&quot;)
+        self.detector_size_string = options.get_string(&quot;DETSIZE&quot;)
+        self.pixel_size = options.get_float(&quot;PIXSCAL&quot;) * units.Unit(&#39;arcsec&#39;)
+
+        subarrays = options.get_int(&quot;SUBARRNO&quot;, default=0)
+        self.subarray_size = []
+        if subarrays &gt; 0:
+            for i in range(subarrays):
+                key = f&#39;SUBARR{str(i + 1).zfill(2)}&#39;
+                value = options.get_string(key)
+                self.subarray_size.append(value)
+        else:
+            self.subarray_size = []
+
+        self.boresight_index.x = options.get_float(&quot;SIBS_X&quot;)
+        self.boresight_index.y = options.get_float(&quot;SIBS_Y&quot;)
+
+        header = self.configuration.fits.header
+        if &#39;CTYPE1&#39; in header and &#39;CTYPE2&#39; in header:
+            try:
+                self.grid = Grid2D.from_header(header, alt=&#39;&#39;)
+            except Exception as err:
+                log.warning(f&quot;Could not read detector array &quot;
+                            f&quot;grid system: {err}&quot;)
+                self.grid = None
+        else:
+            self.grid = None</div>
+
+
+<div class="viewcode-block" id="SofiaDetectorArrayInfo.edit_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.detector_array.SofiaDetectorArrayInfo.html#sofia_redux.scan.custom.sofia.info.detector_array.SofiaDetectorArrayInfo.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        info = [(&#39;COMMENT&#39;, &quot;&lt;------ SOFIA Array Data ------&gt;&quot;),
+                (&#39;DETECTOR&#39;, self.detector_name, &#39;Detector name.&#39;),
+                (&#39;DETSIZE&#39;, self.detector_size_string, &#39;Detector size.&#39;),
+                (&#39;PIXSCAL&#39;, (to_header_float(self.pixel_size, &#39;arcsec&#39;)),
+                 &#39;(arcsec) pixel size on sky.&#39;)]
+
+        if 0 &lt; self.subarrays == len(self.subarray_size):
+            info.append((&#39;SUBARRNO&#39;, self.subarrays, &#39;Number of subarrays.&#39;))
+            for subarray in range(self.subarrays):
+                value = self.subarray_size[subarray]
+                if value is not None:
+                    key = f&#39;SUBARR{str(subarray).zfill(2)}&#39;
+                    comment = f&#39;Subarray {subarray} location and size.&#39;
+                    info.append((key, value, comment))
+
+        if self.boresight_index is None:
+            sx, sy = np.nan, np.nan
+        else:
+            sx, sy = self.boresight_index.coordinates
+
+        info.append((&#39;SIBS_X&#39;, to_header_float(sx),
+                     &#39;(pixel) boresight pixel x.&#39;))
+        info.append((&#39;SIBS_Y&#39;, to_header_float(sy),
+                     &#39;(pixel) boresight pixel y.&#39;))
+        insert_info_in_header(header, info, delete_special=True)
+
+        if self.grid is not None:
+            self.grid.edit_header(header)</div>
+
+
+<div class="viewcode-block" id="SofiaDetectorArrayInfo.get_table_entry">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.detector_array.SofiaDetectorArrayInfo.html#sofia_redux.scan.custom.sofia.info.detector_array.SofiaDetectorArrayInfo.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Given a name, return the parameter stored in the information object.
+
+        Note that names do not exactly match to attribute names.
+
+        Parameters
+        ----------
+        name : str
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        if name == &#39;sibsx&#39;:
+            return self.boresight_index.x
+        elif name == &#39;sibsy&#39;:
+            return self.boresight_index.y
+        else:
+            return super().get_table_entry(name)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

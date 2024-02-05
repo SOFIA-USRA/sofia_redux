@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.info.info &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.info.info</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import abstractmethod
+from astropy import units, log
+from astropy.coordinates import Angle
+import os
+import numpy as np
+
+from sofia_redux.scan.info.weather_info import WeatherInfo
+from sofia_redux.scan.custom.sofia.info.instrument import SofiaInstrumentInfo
+from sofia_redux.scan.custom.sofia.info.astrometry import SofiaAstrometryInfo
+from sofia_redux.scan.custom.sofia.info.aircraft import SofiaAircraftInfo
+from sofia_redux.scan.custom.sofia.info.chopping import SofiaChoppingInfo
+from sofia_redux.scan.custom.sofia.info.detector_array import (
+    SofiaDetectorArrayInfo)
+from sofia_redux.scan.custom.sofia.info.dithering import SofiaDitheringInfo
+from sofia_redux.scan.custom.sofia.info.environment import SofiaEnvironmentInfo
+from sofia_redux.scan.custom.sofia.info.mapping import SofiaMappingInfo
+from sofia_redux.scan.custom.sofia.info.mission import SofiaMissionInfo
+from sofia_redux.scan.custom.sofia.info.mode import SofiaModeInfo
+from sofia_redux.scan.custom.sofia.info.nodding import SofiaNoddingInfo
+from sofia_redux.scan.custom.sofia.info.observation import SofiaObservationInfo
+from sofia_redux.scan.custom.sofia.info.origination import SofiaOriginationInfo
+from sofia_redux.scan.custom.sofia.info.processing import SofiaProcessingInfo
+from sofia_redux.scan.custom.sofia.info.scanning import SofiaScanningInfo
+from sofia_redux.scan.custom.sofia.info.spectroscopy import (
+    SofiaSpectroscopyInfo)
+from sofia_redux.scan.custom.sofia.info.telescope import SofiaTelescopeInfo
+from sofia_redux.scan.utilities import utils
+from sofia_redux.scan.info.camera.info import CameraInfo
+
+__all__ = [&#39;SofiaInfo&#39;]
+
+
+<div class="viewcode-block" id="SofiaInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo">[docs]</a>
+class SofiaInfo(WeatherInfo, CameraInfo):
+
+    def __init__(self, configuration_path=None):
+        &quot;&quot;&quot;
+        Initialize a SofiaInfo object.
+
+        The SOFIA information contains metadata on various parts of an
+        observation that are specific to SOFIA.
+
+        Parameters
+        ----------
+        configuration_path : str, optional
+            An alternate directory path to the configuration tree to be
+            used during the reduction.  The default is
+            &lt;package&gt;/data/configurations.
+        &quot;&quot;&quot;
+        super().__init__(configuration_path=configuration_path)
+        self.name = &#39;sofia&#39;
+        self.history = []
+        self.configuration_files = set()
+        self.instrument = SofiaInstrumentInfo()
+        self.astrometry = SofiaAstrometryInfo()
+        self.aircraft = SofiaAircraftInfo()
+        self.chopping = SofiaChoppingInfo()
+        self.detector_array = SofiaDetectorArrayInfo()
+        self.dithering = SofiaDitheringInfo()
+        self.environment = SofiaEnvironmentInfo()
+        self.mapping = SofiaMappingInfo()
+        self.mission = SofiaMissionInfo()
+        self.mode = SofiaModeInfo()
+        self.nodding = SofiaNoddingInfo()
+        self.observation = SofiaObservationInfo()
+        self.origin = SofiaOriginationInfo()
+        self.processing = SofiaProcessingInfo()
+        self.scanning = SofiaScanningInfo()
+        self.spectroscopy = SofiaSpectroscopyInfo()
+        self.telescope = SofiaTelescopeInfo()
+
+<div class="viewcode-block" id="SofiaInfo.register_config_file">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.register_config_file">[docs]</a>
+    def register_config_file(self, filename):
+        &quot;&quot;&quot;
+        Register a configuration file in the history and for reference.
+
+        Parameters
+        ----------
+        filename : str
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().register_config_file(filename)
+        if filename is None:
+            return
+        self.configuration_files.add(filename)
+        self.append_history_message(f&#39;AUX: {filename}&#39;)</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.read_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.read_configuration">[docs]</a>
+    def read_configuration(self, configuration_file=&#39;default.cfg&#39;,
+                           validate=True):
+        &quot;&quot;&quot;
+        Read and apply a configuration file.
+
+        Parameters
+        ----------
+        configuration_file : str, optional
+            Path to, or name of, a configuration file.
+        validate : bool, optional
+            If `True` (default), validate information read from the
+            configuration file.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().read_configuration(configuration_file=configuration_file,
+                                   validate=validate)
+        config_files = self.configuration.config_files
+        if config_files is None:  # pragma: no cover
+            # Very hard to hit this code
+            return
+        config_files = list(np.unique(config_files))
+        for config_file in config_files:
+            self.append_history_message(f&#39;AUX: {config_file}&#39;)</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.get_name">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.get_name">[docs]</a>
+    def get_name(self):
+        &quot;&quot;&quot;
+        Return the name of the instrument.
+
+        Returns
+        -------
+        name : str
+        &quot;&quot;&quot;
+        if self.instrument is None or self.instrument.name is None:
+            return super().get_name()
+        return self.instrument.name</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.apply_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Apply a configuration to the information.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().apply_configuration()
+        log.info(f&quot;[{self.observation.source_name}] &quot;
+                 f&quot;of AOR {self.observation.aor_id}&quot;)
+        log.info(f&quot;Observed on {self.astrometry.date} &quot;
+                 f&quot;at {self.astrometry.start_time} &quot;
+                 f&quot;by {self.origin.observer}&quot;)
+
+        if self.astrometry.equatorial is not None:
+            log.info(f&quot;Equatorial: {self.astrometry.equatorial}&quot;)
+
+        if self.telescope.boresight_equatorial is not None:
+            log.info(f&quot;Boresight: {self.telescope.boresight_equatorial}&quot;)
+
+        if self.astrometry.requested_equatorial is not None:
+            log.info(f&quot;Requested: {self.astrometry.requested_equatorial}&quot;)
+
+        kft = (self.aircraft.altitude.midpoint.to(self.aircraft.kft)).value
+        temp = self.environment.ambient_t.to(
+            units.K, equivalencies=units.temperature()).value
+        log.info(f&quot;Altitude: {kft:.2f} kft, Tamb: {temp:.3f} K&quot;)
+
+        if self.telescope.focus_t is not None:
+            log.info(f&quot;Focus: {self.telescope.focus_t}&quot;)
+
+        hwp = self.configuration.get_float(&#39;hwp&#39;, default=np.nan)
+        if not np.isnan(hwp):
+            hwp_header = hwp, &#39;Actual value of the initial HWP angle (degree)&#39;
+            self.configuration.fits.preserved_cards[&#39;HWPINIT&#39;] = hwp_header
+            self.configuration.fits.header[&#39;HWPINIT&#39;] = hwp_header
+            self.configuration.fits.reread()
+            self.configuration.merge_fits_options()
+
+        self.parse_history(self.configuration.fits.header)</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.append_history_message">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.append_history_message">[docs]</a>
+    def append_history_message(self, message):
+        &quot;&quot;&quot;
+        Add a FITS history message for later addition to a FITS header.
+
+        Parameters
+        ----------
+        message : str or list (str)
+            The history message(s) to add.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if message is None:
+            return
+        if self.history is None:
+            self.history = []
+        if isinstance(message, str):
+            if message in self.history:
+                return
+            self.history.append(message)
+        elif isinstance(message, list):
+            for msg in message:
+                self.append_history_message(msg)</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.edit_image_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.edit_image_header">[docs]</a>
+    def edit_image_header(self, header, scans=None):
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+        scans : list (Scan), optional
+            A list of scans to use during editing.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().edit_image_header(header, scans=scans)
+        if scans is None:
+            return
+
+        mjds = [scan.mjd for scan in scans]
+        first_scan = scans[np.argmin(mjds)]
+        last_scan = scans[np.argmax(mjds)]
+
+        aors = [scan.info.observation.aor_id for scan in scans]
+        aors = [aor for aor in aors if aor is not None]
+        mission_ids = [scan.info.mission.mission_id for scan in scans]
+        mission_ids = [mid for mid in mission_ids if mid is not None]
+        freqs = [scan.info.instrument.frequency.decompose().value
+                 for scan in scans]
+
+        # SOFIA date and time keys
+        header[&#39;DATE-OBS&#39;] = first_scan.info.astrometry.time_stamp
+        header.comments[&#39;DATE-OBS&#39;] = &#39;Start of observation&#39;
+
+        utc_range = [first_scan.info.astrometry.utc.start,
+                     last_scan.info.astrometry.utc.end]
+        for i, utc in enumerate(utc_range):
+            if isinstance(utc, units.Quantity) and utc.unit == &#39;hour&#39;:
+                utc_range[i] = utc.value * units.Unit(&#39;hourangle&#39;)
+
+        utc_str = [&#39;00:00:NaN&#39;] * 2
+        if not np.isnan(utc_range[0]):
+            utc_str[0] = Angle(utc_range[0]).to_string(
+                sep=&#39;:&#39;, pad=True, precision=3)
+        if not np.isnan(utc_range[1]):
+            utc_str[1] = Angle(utc_range[1]).to_string(
+                sep=&#39;:&#39;, pad=True, precision=3)
+
+        header[&#39;UTCSTART&#39;] = utc_str[0], &#39;UTC start of first scan&#39;
+        header[&#39;UTCEND&#39;] = utc_str[1], &#39;UTC end of last scan&#39;
+
+        # SOFIA INSTRUMENT keys
+        self.instrument.exposure_time = self.get_total_exposure_time(
+            scans=scans)
+
+        # SOFIA array keys
+        if self.detector_array is not None and len(scans) == 1:
+            self.detector_array.boresight_index = (
+                first_scan.info.detector_array.boresight_index)
+
+        self.edit_header(header)
+
+        # SOFIA observation keys
+        first_scan.info.observation.edit_header(header)
+
+        # SOFIA mission keys
+        first_scan.info.mission.edit_header(header)
+
+        # SOFIA origination keys
+        origin = first_scan.info.origin.copy()
+        if self.configuration.has_option(&#39;organization&#39;):
+            origin.organization = self.configuration.get_string(&#39;organization&#39;)
+        origin.creator = &#39;sofscan&#39;
+        origin.filename = None  # FILENAME fills automatically at writing.
+        origin.edit_header(header)
+
+        # SOFIA environmental keys
+        environment = first_scan.info.environment.copy()
+        environment.merge(last_scan.info.environment)
+        environment.edit_header(header)
+
+        # SOFIA aircraft keys
+        aircraft = first_scan.info.aircraft.copy()
+        aircraft.merge(last_scan.info.aircraft)
+        aircraft.edit_header(header)
+
+        # SOFIA telescope keys
+        telescope = first_scan.info.telescope.copy()
+        telescope.merge(last_scan.info.telescope)
+        telescope.edit_header(header)
+
+        # SOFIA collection keys
+        first_scan.info.mode.edit_header(header)
+        if first_scan.info.mode.is_chopping:
+            first_scan.info.chopping.edit_header(header)
+        if first_scan.info.mode.is_nodding:
+            first_scan.info.nodding.edit_header(header)
+        if first_scan.info.mode.is_dithering:
+            dither = first_scan.info.dithering.copy()
+            if len(scans) &gt; 1:
+                dither.index = utils.UNKNOWN_INT_VALUE
+            dither.edit_header(header)
+
+        if first_scan.info.mode.is_mapping:
+            first_scan.info.mapping.edit_header(header)
+
+        if first_scan.info.mode.is_scanning:
+            scanning = first_scan.info.scanning.copy()
+            scanning.merge(last_scan.info.scanning)
+            scanning.edit_header(header)
+
+        # SOFIA data processing keys
+        processing = self.processing.get_processing(
+            is_calibrated=self.configuration.has_option(&#39;calibrated&#39;),
+            dims=header.get(&#39;NAXIS&#39;, 0),
+            quality_level=self.get_lowest_quality(scans))
+        processing.associated_aors = aors
+        processing.associated_mission_ids = mission_ids
+        processing.associated_frequencies = freqs
+        processing.edit_header(header)
+
+        first_scan.info.configuration.add_preserved_header_keys(header)</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.has_tracking_error">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.has_tracking_error">[docs]</a>
+    @staticmethod
+    def has_tracking_error(scans):
+        &quot;&quot;&quot;
+        Report whether any scan in a set contains a telescope tracking error.
+
+        Parameters
+        ----------
+        scans : list (SofiaScan)
+            A list of scans.
+
+        Returns
+        -------
+        tracking_error : bool
+            `True` if any scan contains a telescope tracking error.  `False`
+            otherwise.
+        &quot;&quot;&quot;
+        if scans is None:
+            return False
+        for scan in scans:
+            if scan.info.telescope.has_tracking_error:
+                return True
+        else:
+            return False</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.edit_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit a scan header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.observation.edit_header(header)
+        self.mission.edit_header(header)
+        self.origin.edit_header(header)
+        self.environment.edit_header(header)
+        self.aircraft.edit_header(header)
+        self.telescope.edit_header(header)
+        self.instrument.edit_header(header)
+        self.mode.edit_header(header)
+        if self.chopping is not None:
+            self.chopping.edit_header(header)
+        if self.nodding is not None:
+            self.nodding.edit_header(header)
+        if self.dithering is not None:
+            self.dithering.edit_header(header)
+        if self.mapping is not None:
+            self.mapping.edit_header(header)
+        if self.scanning is not None:
+            self.scanning.edit_header(header)
+
+        self.processing.edit_header(header)</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.get_total_exposure_time">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.get_total_exposure_time">[docs]</a>
+    @staticmethod
+    def get_total_exposure_time(scans=None):
+        &quot;&quot;&quot;
+        Return the total integration time for a list of scans.
+
+        Parameters
+        ----------
+        scans : list (Scan), optional
+            A list of scans from which to get the total integration time.
+
+        Returns
+        -------
+        time : astropy.units.Quantity
+        &quot;&quot;&quot;
+        time = 0.0 * units.Unit(&#39;second&#39;)
+        if scans is None:
+            return time
+        for scan in scans:
+            time += scan.info.instrument.exposure_time
+        return time</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.get_lowest_quality">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.get_lowest_quality">[docs]</a>
+    @staticmethod
+    def get_lowest_quality(scans):
+        &quot;&quot;&quot;
+        Return the lowest quality processing flag from a list of scans.
+
+        Parameters
+        ----------
+        scans : list (Scan)
+            A list of scans from which to determine the lowest quality
+            processing level.
+
+        Returns
+        -------
+        QualityFlagTypes
+        &quot;&quot;&quot;
+        flag_values = [scan.info.processing.quality_level.value
+                       for scan in scans]
+        min_index = np.argmin(flag_values)
+        return scans[min_index].info.processing.quality_level</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.add_history">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.add_history">[docs]</a>
+    def add_history(self, header, scans=None):
+        &quot;&quot;&quot;
+        Add HISTORY messages to a FITS header.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The header to update with HISTORY messages.
+        scans : list (Scan), optional
+            A list of scans to add HISTORY messages from if necessary.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().add_history(header, scans=scans)
+        self.validate_configuration_registration()
+        self.append_history_message(f&#39;PWD: {os.getcwd()}&#39;)
+        # Add obs-ID for all input scans
+        if scans is not None:
+            if not isinstance(scans, list):
+                scans = [scans]
+            for i, scan in enumerate(scans):
+                self.append_history_message(
+                    f&#39; OBS-ID[{i + 1}]: {scan.get_id()}&#39;)
+
+        if self.history is not None:
+            for message in self.history:
+                header[&#39;HISTORY&#39;] = f&#39; {message}&#39;</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.parse_history">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.parse_history">[docs]</a>
+    def parse_history(self, header):
+        &quot;&quot;&quot;
+        Parse all history messages in the header to the scan info.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.history = []
+        if &#39;HISTORY&#39; in header:
+            history = header[&#39;HISTORY&#39;]
+            if isinstance(history, str):
+                self.history = [history]
+            else:
+                self.history = list(history)
+
+        if len(self.history) &gt; 0:
+            log.debug(f&quot;Processing History: &quot;
+                      f&quot;{len(self.history)} entries found.&quot;)</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.get_ambient_kelvins">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.get_ambient_kelvins">[docs]</a>
+    def get_ambient_kelvins(self):
+        &quot;&quot;&quot;
+        Get the ambient temperature in Kelvins.
+
+        Returns
+        -------
+        kelvins : units.Quantity
+        &quot;&quot;&quot;
+        return self.environment.ambient_t.to(
+            &#39;Kelvin&#39;, equivalencies=units.temperature())</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.get_ambient_pressure">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.get_ambient_pressure">[docs]</a>
+    def get_ambient_pressure(self):
+        &quot;&quot;&quot;
+        Get the ambient pressure.
+
+        Returns
+        -------
+        pressure : units.Quantity
+        &quot;&quot;&quot;
+        return np.nan * units.Unit(&#39;Pascal&#39;)</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.get_ambient_humidity">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.get_ambient_humidity">[docs]</a>
+    def get_ambient_humidity(self):
+        &quot;&quot;&quot;
+        Get the ambient humidity.
+
+        Returns
+        -------
+        humidity : units.Quantity
+        &quot;&quot;&quot;
+        return np.nan * units.Unit(&#39;gram/m3&#39;)</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.get_wind_direction">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.get_wind_direction">[docs]</a>
+    def get_wind_direction(self):
+        &quot;&quot;&quot;
+        Return the wind direction.
+
+        Returns the tail vs. head wind.
+
+        Returns
+        -------
+        direction : units.Quantity
+        &quot;&quot;&quot;
+        if self.aircraft.ground_speed &gt; self.aircraft.air_speed:
+            return -180.0 * units.Unit(&#39;degree&#39;)
+        else:
+            return 0.0 * units.Unit(&#39;degree&#39;)</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.get_wind_speed">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.get_wind_speed">[docs]</a>
+    def get_wind_speed(self):
+        &quot;&quot;&quot;
+        Return the wind speed.
+
+        Returns
+        -------
+        speed : units.Quantity
+        &quot;&quot;&quot;
+        return np.abs(self.aircraft.ground_speed - self.aircraft.air_speed)</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.get_wind_peak">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.get_wind_peak">[docs]</a>
+    def get_wind_peak(self):
+        &quot;&quot;&quot;
+        Return the wind peak.
+
+        Returns
+        -------
+        speed : units.Quantity
+        &quot;&quot;&quot;
+        return np.nan * units.Unit(&#39;m/second&#39;)</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.validate_scans">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.validate_scans">[docs]</a>
+    def validate_scans(self, scans):
+        &quot;&quot;&quot;
+        Validate a list of scans specific to the instrument
+
+        Parameters
+        ----------
+        scans : list (SofiaScan)
+            A list of scans.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if scans is None or len(scans) == 0 or scans[0] is None:
+            super().validate_scans(scans)
+            return
+
+        if len(scans) == 1:
+            first_scan = scans[0]
+            if first_scan.get_observing_time() &lt; 3.3 * units.Unit(&#39;minute&#39;):
+                self.set_pointing(first_scan)
+        super().validate_scans(scans)</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.get_plate_scale">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.get_plate_scale">[docs]</a>
+    @staticmethod
+    def get_plate_scale(angular_size, physical_size):
+        &quot;&quot;&quot;
+        Return plate scaling.
+
+        The plate scaling is in radians/m for the focal plane projected through
+        the telescope.
+
+        Parameters
+        ----------
+        angular_size : list (astropy.units.Quantity or float)
+            x, y angles representing the projected angular size on the sky.  If
+            float values are used, must be supplied in radians.
+        physical_size : list (astropy.units.Quantity or float)
+            x, y physical/geometric size on the focal plane unit.  If float
+            values are used, must be in meters.
+
+        Returns
+        -------
+        plate_scale : astropy.units.Quantity
+        &quot;&quot;&quot;
+        rpm = units.Unit(&#39;radian/meter&#39;)
+        result = angular_size[0] * angular_size[1]
+        result /= physical_size[0] * physical_size[1]
+        result = np.sqrt(result)
+
+        if isinstance(result, units.Quantity):
+            return result.to(rpm)
+        else:
+            return result * rpm</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.get_si_pixel_size">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.get_si_pixel_size">[docs]</a>
+    @abstractmethod
+    def get_si_pixel_size(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Get the science instrument pixel size.
+
+        Returns
+        -------
+        size : Coordinate2D
+            The (x, y) pixel sizes, each of which is a units.Quantity.
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SofiaInfo.get_file_id">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.info.SofiaInfo.html#sofia_redux.scan.custom.sofia.info.info.SofiaInfo.get_file_id">[docs]</a>
+    @abstractmethod
+    def get_file_id(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the file ID.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        pass</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

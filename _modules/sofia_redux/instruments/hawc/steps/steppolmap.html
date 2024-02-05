@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.steppolmap &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.steppolmap</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Polarization map pipeline step.&quot;&quot;&quot;
+
+import os
+
+from astropy import log
+from astropy.wcs import WCS
+from matplotlib.collections import LineCollection
+from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+
+import numpy as np
+
+from sofia_redux.instruments.hawc.stepparent import StepParent
+from sofia_redux.visualization.quicklook import make_image
+
+
+__all__ = [&#39;StepPolMap&#39;]
+
+
+<div class="viewcode-block" id="StepPolMap">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.steppolmap.StepPolMap.html#sofia_redux.instruments.hawc.steps.steppolmap.StepPolMap">[docs]</a>
+class StepPolMap(StepParent):
+    &quot;&quot;&quot;
+    Generate a polarization map image.
+
+    This pipeline step calls
+    `sofia_redux.visualization.quicklook.make_image` to generate a PNG
+    image for quick-look purposes from polarization data in the input.
+    This step must be run after
+    `sofia_redux.instruments.hawc.steps.StepRegion`.  It expects a
+    &#39;FINAL POL DATA&#39; table extension in the input DataFits.
+
+    The output from this step is identical to the input.  As a side
+    effect, a PNG file is saved to disk to the same base name as the input
+    file, with &#39;PMP&#39; replacing the product type indicator.
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepPolMap.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.steppolmap.StepPolMap.html#sofia_redux.instruments.hawc.steps.steppolmap.StepPolMap.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;polmap&#39;, and are named with
+        the step abbreviation &#39;PMP&#39;.
+
+        Parameters defined for this step are:
+
+        maphdu : str
+            Extension name to use as the background image.
+        lowhighscale : list of float
+            Specify a low and high percentile value for the image scale,
+            e.g. [0,99].
+        scalevec : float
+            Scale factor for sizing polarization vectors.
+        scale : bool
+            If set, vector lengths are scaled by their magnitude.
+            If not, all vectors will be the same length.
+        rotate : bool
+            If set, vectors are rotated to display B-field directions.
+        debias : bool
+            If set, the debiased polarizations are used to determine
+            the vectors.
+        colorvec : str
+            Vector color.
+        colorcontour : str
+            Contour color.
+        colormap : str
+            Image colormap.
+        ncontours : int
+            Number of contour levels.
+        fillcontours : bool
+            If set, the contours will be filled, rather than just
+            overlaid on the image.
+        grid : bool
+            If set, a grid will be overlaid on the image.
+        title : str
+            A title string. If set to &#39;info&#39;, a title will be
+            automatically generated.
+        centercrop : bool
+            If set, the image will be cropped, using the values in
+            the &#39;centercropparams&#39; parameter.
+        centercropparams : list of float
+            Cropping area to use if centercrop = True.  Should be
+            a 4-element list of [RA center (deg), Dec center (deg,
+            box width (deg), box height (deg)].
+        watermark : str
+            Text to add to the plot as a watermark.
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;polmap&#39;
+        self.description = &#39;Make Polarization Map&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;pmp&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+
+        # Append parameters
+        self.paramlist.append([&#39;maphdu&#39;, &#39;STOKES I&#39;,
+                               &#39;HDU name to be used in the mapfile&#39;])
+        self.paramlist.append([&#39;lowhighscale&#39;, [0., 99.],
+                               &#39;Low/High percentile values for &#39;
+                               &#39;image scaling.&#39;])
+        self.paramlist.append([&#39;scalevec&#39;, 0.0005,
+                               &#39;Scale factor for vector sizes&#39;])
+        self.paramlist.append([&#39;scale&#39;, True,
+                               &#39;Set to False to make all vectors &#39;
+                               &#39;the same length&#39;])
+        self.paramlist.append([&#39;rotate&#39;, False,
+                               &#39;Use rotated (B-Field) vectors&#39;])
+        self.paramlist.append([&#39;debias&#39;, True,
+                               &#39;Use debiased polarizations&#39;])
+        self.paramlist.append([&#39;colorvec&#39;, &#39;lime&#39;,
+                               &#39;Vector color&#39;])
+        self.paramlist.append([&#39;colorcontour&#39;, &#39;blue&#39;,
+                               &#39;Contour color&#39;])
+        self.paramlist.append([&#39;colormap&#39;, &#39;inferno&#39;,
+                               &#39;Color scheme of the background map&#39;])
+        self.paramlist.append([&#39;ncontours&#39;, 30,
+                               &#39;Number of contour levels&#39;])
+        self.paramlist.append([&#39;fillcontours&#39;, False,
+                               &#39;Fill in contours&#39;])
+        self.paramlist.append([&#39;grid&#39;, False,
+                               &#39;Show grid&#39;])
+        self.paramlist.append([&#39;title&#39;, &#39;info&#39;,
+                               &#39;Title for the map.&#39;
+                               &#39;Input text or &quot;info&quot;&#39;])
+        self.paramlist.append([&#39;centercrop&#39;, False,
+                               &#39;Define a center and cropping &#39;
+                               &#39;parameters (True) or use entire &#39;
+                               &#39;image size (False)?&#39;])
+        self.paramlist.append([&#39;centercropparams&#39;,
+                               [266.41721, -29.006936, 0.05, 0.08],
+                               &#39;If centercrop = True, this is a list of: &#39;
+                               &#39;RA center (deg), DEC center (deg), &#39;
+                               &#39;Area width (deg), Area height (deg)&#39;])
+        self.paramlist.append([&#39;watermark&#39;, &#39;&#39;,
+                               &#39;Text to add to the plot as a watermark&#39;])</div>
+
+
+<div class="viewcode-block" id="StepPolMap.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.steppolmap.StepPolMap.html#sofia_redux.instruments.hawc.steps.steppolmap.StepPolMap.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        Because this step is single-in, single-out (SISO),
+        self.datain must be a DataFits object.  The output
+        is also a DataFits object, stored in self.dataout.
+
+        The process is:
+
+        1. Read image data and polarization table data.
+        2. Generate a plot with vectors overlaid on a flux image.
+        &quot;&quot;&quot;
+
+        self.auxout = []
+        self.dataout = self.datain.copy()
+        nhwp = self.dataout.getheadval(&#39;nhwp&#39;)
+
+        if nhwp == 1:
+            log.info(&#39;No polarization data, so skipping step %s&#39; %
+                     self.name)
+            return
+
+        maphdu = self.getarg(&#39;maphdu&#39;)
+        scalevec = self.getarg(&#39;scalevec&#39;)
+        rotflag = self.getarg(&#39;rotate&#39;)
+        scaleflag = self.getarg(&#39;scale&#39;)
+        debiasflag = self.getarg(&#39;debias&#39;)
+        colorvec = self.getarg(&#39;colorvec&#39;)
+        colorcon = self.getarg(&#39;colorcontour&#39;)
+        colormap = self.getarg(&#39;colormap&#39;)
+        ncontours = self.getarg(&#39;ncontours&#39;)
+        fillcontours = self.getarg(&#39;fillcontours&#39;)
+        grid = self.getarg(&#39;grid&#39;)
+        title = self.getarg(&#39;title&#39;)
+        centercrop = self.getarg(&#39;centercrop&#39;)
+        centercropparams = self.getarg(&#39;centercropparams&#39;)
+        scale = self.getarg(&#39;lowhighscale&#39;)
+        watermark = self.getarg(&#39;watermark&#39;)
+
+        # Check if any pol. vect. was found after data cuts
+        poldataexist = True
+        poldata = None
+        header = self.datain.header
+        if &#39;FINAL POL DATA&#39; in self.dataout.tabnames:
+            poldata = self.dataout.tableget(&#39;FINAL POL DATA&#39;)
+            nvec = header.get(&quot;NVECCUT&quot;, 0)
+        else:
+            poldataexist = False
+            nvec = 0
+
+        # Set text for title and subtitle
+        # Read data cuts from stepregion
+        mini = header.get(&quot;CUTMINI&quot;, 0)
+        minp = header.get(&quot;CUTMINP&quot;, 0)
+        sigma = header.get(&quot;CUTPSIGP&quot;, 0)
+        minisigi = header.get(&quot;CUTISIGI&quot;, 0)
+        maxp = header.get(&quot;CUTMAXP&quot;, 0)
+
+        obj = header.get(&#39;OBJECT&#39;, &#39;UNKNOWN&#39;)
+        band = header.get(&#39;SPECTEL1&#39;, &#39;UNKNOWN&#39;)
+
+        # Title
+        if title == &#39;info&#39;:
+            if rotflag:
+                eorb = &quot;B&quot;
+                log.debug(&#39;Plotting B vectors&#39;)
+            else:
+                eorb = &quot;E&quot;
+                log.debug(&#39;Plotting E vectors&#39;)
+            title = &quot;Object: %s, Band: %s, Polarization %s vectors &quot; % \
+                    (obj, band[-1], eorb)
+
+        # Subtitle
+        fname = os.path.basename(self.datain.filenamebegin) + \
+            self.procname.upper() + self.datain.filenameend
+        subtitle1 = &quot;Filename: %s&quot; % fname
+        if nvec &gt; 0.5:
+            subtitle2 = r&quot;Pol. data selection: $p/\sigma p &gt;$ %s ; &quot; \
+                        r&quot;%s $&lt; p (%s) &lt;$ %s ; $I/peak(I) &gt;$ %s ; &quot; \
+                        r&quot;$I/\sigma I &gt;$ %s ; &quot; \
+                        r&quot;N. vectors = %s&quot; % \
+                        (str(sigma), str(minp), str(r&quot;\%&quot;), str(maxp),
+                         str(mini), str(minisigi), str(nvec))
+        else:
+            subtitle2 = r&quot;Pol. data selection: $p/\sigma p &gt;$ %s ; &quot; \
+                        r&quot;%s $&lt; p (%s) &lt;$ %s ; $I/peak(I) &gt;$ %s ; &quot; \
+                        r&quot;$I/\sigma I &gt;$ %s ; &quot; \
+                        r&quot;No vectors found after cuts&quot; % \
+                        (str(sigma), str(minp), str(r&quot;\%&quot;),
+                         str(maxp), str(mini), str(minisigi))
+
+        # Set parameters for Pol vectors
+        if poldataexist:
+            ra = poldata[&#39;Right Ascension&#39;]
+            dec = poldata[&#39;Declination&#39;]
+            if debiasflag:
+                pol = poldata[&#39;debiased percent pol&#39;]
+            else:
+                pol = poldata[&#39;percent pol&#39;]
+            if rotflag:
+                theta = poldata[&#39;rotated theta&#39;]
+            else:
+                theta = poldata[&#39;theta&#39;]
+            if scaleflag is False:
+                polplot = scalevec * np.ones(theta.shape[0]) * 5.0
+            else:
+                polplot = scalevec * pol
+        else:
+            ra = None
+            dec = None
+            pol = None
+            theta = None
+            polplot = None
+
+        # get cropping parameters
+        if centercrop:
+            crop_region = centercropparams
+        else:
+            crop_region = None
+
+        # make image
+        hdul = self.datain.to_hdulist(save_tables=False)
+        fig = make_image(hdul, extension=maphdu, colormap=colormap,
+                         scale=scale, n_contour=ncontours,
+                         contour_color=colorcon,
+                         fill_contours=fillcontours, title=title,
+                         subtitle=subtitle1, subsubtitle=subtitle2,
+                         crop_region=crop_region,
+                         grid=grid, beam=True, watermark=watermark)
+
+        # get axes to add vectors to plot
+        ax = fig.get_axes()[0]
+
+        # pixel scale from header WCS
+        hwcs = WCS(hdul[maphdu])
+        try:
+            pixscale = np.max(np.abs(hwcs.celestial.pixel_scale_matrix))
+        except ValueError:  # pragma: no cover
+            log.warning(&#39;Could not read pixel scale from header&#39;)
+            pixscale = 1.0
+
+        # from aplpy.overlays.Scalebar.show
+        length = scalevec * 5.0 / pixscale
+        scalebar = AnchoredSizeBar(ax.transData, length,
+                                   &quot;p = 5%&quot;, 1,
+                                   pad=0.5, borderpad=0.4, sep=5,
+                                   color=colorvec, frameon=False)
+        ax.add_artist(scalebar)
+
+        # Plot vectors
+        if poldataexist:
+            line_list = []
+            for i in range(0, len(ra)):
+                if pol[i] &gt;= 0.0:
+                    ra1 = ra[i] - 0.5 * polplot[i] \
+                        * (np.sin(theta[i] * np.pi / 180.)
+                           / np.cos(dec[i] * np.pi / 180.))
+                    dec1 = dec[i] - 0.5 * polplot[i] \
+                        * np.cos(theta[i] * np.pi / 180.)
+                    ra2 = ra[i] + 0.5 * polplot[i] \
+                        * (np.sin(theta[i] * np.pi / 180.)
+                           / np.cos(dec[i] * np.pi / 180.))
+                    dec2 = dec[i] + 0.5 * polplot[i] \
+                        * np.cos(theta[i] * np.pi / 180.)
+                    line_list.append(
+                        np.column_stack([[ra1, ra2], [dec1, dec2]]))
+
+            line_col = LineCollection(line_list, color=colorvec,
+                                      linewidth=1, alpha=0.5,
+                                      transform=ax.get_transform(&#39;world&#39;))
+            ax.add_collection(line_col)
+
+        else:
+            log.debug(&#39;No vectors found.&#39;)
+
+        # save the figure
+        basename = self.datain.filenamebegin + \
+            self.procname.upper() + self.datain.filenameend
+        fname = os.path.splitext(basename)[0] + &#39;_polmap.png&#39;
+        with np.errstate(invalid=&#39;ignore&#39;):
+            fig.savefig(fname, dpi=300)
+
+        log.info(f&#39;Saved image to {fname}&#39;)
+        self.auxout.append(fname)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

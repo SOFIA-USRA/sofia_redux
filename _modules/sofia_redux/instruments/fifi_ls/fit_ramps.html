@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.fifi_ls.fit_ramps &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.fifi_ls.fit_ramps</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from datetime import datetime
+import os
+import warnings
+
+from astropy import log
+from astropy.io import fits
+from astropy.stats import sigma_clipped_stats
+from astropy.table import Table
+from astropy.time import Time
+import bottleneck as bn
+import numba as nb
+import numpy as np
+
+from sofia_redux.instruments.fifi_ls.get_badpix \
+    import get_badpix, clear_badpix_cache
+from sofia_redux.toolkit.stats import meancomb
+from sofia_redux.toolkit.utilities \
+    import (hdinsert, gethdul, write_hdul, multitask)
+
+__all__ = [&#39;get_readout_range&#39;, &#39;resize_data&#39;, &#39;fit_data&#39;,
+           &#39;process_extension&#39;, &#39;fit_ramps&#39;, &#39;wrap_fit_ramps&#39;]
+
+DEBUG = False
+
+
+<div class="viewcode-block" id="get_readout_range">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.fit_ramps.get_readout_range.html#sofia_redux.instruments.fifi_ls.fit_ramps.get_readout_range">[docs]</a>
+def get_readout_range(header):
+    &quot;&quot;&quot;
+    Returns the readout range as extracted from header.
+
+    If the observations occurred between January 2014 and March 2015,
+    we ignore the first 3 readouts, otherwise ignore the first 2.
+    The last readout is also ignored.
+
+    Parameters
+    ----------
+    header : fits.Header
+
+    Returns
+    -------
+    2-tuple:
+        int : first readout
+        int : ramplength
+    &quot;&quot;&quot;
+    channel = header.get(&#39;CHANNEL&#39;, &#39;UNKNOWN&#39;).strip().upper()
+    ramplength = header.get(
+        &#39;RAMPLN_%s&#39; % (&#39;R&#39; if channel == &#39;RED&#39; else &#39;B&#39;))
+    dateobs = header.get(&#39;DATE-OBS&#39;,
+                         Time(datetime.utcnow(), format=&#39;datetime&#39;).isot)
+    dateobs = Time(dateobs, format=&#39;isot&#39;)
+    drange = [Time(&#39;2014-01-01T00:00:00&#39;, format=&#39;isot&#39;),
+              Time(&#39;2015-03-01T00:00:00&#39;, format=&#39;isot&#39;)]
+    read_start = 3 if (drange[0] &lt; dateobs &lt; drange[1]) else 2
+    return read_start, ramplength</div>
+
+
+
+<div class="viewcode-block" id="resize_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.fit_ramps.resize_data.html#sofia_redux.instruments.fifi_ls.fit_ramps.resize_data">[docs]</a>
+def resize_data(data, readout_range, indpos, remove_first_ramps=True,
+                subtract_bias=True, indpos_sigma=3.0):
+    &quot;&quot;&quot;
+    Trim and reshape data to separate ramps.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        (1 [optional], nramps, nwave (18), nspaxel (26))
+    readout_range : array_like of int
+        (start readout, ramp length)
+    indpos : int
+        Expected inductosyn position for the grating
+    remove_first_ramps : bool, optional
+        Remove the first two ramps.
+    subtract_bias : bool, optional
+        Subtract the empty pixel value.
+    indpos_sigma : float, optional
+        If &gt;0, will be used to flag ramps with mean grating
+        position that deviates from the indpos value by this
+        many sigma, or has a standard deviation greater
+        than this value.  Flags are returned in the bad_ramps
+        array.
+
+    Returns
+    -------
+    data, bad_ramps : numpy.ndarray, numpy.ndarray
+        Resized data is a floating point array with dimensions
+        (ramps/spaxel, ramplength, nwave (16), nspaxel (25)).
+        The secondary array is a Boolean array with dimensions
+        (ramps/spaxel), containing bad ramp flags (True = bad)
+        for later propagation in ramp fits.
+    &quot;&quot;&quot;
+    if not isinstance(data, np.ndarray):
+        log.error(&quot;Invalid data&quot;)
+        return
+    elif (data.ndim != 3
+          or data.shape[-1] &lt; 25
+          or data.shape[-2] != 18):
+        log.error(&quot;Invalid data shape&quot;)
+        return
+    elif not hasattr(readout_range, &#39;__len__&#39;) or len(readout_range) != 2:
+        log.error(&quot;Invalid readout_range&quot;)
+        return
+
+    grating_values = None
+    if indpos_sigma &gt; 0:
+        # use the values in the last spaxel to check for
+        # bad grating position
+        mask = 0b0000000000011111
+        grating_values = (data[:, 2::4, 25] &amp; 0xffff) + 2 ** 16 \
+            * ((data[:, 3::4, 25] &amp; 0xffff) &amp; mask)
+
+        # average the 4 samples
+        grating_values = np.mean(grating_values, axis=1)
+
+        # check for appropriate values
+        gmean, gmed, gstd = sigma_clipped_stats(grating_values)
+        log.debug(f&#39;Expected INDPOS: {indpos}; reported: {gmean} +/- {gstd}&#39;)
+        if np.allclose(gstd, 0) or np.allclose(gmean, 0) or \
+                np.abs(gmean - indpos) &gt; 5 * gstd:
+            # mean is well off from expected value -- this likely
+            # means the data is older, and does not contain grating
+            # value measurements
+            log.debug(&#39;Grating measurements do not match expected &#39;
+                      &#39;value. Turning off grating instability data &#39;
+                      &#39;rejection.&#39;)
+            grating_values = None
+
+    if subtract_bias:
+        # subtract the first spexel (empty pixel) value,
+        # accounting for invalid int16 values
+        fdata = np.float32(data)
+        empty_pix = fdata[:, 0, :] + 2**15
+        all_pix = fdata + 5000.0
+        all_pix -= np.tile(np.expand_dims(empty_pix, 1), (1, 18, 1))
+        all_pix[all_pix &lt; -32768] = -32768
+        all_pix[all_pix &gt; 32767] = 32767
+        data = np.int16(all_pix)
+
+    # remove the last spaxel and the first and last spexel
+    data = data[:, 1:17, :25]
+    readout_start, ramplength = readout_range
+    nreadouts = data.size
+    nramps = nreadouts // ramplength
+    ramps_per_spaxel = nramps // (25 * 16)
+    if nreadouts != (25 * 16 * ramplength * ramps_per_spaxel):
+        log.error(f&quot;Number of readouts in data shape {data.shape} &quot;
+                  &quot;does not match header&quot;)
+        return
+
+    # Reshape the data into separate ramp dimensions
+    # (nramps, 16, 25) -&gt; (ramps/spaxel, ramplength, 16, 25)
+    # i.e. (n_ramp, n_readout, n_wave, n_spaxel)
+    newshape = ramps_per_spaxel, ramplength, 16, 25
+    data = data.reshape(newshape)
+    log.debug(f&#39;# ramps, # readouts/ramp: {ramps_per_spaxel}, {ramplength}&#39;)
+    if grating_values is not None:
+        grating_values = grating_values.reshape(ramps_per_spaxel, ramplength)
+
+    # remove the first ramps from each spaxel if required
+    if remove_first_ramps and ramps_per_spaxel &gt; 2:
+        log.debug(&#39;Removing first 2 ramps&#39;)
+        data = data[2:]
+        if grating_values is not None:
+            grating_values = grating_values[2:]
+
+    # remove the first 2 or 3, and last readout if possible
+    if ramplength &gt; (readout_start + 1):
+        data = data[:, readout_start:-1, :, :]
+
+    # convert data to float
+    data = np.asarray(data, dtype=float)
+
+    # make a bad sample mask from the grating values
+    bad_ramps = np.full(data.shape[0], False)
+    if grating_values is not None:
+        # average value over ramp
+        ramp_value = np.mean(grating_values, axis=1)
+        ramp_std = np.std(grating_values, axis=1)
+        # use full clipped standard deviation for flagging
+        gmean, gmed, gstd = sigma_clipped_stats(grating_values)
+
+        bad_mean = np.abs(ramp_value - indpos) &gt; indpos_sigma * gstd
+        bad_std = np.abs(ramp_std / gstd) &gt; indpos_sigma
+        bad_ramps = bad_mean | bad_std
+        log.debug(f&#39;Found {np.sum(bad_ramps)} bad ramps &#39;
+                  f&#39;(out of {np.size(bad_ramps)}).&#39;)
+
+        bad_ramp_idx = np.unique(np.where(bad_ramps)[0])
+        if len(bad_ramp_idx) &gt; 0:
+            log.debug(f&#39;Bad ramp index: {bad_ramp_idx}&#39;)
+        if DEBUG:  # pragma: no cover
+            log.info(f&#39;Bad ramp index: {bad_ramp_idx}&#39;)
+            from matplotlib import pyplot as plt
+            plt.plot(grating_values)
+            plt.plot(ramp_value, color=&#39;black&#39;, linestyle=&quot;-&quot;,
+                     label=&#39;ramp-averaged value&#39;)
+            plt.axhline(indpos, color=&#39;lightgray&#39;, linestyle=&quot;--&quot;,
+                        alpha=0.5, label=&#39;expected value&#39;)
+            plt.axhline(indpos - gstd, color=&#39;darkgray&#39;, linestyle=&quot;-.&quot;,
+                        alpha=0.5)
+            plt.axhline(indpos + gstd, color=&#39;darkgray&#39;, linestyle=&quot;-.&quot;,
+                        alpha=0.5, label=&#39;standard deviation&#39;)
+            plt.axhline(indpos - indpos_sigma * gstd, color=&#39;gray&#39;,
+                        linestyle=&quot;:&quot;, alpha=0.5)
+            plt.axhline(indpos + indpos_sigma * gstd, color=&#39;gray&#39;,
+                        linestyle=&quot;:&quot;, alpha=0.5,
+                        label=f&#39;{indpos_sigma} sigma limit&#39;)
+            for idx in bad_ramp_idx:
+                plt.axvline(idx, alpha=0.2, color=&#39;black&#39;)
+            plt.title(f&#39;Rejected ramps: {bad_ramp_idx}&#39;)
+            plt.xlabel(&#39;Ramp number&#39;)
+            plt.ylabel(&#39;Inductosyn value&#39;)
+            plt.legend()
+            plt.tight_layout()
+            plt.show()
+
+    return data, bad_ramps</div>
+
+
+
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def calculate_fit(data, maxidx):   # pragma: no cover
+
+    ramps_per_spaxel, nramp, nwave, nspaxel = data.shape
+    mat = np.empty((nramp, 2), dtype=nb.int64)
+    ata = np.empty((nramp, 2, 2), dtype=nb.float64)
+    vfac = np.empty(nramp, dtype=nb.float64)
+    sum1 = 0
+    sum2 = 0
+
+    for i in range(nramp):
+        sum1 += i
+        sum2 += i * i
+        mat[i, 0] = 1
+        mat[i, 1] = i
+        ata[i, 0, 0] = i + 1
+        ata[i, 0, 1] = sum1
+        ata[i, 1, 0] = sum1
+        ata[i, 1, 1] = sum2
+        if i &gt; 0:
+            vfac[i] = 1.0 / np.sum((mat[:i + 1, 1] - (i / 2)) ** 2)
+        else:
+            vfac[i] = 0.0
+
+    slopes = np.empty((ramps_per_spaxel, nwave, nspaxel), dtype=nb.float64)
+    var = np.empty((ramps_per_spaxel, nwave, nspaxel), dtype=nb.float64)
+    for i in nb.prange(ramps_per_spaxel):
+        for j in range(nwave):
+            for k in range(nspaxel):
+                idx = maxidx[i, j, k]
+                if idx == 0 or idx == (nramp - 1):
+                    idx = nramp
+                elif idx &lt;= 2:
+                    slopes[i, j, k] = np.nan
+                    var[i, j, k] = np.nan
+                    continue
+
+                line = data[i, :idx, j, k]
+                a = ata[idx - 1]
+                b = np.empty(2, dtype=nb.float64)
+                b[0] = 0.0
+                b[1] = 0.0
+                for ln in range(idx):
+                    b[0] += line[ln]
+                    b[1] += line[ln] * ln
+
+                c = np.linalg.solve(a, b)
+                slopes[i, j, k] = c[1]
+                sdevd = 0.0
+                for ln in range(idx):
+                    diff = c[0] + (c[1] * ln) - line[ln]
+                    sdevd += diff * diff
+                var[i, j, k] = vfac[idx - 1] * sdevd / (idx - 2)
+
+    return slopes, var
+
+
+<div class="viewcode-block" id="fit_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.fit_ramps.fit_data.html#sofia_redux.instruments.fifi_ls.fit_ramps.fit_data">[docs]</a>
+def fit_data(data, s2n=10, threshold=5, allow_zero_variance=True,
+             average_ramps=True, bad_ramps=None):
+    &quot;&quot;&quot;
+    Applies linear fit (y = ax + b) over the second dimension of a 4D array.
+
+    Highly optimized for this particular problem.  The flux is
+    determined by the slope of the second dimension (ramps).
+    After collapsing the ramp dimension, multiple ramps are averaged for
+    each spaxel and spexel.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        (ramps/spaxel, ramplength, nwave, nspaxel)
+    s2n : float, optional
+        Signal-to-noise below which data will be considered questionable
+        and will be ignored.  Set &lt;= 0 to turn off signal-to-noise filtering.
+    threshold : float, optional
+        Robust rejection threshold (in sigma) for combining slopes of
+        individual ramps.
+    allow_zero_variance : bool, optional
+        If True, does not set data points with zero variance to NaN.  This
+        option is here to replicate the behaviour of the previous IDL
+        version.
+    average_ramps : bool, optional
+        If True, all ramps in the extension are averaged together.  This
+        is desirable for all modes except OTF scans.
+    bad_ramps : numpy.ndarray, optional
+        If provided, should be an array of bool, matching the number
+        of ramps/spaxel (data.shape[0]) where True indicates a bad ramp
+        (e.g. due to grating position instability).
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        flux and standard deviation arrays of size (spexel, spaxel)
+        or (16, 25) for FIFI-LS.
+    &quot;&quot;&quot;
+
+    maxidx = bn.nanargmax(data, axis=1)
+    if bad_ramps is not None:
+        maxidx[bad_ramps] = -1
+    slopes, var = calculate_fit(data, maxidx)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+        if isinstance(s2n, (float, int)) and s2n &gt; 0:
+            setnan = np.full(slopes.shape, False)
+            nzi = var &gt; 0
+            setnan[nzi] = (slopes[nzi] / np.sqrt(var[nzi])) &lt; s2n
+            if allow_zero_variance:
+                setnan[var == 0] = False
+            slopes[setnan] = np.nan
+
+    info = {}
+    flux, mvar = meancomb(slopes, robust=threshold, variance=var,
+                          axis=0, returned=True, info=info)
+
+    if average_ramps:
+        return flux, np.sqrt(mvar)
+    else:
+        # still flag outliers
+        slopes[~info[&#39;mask&#39;]] = np.nan
+        var[~info[&#39;mask&#39;]] = np.nan
+        return slopes, np.sqrt(var)</div>
+
+
+
+<div class="viewcode-block" id="process_extension">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.fit_ramps.process_extension.html#sofia_redux.instruments.fifi_ls.fit_ramps.process_extension">[docs]</a>
+def process_extension(hdu, readout_range, threshold=5,
+                      s2n=10, remove_first=None,
+                      subtract_bias=True, badmask=None,
+                      average_ramps=True, posdata=None,
+                      indpos_sigma=3.0):
+    &quot;&quot;&quot;
+    Wrapper to process a single HDU extension.
+
+    Parameters
+    ----------
+    hdu : ImageHDU
+        input HDU extension
+    readout_range : array_like of int
+        (start readout, ramplength)
+    threshold : float, optional
+        Robust rejection threshold (in sigma) for combining slopes of
+        individual ramps.
+    s2n : float, optional
+        Signal-to-noise below which data will be considered questionable
+        and will be ignored.  Set &lt;= 0 to turn off signal-to-noise filtering.
+    remove_first : bool, optional
+        if True, remove the first two ramps prior to fitting
+    subtract_bias : bool, optional
+        If True, subtract the value of the empty zeroth pixel for each
+        spaxel prior to fitting.
+    badmask : numpy.ndarray, optional
+        (npoints, (spexel, spaxel)) array specifying indices of bad pixels
+    average_ramps : bool, optional
+        If set, data is averaged over ramps (default).  If not, all ramps
+        are returned, as appropriate for OTF mode data, for which each ramp
+        is at a different sky position.
+    posdata : fits.Table, optional
+        OTF scan position data table. If provided and `average_ramps` is
+        set to False, then the input DLAM_MAP and DBET_MAP for each
+        readout are averaged over each ramp; the FLAG key is and-ed over
+        the ramp. The UNIXTIME for the first and last retained ramps
+        are averaged and added to the header as RAMPSTRT and RAMPEND
+        keywords, respectively.
+    indpos_sigma : float, optional
+        If &gt;0, will be used to discard samples with grating
+        position that deviates from the expected INDPOS value by this
+        many sigma.
+
+    Returns
+    -------
+    flux, stddev : ImageHDU, ImageHDU
+        Optionally, a third element may be returned: a BinTableHDU containing
+        OTF position data, propagated from the `posdata` argument.
+    &quot;&quot;&quot;
+    if hdu.data is None:
+        log.error(&quot;No data in HDU&quot;)
+        return
+    data = hdu.data.copy()
+    image_hdr = hdu.header.copy()
+    indpos = image_hdr[&#39;INDPOS&#39;]
+    result = resize_data(data, readout_range, indpos,
+                         remove_first_ramps=remove_first,
+                         subtract_bias=subtract_bias,
+                         indpos_sigma=indpos_sigma)
+    if result is None:
+        return
+
+    flux, bad_ramps = result
+    nramp = flux.shape[0]
+    nread = readout_range[1]
+
+    # fit slopes to ramps, average if desired
+    flux, stddev = fit_data(flux, s2n=s2n, threshold=threshold,
+                            average_ramps=average_ramps,
+                            bad_ramps=bad_ramps)
+
+    # apply bad mask to spaxels/spexels
+    if isinstance(badmask, np.ndarray):
+        if average_ramps:
+            flux[badmask[:, 0], badmask[:, 1]] = np.nan
+            stddev[badmask[:, 0], badmask[:, 1]] = np.nan
+        else:
+            flux[:, badmask[:, 0], badmask[:, 1]] = np.nan
+            stddev[:, badmask[:, 0], badmask[:, 1]] = np.nan
+
+    # average position data for each ramp if available
+    # (but don&#39;t average over ramps)
+    if posdata is not None:
+        if average_ramps:
+            log.warning(&#39;Incompatible arguments: posdata cannot &#39;
+                        &#39;be propagated with average_ramps=True.&#39;)
+            log.warning(&#39;Dropping scan position data from further &#39;
+                        &#39;reduction.&#39;)
+            posdata = None
+        else:
+            # reshape: nreadout -&gt; n_ramp, n_readout
+            if len(posdata) != (nramp * nread):
+                log.error(&quot;Number of readouts does not match header&quot;)
+                return
+            newshape = (nramp, nread)
+
+            # logical-and of flags over each ramp
+            reshaped = posdata[&#39;FLAG&#39;].reshape(newshape)
+            flag = np.all(reshaped, axis=1)
+
+            # get first and last averaged ramp times
+            reshaped = posdata[&#39;UNIXTIME&#39;].reshape(newshape)
+            ftime = np.mean(reshaped, axis=1)[flag]
+            hdinsert(image_hdr, &#39;RAMPSTRT&#39;, ftime[0],
+                     &#39;UNIX time of first ramp [s]&#39;)
+            hdinsert(image_hdr, &#39;RAMPEND&#39;, ftime[-1],
+                     &#39;UNIX time of last ramp [s]&#39;)
+
+            # new table with only good ramp-averaged position data
+            # todo: consider averaging spatially local ramps as well
+            pdata = Table()
+            for name in [&#39;DLAM_MAP&#39;, &#39;DBET_MAP&#39;]:
+                reshaped = posdata[name].reshape(newshape)
+                pdata[name] = np.mean(reshaped, axis=1)[flag]
+            posdata = pdata
+
+            # trim flux ramps to useful range as well
+            if not flag.all():
+                log.debug(f&#39;Trimming {(~flag).sum()} &#39;
+                          f&#39;ramps outside scan motion&#39;)
+                flux = flux[flag, :, :]
+                stddev = stddev[flag, :, :]
+
+    # add a bg level header keyword
+    mflux = 0.0 if np.isnan(flux).all() else np.nanmean(flux)
+    hdinsert(image_hdr, &#39;BGLEVL_A&#39;, mflux,
+             comment=&#39;BG level nod A (ADU/s)&#39;)
+
+    name = image_hdr[&#39;EXTNAME&#39;]
+    image_hdr[&#39;BUNIT&#39;] = &#39;adu/s&#39;
+    hdu1 = fits.ImageHDU(flux, header=image_hdr, name=name)
+    hdu2 = fits.ImageHDU(stddev, header=image_hdr,
+                         name=name.replace(&#39;FLUX&#39;, &#39;STDDEV&#39;))
+    if posdata is not None:
+        hdu3 = fits.BinTableHDU(posdata, name=name.replace(&#39;FLUX&#39;, &#39;SCANPOS&#39;))
+        return hdu1, hdu2, hdu3
+    else:
+        return hdu1, hdu2</div>
+
+
+
+<div class="viewcode-block" id="fit_ramps">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.fit_ramps.fit_ramps.html#sofia_redux.instruments.fifi_ls.fit_ramps.fit_ramps">[docs]</a>
+def fit_ramps(filename, s2n=10, threshold=5, badpix_file=None,
+              write=False, outdir=None, remove_first=True,
+              subtract_bias=True, indpos_sigma=3.0):
+    &quot;&quot;&quot;
+    Fit straight lines to raw voltage ramps to calculate corresponding flux.
+
+    If writing to disk, the output filename is created from the input
+    filename, with the suffix &#39;CP0&#39; or &#39;CP1&#39; replaced with &#39;RP0&#39; or
+    &#39;RP1&#39;.  The resulting HDU contains n_scan * 2 image extensions, for
+    FLUX and STDDEV data for each grating scan, named with a grating scan
+    index (e.g. FLUX_G0, STDDEV_G0, FLUX_G1, STDDDEV_G1, etc.).
+
+    For all data except OTF mode A nods, the output image arrays have
+    dimensions 25 x 16.  For OTF A nods, the ramps are not averaged to
+    produce a single 2D array but rather propagated as a 3D cube, along
+    with separate scanning position data.  Dimensions for these data
+    are 25 x 16 x n_ramp, and an additional table called SCANPOS_G0
+    is attached to the output file, containing the scan position data,
+    averaged over each ramp.  It is assumed that OTF data files contain
+    only one grating scan.
+
+    Input files for this step should have been generated by
+    fifi_ls.split_grating_and_chop.
+
+    The procedure is:
+    Loop through the extensions, fitting ramps in each:
+
+        1. Remove the 26th spaxel (chopper values) and the first and
+           last spexel.
+        2. Remove the first ramp from each spaxel and the first and last
+           readout in each ramp.
+        3. Loop over spaxels and spexels, fitting each ramp with a line.
+           Record the slope and the error on the slope.  Combine the
+           slopes from all ramps with a robust weighted mean.  Record
+           the error on the mean as the error on the flux.
+        4. (optional) Create FITS file and write results to disk.
+
+    Parameters
+    ----------
+    filename : str
+        Name of the chop-split, grating-split file (including the path
+        if not in the current working directory)
+    s2n : float, optional
+        Signal-to-noise below which data will be considered questionable
+        and will be ignored.  Set &lt;= 0 to turn off signal-to-noise filtering.
+    threshold : float, optional
+        Robust rejection threshold (in sigma) for combining slopes of
+        individual ramps.
+    badpix_file : str, optional
+        badpix file to be used.  If not provided, a default file will be
+        retrieved from the data/badpix_files directory, matching the date
+        and channel of the input header.  If an override file is provided,
+        it should be a text file containing two columns, spaxel and
+        spexel coordinates.  Spaxels are numbered from 1 to 25, spexels
+        from 1 to 16.
+    write : bool, optional
+        If True, write the output to disk and return the filename instead
+        of the HDU.
+    outdir : str, optional
+        If writing to disk, use to set the output directory.  By default the
+        output directory will be the same as the input filename location.
+    remove_first : bool, optional
+        If True, remove the first two ramps prior to fitting.
+    subtract_bias : bool, optional
+        If True, subtract the value of the empty zeroth pixel prior to
+        fitting.
+    indpos_sigma : float, optional
+        If &gt;0, will be used to discard samples with grating
+        position that deviates from the expected INDPOS value by this
+        many sigma.
+
+    Returns
+    -------
+    fits.HDUList or str
+        Either the HDU (if write is False) or the filename of the output file
+        (if write is True)
+    &quot;&quot;&quot;
+    if isinstance(outdir, str):
+        if not os.path.isdir(outdir):
+            log.error(&quot;Output directory %s does not exist&quot; % outdir)
+            return
+
+    hdul = gethdul(filename, verbose=True)
+    if hdul is None:
+        return
+
+    readout_range = get_readout_range(hdul[0].header)
+    if (not hasattr(readout_range, &#39;__len__&#39;)
+            or len(readout_range) != 2
+            or None in readout_range):
+        log.error(&quot;Invalid readout range&quot;)
+        return
+
+    if not isinstance(filename, str):
+        filename = hdul[0].header[&#39;FILENAME&#39;]
+    if not isinstance(outdir, str):
+        outdir = os.path.dirname(filename)
+
+    if DEBUG:  # pragma: no cover
+        log.info(f&#39;Working on: {filename}&#39;)
+    else:
+        log.debug(f&#39;Working on: {filename}&#39;)
+
+    outfile = os.path.basename(filename).replace(&#39;CP&#39;, &#39;RP&#39;)
+    primehead = hdul[0].header.copy()
+    hdinsert(primehead, &#39;FILENAME&#39;, outfile)
+    hdinsert(primehead, &#39;PRODTYPE&#39;, &#39;ramps_fit&#39;)
+
+    badmask = get_badpix(primehead, filename=badpix_file)
+    hdul_new = fits.HDUList([fits.PrimaryHDU(header=primehead)])
+    ngrating = primehead.get(&#39;NGRATING&#39;, 1)
+    remove_first_passed = remove_first
+    for idx in range(ngrating):
+        hdu = hdul[f&#39;FLUX_G{idx}&#39;]
+
+        # check for OTF mode data
+        if f&#39;SCANPOS_G{idx}&#39; in hdul:
+            average_ramps = False
+            remove_first = False
+            posdata = hdul[f&#39;SCANPOS_G{idx}&#39;].data
+        else:
+            average_ramps = True
+            remove_first = remove_first_passed
+            posdata = None
+
+        ext = process_extension(
+            hdu, readout_range, threshold=threshold,
+            s2n=s2n, remove_first=remove_first,
+            subtract_bias=subtract_bias, badmask=badmask,
+            average_ramps=average_ramps, posdata=posdata,
+            indpos_sigma=indpos_sigma)
+        if ext is None:
+            log.error(&quot;Failed to process extension %i: %s&quot; %
+                      (idx + 1, filename))
+            return
+
+        # append flux and stddev extensions
+        hdul_new.append(ext[0])
+        hdul_new.append(ext[1])
+
+        # append posdata too if present
+        if len(ext) &gt; 2:
+            hdul_new.append(ext[2])
+
+    hdul_new[0].header[&#39;HISTORY&#39;] = &quot;Ramps fit; bad pixels flagged with NaN&quot;
+    if remove_first:
+        hdul_new[0].header[&#39;HISTORY&#39;] = &quot;Ramps fit; removed first 2 ramps&quot;
+    hdul_new[0].header[&#39;HISTORY&#39;] = \
+        &quot;Ramps fit; fitting on readouts [%i: %i]&quot; % (
+        readout_range[0] + 1, readout_range[1] - 1)
+
+    if write:
+        return write_hdul(hdul_new, outdir=outdir, overwrite=True)
+    else:
+        return hdul_new</div>
+
+
+
+def fit_ramps_wrap_helper(_, kwargs, filename):
+    return fit_ramps(filename, **kwargs)
+
+
+<div class="viewcode-block" id="wrap_fit_ramps">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.fit_ramps.wrap_fit_ramps.html#sofia_redux.instruments.fifi_ls.fit_ramps.wrap_fit_ramps">[docs]</a>
+def wrap_fit_ramps(files, s2n=30, threshold=5, badpix_file=None,
+                   outdir=None, remove_first=True, subtract_bias=True,
+                   indpos_sigma=3.0, allow_errors=False,
+                   write=False, jobs=None):
+    &quot;&quot;&quot;
+    Wrapper for fit_ramps over multiple files.
+
+    See `fit_ramps` for full description of reduction on a single file.
+
+    Parameters
+    ----------
+    files : array_like of str
+    s2n : float, optional
+    threshold : float, optional
+    badpix_file : str, optional
+    outdir : str, optional
+    remove_first : bool, optional
+    subtract_bias : bool, optional
+    indpos_sigma : float, optional
+    allow_errors : bool, optional
+        If True, return all created files on error.  Otherwise, return None
+    write : bool, optional
+        If True, write the output to disk and return the filename instead
+        of the HDU.
+    jobs : int, optional
+        Specifies the maximum number of concurrently running jobs.
+        Values of 0 or 1 will result in serial processing.  A negative
+        value sets jobs to `n_cpus + 1 + jobs` such that -1 would use
+        all cpus, and -2 would use all but one cpu.
+
+    Returns
+    -------
+    tuple of str
+        output filenames written to disk
+    &quot;&quot;&quot;
+    if isinstance(files, str):
+        files = [files]
+    if not hasattr(files, &#39;__len__&#39;):
+        log.error(&quot;Invalid input files type (%s)&quot; % repr(files))
+        return
+
+    clear_badpix_cache()
+
+    kwargs = {
+        &#39;s2n&#39;: s2n, &#39;threshold&#39;: threshold, &#39;badpix_file&#39;: badpix_file,
+        &#39;outdir&#39;: outdir, &#39;remove_first&#39;: remove_first,
+        &#39;subtract_bias&#39;: subtract_bias, &#39;indpos_sigma&#39;: indpos_sigma,
+        &#39;write&#39;: write}
+
+    if DEBUG:  # pragma: no cover
+        jobs = 1
+
+    output = multitask(fit_ramps_wrap_helper, files, None, kwargs,
+                       jobs=jobs)
+
+    failure = False
+    result = []
+    for x in output:
+        if x is None:
+            failure = True
+        else:
+            result.append(x)
+    if failure:
+        if len(result) &gt; 0:
+            if not allow_errors:
+                log.error(&quot;Errors were encountered but the following &quot;
+                          &quot;files were created:\n%s&quot; % &#39;\n&#39;.join(result))
+                return
+
+    clear_badpix_cache()
+
+    return tuple(result)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

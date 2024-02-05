@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.toolkit.resampling.tree.polynomial_tree &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.toolkit.resampling.tree.polynomial_tree</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+
+from sofia_redux.toolkit.resampling.tree.base_tree import BaseTree
+from sofia_redux.toolkit.resampling.resample_utils import (
+    polynomial_terms, polynomial_exponents, polynomial_derivative_map)
+
+__all__ = [&#39;PolynomialTree&#39;]
+
+
+<div class="viewcode-block" id="PolynomialTree">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.toolkit.resampling.PolynomialTree.html#sofia_redux.toolkit.resampling.PolynomialTree">[docs]</a>
+class PolynomialTree(BaseTree):
+
+    def __init__(self, argument, shape=None, build_type=&#39;all&#39;,
+                 order=None, fix_order=True, leaf_size=40, large_data=False,
+                 **distance_kwargs):
+        r&quot;&quot;&quot;
+        Create a tree structure for use with the resampling algorithm.
+
+        The resampling tree is primarily responsible for deriving and
+        storing all independent variables necessary for polynomial fitting,
+        as well as allowing fast access to those variables that belong to
+        coordinates within a certain radius of a given point.
+
+        TREE STRUCTURE AND ACCESS
+
+        The tree itself is divided into N-dimensional blocks, each of which
+        is allocated a set of coordinates.  The width of these blocks should
+        correspond to the `window` (:math:`\Omega`) defined in the resampling
+        algorithm, and coordinates should be scaled accordingly.  For example,
+        if the window radius is set to :math:`\Omega=4` in (arbitrary) units
+        for the purposes of resampling 1-dimensional data, and the independent
+        values are:
+
+            x = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+        They should be supplied to the tree as :math:`x^\prime = x / \Omega`.
+
+        .. math::
+
+            x^\prime = \frac{x}{\Omega} =
+                [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5]
+
+        The tree defines blocks by grouping all coordinates with the same
+        floored values into a single block.  Therefore, in this case the tree
+        will contain 3 blocks.  The first contains [0.25, 0.5, 0.75], the
+        second contains [1, 1.25, 1.5, 1.75], and the third contains
+        [2, 2.25, 2.5].
+
+        The reasoning behind the whole tree structure is to allow for easy
+        extraction of all coordinates within range of a user supplied
+        coordinate.  This is done in two stages:  The first is to find out
+        which block the user supplied coordinate belongs to.  We can then
+        quickly narrow down the search by recognizing that coordinates in the
+        tree population inside the window region of the supplied coordinate
+        must either belong to the same block, or to immediately neighboring
+        blocks since each block of the tree is the same width as the window
+        radius.
+
+        Once all candidates have been identified, the next step is to keep
+        only those that are within a radius :math:`\Omega` of the user supplied
+        coordinate.  This can be accomplished quickly using the ball-tree
+        algorithm (see :func:`sklearn.neighbors.BallTree`.
+
+        In practice, the resampling algorithm loops through each block of
+        the tree in parallel.  For each block, all user supplied coordinates
+        (points at which a fit is required) within that block, and all tree
+        members within the neighborhood (the block and all adjacent blocks
+        including diagonals) are evaluated in one step by the ball-tree
+        algorithm so that for each point, we quickly get all tree members
+        within that point&#39;s window region.
+
+        POLYNOMIAL ORDER AND TERMS
+
+        The resampling tree is also responsible for deriving all polynomial
+        terms for the fit as well as mapping these terms to the derivative of
+        the function.  Please see :func:`power_product`,
+        :func:`polynomial_exponents`, and :func:`polynomial_derivative_map`
+        for further details.  It is also possible to calculate terms for
+        a range of orders in the case where order may vary to accommodate
+        fits where insufficient samples are present.  To allow `order` to
+        vary, set `fix_order` to `False`.
+
+        Parameters
+        ----------
+        argument : numpy.ndarray (n_features, n_samples) or n-tuple
+            Either the independent coordinates of samples in n_features-space,
+            or the shape defining the skeleton of the tree.
+        shape : n-tuple, optional
+            If coordinates were supplied with `argument`, the shape of the
+            tree to build.  Otherwise, the shape will be determined from the
+            coordinate values in each dimension as
+            floor(max(coordinates[i])) + 1 for dimension i.
+        build_type : str, optional
+            Must be one of {&#39;hood&#39;, &#39;balltree&#39;, &#39;all&#39;, None}.  Defines the
+            type of tree structures to create.
+        order : int or array_like (n_features,), optional
+           The symmetrical or asymmetrical orders respectively.  Symmetrical
+           orders are selected by supplying an integer to this parameter.
+        fix_order : bool, optional
+            If `order` is symmetrical, allow for a varying order in an attempt
+            to pass the order validation algorithm (the order can only
+            decrease).
+        balltree_metric : str or sklearn.neighbors.DistanceMetric object
+            The distance metric to use for the tree. Default=’minkowski’ with
+            p=2 (that is, a euclidean metric). See the documentation of the
+            :func:`sklearn.neighbors.DistanceMetric` class for a list of
+            available metrics. ball_tree.valid_metrics gives a list of the
+            metrics which are valid for BallTree.
+        leaf_size : int, optional
+            If `build_type` was set to &#39;all&#39; or &#39;balltree&#39;, defines the leaf
+            size of the BallTree.  Please see
+            :func:`sklearn.neighbors.BallTree` for further details.
+        large_data : bool, optional
+            If `True`, indicates that this resampling algorithm will run on
+            a large set of data, and the ball tree should be created on
+            subsets of the data.
+        distance_kwargs : dict, optional
+            Optional keyword arguments passed into
+            :func:`sklearn.neighbors.DistanceMetric`.  The default is to use
+            the &quot;minkowski&quot; definition with `p=2`, i.e., the Euclidean
+            definition.
+        &quot;&quot;&quot;
+        super().__init__(argument, shape=shape, build_type=build_type,
+                         leaf_size=leaf_size, large_data=large_data,
+                         **distance_kwargs)
+
+        self._order = None
+        self._order_symmetry = None
+        self._order_required = None
+        self._order_varies = None
+        self._exponents = None
+        self._derivative_term_map = None
+        self._phi_terms_precalculated = False
+        self.phi_terms = None
+        self.term_indices = None
+        self.derivative_term_indices = None
+
+        if order is not None:
+            self.set_order(order, fix_order=fix_order)
+
+            if self.coordinates is not None:
+                self.precalculate_phi_terms()
+
+    @property
+    def order(self):
+        &quot;&quot;&quot;
+        Return the order of the polynomial for the tree.
+
+        Returns
+        -------
+        int or numpy.ndarray (int)
+            A scalar value if orders for each feature are identical, or an
+            array of values of shape (n_features,) if values are not identical.
+        &quot;&quot;&quot;
+        return self._order
+
+    @property
+    def exponents(self):
+        &quot;&quot;&quot;
+        Return the polynomial exponents for the tree.
+
+        The polynomial exponents describe how the polynomial terms should be
+        calculated.  For example, the exponents [[0, 0], [1, 0], [2, 0],
+        [0, 1], [1, 1], [0, 2]] represent the equation:
+
+          f(x, y) = c0 + c1.x + c2.x^2 + c3.y + c4.xy + c5.y^2
+
+        Returns
+        -------
+        numpy.ndarray (int)
+            An array of shape (n_exponents, n_features)
+        &quot;&quot;&quot;
+        if self._exponents is not None:
+            return self._exponents.copy()
+        return None
+
+    @property
+    def derivative_term_map(self):
+        &quot;&quot;&quot;
+        Returns mapping necessary to describe the 1st derivative of the tree.
+
+        The terms describing the derivative of a polynomial function should all
+        be present in the exponent terms of the tree, but need to be reordered
+        in a specific way and may also contain an additional coefficient.
+        Once the coefficients of the fit are known (c), the derivative of
+        feature k may be be calculated by:
+
+            sum(h[k, 0] * c[h[k, 1]] * p[h[k, 2], k])
+
+        where p are the exponent terms, and h is the map returned by this
+        property.
+
+        Returns
+        -------
+        mapping : numpy.ndarray (int)
+            An array of shape (n_features, 3, n_terms).
+        &quot;&quot;&quot;
+        if self._derivative_term_map is not None:
+            return self._derivative_term_map.copy()
+        return None
+
+    @property
+    def order_symmetry(self):
+        &quot;&quot;&quot;
+        Return whether the orders are symmetrical.
+
+        Orders are considered symmetrical when the orders of each feature are
+        identical.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self._order_symmetry
+
+    @property
+    def order_varies(self):
+        &quot;&quot;&quot;
+        Return whether the order may be decreased.
+
+        The order of the polynomial may be reduced if specifically set by the
+        user (fix_order=False) and the order is symmetrical.  In this case,
+        a subset of polynomial terms can be extracted from the original terms
+        to describe a lower order polynomial.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self._order_varies
+
+    @property
+    def phi_terms_precalculated(self):
+        &quot;&quot;&quot;
+        Return whether the polynomial terms have been calculated.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self._phi_terms_precalculated
+
+<div class="viewcode-block" id="PolynomialTree.estimate_max_bytes">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.toolkit.resampling.PolynomialTree.html#sofia_redux.toolkit.resampling.PolynomialTree.estimate_max_bytes">[docs]</a>
+    @classmethod
+    def estimate_max_bytes(cls, coordinates, window=1, leaf_size=40,
+                           full_tree=True, order=2):
+        &quot;&quot;&quot;
+        Estimate the maximum number of bytes required by the tree.
+
+        This includes pre-calculation of the phi terms for polynomial
+        representation.
+
+        Parameters
+        ----------
+        coordinates : numpy.ndarray
+            The coordinates for the tree of shape (n_dimensions, n)
+        window : int or float, optional
+            The size of the tree windows
+        leaf_size : int, optional
+            The number of leaves used to construct the ball-tree
+        full_tree : bool, optional
+            Calculate the maximum number of bytes if the full ball-tree is
+            pre-calculated.  Otherwise, calculates the size of a single
+            neighborhood sized ball-tree.
+        order : int or numpy.ndarray (int), optional
+            The order of polynomial to fit as an integer for all dimensions or
+            an array of shape (n_dimensions,).
+
+        Returns
+        -------
+        max_size : int
+            An upper limit for the maximum number of bytes used to construct
+            the tree.
+        &quot;&quot;&quot;
+        tree_bytes = super().estimate_max_bytes(
+            coordinates, window=window, leaf_size=leaf_size,
+            full_tree=full_tree)
+        float_bytes = np.empty(0, dtype=float).itemsize
+        n_dimensions = coordinates.shape[0]
+        n = coordinates.size // n_dimensions
+
+        if not full_tree:
+            n_bins = cls.estimate_n_bins(coordinates, window=window)
+            samples_per_bin = n / n_bins
+            bins_per_hood = 3 ** n_dimensions
+            samples_per_hood = int(np.ceil(samples_per_bin * bins_per_hood))
+            if samples_per_hood &lt; n:
+                n = samples_per_hood
+
+        exponents = polynomial_exponents(order, ndim=n_dimensions)
+        n_coefficients = exponents.shape[0]
+        phi_bytes = n_coefficients * n * float_bytes
+        return phi_bytes + tree_bytes</div>
+
+
+    def _set_shape(self, shape):
+        r&quot;&quot;&quot;
+        Set the shape of the tree.
+
+        The shape of the tree determines the number of n-dimensional coordinate
+        bins.  Once defined, a number of useful factors are pre-calculated to
+        allow for easy determination of neighboring bins to any given bin.
+
+        The search kernel is every permutation of [-1, 0, 1] over all features,
+        meaning each bin not on the edge of the tree bounds has :math:`3^n - 1`
+        neighbors.
+
+        Parameters
+        ----------
+        shape : n-tuple of int
+            The size for each of the n features of the tree.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super()._set_shape(shape)
+        self.term_indices = None
+
+<div class="viewcode-block" id="PolynomialTree.set_order">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.toolkit.resampling.PolynomialTree.html#sofia_redux.toolkit.resampling.PolynomialTree.set_order">[docs]</a>
+    def set_order(self, order, fix_order=True):
+        r&quot;&quot;&quot;
+        Set the order(s) of polynomial fit for the resampling algorithm tree.
+
+        In addition to declaring the desired order of polynomial fit, the user
+        may also opt to select an algorithm to validate the desired order of
+        fit is possible given a distribution of samples.  Please see
+        :func:`resample_utils.check_orders` for a full description of available
+        algorithms.
+
+        Throughout the resampling algorithm, orders are classified as either
+        &quot;symmetrical&quot; or &quot;asymmetrical&quot;.  An order is termed as symmetrical
+        if it is the same for all features of the polynomial fit.  i.e., the
+        maximum exponent for each feature in a polynomial equation will be
+        equal to the order.  For example, a 2-dimensional 2nd order polynomial
+        is of the form:
+
+        .. math::
+
+            f(x, y) = c_0 + c_1 x + c_2 x^2 + c_3 y + c_4 x y + c_5 y^2
+
+        where the maximum exponent for :math:`x` and :math:`y` in any
+        term is 2.
+
+        An order is considered &quot;asymmetrical&quot; if orders are not equal across
+        features or dimensions.  For example, a 2-dimensional polynomial with
+        an order of 1 in :math:`x`, and 2 in :math:`y` would have the form:
+
+        .. math::
+
+            f(x, y) = c_0 + c_1 x + c_2 y + c_3 x y + c_4 y^2
+
+        where the maximum exponent of :math:`x` is 1, and the maximum exponent
+        of :math:`y` is 2.
+
+        If orders are symmetrical, the user can allow the order to vary such
+        that it passes the order validation algorithm.  For instance, if only
+        2 samples exist for a 1-dimensional polynomial fit, and the user
+        requested a 2nd order polynomial fit, the resampling algorithm will
+        lower the order to 1, so that a fit can be performed (if the algorithm
+        worked by counting the number of available samples).  If orders are
+        asymmetrical, this option is not available and fits will be aborted
+        if they fail the order validation algorithm.
+
+        Parameters
+        ----------
+        order : int or array_like (n_features,)
+           The symmetrical or asymmetrical orders respectively.
+        fix_order : bool, optional
+            If `order` is symmetrical, allow for a varying order in an attempt
+            to pass the order validation algorithm (the order can only
+            decrease).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        o = np.asarray(order)
+        order_symmetry = o.shape == ()
+        if not order_symmetry:
+            if o.size != self._n_features:
+                raise ValueError(
+                    &quot;Number of orders (%i) does not match number of &quot;
+                    &quot;features (%i)&quot; % (o.size, self.features))
+        if order_symmetry:
+            self._order = int(order)
+        else:
+            self._order = o.astype(int)
+        self._order_symmetry = order_symmetry
+        self._order_varies = not fix_order and order_symmetry</div>
+
+        # Note, it is possible to vary orders if order_symmetry is False, but
+        # will require either a ton of either memory or computation time.
+        # (plus I&#39;ll need to write the code)
+
+<div class="viewcode-block" id="PolynomialTree.precalculate_phi_terms">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.toolkit.resampling.PolynomialTree.html#sofia_redux.toolkit.resampling.PolynomialTree.precalculate_phi_terms">[docs]</a>
+    def precalculate_phi_terms(self):
+        r&quot;&quot;&quot;
+        Calculates polynomial terms for the tree coordinates and order.
+
+        Calculates the :math:`\Phi` terms for the equation:
+
+        .. math::
+
+            f(\Phi) = \hat{c} \cdot \Phi
+
+        The polynomial terms are dependent on the tree coordinates, and the
+        order of polynomial fit.  Please see :func:`polynomial_exponents` for
+        a description on how terms are derived.
+
+        If the order is not fixed (i.e., is allowed to vary as marked by the
+        `order_varies` attribute), a set of terms will be derived for all
+        orders up to the order defined by the user.  Please note that orders
+        may only vary if the order is &quot;symmetrical&quot; as defined in
+        `PolynomialTree.set_order`.  In addition, a mapping relating terms to
+        derivatives of the fit is also created in the `derivative_term_map`
+        attribute, details of which can be found in
+        :func:`polynomial_derivative_map`.  When the order does vary, the
+        terms for order k are given as:
+
+            tree.phi_terms[tree.order_term_indices[k]:
+                           tree.order_term_indices[k+1]]
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.coordinates is None:
+            raise ValueError(&quot;Tree has not been populated with coordinates.&quot;)
+
+        if self.order is None:
+            raise ValueError(&quot;Order has not been set.&quot;)
+
+        self._phi_terms_precalculated = False
+
+        if not self.order_varies:  # easy
+            self.term_indices = None
+            exponents = polynomial_exponents(self._order, ndim=self.features)
+            self._derivative_term_map = polynomial_derivative_map(exponents)
+            self.derivative_term_indices = None
+
+        else:
+            # For each possible order generate phi terms and derivative maps.
+            # Also, since we concatenate the results into a single large array,
+            # create indices that reference correct terms for a given order.
+            order_phi_indices = [0]
+            order_derivative_indices = [0]
+            order_derivative_maps = []
+            exponents = None
+
+            for o in range(self.order + 1):
+                exponents = polynomial_exponents(o, ndim=self.features)
+                order_phi_indices.append(
+                    exponents.shape[0] + order_phi_indices[o])
+                derivative_map = polynomial_derivative_map(exponents)
+                order_derivative_maps.append(derivative_map)
+                order_derivative_indices.append(derivative_map.shape[2]
+                                                + order_derivative_indices[o])
+
+            self.term_indices = np.asarray(order_phi_indices, dtype=int)
+            self._derivative_term_map = np.empty(
+                (self.features, 3, order_derivative_indices[-1]), dtype=int)
+
+            self.derivative_term_indices = np.asarray(
+                order_derivative_indices, dtype=int)
+
+            for o in range(self.order + 1):
+                i0, i1 = order_derivative_indices[o: o + 2]
+                self._derivative_term_map[..., i0: i1] = \
+                    order_derivative_maps[o]
+
+        self._exponents = exponents
+        self.create_phi_terms_for(None)</div>
+
+
+<div class="viewcode-block" id="PolynomialTree.create_phi_terms_for">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.toolkit.resampling.PolynomialTree.html#sofia_redux.toolkit.resampling.PolynomialTree.create_phi_terms_for">[docs]</a>
+    def create_phi_terms_for(self, block=None):
+        &quot;&quot;&quot;
+        Create the phi terms on demand.
+
+        If `block` is None, creates the phi terms over all samples.  Otherwise,
+        creates phi terms for all samples in the neighborhood of `block`.
+
+        Parameters
+        ----------
+        block : int, optional
+            The block for which to create the phi terms.  If `None` is
+            supplied, will calculate for all coordinates.
+
+        Returns
+        -------
+        hood_members : numpy.ndarray (int) or slice or None
+            The samples within the neighborhood of block, all indices or
+            `None` if not calculated.
+        &quot;&quot;&quot;
+        self._phi_terms_precalculated = False
+        if self.large_data and block is None:
+            # Do not precalculate the phi terms for large data.
+            self.phi_terms = None
+            self._phi_terms_precalculated = False
+            return None
+
+        if block is None:
+            coordinates = self.coordinates
+            indices = slice(0, self.n_members)
+        else:
+            indices, coordinates = self.hood_members(block, get_locations=True)
+
+        if not self.order_varies:  # easy
+            exponents = polynomial_exponents(self._order, ndim=self.features)
+            self.phi_terms = polynomial_terms(coordinates, exponents)
+            self._phi_terms_precalculated = True
+            return indices
+
+        # For each possible order generate phi terms and derivative maps.
+        # Also, since we concatenate the results into a single large array,
+        # create indices that reference correct terms for a given order.
+        order_phi_indices = [0]
+        order_phi = []
+        n = coordinates.shape[1]
+
+        for o in range(self.order + 1):
+            exponents = polynomial_exponents(o, ndim=self.features)
+            phi = polynomial_terms(coordinates, exponents)
+            order_phi.append(phi)
+            order_phi_indices.append(exponents.shape[0] + order_phi_indices[o])
+
+        self.phi_terms = np.empty(
+            (order_phi_indices[-1], n), dtype=np.float64)
+
+        for o in range(self.order + 1):
+            i0, i1 = order_phi_indices[o: o + 2]
+            self.phi_terms[i0: i1] = order_phi[o]
+
+        self._phi_terms_precalculated = True
+        return indices</div>
+
+
+<div class="viewcode-block" id="PolynomialTree.block_members">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.toolkit.resampling.PolynomialTree.html#sofia_redux.toolkit.resampling.PolynomialTree.block_members">[docs]</a>
+    def block_members(self, block, get_locations=False, get_terms=False):
+        &quot;&quot;&quot;
+        Find all members within a single block.
+
+        Parameters
+        ----------
+        block : int
+            The index of the block.
+        get_locations : bool, optional
+            If `True`, return the coordinates of the hood members.
+        get_terms : bool, optional
+            If `True`, return the calculated &quot;phi&quot; terms of hood members.  Note
+            that a polynomial order must have been set, and terms calculated.
+            See :func:`PolynomialTree.set_order`, and
+            :func:`PolynomialTree.precalculate_phi_terms` for further
+            information.
+
+        Returns
+        -------
+        members, [coordinates, terms]
+            members is a numpy.ndarray of int and shape (found_members,).
+            If `get_locations` was set to `True,` coordinates is of shape
+            (n_features, found_members).  If `get_terms` was set to `True`,
+            terms is of shape (n_terms, found_members).
+        &quot;&quot;&quot;
+        result = super().block_members(block, get_locations=get_locations)
+        if not get_terms:
+            return result
+
+        indices = result[0] if get_locations else result
+        if self.large_data:
+            terms = None
+        elif not self._phi_terms_precalculated:
+            raise RuntimeError(&quot;Phi terms have not been calculated.&quot;)
+        else:
+            terms = self.phi_terms[:, indices]
+
+        if get_locations:
+            result += terms,
+        else:
+            result = result, terms
+        return result</div>
+
+
+<div class="viewcode-block" id="PolynomialTree.hood_members">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.toolkit.resampling.PolynomialTree.html#sofia_redux.toolkit.resampling.PolynomialTree.hood_members">[docs]</a>
+    def hood_members(self, center_block, get_locations=False, get_terms=False):
+        r&quot;&quot;&quot;
+        Find all members within the neighborhood of a single block.
+
+        Parameters
+        ----------
+        center_block : int
+            The index of the block at the center of the neighborhood.
+        get_locations : bool, optional
+            If `True`, return the coordinates of the hood members.
+        get_terms : bool, optional
+            If `True`, return the calculated &quot;phi&quot; terms of hood members.  Note
+            that a polynomial order must have been set, and terms calculated.
+            See :func:`PolynomialTree.set_order`, and
+            :func:`PolynomialTree.precalculate_phi_terms` for further
+            information.
+
+        Returns
+        -------
+        members, [coordinates, terms]
+            members is a numpy.ndarray of int and shape (found_members,).
+            If `get_locations` was set to `True,` coordinates is of shape
+            (n_features, found_members).  If `get_terms` was set to `True`,
+            terms is of shape (n_terms, found_members).
+        &quot;&quot;&quot;
+        result = super().hood_members(center_block,
+                                      get_locations=get_locations)
+        if not get_terms:
+            return result
+
+        indices = result[0] if get_locations else result
+        if self.large_data:
+            terms = None
+        elif not self._phi_terms_precalculated:
+            raise RuntimeError(&quot;Phi terms have not been calculated.&quot;)
+        else:
+            terms = self.phi_terms[:, indices]
+
+        if get_locations:
+            result += terms,
+        else:
+            result = result, terms
+        return result</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

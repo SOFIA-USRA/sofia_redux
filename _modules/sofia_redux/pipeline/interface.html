@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.interface &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.interface</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Interface to Redux reduction objects.&quot;&quot;&quot;
+
+import logging
+import mimetypes
+import os
+import shutil
+import time
+
+import astropy
+from astropy import log
+from configobj import ConfigObj
+
+import sofia_redux.pipeline
+from sofia_redux.pipeline.configuration import Configuration
+
+__all__ = [&#39;TidyLogHandler&#39;, &#39;Interface&#39;]
+
+
+<div class="viewcode-block" id="TidyLogHandler">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.TidyLogHandler.html#sofia_redux.pipeline.interface.TidyLogHandler">[docs]</a>
+class TidyLogHandler(logging.StreamHandler):
+    &quot;&quot;&quot;Simple log handler for printing INFO messages.&quot;&quot;&quot;
+<div class="viewcode-block" id="TidyLogHandler.emit">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.TidyLogHandler.html#sofia_redux.pipeline.interface.TidyLogHandler.emit">[docs]</a>
+    def emit(self, record):
+        &quot;&quot;&quot;
+        Print the log message.
+
+        Parameters
+        ----------
+        record : `logging.LogRecord`
+           The log record.
+        &quot;&quot;&quot;
+        print(record.msg)</div>
+</div>
+
+
+
+<div class="viewcode-block" id="Interface">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface">[docs]</a>
+class Interface(object):
+    &quot;&quot;&quot;
+    Interface to Redux reduction objects.
+
+    Parent object to both command-line and graphical interfaces.
+
+    Attributes
+    ----------
+    reduction: Reduction
+        A Redux reduction object for the currently loaded data
+    chooser: Chooser
+        A Redux chooser object that selects reduction objects for new data
+    configuration: Configuration
+        A Redux configuration object that selects a chooser and
+        sets any necessary parameters for the reduction.
+    viewers: list of Viewer
+        List of Redux Viewer objects associated with the reduction.
+    &quot;&quot;&quot;
+    def __init__(self, configuration=None):
+        &quot;&quot;&quot;
+        Initialize the interface, with an optional configuration.
+
+        Parameters
+        ----------
+        configuration : `Configuration`, optional
+            Configuration items to be used for all reductions.
+        &quot;&quot;&quot;
+
+        # associations
+        self.reduction = None
+        self.chooser = None
+        if configuration is not None:
+            self.configuration = configuration
+        else:
+            self.configuration = Configuration()
+        self.viewers = []
+
+<div class="viewcode-block" id="Interface.clear_reduction">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.clear_reduction">[docs]</a>
+    def clear_reduction(self):
+        &quot;&quot;&quot;
+        Clear reduction variables.
+
+        Resets the reduction and viewers attributes.
+        Removes any existing log file handlers.
+        &quot;&quot;&quot;
+        try:
+            self.reduction.cleanup()
+            del self.reduction
+        except Exception:
+            pass
+        self.reduction = None
+        self.viewers = []
+
+        # remove any old file handlers
+        self.unset_log_file()</div>
+
+
+<div class="viewcode-block" id="Interface.close_viewers">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.close_viewers">[docs]</a>
+    def close_viewers(self):
+        &quot;&quot;&quot;Close any open viewers.&quot;&quot;&quot;
+        for viewer in self.viewers:
+            viewer.close()</div>
+
+
+<div class="viewcode-block" id="Interface.has_embedded_viewers">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.has_embedded_viewers">[docs]</a>
+    def has_embedded_viewers(self):
+        &quot;&quot;&quot;
+        Check for associated embedded viewers.
+
+        Returns
+        -------
+        bool
+            True if associated viewers are intended to be
+            embedded in the main GUI; False otherwise
+        &quot;&quot;&quot;
+        if self.reduction is not None and self.viewers:
+            for viewer in self.viewers:
+                if viewer.embedded:
+                    return True
+        return False</div>
+
+
+<div class="viewcode-block" id="Interface.is_input_manifest">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.is_input_manifest">[docs]</a>
+    def is_input_manifest(self, data):
+        &quot;&quot;&quot;
+        Test if input data list is actually an input manifest file.
+
+        Parameters
+        ----------
+        data : `list` of str
+            List of input file names.
+
+        Returns
+        -------
+        bool
+            True if `data` is a single plain text file; False otherwise.
+        &quot;&quot;&quot;
+
+        # currently, the test is just whether it is a plain text file
+        if len(data) == 1 and os.path.isfile(data[0]):
+            mtype = mimetypes.guess_type(data[0])
+            if mtype[0] == &#39;text/plain&#39;:
+                return True
+            else:
+                return False</div>
+
+
+<div class="viewcode-block" id="Interface.load_configuration">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.load_configuration">[docs]</a>
+    def load_configuration(self):
+        &quot;&quot;&quot;
+        Set reduction chooser from configuration.
+
+        All other configuration items are accessed as needed.
+        &quot;&quot;&quot;
+        self.chooser = self.configuration.chooser</div>
+
+
+<div class="viewcode-block" id="Interface.load_data_id">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.load_data_id">[docs]</a>
+    def load_data_id(self):
+        &quot;&quot;&quot;Load the input file description from the reduction.&quot;&quot;&quot;
+        if self.reduction is None:
+            return
+        self.reduction.load_data_id()</div>
+
+
+<div class="viewcode-block" id="Interface.load_files">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.load_files">[docs]</a>
+    def load_files(self, data):
+        &quot;&quot;&quot;
+        Load input files from a list of file names.
+
+        The reduction object is assigned by the chooser, then
+        an output directory and log file are set, and the data
+        is loaded into the reduction object.
+
+        Parameters
+        ----------
+        data : `list` of str or str
+           Lists the input file names to be reduced.
+        &quot;&quot;&quot;
+        if self.chooser is None:
+            return
+        self.reduction = self.chooser.choose_reduction(
+            data, config=self.configuration.config)
+        if self.reduction is None:
+            return
+
+        # set log file and output directory
+        self.set_output_directory()
+        self.set_log_file()
+
+        self.reduction.load(data)
+
+        # override the recipe from configuration if necessary
+        self.set_recipe()</div>
+
+
+<div class="viewcode-block" id="Interface.load_parameters">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.load_parameters">[docs]</a>
+    def load_parameters(self, param_file=None):
+        &quot;&quot;&quot;
+        Load reduction parameters.
+
+        Default reduction parameters may optionally be overridden
+        by a parameter file in INI format with reduction step names
+        as section headers, and parameters specified in
+        key, value pairs.
+
+        Parameters
+        ----------
+        param_file : str, optional
+            Parameter file name
+        &quot;&quot;&quot;
+        if self.reduction is None:
+            return
+        if param_file is None:
+            param_file = self.configuration.config
+        self.reduction.param_file = param_file
+        self.reduction.load_parameters()</div>
+
+
+<div class="viewcode-block" id="Interface.read_input_manifest">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.read_input_manifest">[docs]</a>
+    def read_input_manifest(self, data):
+        &quot;&quot;&quot;
+        Read an input manifest and return input filenames.
+
+        Input manifests are assumed to be plain text files that
+        list one input file per line. Only file names that exist on
+        disk as files are returned.
+
+        Parameters
+        ----------
+        data : str or `list` of str
+            File name for the input manifest.
+
+        Returns
+        -------
+        list of str
+            List of input file names.
+        &quot;&quot;&quot;
+        # assume one input file per line
+        infiles = []
+        if type(data) is list:
+            data = data[0]
+        with open(data) as fh:
+            for line in fh.readlines():
+                line = line.strip()
+                # keep only if it is a file that exists
+                if os.path.isfile(line):
+                    infiles.append(line)
+        return infiles</div>
+
+
+<div class="viewcode-block" id="Interface.reduce">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.reduce">[docs]</a>
+    def reduce(self):
+        &quot;&quot;&quot;Call the reduce method of the current reduction.&quot;&quot;&quot;
+        if self.reduction is None:
+            return
+        self.reduction.reduce()</div>
+
+
+<div class="viewcode-block" id="Interface.register_viewers">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.register_viewers">[docs]</a>
+    def register_viewers(self, parent=None):
+        &quot;&quot;&quot;
+        Retrieve and start viewers defined by the reduction object.
+
+        Calls the :meth:`Reduction.register_viewers` method, to
+        retrieve :class:`Viewer` objects, then calls the
+        :meth:`Viewer.start` method to initialize them.  If
+        configuration.update_display is False, no viewers will
+        be registered.
+
+        Parameters
+        ----------
+        parent: object, optional
+            A parent widget for the viewer.  May be any
+            type that the viewer understands
+            (e.g. a Qt frame widget).
+        &quot;&quot;&quot;
+        if self.reduction is None:
+            return
+        if self.configuration.update_display is False:
+            self.viewers = []
+            return
+        self.viewers = self.reduction.register_viewers()
+        for viewer in self.viewers:
+            viewer.start(parent)</div>
+
+
+<div class="viewcode-block" id="Interface.reset_reduction">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.reset_reduction">[docs]</a>
+    def reset_reduction(self, data):
+        &quot;&quot;&quot;
+        Reset the current reduction to its initial state.
+
+        Calls the :meth:`Reduction.load` method on the input
+        data.  Also resets a non-standard recipe if necessary.
+
+        Parameters
+        ----------
+        data : `list` of str or str
+            Input data filenames.
+        &quot;&quot;&quot;
+        if self.reduction is None:
+            return
+        self.reduction.load(data)
+        self.set_recipe()</div>
+
+
+<div class="viewcode-block" id="Interface.reset_viewers">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.reset_viewers">[docs]</a>
+    def reset_viewers(self):
+        &quot;&quot;&quot;
+        Reset viewers to default state.
+
+        Calls the :meth:`Viewer.reset` method
+        &quot;&quot;&quot;
+        if self.reduction is None:
+            return
+        for viewer in self.viewers:
+            viewer.reset()</div>
+
+
+<div class="viewcode-block" id="Interface.save_input_manifest">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.save_input_manifest">[docs]</a>
+    def save_input_manifest(self, filename=None, absolute_paths=None):
+        &quot;&quot;&quot;
+        Save input manifest to disk.
+
+        Writes a plain text file containing one file name per line.
+        Input files are specified in the ``reduction.raw_files``
+        attribute.
+
+        Parameters
+        ----------
+        filename : str, optional
+            Output file path to write to.  Default may be set in
+            the ``configuration.input_manifest`` attribute.
+            If ``configuration.input_manifest`` is not an absolute path,
+            it will be joined with the ``reduction.output_directory``
+            attribute.
+        absolute_paths : bool, optional
+            If True, input file names will be written as absolute
+            paths.  If False, they will be written as relative paths.
+            If None, the default value specified in
+            ``configuration.absolute_paths`` will be used if present;
+            otherwise, `absolute_paths` defaults to True.
+        &quot;&quot;&quot;
+        if self.reduction is None:
+            return
+        if filename is None:
+            filename = self.configuration.input_manifest
+        # if still None, do nothing
+        if filename is None or str(filename).strip() == &#39;&#39;:
+            return
+        elif self.reduction.output_directory is not None \
+                and not os.path.isabs(filename):
+            filename = os.path.join(self.reduction.output_directory,
+                                    filename)
+
+        if absolute_paths is None:
+            absolute_paths = self.configuration.absolute_paths
+        # if still None, default to True
+        if absolute_paths is None:
+            absolute_paths = True
+
+        infiles = self.reduction.raw_files
+        if type(infiles) is not list:
+            infiles = [infiles]
+        if infiles:
+            with open(filename, &#39;w&#39;) as manifest:
+                for fname in infiles:
+                    if absolute_paths:
+                        fname = os.path.abspath(fname)
+                    else:
+                        fname = os.path.relpath(
+                            os.path.abspath(fname),
+                            os.path.dirname(os.path.abspath(filename)))
+                    manifest.write(&quot;{}\n&quot;.format(fname))
+            log.info(&quot;Wrote input manifest to {}&quot;.format(filename))
+        else:
+            log.warning(&quot;No input files; not saving input manifest.&quot;)</div>
+
+
+<div class="viewcode-block" id="Interface.save_configuration">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.save_configuration">[docs]</a>
+    def save_configuration(self, filename=None):
+        &quot;&quot;&quot;
+        Save configuration values.
+
+        If a file name is provided, this function writes a plain
+        text file in INI format, containing top-level configuration
+        values.
+
+        Parameters
+        ----------
+        filename : str, optional
+           File path to write to.
+
+        Returns
+        -------
+        None or list of str
+           The return value depends on the `filename` parameter.
+        &quot;&quot;&quot;
+        conf = ConfigObj(self.configuration.config)
+        if str(filename).strip() == &#39;&#39;:
+            filename = None
+        if filename is not None:
+            if self.configuration.output_directory is not None \
+                    and not os.path.isabs(filename):
+                filename = os.path.join(self.configuration.output_directory,
+                                        filename)
+            conf.filename = filename
+
+        conf.initial_comment = [
+            &quot;Redux v{} Configuration&quot;.format(sofia_redux.pipeline.__version__)]
+        text = conf.write()
+        if filename is None:
+            return text
+        else:
+            log.info(&quot;Wrote configuration file to {}&quot;.format(filename))</div>
+
+
+<div class="viewcode-block" id="Interface.save_parameters">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.save_parameters">[docs]</a>
+    def save_parameters(self, filename=None):
+        &quot;&quot;&quot;
+        Save current reduction parameters.
+
+        If a file name is provided, this function writes a plain
+        text file in INI format.  Reduction step index and names
+        are used as section headers, followed by key-value pairs
+        for all currently defined parameters.
+
+        If no filename is provided, this function will return
+        a list of strings containing the parameters pretty-printed
+        to INI format.
+
+        Parameters
+        ----------
+        filename : str, optional
+           File path to write to.
+
+        Returns
+        -------
+        None or list of str
+           The return value depends on the `filename` parameter.
+        &quot;&quot;&quot;
+        if self.reduction is None:
+            return
+        conf = self.reduction.parameters.to_config()
+        if str(filename).strip() == &#39;&#39;:
+            filename = None
+        if filename is not None:
+            if self.reduction.output_directory is not None \
+                    and not os.path.isabs(filename):
+                filename = os.path.join(self.reduction.output_directory,
+                                        filename)
+            conf.filename = filename
+
+        conf.initial_comment = [
+            &quot;Redux parameters for {} instrument in {} mode&quot;.format(
+                self.reduction.instrument,
+                self.reduction.mode),
+            &quot;Pipeline: {} v{}&quot;.format(
+                self.reduction.pipe_name,
+                self.reduction.pipe_version),
+        ]
+        text = conf.write()
+        if filename is None:
+            return text
+        else:
+            log.info(&quot;Wrote parameter file to {}&quot;.format(filename))</div>
+
+
+<div class="viewcode-block" id="Interface.save_output_manifest">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.save_output_manifest">[docs]</a>
+    def save_output_manifest(self, filename=None, absolute_paths=None):
+        &quot;&quot;&quot;
+        Save the output manifest.
+
+        Writes a plain text file containing one file name per line.
+        Output files are specified in the ``reduction.out_files``
+        attribute.
+
+        Parameters
+        ----------
+        filename : str, optional
+            Output file path to write to.  Default may be set in
+            the ``configuration.output_manifest`` attribute.
+            If ``configuration.output_manifest`` is not an absolute path,
+            it will be joined with the ``reduction.output_directory``
+            attribute.
+        absolute_paths : bool or None
+            If True, output file names will be written as absolute
+            paths.  If False, they will be written as relative paths.
+            If None, the default value specified in
+            ``configuration.absolute_paths`` will be used if present;
+            otherwise, `absolute_paths` defaults to True
+        &quot;&quot;&quot;
+        if self.reduction is None:
+            return
+        if filename is None:
+            filename = self.configuration.output_manifest
+        # if still None, do nothing
+        if filename is None or str(filename).strip() == &#39;&#39;:
+            return
+        elif self.reduction.output_directory is not None \
+                and not os.path.isabs(filename):
+            filename = os.path.join(self.reduction.output_directory,
+                                    filename)
+
+        if absolute_paths is None:
+            absolute_paths = self.configuration.absolute_paths
+        # if still None, default to True
+        if absolute_paths is None:
+            absolute_paths = True
+
+        outfiles = self.reduction.out_files
+        if type(outfiles) is not list:
+            outfiles = [outfiles]
+        if outfiles:
+            with open(filename, &#39;w&#39;) as manifest:
+                for fname in outfiles:
+                    if absolute_paths:
+                        fname = os.path.abspath(fname)
+                    else:
+                        fname = os.path.relpath(
+                            os.path.abspath(fname),
+                            os.path.dirname(os.path.abspath(filename)))
+                    manifest.write(&quot;{}\n&quot;.format(fname))
+            log.info(&quot;Wrote output manifest to {}&quot;.format(filename))
+        else:
+            log.warning(&quot;No output files; not saving output manifest.&quot;)</div>
+
+
+<div class="viewcode-block" id="Interface.set_log_file">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.set_log_file">[docs]</a>
+    def set_log_file(self, filename=None):
+        &quot;&quot;&quot;
+        Set a log file handler for the reduction.
+
+        If the provided file name is not an absolute path,
+        it will be joined with ``reduction.output_directory``.
+        When called, any existing file handlers will be removed.
+        If a log file has already been written, it will be moved
+        to the new file name; any further log messages will be
+        appended to the existing log file.
+
+        Parameters
+        ----------
+        filename : str, optional
+           Log file path name.  If not provided, the
+           ``configuration.log_file`` attribute will be used.
+           If this value is None, no action will be taken.
+        &quot;&quot;&quot;
+        if self.reduction is None:
+            return
+        if filename is None:
+            filename = self.configuration.log_file
+        if filename is not None and str(filename).strip() != &#39;&#39;:
+            # add time stamp to filename
+            filename = time.strftime(filename)
+
+            # add output directory to filename
+            if self.reduction.output_directory is not None \
+                    and not os.path.isabs(filename):
+                filename = os.path.join(self.reduction.output_directory,
+                                        filename)
+
+            # remove any old file handlers
+            for hand in log.handlers:
+                if isinstance(hand, logging.FileHandler):
+                    old_log = hand.baseFilename
+                    log.removeHandler(hand)
+                    del hand
+                    if os.path.isfile(old_log):
+                        shutil.move(old_log, filename)
+
+            # add the new file handler
+            fhand = logging.FileHandler(filename, &#39;at&#39;)
+            if self.configuration.log_level is not None:
+                fhand.setLevel(self.configuration.log_level)
+            if self.configuration.log_format is not None:
+                fhand.setFormatter(
+                    logging.Formatter(self.configuration.log_format))
+            log.addHandler(fhand)
+
+            # log the file name
+            log.info(&quot;Log file: {}&quot;.format(filename))</div>
+
+
+<div class="viewcode-block" id="Interface.set_output_directory">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.set_output_directory">[docs]</a>
+    def set_output_directory(self, dirname=None):
+        &quot;&quot;&quot;
+        Set the output directory for the reduction.
+
+        Makes the directory if it does not yet exist.  The directory
+        name is stored in the ``reduction.output_directory`` attribute.
+
+        Parameters
+        ----------
+        dirname : str, optional
+            Path to the output directory.  If not provided, the
+            ``configuration.output_directory`` attribute will
+            be used.  If this value is None, no action is taken.
+        &quot;&quot;&quot;
+        if self.reduction is None:
+            return
+        if dirname is None:
+            dirname = self.configuration.output_directory
+        if dirname is not None:
+            # make the directory if it does not exist.
+            # Allow OS/type errors to be raised here.
+            dirname = os.path.abspath(dirname)
+            os.makedirs(dirname, exist_ok=True)
+            self.reduction.output_directory = dirname</div>
+
+
+<div class="viewcode-block" id="Interface.set_recipe">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.set_recipe">[docs]</a>
+    def set_recipe(self, recipe=None, step_to=None):
+        &quot;&quot;&quot;
+        Set a non-default processing recipe for the reduction.
+
+        All specified processing steps must be known to the
+        current reduction object.  The reduction is not reset
+        after setting the new recipe.
+
+        Parameters
+        ----------
+        recipe : list of str, optional
+            List of processing step names to use in place of
+            the default reduction.  If not provided, the
+            ``configuration.recipe`` attribute will
+            be used.  If this value is also None, no action
+            will be taken.
+        step_to : str, optional
+            A processing step name after which the recipe is terminated.
+            If not provided, the ``configuration.step_to`` attribute will
+            be used.  If this value is also None, no action
+            will be taken.
+        &quot;&quot;&quot;
+        if self.reduction is None:
+            return
+        if recipe is None:
+            recipe = self.configuration.recipe
+        if recipe is not None:
+            log.warning(f&#39;Setting a new recipe: {recipe}&#39;)
+            self.reduction.recipe = recipe
+        if step_to is None:
+            step_to = self.configuration.step_to
+        if step_to is not None:
+            if step_to in self.reduction.recipe:
+                log.warning(f&#39;Setting a new stopping point: {step_to}&#39;)
+                idx = self.reduction.recipe.index(step_to) + 1
+                self.reduction.recipe = self.reduction.recipe[:idx]</div>
+
+
+<div class="viewcode-block" id="Interface.start">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.start">[docs]</a>
+    def start(self, data):
+        &quot;&quot;&quot;
+        Start a new reduction from an input data set.
+
+        Parameters
+        ----------
+        data : `list` of str or str
+            Input data.
+        &quot;&quot;&quot;
+        self.load_configuration()
+
+        # check for input manifest file
+        if type(data) is not list:
+            data = [data]
+        if self.is_input_manifest(data):
+            data = self.read_input_manifest(data)
+
+        # load files from input data (usually filenames)
+        self.load_files(data)
+
+        # load parameters
+        self.load_parameters()</div>
+
+
+<div class="viewcode-block" id="Interface.step">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.step">[docs]</a>
+    def step(self):
+        &quot;&quot;&quot;
+        Run a reduction step.
+
+        Calls the current reduction&#39;s `Reduction.step` method.
+
+        Returns
+        -------
+        str
+            Empty string if step was successful; an error message otherwise.
+        &quot;&quot;&quot;
+        if self.reduction is None:
+            return &#39;&#39;
+
+        # output status is empty string
+        # or error message
+        status = self.reduction.step()
+        return status</div>
+
+
+<div class="viewcode-block" id="Interface.update_configuration">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.update_configuration">[docs]</a>
+    def update_configuration(self, config_file):
+        &quot;&quot;&quot;
+        Update top-level configuration.
+
+        Default configuration parameters may optionally be overridden
+        by a parameter file in INI format, specified in key, value pairs.
+
+        Parameters
+        ----------
+        config_file : str, dict, or ConfigObj
+            Configuration to update with.
+        &quot;&quot;&quot;
+        self.configuration.update(config_file)</div>
+
+
+<div class="viewcode-block" id="Interface.update_viewers">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.update_viewers">[docs]</a>
+    def update_viewers(self):
+        &quot;&quot;&quot;
+        Update all viewers associated with the current reduction.
+
+        Calls the current viewers&#39; `Viewer.update` method with the
+        current reduction&#39;s ``reduction.display_data``.  If
+        configuration.update_display is False, the update will not be
+        performed.
+        &quot;&quot;&quot;
+        if self.reduction is None:
+            return
+        if self.configuration.update_display is False:
+            return
+        for viewer in self.viewers:
+            if viewer.name in self.reduction.display_data:
+                viewer.update(self.reduction.display_data[viewer.name])</div>
+
+
+<div class="viewcode-block" id="Interface.unset_log_file">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.unset_log_file">[docs]</a>
+    def unset_log_file(self):
+        &quot;&quot;&quot;Remove any existing log file handlers.&quot;&quot;&quot;
+        # remove any old file handlers
+        for hand in log.handlers:
+            if isinstance(hand, logging.FileHandler):
+                log.removeHandler(hand)</div>
+
+
+    @staticmethod
+    def _info_only(x):
+        return x.levelno == logging.INFO
+
+    @staticmethod
+    def _not_info(x):
+        return x.levelno != logging.INFO
+
+<div class="viewcode-block" id="Interface.tidy_log">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.tidy_log">[docs]</a>
+    @staticmethod
+    def tidy_log(loglevel=&quot;INFO&quot;):
+        &quot;&quot;&quot;
+        Tidy up log printing for easier human readability at INFO level.
+
+        INFO messages to the terminal will be printed directly.
+        Messages at all other levels will use ``astropy.log`` format.
+        Log file formatting is unaffected.
+
+        Parameters
+        ----------
+        loglevel : str or int, optional
+            Logging level to use for the terminal log.  May be any of
+            the values accepted by the logging module
+            (CRITICAL, ERROR, WARNING, INFO, DEBUG).
+        &quot;&quot;&quot;
+
+        # set overall level as low as possible, so that messages are
+        # accessible if necessary
+        log.setLevel(&quot;DEBUG&quot;)
+
+        # check to see if log has already been tidied
+        found = False
+        for hand in log.handlers:
+            if isinstance(hand, TidyLogHandler):
+                # just set the level
+                hand.setLevel(loglevel)
+                found = True
+            elif isinstance(hand, astropy.logger.StreamHandler):
+                # configure astropy terminal log to ignore info
+                # messages
+                hand.addFilter(Interface._not_info)
+                hand.setLevel(loglevel)
+
+        # if not already found, add a new handler
+        if not found:
+            stream_handler = TidyLogHandler()
+            stream_handler.setFormatter(logging.Formatter(&#39;%(message)s&#39;))
+            stream_handler.addFilter(Interface._info_only)
+            stream_handler.setLevel(loglevel)
+            log.addHandler(stream_handler)</div>
+
+
+<div class="viewcode-block" id="Interface.reset_log">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.interface.Interface.html#sofia_redux.pipeline.interface.Interface.reset_log">[docs]</a>
+    @staticmethod
+    def reset_log(loglevel=None):
+        &quot;&quot;&quot;
+        Reset astropy log to standard settings.
+
+        Removes any TidyLogHandlers, and resets filters for
+        any astropy LogHandlers.
+
+        Parameters
+        ----------
+        loglevel : str or int, optional
+            Logging level to use for the terminal log.  May be any of
+            the values accepted by the logging module
+            (CRITICAL, ERROR, WARNING, INFO, DEBUG).  If not specified,
+            log levels will not be modified.
+        &quot;&quot;&quot;
+        for hand in log.handlers:
+            if isinstance(hand, TidyLogHandler):
+                log.removeHandler(hand)
+            elif isinstance(hand, astropy.logger.StreamHandler):
+                hand.removeFilter(Interface._not_info)
+                if loglevel is not None:
+                    hand.setLevel(loglevel)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

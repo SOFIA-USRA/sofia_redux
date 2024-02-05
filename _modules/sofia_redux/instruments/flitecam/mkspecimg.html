@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.flitecam.mkspecimg &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.flitecam.mkspecimg</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.instruments.forcast.hdmerge import hdmerge
+from sofia_redux.spectroscopy.readflat import readflat
+from sofia_redux.toolkit.image.adjust import rotate90
+from sofia_redux.toolkit.utilities import date2seconds
+
+__all__ = [&#39;mkspecimg&#39;]
+
+
+<div class="viewcode-block" id="mkspecimg">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.flitecam.mkspecimg.mkspecimg.html#sofia_redux.instruments.flitecam.mkspecimg.mkspecimg">[docs]</a>
+def mkspecimg(infiles, pair_subtract=True, flatfile=None, filenum=None):
+    &quot;&quot;&quot;
+    Rotate and pair-subtract spectral images.
+
+    The process is:
+
+    - Divide by the flat if provided.
+    - If subtraction is desired, sort infiles by date-obs, then subtract
+      all pairs in order.
+    - Rotate the image 90 degrees counter-clockwise to align the spectral
+      direction along the x-axis.
+    - Propagate variance accordingly.
+
+    Parameters
+    ----------
+    infiles : `list` of fits.HDUList
+        Input data.  Should have FLUX, ERROR, and BADMASK extensions.
+    pair_subtract : bool, optional
+        If True, data will be subtracted in pairs, in order by time
+        observed. If an odd number of files is specified, the last one
+        will be dropped from the reduction.
+    flatfile : str, optional
+        Path to FITS file containing flat data to divide into the image.
+        Should be in Spextool format, readable by
+        `sofia_redux.spectroscopy.readflat.readflat`.
+    filenum : list of int or str, optional
+        List of file numbers corresponding to the input.  Will be updated
+        to match the order and pairs of file numbers corresponding to
+        the output, and returned as a secondary output.
+
+    Returns
+    -------
+    outfiles : list of fits.HDUList
+        Pair-subtracted spectral images.
+    filenum : list of int or str, optional
+        If an input filenum list is specified, the output is
+        tuple(outfiles, filenum), where filenum is a list of file
+        numbers matching the output order, if no pair subtraction is
+        done. If pair subtraction was done, filenum is a list of
+        lists of file numbers, where each element is the pair of
+        input file numbers.
+    &quot;&quot;&quot;
+    # read flat data
+    flat = None
+    if flatfile is not None:
+        flatdata = readflat(flatfile)
+        if flatdata is None:
+            raise ValueError(f&#39;Could not read flat file {flatfile}&#39;)
+        flat = flatdata[&#39;image&#39;]
+        log.info(f&#39;Dividing by flat data in {flatfile}&#39;)
+
+    # get times for sorting
+    dateobs = []
+    for hdul in infiles:
+        dt = hdul[0].header.get(&#39;DATE-OBS&#39;, default=&#39;3000-01-01T00:00:00&#39;)
+        dateobs.append(date2seconds(str(dt)))
+    idx = np.argsort(dateobs)
+
+    if pair_subtract and len(infiles) == 1:
+        log.warning(&#39;Only one file; turning off pair-subtraction.&#39;)
+        pair_subtract = False
+    if pair_subtract:
+        iter = range(0, len(infiles), 2)
+    else:
+        iter = range(len(infiles))
+
+    outfiles = []
+    outfilenum = []
+    for i in iter:
+        hdul = infiles[idx[i]]
+        header = hdul[0].header
+        flux = hdul[&#39;FLUX&#39;].data
+        var = hdul[&#39;ERROR&#39;].data ** 2
+        mask = hdul[&#39;BADMASK&#39;].data
+        a_nod = str(header.get(&#39;NODBEAM&#39;, &#39;A&#39;)).strip().upper()
+
+        # mask saturated pixels then delete mask
+        flux[mask != 0] = np.nan
+        del hdul[&#39;BADMASK&#39;]
+
+        # pair subtract if desired
+        if pair_subtract:
+            # drop orphaned files
+            if i + 1 &gt;= len(idx):
+                log.warning(f&quot;Mismatched pairs, dropping &quot;
+                            f&quot;{header.get(&#39;FILENAME&#39;)}&quot;)
+                continue
+
+            # get the B data
+            b_hdul = infiles[idx[i + 1]]
+            b_header = b_hdul[0].header
+            b_flux = b_hdul[&#39;FLUX&#39;].data
+            b_var = b_hdul[&#39;ERROR&#39;].data ** 2
+            b_mask = b_hdul[&#39;BADMASK&#39;].data
+            b_flux[b_mask != 0] = np.nan
+
+            # subtract, propagate errors, merge headers
+            flux -= b_flux
+            var += b_var
+            header = hdmerge([header, b_header])
+
+            # swap sign if &quot;A&quot; nod is really a B, to make dithers
+            # line up correctly
+            if a_nod != &#39;A&#39;:
+                flux *= -1
+
+            # track file numbers
+            if filenum is not None:
+                outfilenum.append([filenum[idx[i]],
+                                   filenum[idx[i + 1]]])
+        elif filenum is not None:
+            outfilenum.append(filenum[idx[i]])
+
+        # rotate data to align spectral axis with x
+        flux = rotate90(flux, 1)
+        var = rotate90(var, 1)
+
+        # divide flux by flat
+        # don&#39;t propagate flat errors - they&#39;re systematic
+        if flat is not None:
+            flux = flux / flat
+            var = var / flat ** 2
+
+        hdul[&#39;FLUX&#39;].data = flux
+        hdul[&#39;ERROR&#39;].data = np.sqrt(var)
+        hdul[0].header = header
+
+        outfiles.append(hdul)
+
+    if filenum is None:
+        return outfiles
+    else:
+        return outfiles, outfilenum</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

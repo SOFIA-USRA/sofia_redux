@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.exes.lincor &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.exes.lincor</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.instruments.exes.utils import get_detsec, get_reset_dark
+from sofia_redux.toolkit.utilities.fits import getdata
+from sofia_redux.toolkit.utilities.func import goodfile
+
+
+__all__ = [&#39;lincor&#39;]
+
+
+<div class="viewcode-block" id="lincor">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.lincor.lincor.html#sofia_redux.instruments.exes.lincor.lincor">[docs]</a>
+def lincor(data, header):
+    &quot;&quot;&quot;
+    Correct raw readout frames for detector nonlinearity.
+
+    Uses the linearity coefficients file stored in header[&#39;LINFILE&#39;]
+    to apply a correction to each raw readout frame.  Each frame in the
+    file corresponds to a polynomial correction coefficient for each pixel
+    in the frame.
+
+    This algorithm subtracts the data from a bias level obtained from
+    an input dark file, calculates the polynomial correction from the
+    coefficients file, then applies it to any pixel between the upper
+    and lower limits.  The upper limit for each pixel is set in the
+    first plane of the coefficients file.  The lower limit is set in
+    header[&#39;LO_LIM&#39;].
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        [nframe, nspec, nspat] input data array.
+    header : fits.Header
+        Input FITS header array.
+
+    Returns
+    -------
+    corrected_data, mask : numpy.ndarray, numpy.ndarray
+        The corrected data (numpy.float64) and mask (bool) where True
+        indicates a good pixel, False indicates bad.  Both arrays are
+        the same shape as `data`.
+    &quot;&quot;&quot;
+    data = _check_data(data)
+    minframe, maxframe, coeffs = _get_linearity_coefficients(header)
+    bias = get_reset_dark(header)
+    corrected_data, mask = _apply_correction(
+        data, header, bias, minframe, maxframe, coeffs)
+
+    return corrected_data, mask</div>
+
+
+
+def _get_linearity_coefficients(header):
+    &quot;&quot;&quot;Get linearity coefficients from a file indicated in the header.&quot;&quot;&quot;
+    nx = header[&#39;NSPAT&#39;]
+    ny = header[&#39;NSPEC&#39;]
+    linearity_file = str(header.get(&#39;LINFILE&#39;, &#39;UNKNOWN&#39;)).strip()
+
+    if not goodfile(linearity_file, verbose=True):
+        raise ValueError(&quot;Could not read linearity file: %s&quot; %
+                         linearity_file)
+    coeffs = getdata(linearity_file)
+    if coeffs.ndim != 3 or coeffs.shape[2] &lt; nx or coeffs.shape[1] &lt; ny:
+        raise ValueError(&quot;Linearity coefficients too small for data &quot;
+                         &quot;%s; the data is %s.&quot; %
+                         (repr(coeffs.shape[1:]), repr((ny, nx))))
+
+    xstart, xstop, ystart, ystop = get_detsec(header)
+    minframe = np.round(coeffs[0, ystart:ystop, xstart:xstop]).astype(int)
+    maxframe = np.round(coeffs[1, ystart:ystop, xstart:xstop]).astype(int)
+    coeffs = coeffs[2:, ystart:ystop, xstart:xstop].astype(float)
+    return minframe, maxframe, coeffs
+
+
+def _apply_correction(data, header, bias, minframe, maxframe, coefficients):
+    &quot;&quot;&quot;Apply the linearity correction to the data.&quot;&quot;&quot;
+    upper_limit = float(header.get(&#39;UP_LIM&#39;, np.inf))
+    lower_limit = float(header.get(&#39;LO_LIM&#39;, -np.inf))
+    minframe = np.clip(minframe, lower_limit, None)
+    maxframe = np.clip(maxframe, None, upper_limit)
+
+    # mark bad pixels in mask
+    warned = False
+    mask = np.full(data.shape, False)
+    corrected_data = np.empty(data.shape, dtype=float)
+    for frame in range(data.shape[0]):
+
+        # subtract the bias from the frame
+        dataframe = bias - data[frame]
+
+        # Find correctable points
+        correct = (dataframe &gt; minframe) &amp; (dataframe &lt; maxframe)
+
+        mask[frame] |= dataframe &gt; maxframe
+
+        if not warned:
+            nbad = mask[frame].sum()
+            if nbad &gt; (0.01 * data.shape[1] * data.shape[2]):
+                log.warning(&quot;Many pixels are uncorrectable. &quot;
+                            &quot;Likely nonlinear data&quot;)
+                warned = True
+
+        if correct.any():
+            correction = coefficients[-1][correct].copy()
+            subframe = dataframe[correct].copy()
+            for j in range(coefficients.shape[0] - 2, -1, -1):
+                correction *= subframe
+                correction += coefficients[j][correct]
+
+            idx = (correction &lt; 1e-3) | (correction &gt; 1)
+            correction[idx] = 1.0
+            subframe /= correction
+            dataframe[correct] = subframe
+
+        # Add bias back into frame and store
+        corrected_data[frame] = bias - dataframe
+
+    # return mask indicating good pixels
+    mask = ~mask
+
+    return corrected_data, mask
+
+
+def _check_data(data):
+    &quot;&quot;&quot;Check input data for expected dimensions.&quot;&quot;&quot;
+    data = np.asarray(data, dtype=float)
+    if data.ndim == 2:
+        data = data[None]
+    if data.ndim != 3:
+        raise ValueError(&quot;Data must be a 3-D cube (nframe, nspec, nspat)&quot;)
+    return data
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

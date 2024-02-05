@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.fifi_ls.subtract_chops &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.fifi_ls.subtract_chops</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import os
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.toolkit.utilities \
+    import (goodfile, gethdul, hdinsert, write_hdul,
+            multitask)
+
+__all__ = [&#39;get_chop_pair&#39;, &#39;subtract_extensions&#39;, &#39;subtract_chops&#39;,
+           &#39;wrap_subtract_chops&#39;]
+
+
+<div class="viewcode-block" id="get_chop_pair">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.subtract_chops.get_chop_pair.html#sofia_redux.instruments.fifi_ls.subtract_chops.get_chop_pair">[docs]</a>
+def get_chop_pair(chop0_file):
+    &quot;&quot;&quot;
+    Given the chop 0 filename, return the chop 0 and chop 1 HDU lists.
+
+    Parameters
+    ----------
+    chop0_file : str
+        File path to the chop 0 file
+
+    Returns
+    -------
+    fits.HDUList, fits.HDUList
+    &quot;&quot;&quot;
+    if not goodfile(chop0_file, verbose=True):
+        return
+    elif &#39;RP0&#39; not in chop0_file:
+        log.error(&quot;Chop0_file must contain &#39;RP0&#39; in name&quot;)
+        return
+
+    c0_hdul = gethdul(chop0_file)
+    if c0_hdul is None:
+        log.error(&#39;Invalid RP0 file&#39;)
+        return
+    c0_hdul[0].header[&#39;FILENAME&#39;] = os.path.basename(chop0_file)
+
+    c_amp = c0_hdul[0].header.get(&#39;C_AMP&#39;, 0)
+    if c_amp == 0:
+        hduls = [c0_hdul]
+        return hduls
+
+    chop1_file = str.replace(chop0_file, &#39;RP0&#39;, &#39;RP1&#39;)
+    if not goodfile(chop1_file, verbose=True):
+        log.error(&#39;No RP1 file found&#39;)
+        return
+
+    c1_hdul = gethdul(chop1_file)
+    if c1_hdul is None:
+        log.error(&#39;Invalid RP1 file&#39;)
+        return
+
+    hduls = [c0_hdul, c1_hdul]
+    hduls[1][0].header[&#39;FILENAME&#39;] = os.path.basename(chop1_file)
+
+    valid = False
+    for idx, hdul in enumerate(hduls):
+        ngrating = hdul[0].header.get(&#39;NGRATING&#39;, 1)
+        for idx in range(ngrating):
+            name = f&#39;FLUX_G{idx}&#39;
+            stdname = f&#39;STDDEV_G{idx}&#39;
+            if name not in hdul:
+                log.error(f&quot;Missing extension: {name}&quot;)
+                break
+            if stdname not in hdul:
+                log.error(f&quot;Missing extension: {stdname}&quot;)
+                break
+        else:
+            continue
+        break
+    else:
+        if len(hduls[0]) == len(hduls[1]):
+            valid = True
+        else:
+            log.error(&quot;Differing number of inductosyn positions in chops&quot;)
+
+    if not valid:
+        for hdul in hduls:
+            if isinstance(hdul, fits.HDUList):
+                hdul.close()
+        return
+
+    return hduls</div>
+
+
+
+<div class="viewcode-block" id="subtract_extensions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.subtract_chops.subtract_extensions.html#sofia_redux.instruments.fifi_ls.subtract_chops.subtract_extensions">[docs]</a>
+def subtract_extensions(hdul0, hdul1, add_only=False):
+    &quot;&quot;&quot;
+    Subtract extensions in the correct order.
+
+    Parameters
+    ----------
+    hdul0 : fits.HDUList
+        HDU list containing chop 0 extensions
+    hdul1 : fits.HDUList
+        HDU list containing chop 1 extensions
+    add_only : bool, optional
+        If True, chop files will be added rather than subtracted.
+        This is intended to be used for flat files only.
+
+    Returns
+    -------
+    fits.HDUList
+    &quot;&quot;&quot;
+    hdul = fits.HDUList(fits.PrimaryHDU(header=hdul0[0].header))
+    primeheader = hdul[0].header
+    hdinsert(primeheader, &#39;PRODTYPE&#39;, &#39;chop_subtracted&#39;)
+    outfile = os.path.basename(
+        primeheader.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;).replace(&#39;RP0&#39;, &#39;CSB&#39;))
+    hdinsert(primeheader, &#39;FILENAME&#39;, outfile)
+    primeheader[&#39;HISTORY&#39;] = &#39;Chops subtracted&#39;
+
+    nodpos0 = primeheader.get(&#39;NODBEAM&#39;, &#39;UNKNOWN&#39;).strip().upper()
+    nodstyle = primeheader.get(&#39;NODSTYLE&#39;, &#39;UNKNOWN&#39;).strip().upper()
+    multiplier = 1
+    if nodstyle in [&#39;SYMMETRIC&#39;, &#39;NMC&#39;] and nodpos0 != &#39;A&#39; and not add_only:
+        multiplier = -1
+
+    ngrating = primeheader.get(&#39;NGRATING&#39;, 1)
+    for idx in range(ngrating):
+        name = f&#39;FLUX_G{idx}&#39;
+        stdname = f&#39;STDDEV_G{idx}&#39;
+        ext0 = hdul0[name]
+        ext1 = hdul1[name]
+        std0 = hdul0[stdname]
+        std1 = hdul1[stdname]
+
+        h0 = ext0.header
+        h1 = ext1.header
+        if h0[&#39;INDPOS&#39;] != h1[&#39;INDPOS&#39;]:
+            log.error(f&quot;Inductosyn positions do not line up for &quot;
+                      f&quot;grating extension {idx}&quot;)
+            return None
+
+        if add_only:
+            data = ext0.data + ext1.data
+        elif h0.get(&#39;CHOPNUM&#39;, 0) &lt; 1:
+            data = multiplier * (ext0.data - ext1.data)
+        else:
+            data = multiplier * (ext1.data - ext0.data)
+
+        stddev = np.hypot(std0.data, std1.data)
+        bglevels = [h0.get(&#39;BGLEVL_A&#39;, np.nan), h1.get(&#39;BGLEVL_A&#39;, np.nan)]
+        bglevel = 0.0 if np.isnan(bglevels).all() else np.nanmean(bglevels)
+        exthdr = h0
+        hdinsert(exthdr, &#39;BGLEVL_A&#39;, bglevel)
+
+        # add flux and stddev extensions to output file
+        # note that OTF scanpos table is not expected or propagated
+        hdu1 = fits.ImageHDU(data, header=exthdr, name=name)
+        hdu2 = fits.ImageHDU(stddev, header=exthdr, name=stdname)
+        hdul.append(hdu1)
+        hdul.append(hdu2)
+
+    return hdul</div>
+
+
+
+<div class="viewcode-block" id="subtract_chops">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.subtract_chops.subtract_chops.html#sofia_redux.instruments.fifi_ls.subtract_chops.subtract_chops">[docs]</a>
+def subtract_chops(chop0_file, outdir=None, add_only=False, write=False):
+    &quot;&quot;&quot;
+    Subtract chops of ramp-fitted data.
+
+    One HDUL/file is created for a chop pair, containing n_scan
+    binary table extensions, each containing DATA and STDDEV data
+    cubes of shape (18, 5, 5).  The output filename is created
+    from the input filename with the suffix &#39;RP0&#39; replaced with
+    &#39;CSB&#39;.
+
+    The procedure is:
+
+        1. Check chop amplitude: if zero, assume observation was taken
+           in no-chop mode and return without subtracting chops
+        2. Identify chop 1 file corresponding to input chop 0 file and
+           read both from disk.
+        3. For each extension, subtract OFF data from ON data.
+
+             a. symmetric mode: For A nods, chop 1 is subtracted from
+                chop 0.  For B nods, chop 0 is subtracted from chop 1.
+                This should result in positive source flux in the
+                resulting output, whether nod A or B, so that files can
+                be simply added in the nod-combination algorithm.
+             b. asymmetric mode: chop 0 is subtracted from chop 1,
+                regardless of nod position.  Sky files are subtracted
+                from sources files in the nod-combination algorithm.
+
+        4. Propagate the error as the square root of the sum of the
+           input variances.
+        5. (optional) Create FITS file and write to disk.
+
+    Parameters
+    ----------
+    chop0_file : str
+        File path to the chop 0 file (*RP0*.fits).  The chop 1
+        file is assumed to have the same root and directory
+        location, with the designator RP1 in place of RP0.
+    outdir : str, optional
+        Directory path to write output.  If None, output files
+        will be written to the same directory as the input files.
+    add_only : bool, optional
+        If True, chop files will be added rather than subtracted.
+        This is intended to be used for flat files only.
+    write : bool, optional
+        If True, write to disk and return the path to the output
+        file.  If False, return the HDUL.
+
+    Returns
+    -------
+    fits.HDUList or str
+        Either the HDU (if write is False) or the filename of the output file
+        (if write is True)
+    &quot;&quot;&quot;
+    if isinstance(outdir, str):
+        if not os.path.isdir(outdir):
+            log.error(&quot;Output directory %s does not exist&quot; % outdir)
+            return
+
+    # check for input HDULists
+    if isinstance(chop0_file, fits.HDUList):
+        hduls = [gethdul(chop0_file)]
+    elif ((isinstance(chop0_file, tuple)
+           or isinstance(chop0_file, list))
+          and len(chop0_file) == 2):
+        hduls = [gethdul(chop0_file[0]), gethdul(chop0_file[1])]
+    elif ((isinstance(chop0_file, tuple)
+           or isinstance(chop0_file, list))
+          and len(chop0_file) == 1):
+        hduls = [gethdul(chop0_file[0])]
+    else:
+        if not goodfile(chop0_file, verbose=True):
+            return
+
+        if not isinstance(outdir, str):
+            outdir = os.path.dirname(chop0_file)
+
+        hduls = get_chop_pair(chop0_file)
+        if hduls is None:
+            log.error(&#39;Problem retrieving chop pair&#39;)
+            return
+
+    primeheader = hduls[0][0].header.copy()
+    if primeheader.get(&#39;C_AMP&#39;, 0) == 0:  # not an error
+        log.info(&quot;No chop subtraction performed for NOCHOP mode &quot;
+                 &quot;(chop amp = 0)&quot;)
+        if write:
+            # not really much point in writing - just return name
+            return tuple((os.path.join(outdir, x[0].header[&#39;FILENAME&#39;])
+                          for x in hduls))
+        else:
+            return hduls
+
+    hdul = subtract_extensions(hduls[0], hduls[1], add_only=add_only)
+    if hdul is None:
+        log.error(&#39;Problem subtracting extensions&#39;)
+
+    if write:
+        return write_hdul(hdul, outdir=outdir, overwrite=True)
+    else:
+        return hdul</div>
+
+
+
+def subtract_chops_wrap_helper(_, kwargs, filename):
+    return subtract_chops(filename, **kwargs)
+
+
+<div class="viewcode-block" id="wrap_subtract_chops">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.subtract_chops.wrap_subtract_chops.html#sofia_redux.instruments.fifi_ls.subtract_chops.wrap_subtract_chops">[docs]</a>
+def wrap_subtract_chops(files, outdir=None, add_only=False, write=False,
+                        allow_errors=False, jobs=None):
+    &quot;&quot;&quot;
+    Wrapper for subtract_chops over multiple files.
+
+    See `subtract_chops` for full description of reduction on a single file.
+
+    Parameters
+    ----------
+    files : array_like of str
+        paths to chop 0 *RP0* files
+    outdir : str, optional
+        Directory path to write output.  If None, output files
+        will be written to the same directory as the input files.
+    add_only : bool, optional
+        If True, chop files will be added rather than subtracted.
+        This is intended to be used for flat files only.
+    write : bool, optional
+        If True, write the output to disk and return the filename instead
+        of the HDU.
+    allow_errors : bool, optional
+        If True, return all created files on error.  Otherwise, return None
+        jobs : int, optional
+        Specifies the maximum number of concurrently running jobs.
+        Values of 0 or 1 will result in serial processing.  A negative
+        value sets jobs to `n_cpus + 1 + jobs` such that -1 would use
+        all cpus, and -2 would use all but one cpu.
+    jobs : int, optional
+        Specifies the maximum number of concurrently running jobs.
+        Values of 0 or 1 will result in serial processing.  A negative
+        value sets jobs to `n_cpus + 1 + jobs` such that -1 would use
+        all cpus, and -2 would use all but one cpu.
+
+    Returns
+    -------
+    tuple of str
+        output filenames written to disk
+    &quot;&quot;&quot;
+    if isinstance(files, str):
+        files = [files]
+    if not hasattr(files, &#39;__len__&#39;):
+        log.error(&quot;Invalid input files type (%s)&quot; % repr(files))
+        return
+
+    kwargs = {&#39;outdir&#39;: outdir, &#39;add_only&#39;: add_only, &#39;write&#39;: write}
+
+    output = multitask(subtract_chops_wrap_helper, files, None, kwargs,
+                       jobs=jobs)
+
+    failure = False
+    result = []
+    for x in output:
+        if x is None:
+            failure = True
+        elif isinstance(x, list) and not isinstance(x, fits.HDUList):
+            result.extend(x)
+        else:
+            result.append(x)
+    if failure:
+        if len(result) &gt; 0:
+            if not allow_errors:
+                log.error(&quot;Errors were encountered but the following &quot;
+                          &quot;files were created:\n%s&quot; % &#39;\n&#39;.join(result))
+                return
+
+    return tuple(result)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

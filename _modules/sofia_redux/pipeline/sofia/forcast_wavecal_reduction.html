@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.sofia.forcast_wavecal_reduction &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.sofia.forcast_wavecal_reduction</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;FORCAST Grism Wavecal Reduction pipeline steps&quot;&quot;&quot;
+
+import os
+import warnings
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+import pandas
+
+from sofia_redux.pipeline.sofia.sofia_exception import SOFIAImportError
+try:
+    import sofia_redux.instruments.forcast
+    assert sofia_redux.instruments.forcast
+except ImportError:
+    raise SOFIAImportError(&#39;FORCAST modules not installed&#39;)
+
+from sofia_redux.instruments.forcast.hdmerge import hdmerge
+
+from sofia_redux.pipeline.gui.matplotlib_viewer import MatplotlibViewer
+from sofia_redux.pipeline.gui.qad_viewer import QADViewer
+from sofia_redux.pipeline.sofia.forcast_reduction import FORCASTReduction
+from sofia_redux.pipeline.sofia.forcast_spectroscopy_reduction \
+    import FORCASTSpectroscopyReduction
+from sofia_redux.pipeline.sofia.parameters.forcast_wavecal_parameters \
+    import FORCASTWavecalParameters
+from sofia_redux.pipeline.sofia.sofia_utilities import parse_apertures
+
+from sofia_redux.spectroscopy.findapertures import find_apertures
+from sofia_redux.spectroscopy.getapertures import get_apertures
+from sofia_redux.spectroscopy.mkapmask import mkapmask
+from sofia_redux.spectroscopy.extspec import extspec
+from sofia_redux.spectroscopy.readflat import readflat
+from sofia_redux.spectroscopy.readwavecal import readwavecal
+from sofia_redux.spectroscopy.simwavecal2d import simwavecal2d
+
+from sofia_redux.toolkit.utilities.fits \
+    import hdinsert, getheader
+from sofia_redux.toolkit.fitting.fitpeaks1d import fitpeaks1d, medabs_baseline
+from sofia_redux.toolkit.fitting.polynomial import polyfitnd
+from sofia_redux.toolkit.image.adjust import unrotate90
+from sofia_redux.toolkit.interpolate import tabinv
+
+__all__ = [&#39;FORCASTWavecalReduction&#39;]
+
+
+def _min_func(_, y):
+    &quot;&quot;&quot;Minimum function to use for baseline in spectral stamp&quot;&quot;&quot;
+    baseline = np.full(y.shape, float(np.nanmin(y)))
+    return y - baseline, baseline
+
+
+def _max_func(_, y):
+    &quot;&quot;&quot;Maximum function to use for baseline in spectral stamp&quot;&quot;&quot;
+    baseline = np.full(y.shape, float(np.nanmax(y)))
+    return y - baseline, baseline
+
+
+<div class="viewcode-block" id="FORCASTWavecalReduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.html#sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction">[docs]</a>
+class FORCASTWavecalReduction(FORCASTSpectroscopyReduction):
+    r&quot;&quot;&quot;
+    FORCAST wavelength calibration reduction steps.
+
+    This reduction object defines specialized reduction steps
+    for generating wavelength calibration data from spectroscopic
+    input files.  It is selected by the SOFIA chooser only if a
+    top-level configuration flag is supplied (wavecal=True).  The
+    final output product from this reduction is a FITS file (\*WCL\*.fits)
+    with PRODTYPE = &#39;wavecal&#39;.  This file can be supplied to the
+    standard spectroscopic pipeline, at the make_profiles step,
+    to specify a new wavelength calibration.
+    &quot;&quot;&quot;
+    def __init__(self):
+        &quot;&quot;&quot;Initialize the reduction object.&quot;&quot;&quot;
+        super().__init__()
+
+        # descriptive attributes specific to calibration
+        self.name = &#39;Wavecal&#39;
+
+        # product type definitions for spectral steps
+        self.prodtype_map.update(
+            {&#39;make_profiles&#39;: &#39;spatial_profile&#39;,
+             &#39;extract_summed_spectrum&#39;: &#39;summed_spectrum&#39;,
+             &#39;identify_lines&#39;: &#39;lines_identified&#39;,
+             &#39;reidentify_lines&#39;: &#39;lines_reidentified&#39;,
+             &#39;fit_lines&#39;: &#39;lines_fit&#39;,
+             &#39;rectify&#39;: &#39;rectified_image&#39;})
+        self.prodnames.update(
+            {&#39;spatial_profile&#39;: &#39;PRF&#39;,
+             &#39;summed_spectrum&#39;: &#39;SSM&#39;,
+             &#39;lines_identified&#39;: &#39;LID&#39;,
+             &#39;lines_reidentified&#39;: &#39;LRD&#39;,
+             &#39;lines_fit&#39;: &#39;LFT&#39;,
+             &#39;rectified_image&#39;: &#39;RIM&#39;})
+
+        # invert the map for quick lookup of step from type
+        self.step_map = {v: k for k, v in self.prodtype_map.items()}
+
+        # default recipe and step names
+        self.recipe = [&#39;checkhead&#39;, &#39;clean&#39;, &#39;droop&#39;, &#39;nonlin&#39;,
+                       &#39;stack&#39;, &#39;stack_dithers&#39;, &#39;make_profiles&#39;,
+                       &#39;extract_summed_spectrum&#39;,
+                       &#39;identify_lines&#39;,
+                       &#39;reidentify_lines&#39;,
+                       &#39;fit_lines&#39;,
+                       &#39;rectify&#39;]
+        self.processing_steps.update(
+            {&#39;extract_summed_spectrum&#39;: &#39;Extract First Spectrum&#39;,
+             &#39;identify_lines&#39;: &#39;Identify Lines&#39;,
+             &#39;reidentify_lines&#39;: &#39;Reidentify Lines&#39;,
+             &#39;fit_lines&#39;: &#39;Fit Lines&#39;,
+             &#39;rectify&#39;: &#39;Verify Rectification&#39;})
+
+<div class="viewcode-block" id="FORCASTWavecalReduction.load">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.html#sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.load">[docs]</a>
+    def load(self, data, param_class=None):
+        &quot;&quot;&quot;Call parent load, with spatcal parameters.&quot;&quot;&quot;
+        FORCASTReduction.load(self, data,
+                              param_class=FORCASTWavecalParameters)</div>
+
+
+<div class="viewcode-block" id="FORCASTWavecalReduction.register_viewers">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.html#sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.register_viewers">[docs]</a>
+    def register_viewers(self):
+        &quot;&quot;&quot;Return new viewers.&quot;&quot;&quot;
+        prof = MatplotlibViewer()
+        prof.name = &#39;ProfileViewer&#39;
+        prof.title = &#39;Spatial Profiles&#39;
+        prof.layout = &#39;rows&#39;
+
+        # using matplotlib viewer instead of Eye,
+        # for line overlay purposes
+        spec = MatplotlibViewer()
+        spec.name = &#39;SpectralViewer&#39;
+        spec.title = &#39;Spectra&#39;
+        spec.layout = &#39;rows&#39;
+
+        resid = MatplotlibViewer()
+        resid.name = &#39;ResidualViewer&#39;
+        resid.title = &#39;Fit Residuals&#39;
+        resid.layout = &#39;rows&#39;
+        resid.share_axes = None
+
+        viewers = [QADViewer(), prof, spec, resid]
+
+        return viewers</div>
+
+
+<div class="viewcode-block" id="FORCASTWavecalReduction.set_display_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.html#sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.set_display_data">[docs]</a>
+    def set_display_data(self, raw=False, filenames=None, regions=None,
+                         residuals=None):
+        &quot;&quot;&quot;
+        Store display data for custom viewers.
+
+        Parameters
+        ----------
+        raw : bool
+            If True, display data is taken from self.rawfiles.
+            If False, display data is taken from self.input
+        filenames : list of str, optional
+            If provided and `raw` is False, file names will be
+            passed to QADViewer instead of self.input.
+        regions : list of str, optional
+            File names of DS9 region files to pass to QADViewer.
+        residuals : list of array-like, optional
+            Fit residual data to pass to ResidualViewer, nplot x 3.
+            The arrays should be x value, y value, residuals.
+        &quot;&quot;&quot;
+        super().set_display_data(raw=raw, filenames=filenames,
+                                 regions=regions, specviewer=&#39;matplotlib&#39;)
+
+        # set residual plot if necessary
+        disp_resid = []
+        if residuals is not None:
+            for residual in residuals:
+                disp = {&#39;args&#39;: [residual[0], residual[2]],
+                        &#39;kwargs&#39;: {&#39;title&#39;: &#39;Fit Residuals vs. X&#39;,
+                                   &#39;xlabel&#39;: &#39;X (pixel)&#39;,
+                                   &#39;ylabel&#39;: &#39;Line position - &#39;
+                                             &#39;model (pixel)&#39;},
+                        &#39;plot_kwargs&#39;: {&#39;linestyle&#39;: &#39; &#39;,
+                                        &#39;marker&#39;: &#39;.&#39;,
+                                        &#39;markersize&#39;: 8,
+                                        &#39;alpha&#39;: 0.7},
+                        &#39;overplot&#39;: [{&#39;plot_type&#39;: &#39;hline&#39;,
+                                      &#39;args&#39;: [0],
+                                      &#39;kwargs&#39;: {&#39;color&#39;: &#39;gray&#39;,
+                                                 &#39;linestyle&#39;: &#39;:&#39;}}],
+                        }
+                disp_resid.append(disp)
+                disp = {&#39;args&#39;: [residual[2], residual[1]],
+                        &#39;kwargs&#39;: {&#39;title&#39;: &#39;Fit Residuals vs. Y&#39;,
+                                   &#39;xlabel&#39;: &#39;Line position - &#39;
+                                             &#39;model (pixel)&#39;,
+                                   &#39;ylabel&#39;: &#39;Y (pixel)&#39;},
+                        &#39;plot_kwargs&#39;: {&#39;linestyle&#39;: &#39; &#39;,
+                                        &#39;marker&#39;: &#39;.&#39;,
+                                        &#39;markersize&#39;: 8,
+                                        &#39;alpha&#39;: 0.7},
+                        &#39;overplot&#39;: [{&#39;plot_type&#39;: &#39;vline&#39;,
+                                      &#39;args&#39;: [0],
+                                      &#39;kwargs&#39;: {&#39;color&#39;: &#39;gray&#39;,
+                                                 &#39;linestyle&#39;: &#39;:&#39;}}]
+                        }
+                disp_resid.append(disp)
+
+        self.display_data[&#39;ResidualViewer&#39;] = disp_resid</div>
+
+
+<div class="viewcode-block" id="FORCASTWavecalReduction.extract_summed_spectrum">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.html#sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.extract_summed_spectrum">[docs]</a>
+    def extract_summed_spectrum(self):
+        &quot;&quot;&quot;Extract high S/N spectrum from unrectified image.&quot;&quot;&quot;
+        # get parameters
+        param = self.get_parameter_set()
+        method = param.get_value(&#39;method&#39;)
+        detrend_order = param.get_value(&#39;detrend_order&#39;)
+        appos = param.get_value(&#39;appos&#39;)
+        aprad = param.get_value(&#39;aprad&#39;)
+
+        if str(method).strip().lower() == &#39;fix to center&#39;:
+            log.info(&#39;Fixing aperture to slit center.&#39;)
+            positions = None
+            radii = parse_apertures(aprad, len(self.input))
+            fix_ap = True
+        elif str(method).strip().lower() == &#39;fix to input&#39;:
+            log.info(&#39;Fixing aperture to input position.&#39;)
+            positions = parse_apertures(appos, len(self.input))
+            radii = parse_apertures(aprad, len(self.input))
+            fix_ap = True
+        else:
+            log.info(&#39;Finding aperture position from Gaussian fits.&#39;)
+            if str(appos).strip() == &#39;&#39;:
+                positions = None
+            else:
+                positions = parse_apertures(appos, len(self.input))
+            radii = None
+            fix_ap = False
+
+        try:
+            detrend_order = int(detrend_order)
+            if detrend_order &lt; 0:
+                detrend_order = None
+            else:
+                log.info(f&#39;Detrending spectrum with order {detrend_order} &#39;
+                         f&#39;polynomial.&#39;)
+        except (ValueError, TypeError):
+            detrend_order = None
+
+        results = []
+        for i, hdul in enumerate(self.input):
+            log.info(&#39;&#39;)
+            log.info(hdul[0].header[&#39;FILENAME&#39;])
+
+            # retrieve data from input
+            header = hdul[0].header
+            image = hdul[&#39;FLUX&#39;].data
+            var = hdul[&#39;ERROR&#39;].data ** 2
+            mask = (hdul[&#39;BADMASK&#39;].data &lt; 1)
+            wave = hdul[&#39;WAVEPOS&#39;].data
+            space = hdul[&#39;SLITPOS&#39;].data
+            spatmap = {1: hdul[&#39;SPATIAL_MAP&#39;].data}
+            profile = {1: [hdul[&#39;SLITPOS&#39;].data,
+                           hdul[&#39;SPATIAL_PROFILE&#39;].data]}
+            if positions is not None:
+                guess = {1: positions[i]}
+            else:
+                guess = None
+
+            ap = find_apertures(profile, npeaks=1, positions=guess,
+                                fwhm=3.0, fix=fix_ap)
+            ap[1][0][&#39;sign&#39;] = 1
+            if fix_ap:
+                ap[1][0][&#39;psf_radius&#39;] = radii[i][0]
+            else:
+                updated_ap = get_apertures(profile, ap, get_bg=False,
+                                           refit_fwhm=False)[1][&#39;apertures&#39;][0]
+                ap[1][0][&#39;psf_radius&#39;] = updated_ap[&#39;psf_radius&#39;]
+
+            # set aperture trace to a row at the aperture position
+            ap[1][0][&#39;trace&#39;] = np.full(len(wave), ap[1][0][&#39;position&#39;])
+
+            # make aperture mask from defined aperture, no background
+            apmask = mkapmask(space, wave, ap[1])
+
+            rectimg = {1: {&#39;image&#39;: image, &#39;variance&#39;: var, &#39;mask&#39;: mask,
+                           &#39;wave&#39;: wave, &#39;spatial&#39;: space, &#39;header&#39;: header,
+                           &#39;apmask&#39;: apmask, &#39;apsign&#39;: None}}
+
+            spectra = extspec(rectimg, spatial_map=spatmap,
+                              optimal=False, fix_bad=True,
+                              sub_background=False,)[1]
+
+            # flatten spectrum if desired
+            if detrend_order is not None:
+                specflux = spectra[0, 1, :].ravel()
+                medval = float(np.nanmedian(specflux))
+
+                pixpos = np.arange(specflux.size, dtype=float)
+                trend = polyfitnd(pixpos, specflux, detrend_order, model=True,
+                                  robust=2)
+                flatspec = specflux - trend(pixpos) + medval
+                spectra[0, 1, :] = flatspec
+
+            # record initial aperture
+            hdinsert(hdul[0].header, &#39;APPOSO01&#39;,
+                     &#39;{:.3f}&#39;.format(ap[1][0][&#39;position&#39;]),
+                     &#39;Aperture positions [pixel]&#39;)
+            hdinsert(hdul[0].header, &#39;PSFRAD01&#39;,
+                     &#39;{:.3f}&#39;.format(ap[1][0][&#39;psf_radius&#39;]),
+                     &#39;Aperture PSF radii [pixel]&#39;)
+
+            # attach spectral flux and error to output file:
+            # shape is n_ap x n_wave
+            exthead = fits.Header()
+            hdinsert(exthead, &#39;BUNIT&#39;,
+                     header.get(&#39;BUNIT&#39;, &#39;Me/s&#39;), &#39;Data units&#39;)
+            hdul.append(fits.ImageHDU(spectra[:, 1, :], exthead,
+                                      name=&#39;SPECTRAL_FLUX&#39;))
+            hdinsert(exthead, &#39;BUNIT&#39;,
+                     header.get(&#39;BUNIT&#39;, &#39;Me/s&#39;), &#39;Data units&#39;)
+            hdul.append(fits.ImageHDU(spectra[:, 2, :], exthead,
+                                      name=&#39;SPECTRAL_ERROR&#39;))
+
+            # update output name
+            outname = self.update_output(hdul, self.filenum[i],
+                                         self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(hdul, outname)
+
+            if param.get_value(&#39;save_1d&#39;):
+                log.info(&#39;&#39;)
+                log.info(&#39;Saving 1D spectra:&#39;)
+                spec = self._make_1d(hdul, wavecal=False)
+                specname = outname.replace(&#39;SSM&#39;, &#39;SSP&#39;)
+                spec[0].header[&#39;FILENAME&#39;] = os.path.basename(specname)
+                spec[0].header[&#39;PRODTYPE&#39;] = &#39;spectra_1d&#39;
+                self.write_output(spec, specname)
+
+            results.append(hdul)
+
+        log.info(&#39;&#39;)
+        self.input = results
+        self.set_display_data()</div>
+
+
+<div class="viewcode-block" id="FORCASTWavecalReduction.identify_lines">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.html#sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.identify_lines">[docs]</a>
+    def identify_lines(self):
+        &quot;&quot;&quot;Initial identification of lines.&quot;&quot;&quot;
+
+        # get parameters
+        param = self.get_parameter_set()
+        wavefile = param.get_value(&#39;wavefile&#39;)
+        linefile = param.get_value(&#39;linefile&#39;)
+        line_type = param.get_value(&#39;line_type&#39;)
+        window = param.get_value(&#39;window&#39;)
+        sigma = param.get_value(&#39;sigma&#39;)
+        guess_lines_input = param.get_value(&#39;guess_lines&#39;)
+        guess_pos_input = param.get_value(&#39;guess_positions&#39;)
+
+        # check for input guess positions
+        guess_lines = []
+        guess_pos = []
+        if str(guess_lines_input).strip() != &#39;&#39;:
+            guess_lines = parse_apertures(guess_lines_input, 1)[0]
+        if str(guess_pos_input).strip() != &#39;&#39;:
+            guess_pos = parse_apertures(guess_pos_input, 1)[0]
+        if len(guess_lines) != len(guess_pos):
+            raise ValueError(&#39;Input guess lines do not match &#39;
+                             &#39;input guess positions.&#39;)
+        if 0 &lt; len(guess_lines) &lt; 2:
+            raise ValueError(&#39;Must have at least 2 line guesses.&#39;)
+
+        mode = &#39;{} {} {}&#39;.format(self.calres[&#39;name&#39;], self.calres[&#39;slit&#39;],
+                                 self.calres[&#39;dateobs&#39;])
+        if not os.path.isfile(linefile):
+            msg = &#39;No line list file for {}&#39;.format(mode)
+            log.error(msg)
+            raise ValueError(msg)
+
+        # read wave and spatial cal file
+        if len(guess_lines) &gt; 0:
+            log.info(&#39;Using input guesses for approximate wavecal.&#39;)
+            order = 2 if len(guess_lines) &gt; 2 else 1
+            wfit_model = polyfitnd(guess_pos, guess_lines, order, model=True)
+            wave = wfit_model(np.arange(256, dtype=float))
+        else:
+            log.info(&#39;Using existing wavecal as starting point.&#39;)
+            if not os.path.isfile(wavefile):
+                msg = &#39;No wavecal file for {}&#39;.format(mode)
+                log.error(msg)
+                raise ValueError(msg)
+
+            # read wavecal
+            try:
+                rotation = fits.getval(wavefile, &#39;ROTATION&#39;)
+            except KeyError:
+                rotation = 0
+            wavecal, spatcal = readwavecal(wavefile, rotate=rotation)
+            ctr = wavecal.shape[0] // 2
+
+            # approximate wavecal
+            wave = wavecal[ctr, :]
+
+        # read linefile
+        linelist = pandas.read_csv(linefile, names=[&#39;line&#39;])[&#39;line&#39;]
+        lines = []
+        display_lines = []
+        for line in linelist:
+            if str(line).startswith(&#39;#&#39;):
+                try:
+                    display_lines.append(float(line[1:]))
+                except (ValueError, TypeError, IndexError):
+                    continue
+            else:
+                try:
+                    line = float(line)
+                except ValueError:
+                    raise ValueError(&#39;Badly formatted line list&#39;) from None
+                lines.append(line)
+                display_lines.append(line)
+        log.debug(&#39;Display lines: {}&#39;.format(display_lines))
+        log.debug(&#39;Fitting lines: {}&#39;.format(lines))
+
+        if line_type == &#39;emission&#39;:
+            baseline = _min_func
+        elif line_type == &#39;absorption&#39;:
+            baseline = _max_func
+        else:
+            baseline = medabs_baseline
+
+        results = []
+        for i, hdul in enumerate(self.input):
+            log.info(&#39;&#39;)
+            log.info(hdul[0].header[&#39;FILENAME&#39;])
+
+            # spectral flux
+            pixelpos = hdul[&#39;WAVEPOS&#39;].data
+            spectrum = hdul[&#39;SPECTRAL_FLUX&#39;].data[0]
+
+            # guess position of each line, then fit it
+            fitpos = []
+            fitline = []
+            for line in lines:
+                guess = tabinv(wave, line)
+                log.info(f&#39;Line {line}, near pixel {guess}&#39;)
+                start = int(np.round(guess - window / 2))
+                start = 0 if start &lt; 0 else start
+                end = int(np.round(guess + window / 2))
+                end = len(pixelpos) if end &gt; len(pixelpos) else end
+                try:
+                    fit_peak = fitpeaks1d(
+                        pixelpos[start:end], spectrum[start:end], npeaks=1,
+                        guess=guess, stddev=sigma, box_width=(&#39;stddev&#39;, 3),
+                        baseline_func=baseline)
+                except ValueError:
+                    log.info(&#39;Not found&#39;)
+                    log.info(&#39;&#39;)
+                else:
+                    mval = fit_peak[0].mean.value
+                    failure = (fit_peak.fit_info[&#39;ierr&#39;] not in [1, 2, 3, 4])
+                    if (failure or np.allclose(mval, pixelpos[start])
+                            or np.allclose(mval, pixelpos[end - 1])):
+                        log.info(&#39;Not found&#39;)
+                        log.info(&#39;&#39;)
+                    else:
+                        log.info(f&#39;Found at {mval}&#39;)
+                        log.info(&#39;&#39;)
+                        fitpos.append(&#39;{:.3f}&#39;.format(mval))
+                        fitline.append(line)
+
+            if not fitpos:
+                msg = &#39;No lines found.&#39;
+                log.error(msg)
+                raise ValueError(msg)
+
+            # record fit lines
+            hdinsert(hdul[0].header, &#39;LINEWAV&#39;,
+                     &#39;,&#39;.join(str(ln) for ln in fitline),
+                     comment=&#39;Line wavelengths [um]&#39;)
+            hdinsert(hdul[0].header, &#39;LINEPOS&#39;, &#39;,&#39;.join(fitpos),
+                     comment=&#39;Line positions [pixels]&#39;)
+            hdinsert(hdul[0].header, &#39;LINETYPE&#39;, line_type,
+                     comment=&#39;Line type&#39;)
+            hdinsert(hdul[0].header, &#39;LINEWID&#39;, sigma,
+                     comment=&#39;Line width&#39;)
+
+            # fit a 1D wavelength solution
+            order = 2 if len(fitline) &gt; 2 else 1
+            wfit_model = polyfitnd(fitpos, fitline, order, model=True)
+            wfit = wfit_model(pixelpos)
+            log.info(f&#39;1D order {order} fit to wavelengths:&#39;)
+            log.info(&#39;&#39;)
+            log.info(wfit_model)
+
+            # store as WAVEPOS
+            hdul[&#39;WAVEPOS&#39;].data = wfit
+            hdul[&#39;WAVEPOS&#39;].header[&#39;BUNIT&#39;] = &#39;um&#39;
+
+            # record display lines too
+            disppos = tabinv(wfit, display_lines)
+            log.debug(display_lines)
+            log.debug(disppos)
+            hdinsert(hdul[0].header, &#39;DISPWAV&#39;,
+                     &#39;,&#39;.join(str(ln) for ln in display_lines),
+                     comment=&#39;Display line wavelengths [um]&#39;)
+            hdinsert(hdul[0].header, &#39;DISPPOS&#39;,
+                     &#39;,&#39;.join(str(ln) for ln in disppos),
+                     comment=&#39;Display line wavelengths [um]&#39;)
+
+            # update output name
+            outname = self.update_output(hdul, self.filenum[i],
+                                         self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(hdul, outname)
+
+            results.append(hdul)
+
+        log.info(&#39;&#39;)
+        self.input = results
+        self.set_display_data()</div>
+
+
+<div class="viewcode-block" id="FORCASTWavecalReduction.reidentify_lines">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.html#sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.reidentify_lines">[docs]</a>
+    def reidentify_lines(self):
+        &quot;&quot;&quot;Reidentification of lines at various slit positions.&quot;&quot;&quot;
+        param = self.get_parameter_set()
+        method = str(param.get_value(&#39;method&#39;)).lower()
+        num_aps = param.get_value(&#39;num_aps&#39;)
+        step = param.get_value(&#39;step&#39;)
+        appos_input = param.get_value(&#39;appos&#39;)
+        radius = param.get_value(&#39;radius&#39;)
+        detrend_order = param.get_value(&#39;detrend_order&#39;)
+        window = param.get_value(&#39;window&#39;)
+        s2n_req = param.get_value(&#39;s2n&#39;)
+
+        try:
+            detrend_order = int(detrend_order)
+            if detrend_order &lt; 0:
+                detrend_order = None
+        except (ValueError, TypeError):
+            detrend_order = None
+
+        if &#39;step&#39; in method:
+            log.info(&#39;Stepping apertures up slit.&#39;)
+            positions = None
+            fix_ap = True
+            radii = parse_apertures(radius, len(self.input))
+        elif str(method).strip().lower() == &#39;fix to input&#39;:
+            log.info(&#39;Fixing aperture to input position.&#39;)
+            positions = parse_apertures(appos_input, len(self.input))
+            fix_ap = True
+            if str(radius).strip() == &#39;&#39;:
+                radii = None
+            else:
+                radii = parse_apertures(radius, len(self.input))
+        else:
+            log.info(&#39;Finding aperture positions from Gaussian fits.&#39;)
+            if str(appos_input).strip() == &#39;&#39;:
+                positions = None
+            else:
+                positions = parse_apertures(appos_input, len(self.input))
+            if str(radius).strip() == &#39;&#39;:
+                radii = None
+            else:
+                radii = parse_apertures(radius, len(self.input))
+            fix_ap = False
+
+        results = []
+        regions = []
+        for i, hdul in enumerate(self.input):
+            log.info(&#39;&#39;)
+            log.info(hdul[0].header[&#39;FILENAME&#39;])
+
+            # flux to extract
+            header = hdul[0].header
+            image = hdul[&#39;FLUX&#39;].data
+            var = hdul[&#39;ERROR&#39;].data ** 2
+            mask = np.full(image.shape, True)
+            wave = np.arange(image.shape[1], dtype=float)
+            space = np.arange(image.shape[0], dtype=float)
+            spatmap = {1: hdul[&#39;SPATIAL_MAP&#39;].data}
+
+            # guess line position from initial line ID
+            lines = parse_apertures(
+                hdul[0].header[&#39;LINEWAV&#39;], 1)[0]
+            guesses = parse_apertures(
+                hdul[0].header[&#39;LINEPOS&#39;], 1)[0]
+            line_type = header.get(&#39;LINETYPE&#39;, &#39;emission&#39;)
+            sigma = header.get(&#39;LINEWID&#39;, 5.0)
+
+            if line_type == &#39;emission&#39;:
+                baseline = _min_func
+            elif line_type == &#39;absorption&#39;:
+                baseline = _max_func
+            else:
+                baseline = medabs_baseline
+
+            appos = []
+            aprad = []
+            if &#39;step&#39; not in method.lower():
+                profile = {1: [hdul[&#39;SLITPOS&#39;].data,
+                               hdul[&#39;SPATIAL_PROFILE&#39;].data]}
+                if positions is not None:
+                    guess = {1: positions[i]}
+                else:
+                    guess = None
+
+                ap = find_apertures(profile, npeaks=num_aps,
+                                    positions=guess, fwhm=3.0,
+                                    fix=fix_ap)
+
+                # update radii from input, accounting for overlap
+                refit = fix_ap
+                if radii is not None:
+                    for j, aperture in enumerate(ap[1]):
+                        k = j if j &lt; len(radii[i]) else len(radii[i]) - 1
+                        aperture[&#39;aperture_radius&#39;] = radii[i][k]
+                        aperture[&#39;psf_radius&#39;] = radii[i][k]
+                    refit = False
+                updated_ap = get_apertures(profile, ap, get_bg=False,
+                                           refit_fwhm=refit)[1][&#39;apertures&#39;]
+
+                log.info(&#39;&#39;)
+                log.info(&#39;Found apertures:&#39;)
+                for j, aperture in enumerate(ap[1]):
+                    aperture[&#39;psf_radius&#39;] = updated_ap[j][&#39;psf_radius&#39;]
+                    aperture[&#39;trace&#39;] = np.full(len(wave),
+                                                aperture[&#39;position&#39;])
+                    appos.append(aperture[&#39;position&#39;])
+                    aprad.append(aperture[&#39;psf_radius&#39;])
+                    log.info(&#39;  position: {}, &#39;
+                             &#39;radius {}&#39;.format(aperture[&#39;position&#39;],
+                                                aperture[&#39;psf_radius&#39;]))
+                log.info(&#39;&#39;)
+
+                # make aperture mask from defined apertures, no background
+                apmask = mkapmask(space, wave, ap[1])
+
+                # extract all spectra at once
+                rectimg = {1: {&#39;image&#39;: image, &#39;variance&#39;: var, &#39;mask&#39;: mask,
+                               &#39;wave&#39;: wave, &#39;spatial&#39;: space,
+                               &#39;header&#39;: header,
+                               &#39;apmask&#39;: apmask, &#39;apsign&#39;: None}}
+                spectra = extspec(rectimg, spatial_map=spatmap,
+                                  optimal=False, fix_bad=True,
+                                  sub_background=False)[1]
+            else:
+                # step up slit, setting apertures, extracting one at a time
+                # This allows overlapping radii, which may be useful
+                # for higher s/n spectra
+                ny = image.shape[0]
+                apctr = step // 2
+                apstart = apctr - radius
+                apend = apctr + radius
+                spectra = []
+
+                log.info(&#39;&#39;)
+                log.info(&#39;Extracting apertures:&#39;)
+
+                while apstart &lt; ny:
+                    apmask = np.full(image.shape, 0.0)
+                    apstart = 0 if apstart &lt; 0 else apstart
+                    apend = ny if apend &gt; ny else apend
+                    apmask[apstart:apend, :] = 1.0
+
+                    # check for mostly nans in aperture: skip aperture if so
+                    apdata = image[apmask == 1]
+                    if np.sum(np.isnan(apdata)) &lt; 0.1 * apdata.size:
+
+                        # effective aperture center
+                        eff = (apend - apstart) / 2
+                        appos.append(apstart + eff)
+                        aprad.append(eff)
+                        log.info(&#39;  position: {}, &#39;
+                                 &#39;radius {}&#39;.format(apstart + eff, eff))
+
+                        rectimg = {1: {&#39;image&#39;: image.copy(),
+                                       &#39;variance&#39;: var.copy(),
+                                       &#39;mask&#39;: mask.copy(), &#39;wave&#39;: wave,
+                                       &#39;spatial&#39;: space, &#39;header&#39;: header,
+                                       &#39;apmask&#39;: apmask, &#39;apsign&#39;: None}}
+
+                        one_spec = extspec(rectimg, spatial_map=spatmap,
+                                           optimal=False, fix_bad=True,
+                                           sub_background=False)[1]
+                        spectra.append(one_spec[0])
+
+                    apctr += step
+                    apstart = apctr - radius
+                    apend = apctr + radius
+
+                spectra = np.array(spectra)
+                log.info(&#39;&#39;)
+
+            # flatten spectra if desired
+            if detrend_order is not None:
+                for j, spec in enumerate(spectra):
+                    specflux = spec[1, :].ravel()
+                    medval = float(np.nanmedian(specflux))
+                    pixpos = np.arange(specflux.size, dtype=float)
+                    trend = polyfitnd(pixpos, specflux, detrend_order,
+                                      model=True, robust=2)
+                    flatspec = specflux - trend(pixpos) + medval
+                    spectra[j, 1, :] = flatspec
+
+            # guess position of each line in each spectrum
+            allpos = []
+            allheight = []
+            for spec in spectra:
+                fitpos = []
+                fitheight = []
+                pixelpos = spec[0]
+                spectrum = spec[1]
+                specerr = spec[2]
+
+                for line, guess in zip(lines, guesses):
+                    start = int(np.round(guess - window / 2))
+                    start = 0 if start &lt; 0 else start
+                    end = int(np.round(guess + window / 2))
+                    end = len(pixelpos) if end &gt; len(pixelpos) else end
+                    with warnings.catch_warnings():
+                        warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+                        s2n = np.nanmean(spectrum[start:end]
+                                         / specerr[start:end])
+                    if s2n_req &gt; 0 and s2n &lt; s2n_req:
+                        fitpos.append(np.nan)
+                        fitheight.append(np.nan)
+                        continue
+
+                    try:
+                        fit_peak = fitpeaks1d(
+                            pixelpos[start:end], spectrum[start:end], npeaks=1,
+                            guess=guess, stddev=sigma, box_width=(&#39;stddev&#39;, 3),
+                            baseline_func=baseline)
+                    except ValueError:
+                        fitpos.append(np.nan)
+                        fitheight.append(np.nan)
+                    else:
+                        mval = fit_peak[0].mean.value
+                        failure = (fit_peak.fit_info[&#39;ierr&#39;]
+                                   not in [1, 2, 3, 4])
+                        if (failure or np.allclose(mval, pixelpos[start])
+                                or np.allclose(mval, pixelpos[end - 1])):
+                            # set failures or boundary-pegged values to NaN
+                            fitpos.append(np.nan)
+                            fitheight.append(np.nan)
+                        else:
+                            # otherwise record fit value
+                            fitpos.append(mval)
+                            if line_type == &#39;emission&#39;:
+                                height = fit_peak[0].amplitude.value
+                            else:
+                                height = np.abs(fit_peak[0].amplitude.value)
+                            fitheight.append(height)
+
+                allpos.append(fitpos)
+                allheight.append(fitheight)
+
+            # make position table and do preliminary fit
+            allpos = np.array(allpos)
+            allheight = np.array(allheight)
+            trace_x = allpos.T
+            trace_y = np.tile(np.expand_dims(appos, 1),
+                              (1, len(lines))).T
+            trace_fit = []
+            for j, line in enumerate(lines):
+                lfit_model = polyfitnd(trace_y[j], trace_x[j], 2,
+                                       robust=5.0, model=True)
+                lfit = lfit_model(space)
+                trace_fit.append(lfit)
+
+            # make a region to display
+            log.info(&#39;&#39;)
+            log.info(&#39;Region file shows 2nd order 1D fits &#39;
+                     &#39;to wavelength positions for reference.&#39;)
+            prodname = self.prodnames[self.prodtypes[self.step_index]]
+            region = self._trace_region(
+                header, self.filenum[i], prodname,
+                trace_x.ravel(), trace_y.ravel(), space, trace_fit,
+                fit_direction=&#39;y&#39;)
+            regions.append(region)
+
+            # record data
+            hdul.append(fits.ImageHDU(allpos, name=&#39;LINE_TABLE&#39;))
+            hdul.append(fits.ImageHDU(allheight, name=&#39;LINE_HEIGHT&#39;))
+            hdinsert(hdul[0].header, &#39;APPOSO01&#39;,
+                     &#39;,&#39;.join([&#39;{:.3f}&#39;.format(a) for a in appos]),
+                     &#39;Aperture positions [pixel]&#39;)
+            hdinsert(hdul[0].header, &#39;PSFRAD01&#39;,
+                     &#39;,&#39;.join([&#39;{:.3f}&#39;.format(a) for a in aprad]),
+                     &#39;Aperture PSF radii [pixel]&#39;)
+
+            # update spectral flux and error in output file:
+            # shape is n_ap x n_wave
+            hdul[&#39;SPECTRAL_FLUX&#39;].data = spectra[:, 1, :]
+            hdul[&#39;SPECTRAL_ERROR&#39;].data = spectra[:, 2, :]
+
+            # update output name
+            outname = self.update_output(hdul, self.filenum[i],
+                                         self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(hdul, outname)
+
+            if param.get_value(&#39;save_1d&#39;):
+                log.info(&#39;&#39;)
+                log.info(&#39;Saving 1D spectra:&#39;)
+                spec = self._make_1d(hdul)
+                specname = outname.replace(&#39;LRD&#39;, &#39;LRS&#39;)
+                spec[0].header[&#39;FILENAME&#39;] = os.path.basename(specname)
+                spec[0].header[&#39;PRODTYPE&#39;] = &#39;spectra_1d&#39;
+                self.write_output(spec, specname)
+
+            results.append(hdul)
+
+        log.info(&#39;&#39;)
+        self.input = results
+        self.set_display_data(regions=regions)</div>
+
+
+    def _save_residual_plot(self, filenames):
+        &quot;&quot;&quot;Save diagnostic plots for wavecal fit.&quot;&quot;&quot;
+
+        # thread-safe imports to use in place of pyplot
+        from matplotlib.backends.backend_agg \
+            import FigureCanvasAgg as FigureCanvas
+        from matplotlib.figure import Figure
+
+        for i, filename in enumerate(filenames):
+            fig = Figure()
+            FigureCanvas(fig)
+            for j in range(2):
+                disp = self.display_data[&#39;ResidualViewer&#39;][2 * i + j]
+                ax = fig.add_subplot(2, 1, j + 1)
+                ax.plot(*disp[&#39;args&#39;], **disp[&#39;plot_kwargs&#39;])
+                ax.set(**disp[&#39;kwargs&#39;])
+                for oplot in disp[&#39;overplot&#39;]:
+                    if oplot[&#39;plot_type&#39;] == &#39;vline&#39;:
+                        ax.axvline(*oplot[&#39;args&#39;], **oplot[&#39;kwargs&#39;])
+                    elif oplot[&#39;plot_type&#39;] == &#39;hline&#39;:
+                        ax.axhline(*oplot[&#39;args&#39;], **oplot[&#39;kwargs&#39;])
+
+            fig.tight_layout()
+            fig.savefig(filename, dpi=300)
+            log.info(&#39;Wrote residual plot {}&#39;.format(filename))
+
+        return
+
+    def _sim_spatcal(self, data_shape):
+        flatfile = self.calres.get(&#39;maskfile&#39;, &#39;UNKNOWN&#39;)
+        log.debug(f&#39;Using order mask {flatfile}&#39;)
+        if not os.path.isfile(flatfile):
+            msg = &#39;Missing order mask&#39;
+            log.error(msg)
+            raise ValueError(msg)
+
+        flat = readflat(flatfile)
+        _, spatcal, _ = simwavecal2d(data_shape, flat[&#39;edgecoeffs&#39;],
+                                     flat[&#39;xranges&#39;], flat[&#39;slith_arc&#39;],
+                                     flat[&#39;ds&#39;])
+        return spatcal
+
+<div class="viewcode-block" id="FORCASTWavecalReduction.fit_lines">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.html#sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.fit_lines">[docs]</a>
+    def fit_lines(self):
+        &quot;&quot;&quot;Fit a 2D surface to line IDs.&quot;&quot;&quot;
+
+        param = self.get_parameter_set()
+        x_order = param.get_value(&#39;x_fit_order&#39;)
+        y_order = param.get_value(&#39;y_fit_order&#39;)
+        weighted = param.get_value(&#39;weighted&#39;)
+        spatfile = param.get_value(&#39;spatfile&#39;)
+        rotation = param.get_value(&#39;rotation&#39;)
+
+        xpos, ypos, expected, height = [], [], [], []
+        data_shape = None
+        all_lines = []
+        hdr_list = []
+        for i, hdul in enumerate(self.input):
+            if data_shape is None:
+                data_shape = hdul[&#39;FLUX&#39;].data.shape
+
+            # lines from previous step
+            header = hdul[0].header
+            hdr_list.append(header)
+            lines = parse_apertures(header[&#39;LINEWAV&#39;], 1)[0]
+            appos = parse_apertures(header[&#39;APPOSO01&#39;], 1)[0]
+            all_lines.extend(lines)
+
+            line_table = hdul[&#39;LINE_TABLE&#39;].data
+            line_height = hdul[&#39;LINE_HEIGHT&#39;].data
+            pos_table = np.tile(np.expand_dims(appos, 1), (1, len(lines)))
+            wave_expected = np.tile(np.expand_dims(lines, 0), (len(appos), 1))
+
+            xpos.extend(line_table.ravel())
+            ypos.extend(pos_table.ravel())
+            expected.extend(wave_expected.ravel())
+            height.extend(line_height.ravel())
+
+        # 2D surface fit to lines
+        if weighted:
+            log.info(&#39;Weighting fit by line height.&#39;)
+            error = 1 / np.array(height)
+        else:
+            log.info(&#39;Fit is unweighted.&#39;)
+            error = None
+        lfit_model = polyfitnd(ypos, xpos, expected,
+                               [y_order, x_order], error=error,
+                               robust=5.0, model=True)
+        log.info(lfit_model)
+
+        idx = np.arange(data_shape[0], dtype=float)
+        space = np.tile(np.expand_dims(idx, 1), (1, data_shape[1]))
+        idx = np.arange(data_shape[1], dtype=float)
+        wave = np.tile(np.expand_dims(idx, 0), (data_shape[0], 1))
+        lfit = lfit_model(space, wave)
+
+        # spatial calibration from input or pixel positions
+        if os.path.isfile(spatfile):
+            log.info(f&#39;Using {spatfile} for spatial calibration.&#39;)
+            _, spatcal = readwavecal(spatfile, rotate=rotation)
+            spat_hdr = getheader(spatfile)
+        else:
+            log.info(&#39;Using simulated calibration from slit height.&#39;)
+            spatcal = self._sim_spatcal(data_shape)
+            spat_hdr = fits.Header()
+
+        # match wavecal nans to spatcal
+        lfit[np.isnan(spatcal)] = np.nan
+
+        results = []
+        regions = []
+        residuals = []
+        save_names = []
+        for i, hdul in enumerate(self.input):
+
+            # record data
+            del hdul[0].header[&#39;APPOSO01&#39;]
+            hdul.append(fits.ImageHDU(lfit, name=&#39;WAVECAL&#39;))
+            hdul.append(fits.ImageHDU(spatcal, name=&#39;SPATCAL&#39;))
+
+            # update output name
+            outname = self.update_output(hdul, self.filenum[i],
+                                         self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(hdul, outname)
+
+            results.append(hdul)
+
+        # also write final wavecal file
+        header = hdmerge(hdr_list, hdr_list[0])
+
+        # rotate wavecal if needed before saving
+        hdinsert(header, &#39;ROTATION&#39;, rotation, &#39;Rotate 90deg value&#39;)
+        rw = unrotate90(lfit.copy(), rotation)
+        rs = unrotate90(spatcal.copy(), rotation)
+
+        calfile = fits.HDUList(
+            fits.PrimaryHDU(header=header,
+                            data=np.array([rw, rs])))
+        hdinsert(calfile[0].header, &#39;WCTYPE&#39;, &#39;2D&#39;,
+                 comment=&#39;Wavelength calibration type&#39;)
+        hdinsert(calfile[0].header, &#39;WXDEG&#39;, x_order,
+                 comment=&#39;X polynomial degree for 2D wavecal&#39;)
+        hdinsert(calfile[0].header, &#39;WYDEG&#39;, y_order,
+                 comment=&#39;Y polynomial degree for 2D wavecal&#39;)
+        hdinsert(calfile[0].header, &#39;WCOEFF&#39;,
+                 &#39;,&#39;.join(str(c) for c in lfit_model.coefficients),
+                 comment=&#39;Wavelength fit coefficients&#39;)
+        hdinsert(calfile[0].header, &#39;SXDEG&#39;, spat_hdr.get(&#39;SXDEG&#39;, 0),
+                 comment=&#39;X polynomial degree for 2D spatcal&#39;)
+        hdinsert(calfile[0].header, &#39;SYDEG&#39;, spat_hdr.get(&#39;SYDEG&#39;, 1),
+                 comment=&#39;Y polynomial degree for 2D spatcal&#39;)
+        hdinsert(calfile[0].header, &#39;SCOEFF&#39;, spat_hdr.get(&#39;SCOEFF&#39;, &#39;&#39;),
+                 comment=&#39;Spatial fit coefficients&#39;)
+        hdinsert(calfile[0].header, &#39;NORDERS&#39;, 1,
+                 comment=&#39;Number of orders&#39;)
+        hdinsert(calfile[0].header, &#39;ORDERS&#39;, &#39;1&#39;,
+                 comment=&#39;Order numbers&#39;)
+        outname = self.getfilename(header, update=True,
+                                   prodtype=&#39;WCL&#39;, filenum=self.filenum)
+        calfile[0].header[&#39;FILENAME&#39;] = os.path.basename(outname)
+        calfile[0].header[&#39;PRODTYPE&#39;] = &#39;wavecal&#39;
+        self.write_output(calfile, outname)
+
+        # make a region file to display
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;)
+            min_line = np.max(np.nanmin(lfit, axis=1))
+            max_line = np.min(np.nanmax(lfit, axis=1))
+        tlines = [min_line] + sorted(list(set(all_lines))) + [max_line]
+        trace_fit = []
+        for ap in idx:
+            aptab = []
+            for wline in tlines:
+                aptab.append(tabinv(lfit[int(ap), :], wline,
+                                    missing=np.nan))
+            trace_fit.append(aptab)
+        trace_fit = np.array(trace_fit).T
+
+        region = self._trace_region(header, self.filenum, &#39;LFT&#39;,
+                                    xpos, ypos, idx, trace_fit,
+                                    fit_direction=&#39;y&#39;)
+        regions.append(region)
+
+        # keep residuals for plotting
+        dw = np.nanmean(lfit[:, 1:] - lfit[:, :-1])
+        residuals_data = [xpos, ypos,
+                          lfit_model.stats.residuals / dw]
+        residuals.append(residuals_data)
+        pngname = outname.replace(&#39;WCL&#39;, &#39;RSD&#39;)
+        pngname = os.path.join(self.output_directory,
+                               os.path.splitext(pngname)[0] + &#39;.png&#39;)
+        save_names.append(pngname)
+
+        self.input = results
+        self.set_display_data(regions=regions, residuals=residuals)
+
+        # save residual plot to disk, after assembled in display data
+        self._save_residual_plot(save_names)
+
+        log.info(&#39;&#39;)</div>
+
+
+<div class="viewcode-block" id="FORCASTWavecalReduction.rectify">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.html#sofia_redux.pipeline.sofia.forcast_wavecal_reduction.FORCASTWavecalReduction.rectify">[docs]</a>
+    def rectify(self):
+        # modify input to expected extensions only -
+        # FLUX, ERROR, WAVECAL, SPATCAL
+        expected = [&#39;FLUX&#39;, &#39;ERROR&#39;, &#39;WAVECAL&#39;, &#39;SPATCAL&#39;]
+        for i, hdul in enumerate(self.input):
+            new_hdul = fits.HDUList()
+            for extname in expected:
+                new_hdul.append(hdul[extname].copy())
+
+            # remove old extraction information
+            for key in [&#39;APPOSO01&#39;, &#39;APRADO01&#39;, &#39;PSFRAD01&#39;]:
+                try:
+                    del new_hdul[0].header[key]
+                except KeyError:
+                    pass
+
+            self.input[i] = new_hdul
+
+        # call the standard make_profiles step, with the testwavecal
+        # hidden parameter set
+        self.make_profiles()</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

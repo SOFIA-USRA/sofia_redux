@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.smoothres &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.smoothres</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+from scipy.signal import convolve
+import warnings
+
+__all__ = [&#39;smoothres&#39;]
+
+
+<div class="viewcode-block" id="smoothres">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.smoothres.smoothres.html#sofia_redux.spectroscopy.smoothres.smoothres">[docs]</a>
+def smoothres(x, y, resolution, siglim=5):
+    &quot;&quot;&quot;
+    Smooth a data to a constant resolution
+
+    The procedure is:
+
+    1. Resample data to a constant spacing in log(wavelength).
+    2. Convolve resampled data with Gaussian kernel.
+    3. Interpolate back to linear wavelength spacing.
+
+    Parameters
+    ----------
+    x : array_like of (int or float)
+        (N,) independent variable
+    y : array_like if (int or float)
+        (N,) dependent variable
+    resolution : int or float
+        Spectral resolution to smooth to
+    siglim : int or float, optional
+        Maximum fwhm deviation
+
+    Returns
+    -------
+    numpy.ndarray
+        (N,) The smoothed data array.
+    &quot;&quot;&quot;
+    x, y = np.array(x), np.array(y)
+    if x.shape != y.shape:
+        raise ValueError(&quot;x and y array shape mismatch&quot;)
+    elif x.ndim != 1:
+        raise ValueError(&quot;x and y arrays must have 1 dimension&quot;)
+    elif resolution &lt; 0:
+        raise ValueError(&quot;resolution must be positive&quot;)
+    elif np.allclose(resolution, 0):
+        return y
+
+    n = x.size
+    with warnings.catch_warnings():
+        warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+        xmin, xmax = np.nanmin(x), np.nanmax(x)
+        a = (n - 1) / (np.log(xmax) - np.log(xmin))
+        b = n - (a * np.log(xmax))
+        xpon = np.arange(n, dtype=float) + 1
+
+        xlog = np.exp((xpon - b) / a)
+        ylog = np.interp(xlog, x, y)
+
+        # Resample to constant spacing in log lambda; dv/c = d(ln lambda)
+        sigma = 1 / (resolution * 2 * np.sqrt(2 * np.log(2)))
+        wgauss = (np.arange(n) - (n / 2)) / a
+        idx = np.abs(wgauss / sigma) &lt;= siglim
+
+    nok = idx.sum()
+    if nok &gt; (n / 2):
+        log.warning(
+            &quot;Kernel too large; &quot;
+            &quot;only part of the input array will be correctly convolved&quot;)
+    elif nok &lt; 2:
+        log.error(&quot;No data less than sigma limit: all data=%s&quot; % np.nan)
+        return np.full(y.shape, np.nan)
+
+    psf = np.exp(-0.5 * ((wgauss[idx] / sigma) ** 2))
+    psf /= psf.sum()
+
+    # perform convolution
+    yconv = convolve(ylog, psf, mode=&#39;same&#39;)
+    yconv[~np.isfinite(yconv)] = 0
+
+    # Switch back to linear x-spacing
+    yout = np.interp(x, xlog, yconv)
+    return yout</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

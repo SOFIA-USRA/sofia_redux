@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.toolkit.image.adjust &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.toolkit.image.adjust</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+from scipy.ndimage import interpolation, affine_transform
+
+from sofia_redux.toolkit.image.fill import image_naninterp
+from sofia_redux.toolkit.image.resize import resize
+from sofia_redux.toolkit.interpolate.interpolate import line_shift
+
+
+__all__ = [&#39;shift&#39;, &#39;rotate&#39;, &#39;frebin&#39;, &#39;image_shift&#39;, &#39;rotate90&#39;,
+           &#39;unrotate90&#39;, &#39;register_image&#39;, &#39;upsampled_dft&#39;]
+
+
+<div class="viewcode-block" id="upsampled_dft">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.image.adjust.upsampled_dft.html#sofia_redux.toolkit.image.adjust.upsampled_dft">[docs]</a>
+def upsampled_dft(data, upsampled_region_size,
+                  upsample_factor=1, axis_offsets=None):
+    &quot;&quot;&quot;
+    Upsampled DFT by matrix multiplication.
+
+    This code is intended to provide the same result as if the following
+    operations were performed:
+
+        - Embed the array &quot;data&quot; in an array that is ``upsample_factor`` times
+          larger in each dimension.  ifftshift to bring the center of the
+          image to (1,1).
+        - Take the FFT of the larger array.
+        - Extract an ``[upsampled_region_size]`` region of the result, starting
+          with the ``[axis_offsets+1]`` element.
+
+    It achieves this result by computing the DFT in the output array without
+    the need to zeropad. Much faster and memory efficient than the zero-padded
+    FFT approach if ``upsampled_region_size`` is much smaller than
+    ``data.size * upsample_factor``.
+
+    Parameters
+    ----------
+    data : array
+        The input data array (DFT of original data) to upsample.
+    upsampled_region_size : integer or tuple of integers, optional
+        The size of the region to be sampled.  If one integer is provided, it
+        is duplicated up to the dimensionality of ``data``.
+    upsample_factor : integer, optional
+        The upsampling factor.  Defaults to 1.
+    axis_offsets : tuple of integers, optional
+        The offsets of the region to be sampled.  Defaults to None (uses
+        image center)
+
+    Returns
+    -------
+    output : ndarray
+            The upsampled DFT of the specified region.
+    &quot;&quot;&quot;
+    # if people pass in an integer, expand it to a list of equal-sized sections
+    if not hasattr(upsampled_region_size, &quot;__iter__&quot;):
+        upsampled_region_size = [upsampled_region_size, ] * data.ndim
+    else:
+        if len(upsampled_region_size) != data.ndim:
+            raise ValueError(&quot;shape of upsampled region sizes must be equal &quot;
+                             &quot;to input data&#39;s number of dimensions.&quot;)
+
+    if axis_offsets is None:
+        axis_offsets = [0, ] * data.ndim
+    else:
+        if len(axis_offsets) != data.ndim:
+            raise ValueError(&quot;number of axis offsets must be equal to input &quot;
+                             &quot;data&#39;s number of dimensions.&quot;)
+
+    im2pi = 1j * 2 * np.pi
+
+    dim_properties = list(zip(data.shape, upsampled_region_size, axis_offsets))
+
+    for (n_items, ups_size, ax_offset) in dim_properties[::-1]:
+        kernel = ((np.arange(ups_size) - ax_offset)[:, None]
+                  * np.fft.fftfreq(n_items, upsample_factor))
+        kernel = np.exp(-im2pi * kernel)
+
+        # Equivalent to:
+        #   data[i, j, k] = kernel[i, :] @ data[j, k].T
+        data = np.tensordot(kernel, data, axes=(1, -1))
+    return data</div>
+
+
+
+<div class="viewcode-block" id="shift">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.image.adjust.shift.html#sofia_redux.toolkit.image.adjust.shift">[docs]</a>
+def shift(data, offset, order=1, missing=np.nan, nan_interpolation=0.0,
+          missing_limit=1e-3, mode=&#39;constant&#39;):
+    &quot;&quot;&quot;
+    Shift an image by the specified amount.
+
+    Uses interpolation to do sub-pixel shifts if desired.  NaNs are
+    safely handled.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        The image array to shift_image (nrow, ncol)
+    offset : array_like
+        The shift along each axis.  If a float, shift is the same for
+        all axis.  If an array, shift should contain one value for each
+        axis.
+    order : int, optional
+        Interpolation order.  0 shifts by integer pixels; 1 shifts
+        using bilinear interpolation; 2-5 shift_image using cubic-spline
+        interpolation of the same order.
+    missing : float or int, optional
+        Value to fill past  edges of input if `edge` is &#39;constant&#39;.
+    nan_interpolation : float, optional
+        NaN values must be replaced by a real value before shifting.
+        Setting this value to None will result in NaN values being replaced
+        by an interpolated value using the Clough-Tocher scheme.
+    missing_limit : float, optional
+        The fraction of NaNs that were excluded from the interpolation.
+        If the interpolation exceeds this limit, the value will be
+        replaced by `missing`.
+    mode : str, optional
+         Points outside the boundaries of the input are filled
+         according to the given mode (&#39;constant&#39;, &#39;nearest&#39;, &#39;reflect&#39;,
+         or &#39;wrap&#39;).
+
+    Returns
+    -------
+    numpy.ndarray
+        shifted image image array (nrow, ncol)
+    &quot;&quot;&quot;
+    if not isinstance(data, np.ndarray):
+        log.error(&quot;data must be %s&quot; % np.ndarray)
+        return
+    ndim = len(data.shape)
+    if not hasattr(offset, &#39;__len__&#39;):
+        offset = [offset] * ndim
+    if len(offset) != ndim:
+        log.error(&quot;invalid offset %s&quot; % repr(offset))
+        return
+
+    try:
+        order = int(order)
+    except (TypeError, ValueError):
+        log.error(&quot;invalid order %s&quot; % repr(order))
+        return
+    if order &lt; 0 or order &gt; 5:
+        log.error(&quot;order must be between in the range 0-5&quot;)
+        return
+
+    if order &gt;= 1:
+        if np.allclose(offset, np.floor(offset)):
+            order = 0
+
+    nans = np.isnan(data)
+    cval = np.nan if missing is None else missing
+    if not nans.any():
+        return interpolation.shift(data, offset, order=order,
+                                   cval=cval, mode=mode)
+
+    if nan_interpolation is None:
+        shifted = image_naninterp(data)
+    else:
+        if np.isnan(nan_interpolation):
+            raise ValueError(&quot;nan_interpolation must be finite&quot;)
+        shifted = data.copy()
+        shifted[nans] = nan_interpolation
+
+    shifted = interpolation.shift(shifted, offset, order=order,
+                                  cval=cval, mode=mode)
+
+    if missing is not None:
+        nanmask = interpolation.shift(
+            nans.astype(float), offset, order=order, cval=1, mode=mode)
+        shifted[np.abs(nanmask) &gt; missing_limit] = missing
+
+    return shifted</div>
+
+
+
+<div class="viewcode-block" id="rotate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.image.adjust.rotate.html#sofia_redux.toolkit.image.adjust.rotate">[docs]</a>
+def rotate(data, angle, order=1, missing=np.nan, nan_interpolation=0.0,
+           missing_limit=1e-3, mode=&#39;constant&#39;, pivot=None):
+    &quot;&quot;&quot;
+    Rotate an image.
+
+    Rotates an image `angle` degrees clockwise around `center`.
+    I cannot find any interpolation algorithms in Python that
+    handle NaNs (quickly), so do it myself.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        2 dimensional data array to rotate
+    angle : float
+        angle in degrees to rotate the image clockwise around
+        center
+    order : int, optional
+        interpolation order.  0 rotates by integer pixels; 1 shifts
+        using bilinear interpolation; 2-5 shift_image using
+        cubic-spline interpolation of the same order.
+    missing : float or int, optional
+        value to fill past  edges of input if `edge` is &#39;constant&#39;.
+        Default is numpy.nan.
+    nan_interpolation : float, optional
+        NaN values must be replaced by a real value before rotating.
+        Setting this value to None will result in NaN values being replaced
+        by an interpolated value using the Clough-Tocher scheme.
+    missing_limit : float, optional
+        use as a threshold 0 to 1 to detect missing values
+    mode : str, optional
+        Points outside the boundaries of the nearest input are filled
+        according to the given mode (&#39;constant&#39;, &#39;nearest&#39;, &#39;reflect&#39;,
+        or &#39;wrap&#39;).  Default is &#39;constant&#39;.
+    pivot : array_like
+        (y, x) coordinate of the center of rotation
+
+    Returns
+    -------
+    numpy.ndarray or None
+       The rotated image or None on failure
+    &quot;&quot;&quot;
+    if len(data.shape) != 2:
+        log.error(&quot;data must be 2-dimensional&quot;)
+        return
+
+    cval = np.nan if missing is None else missing
+    rads = np.radians(angle)
+    cosa = np.cos(rads)
+    sina = np.sin(rads)
+    matrix = np.array([[cosa, sina], [-sina, cosa]], dtype=np.float64)
+    center = np.array([data.shape[0] - 1, data.shape[1] - 1],
+                      dtype=np.float64) / 2
+    if pivot is None:
+        offset = center - np.dot(matrix, center)
+    else:
+        piv = np.array(pivot, dtype=np.float64)
+        if piv.shape != (2,):
+            log.error(&quot;invalid pivot %s: will not rotate&quot; % repr(pivot))
+            return
+        offset = piv - np.dot(matrix, piv)
+
+    kwargs = {&#39;order&#39;: order, &#39;cval&#39;: cval, &#39;prefilter&#39;: False,
+              &#39;mode&#39;: mode, &#39;output_shape&#39;: data.shape, &#39;offset&#39;: offset}
+
+    nans = np.isnan(data)
+    do_nans = nans.any()
+
+    if angle % 360 == 0:
+        clean_data = data.copy()
+        if missing is not None:
+            clean_data[nans] = missing
+        return clean_data
+
+    if do_nans:
+        if nan_interpolation is None:
+            clean_data = image_naninterp(data)
+        else:
+            if np.isnan(nan_interpolation):
+                raise ValueError(&quot;nan_interpolation must be finite&quot;)
+            clean_data = data.copy()
+            clean_data[nans] = nan_interpolation
+    else:
+        clean_data = data
+
+    output = affine_transform(clean_data, matrix, **kwargs)
+
+    if not do_nans:
+        return output.astype(data.dtype)
+
+    kwargs[&#39;cval&#39;] = 1.0
+
+    if missing is not None:
+        nanmask = affine_transform(nans.astype(float), matrix, **kwargs)
+        output[np.abs(nanmask) &gt; missing_limit] = missing
+
+    return output.astype(data.dtype)</div>
+
+
+
+<div class="viewcode-block" id="frebin">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.image.adjust.frebin.html#sofia_redux.toolkit.image.adjust.frebin">[docs]</a>
+def frebin(data, shape, total=False, order=None,
+           anti_aliasing=None, mode=&#39;reflect&#39;):
+    &quot;&quot;&quot;
+    Rebins an array to new shape
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        input data (nrow, ncol)
+    shape : 2-tuple of int
+        output data shape (nrow2, ncol2)
+    total : bool, optional
+        if True the sum of the output data will equal the sum
+        of the input data.
+    order : int, optional
+        0 = nearest neighbor
+        1 = bi-linear
+        2 = bi-quadratic
+        3 = bi-cubic
+        4 = bi-quartic
+        5 = bi-quintic
+        By default, nearest neighbor will be used if the output
+        shape is an integer factor of the input data shape.
+        Otherwise, bi-linear interpolation will be used.
+    anti_aliasing : bool, optional
+        passed into `resize`
+    mode : str, optional
+        passed into `resize`
+
+    Returns
+    -------
+    numpy.ndarray
+       resized data array (nrow2, ncol2)
+    &quot;&quot;&quot;
+    if data.shape == shape:
+        return data.copy()
+
+    if order is None:
+        for s1, s2 in zip(data.shape, shape):
+            if (s1 % s2 != 0) and (s2 % s1 != 0):
+                order = 1  # linear
+                break
+        else:
+            order = 0  # nearest neighbor
+
+    if anti_aliasing is None:
+        for s1, s2 in zip(data.shape, shape):
+            if s2 &gt; s1:
+                anti_aliasing = True
+                break
+        else:
+            anti_aliasing = False
+
+    if np.isnan(data).any():
+        d = data.copy()
+        select = np.isnan(d)
+        mask = np.full_like(d, 1)
+        mask[select] = 0
+        d[select] = 0
+        rebinned = resize(d, shape, order=order,
+                          mode=mode, anti_aliasing=anti_aliasing)
+        mask = resize(mask, shape, order=order,
+                      mode=mode, anti_aliasing=anti_aliasing)
+        nzi = mask &gt;= 0.5
+        rebinned[nzi] /= mask[nzi]
+        rebinned[~nzi] = np.nan
+    else:
+        rebinned = resize(data, shape, order=order,
+                          mode=mode, anti_aliasing=anti_aliasing)
+    if total:
+        fac = np.product(data.shape) / np.product(shape)
+        rebinned *= fac
+
+    return rebinned</div>
+
+
+
+<div class="viewcode-block" id="image_shift">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.image.adjust.image_shift.html#sofia_redux.toolkit.image.adjust.image_shift">[docs]</a>
+def image_shift(data, shifts, order=3, missing=np.nan):
+    &quot;&quot;&quot;
+    Shifts an image by x and y offsets
+
+    Uses `line_shift` to shift the entire image in the x-direction
+    followed by a shift in the y-direction.
+
+    Parameters
+    ----------
+    data : array_like
+        2 dimensional (y, x) array to shift_image
+    shifts : Sequence of (int or float)
+        [xoffset, yoffset] (additive)
+    order : int
+        0 : integer shifts
+        1 : linear interpolation
+        2-5: spline order of interpolation.  3=cubic.
+    missing : int or float
+        Edges are treated as hard limits.  Values outside of these limits
+        will be replaced with the missing value defined here.
+
+    Returns
+    -------
+    np.ndarray
+        A shifted copy of the input data
+    &quot;&quot;&quot;
+    result = np.empty_like(data)
+    result.fill(missing)
+    for yind in np.arange(data.shape[0]):
+        result[yind, :] = line_shift(
+            data[yind, :], shifts[0], missing=missing, order=order)
+    for xind in np.arange(data.shape[1]):
+        result[:, xind] = line_shift(
+            result[:, xind], shifts[1], order=order, missing=missing)
+    return result</div>
+
+
+
+<div class="viewcode-block" id="rotate90">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.image.adjust.rotate90.html#sofia_redux.toolkit.image.adjust.rotate90">[docs]</a>
+def rotate90(image, direction):
+    &quot;&quot;&quot;
+    Replicates IDL rotate function
+
+    In the table below, (X0, Y0) indicates the original subscripts, and
+    (X1, Y1) are the subscripts of the resulting array.  The notation
+    Y0 indicates a reversal of the Y axis, Y1 = Ny - Y0 - 1.
+
+    ========= ========== ============= ==== ====
+    Direction Transpose? AntiClockwise  X1   Y1
+    ========= ========== ============= ==== ====
+    0         N            0             X0   Y0
+    1         N           90            -Y0   X0
+    2         N          180            -X0  -Y0
+    3         N          270             Y0  -X0
+    4         Y            0             Y0   X0
+    5         Y           90            -X0   Y0
+    6         Y          180            -Y0  -X0
+    7         Y          270             X0  -Y0
+    ========= ========== ============= ==== ====
+
+    Parameters
+    ----------
+    image : array_like
+        (N, M) 2 dimensional array to rotate.
+    direction : int
+        See above for rotate value effect.  Direction is taken as
+        modulo 8.
+
+    Returns
+    -------
+    numpy.ndarray
+    &quot;&quot;&quot;
+    image = np.asarray(image)
+    ndim = image.ndim
+    if ndim not in [1, 2]:
+        raise ValueError(&quot;Only 1 or 2 features allowed&quot;)
+    if ndim == 1:
+        image = image[:, None]
+    shape1 = image.shape
+
+    rot = int(direction) % 8
+    if rot &gt;= 4:
+        image = image.T
+
+    image = np.rot90(image, k=(rot % 4), axes=(1, 0))
+    if image.shape == shape1 and ndim == 1:
+        image = image[:, 0]
+
+    return image</div>
+
+
+
+<div class="viewcode-block" id="unrotate90">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.image.adjust.unrotate90.html#sofia_redux.toolkit.image.adjust.unrotate90">[docs]</a>
+def unrotate90(image, direction):
+    &quot;&quot;&quot;
+    Un-rotates an image using IDL style rotation types
+
+    The table below lists the different IDL rotation directions
+    (The rotation applied to the image that you now wish to remove).
+    (X0, Y0) indicates the original subscripts, and (X1, Y1) are
+    the subscripts of the resulting array.  The notation Y0
+    indicates a reversal of the Y axis, Y1 = Ny - Y0 - 1.
+
+    ========= ========== ============= ==== ====
+    Direction Transpose? AntiClockwise  X1   Y1
+    ========= ========== ============= ==== ====
+    0         N            0             X0   Y0
+    1         N           90            -Y0   X0
+    2         N          180            -X0  -Y0
+    3         N          270             Y0  -X0
+    4         Y            0             Y0   X0
+    5         Y           90            -X0   Y0
+    6         Y          180            -Y0  -X0
+    7         Y          270             X0  -Y0
+    ========= ========== ============= ==== ====
+
+    This function applies the opposite rotation to the input
+    image.
+
+    Parameters
+    ----------
+    image : array_like of float
+        (nrow, ncol) array to rotate.
+    direction : int
+        The IDL rotation type to &quot;unrotate&quot; the image by.
+
+    Returns
+    -------
+    numpy.ndarray
+        (nrow, ncol) or (ncol, nrow) depending on rotation type.
+    &quot;&quot;&quot;
+    # Yes, I know there are lots of clever ways to do this in 1-2
+    # lines, but it&#39;s displayed like this for clarity.
+    rot = int(direction) % 8
+    if rot == 0:
+        return rotate90(image, 0)
+    elif rot == 1:
+        return rotate90(image, 3)
+    elif rot == 2:
+        return rotate90(image, 2)
+    elif rot == 3:
+        return rotate90(image, 1)
+    elif rot == 4:
+        return rotate90(image, 4)
+    elif rot == 5:
+        return rotate90(rotate90(image, 3), 4)
+    elif rot == 6:
+        return rotate90(rotate90(image, 2), 4)
+    elif rot == 7:
+        return rotate90(rotate90(image, 1), 4)
+    else:
+        raise ValueError(&quot;should not be able to get here&quot;)  # pragma: no cover</div>
+
+
+
+<div class="viewcode-block" id="register_image">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.image.adjust.register_image.html#sofia_redux.toolkit.image.adjust.register_image">[docs]</a>
+def register_image(image, reference, upsample=1,
+                   maxshift=None, shift0=None):
+    &quot;&quot;&quot;
+    Return the pixel offset between an image and a reference
+
+    Uses cross-correlation (phase correlation) to find the pixel
+    shift between an image and a reference image.  If `upsample`
+    is greater than one, accuracy is increased to a subpixel
+    level by upsampling a DFT in the neighborhood of the
+    integer pixel solution.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Image to register (nrow, ncol).  Must be the same shape
+        as `reference`.
+    reference : numpy.ndarray
+        Reference image (nrow, ncol).  Must be the same shape as
+        `image`.
+    upsample : int, optional
+        Images will be registered to within `1 / upsample`.  For
+        example, upsample = 100 results in registration to within
+        1/100th of a pixel.
+    maxshift : int or float or array_like, optional
+        The maximum shift allowed in each dimension.  There may
+        be more than one solution when images contain repeating
+        patterns.  Therefore, set maxshift to search for maximum
+        correlation within `init - maxshift` to `init + maxshift`.
+        An array maxshift should have the same length as the image
+        features whereas a single valued maxshift will be applied
+        to all features.  None results in a search over the full
+        image domain.  Order of features is (x, y, z, etc.)
+    shift0 : array_like
+        An initial registration estimate in each dimension.  This
+        is useful when repeating patterns are present in the image
+        and you wish to center the search at a specific location.
+        Best used in conjunction with `maxshift`.  None centers the
+        search around the center of the reference image.  Order of
+        features is (x, y, z, etc.)
+
+    Returns
+    -------
+    numpy.array
+        Pixel registration in the (x, y, z, etc.) order.  This is the
+        pixel shift of `reference` relative to `image` i.e. apply this
+        shift to image to map it onto reference.
+    &quot;&quot;&quot;
+    ndim = len(image.shape)
+    if maxshift is not None:
+        if hasattr(maxshift, &#39;__len__&#39;):
+            maxshift = np.array(maxshift)
+        else:
+            maxshift = np.array([maxshift])
+        if len(maxshift) == 1 and ndim &gt; 1:
+            maxshift = np.full(ndim, maxshift[0])
+    if maxshift is not None and len(maxshift) != ndim:
+        raise ValueError(&quot;Invalid maxshift length %s&quot; % repr(maxshift))
+
+    if shift0 is not None:
+        if hasattr(shift0, &#39;__len__&#39;):
+            shift0 = np.array(shift0)
+        else:
+            shift0 = np.array([shift0] * ndim)
+    else:
+        shift0 = np.zeros(len(image.shape))
+    if len(shift0) != ndim:
+        raise ValueError(&quot;Invalid shift0 length %s&quot; % repr(shift0))
+    if image.shape != reference.shape:
+        raise ValueError(&quot;Image shape does not match reference shape&quot;)
+
+    # apply initial offset now if supplied - integer only
+    img = image.copy()
+    img[np.isnan(img)] = np.nanmedian(img)
+    ref = reference.copy()
+    ref[np.isnan(reference)] = np.nanmedian(reference)
+
+    ishift = np.array(list(np.fix(x) for x in shift0))
+    if not (ishift == 0).all():
+        img = shift(img, np.flip(ishift), order=0, mode=&#39;wrap&#39;)
+    source = np.array(img, dtype=np.complex128, copy=False)
+    sfreq = np.fft.fftn(source)
+    rfreq = np.fft.fftn(ref)
+
+    # calculate integer pixel shift
+    product = sfreq * rfreq.conj()
+    cc_image = np.fft.ifftn(product)
+    shape = cc_image.shape
+
+    if maxshift is not None:
+        maxarr = np.zeros_like(cc_image)
+        grids = np.meshgrid(*(np.arange(x) for x in np.flip(shape)))
+        select = np.full(shape, True)
+        for d, grid, mshift in zip(np.flip(shape), grids, maxshift):
+            select &amp;= (grid &lt; mshift) | (grid &gt; (d - mshift))
+        maxarr[select] = cc_image[select]
+    else:
+        maxarr = cc_image.copy()
+
+    maxima = np.unravel_index(np.argmax(maxarr.real), shape)
+    mid = np.array([np.fix(dim / 2) for dim in shape])
+    shifts = np.array(maxima, dtype=np.float64)
+    shifts[shifts &gt; mid] -= np.array(shape)[shifts &gt; mid]
+
+    if upsample &gt; 1:
+        # Initial shift estimate in upsampled grid
+        # Taken from skimage.feature.register_translation
+        shifts = np.round(shifts * upsample) / upsample
+        upsampled_region_size = np.ceil(upsample * 1.5)
+        dftshift = np.fix(upsampled_region_size / 2.0)
+        upsample_factor = np.array(upsample, dtype=np.float64)
+        normalization = (sfreq.size * upsample_factor ** 2)
+        # Matrix multiply DFT around the current shift estimate
+        sample_region_offset = dftshift - shifts * upsample_factor
+        cc_image = upsampled_dft(
+            product.conj(), upsampled_region_size,
+            upsample, sample_region_offset).conj()  # upsample_factor
+        cc_image /= normalization
+        maxima = np.array(
+            np.unravel_index(np.argmax(np.abs(cc_image)), cc_image.shape),
+            dtype=np.float64)
+        if (maxima == 0).all():  # pragma: no cover
+            # we hit a boundary
+            shifts.fill(np.nan)
+        else:
+            maxima -= dftshift
+            shifts = shifts + maxima / upsample_factor
+
+    # If its only one row or column the shift along that dimension has no
+    # effect. We set to zero.
+    for dim in range(sfreq.ndim):
+        if shape[dim] == 1:
+            shifts[dim] = 0
+
+    # if we shifted earlier, add it back on and return in x,y format
+    result = ishift - np.flip(shifts)
+    dtype = int if upsample == 1 else float
+    return result.astype(dtype)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

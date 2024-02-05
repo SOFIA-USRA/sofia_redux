@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.coordinate_systems.equatorial_coordinates &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.coordinate_systems.equatorial_coordinates</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units
+from astropy.coordinates import Angle
+import numpy as np
+import warnings
+
+from sofia_redux.scan.coordinate_systems.precessing_coordinates import \
+    PrecessingCoordinates
+from sofia_redux.scan.coordinate_systems.epoch.epoch import J2000
+from sofia_redux.scan.coordinate_systems.epoch.precession import Precession
+from sofia_redux.scan.coordinate_systems.coordinate_system import \
+    CoordinateSystem
+
+__all__ = [&#39;EquatorialCoordinates&#39;, &#39;EQUATORIAL_POLE&#39;]
+
+
+<div class="viewcode-block" id="EquatorialCoordinates">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates">[docs]</a>
+class EquatorialCoordinates(PrecessingCoordinates):
+
+    NORTH = 1
+    SOUTH = -1
+    EAST = -1
+    WEST = 1
+    ZERO_LONGITUDE = 0.0 * units.Unit(&#39;degree&#39;)
+
+    def __init__(self, coordinates=None, unit=&#39;degree&#39;,
+                 copy=True, epoch=J2000):
+        &quot;&quot;&quot;
+        Initialize equatorial coordinates.
+
+        Equatorial coordinates are precessing celestial coordinates
+        represented as spherical coordinates with the origin at the center
+        of the Earth.  The longitude (RA or right ascension) measure the
+        angular distance of an object eastward along the celestial equator
+        from the vernal equinox to the hour angle passing through the object.
+        The latitude (DEC or declination) measures the angular distance of
+        an object perpendicular to the celestial equator with north taken as
+        positive.
+
+        Parameters
+        ----------
+        coordinates : list or tuple or array-like or units.Quantity, optional
+            The coordinates used to populate the object during initialization.
+            The first (0) value or index should represent longitudinal
+            coordinates, and the second should represent latitude.
+        unit : units.Unit or str, optional
+            The angular unit for the spherical coordinates.  The default is
+            &#39;degree&#39;.
+        copy : bool, optional
+            Whether to explicitly perform a copy operation on the input
+            coordinates when storing them into these coordinates.  Note that it
+            is extremely unlikely for the original coordinates to be passed in
+            as a reference due to the significant checks performed on them.
+        epoch : Epoch or str or int or float or Time or fits.Header, optional
+            Information from which to set the epoch for these coordinates.
+        &quot;&quot;&quot;
+        super().__init__(coordinates=coordinates, unit=unit, copy=copy,
+                         epoch=epoch)
+
+<div class="viewcode-block" id="EquatorialCoordinates.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the equatorial coordinates.
+
+        Returns
+        -------
+        EquatorialCoordinates
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+<div class="viewcode-block" id="EquatorialCoordinates.setup_coordinate_system">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.setup_coordinate_system">[docs]</a>
+    def setup_coordinate_system(self):
+        &quot;&quot;&quot;
+        Setup the system for the coordinates.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.default_coordinate_system = CoordinateSystem(
+            name=&#39;Equatorial Coordinates&#39;)
+        self.default_local_coordinate_system = CoordinateSystem(
+            name=&#39;Equatorial Offsets&#39;)
+        ra_axis = self.create_axis(&#39;Right Ascension&#39;, &#39;RA&#39;)
+        ra_axis.reverse = True
+        dec_axis = self.create_axis(&#39;Declination&#39;, &#39;DEC&#39;)
+        ra_offset_axis = self.create_offset_axis(
+            &#39;Right Ascension Offset&#39;, &#39;dRA&#39;)
+        ra_offset_axis.reverse = True
+        dec_offset_axis = self.create_offset_axis(
+            &#39;Declination Offset&#39;, &#39;dDEC&#39;)
+        self.default_coordinate_system.add_axis(ra_axis)
+        self.default_coordinate_system.add_axis(dec_axis)
+        self.default_local_coordinate_system.add_axis(ra_offset_axis)
+        self.default_local_coordinate_system.add_axis(dec_offset_axis)</div>
+
+
+    @property
+    def fits_longitude_stem(self):
+        &quot;&quot;&quot;
+        Return the string prefix for longitude (RA).
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;RA--&#39;
+
+    @property
+    def fits_latitude_stem(self):
+        &quot;&quot;&quot;
+        Return the string prefix for latitude (DEC).
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;DEC-&#39;
+
+    @property
+    def two_letter_code(self):
+        &quot;&quot;&quot;
+        Return the two-letter code for the coordinate system.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;EQ&#39;
+
+    @property
+    def ra(self):
+        &quot;&quot;&quot;
+        Return the Right Ascension coordinate(s).
+
+        Returns
+        -------
+        right_ascension : units.Quantity
+        &quot;&quot;&quot;
+        if self.coordinates is None:
+            return None
+        return self.zero_to_two_pi(self.longitude)
+
+    @ra.setter
+    def ra(self, values):
+        &quot;&quot;&quot;
+        Set the Right Ascension.
+
+        Parameters
+        ----------
+        values : units.Quantity
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_ra(values, copy=True)
+
+    @property
+    def dec(self):
+        &quot;&quot;&quot;
+        Return the Declination coordinate(s).
+
+        Returns
+        -------
+        declination : units.Quantity
+        &quot;&quot;&quot;
+        if self.coordinates is None:
+            return None
+        return self.latitude
+
+    @dec.setter
+    def dec(self, values):
+        &quot;&quot;&quot;
+        Set the Declination.
+
+        Parameters
+        ----------
+        values : units.Quantity
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_dec(values, copy=True)
+
+    @property
+    def equatorial_pole(self):
+        &quot;&quot;&quot;
+        Return an equatorial pole.
+
+        Returns
+        -------
+        pole : EquatorialCoordinates
+        &quot;&quot;&quot;
+        return self.get_equatorial_pole()
+
+    @property
+    def zero_longitude(self):
+        &quot;&quot;&quot;
+        Return the zero longitude coordinate.
+
+        Returns
+        -------
+        longitude : units.Quantity
+        &quot;&quot;&quot;
+        return self.get_zero_longitude()
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Create a string representation of the equatorial coordinates.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if self.coordinates is None:
+            return f&#39;Empty coordinates ({self.epoch})&#39;
+
+        ra = self.ra
+        dec = self.dec
+
+        if self.singular:
+            if np.isnan(ra):
+                ra_string = &#39;NaN&#39;
+            else:
+                ra_string = Angle(self.ra).to_string(unit=&#39;hourangle&#39;)
+            if np.isnan(dec):
+                dec_string = &#39;NaN&#39;
+            else:
+                dec_string = Angle(self.dec).to_string(unit=&#39;degree&#39;)
+            return f&#39;RA={ra_string} DEC={dec_string} ({self.epoch})&#39;
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+                min_ra = np.nanmin(ra)
+                if np.isnan(min_ra):
+                    min_ra = max_ra = &#39;NaN&#39;
+                else:
+                    min_ra = Angle(min_ra).to_string(unit=&#39;hourangle&#39;)
+                    max_ra = Angle(np.nanmax(self.ra)).to_string(
+                        unit=&#39;hourangle&#39;)
+                min_dec = np.nanmin(dec)
+                if np.isnan(min_dec):
+                    min_dec = max_dec = &#39;NaN&#39;
+                else:
+                    min_dec = Angle(min_dec).to_string(unit=&#39;degree&#39;)
+                    max_dec = Angle(np.nanmax(self.dec)).to_string(
+                        unit=&#39;degree&#39;)
+                return (f&#39;RA={min_ra}-&gt;{max_ra} DEC={min_dec}-&gt;{max_dec} &#39;
+                        f&#39;({self.epoch})&#39;)
+
+    def __getitem__(self, indices):
+        &quot;&quot;&quot;
+        Return a section of the coordinates
+
+        Parameters
+        ----------
+        indices : int or numpy.ndarray or slice
+
+        Returns
+        -------
+        EquatorialCoordinates
+        &quot;&quot;&quot;
+        return super().__getitem__(indices)
+
+<div class="viewcode-block" id="EquatorialCoordinates.get_equatorial_pole">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.get_equatorial_pole">[docs]</a>
+    @classmethod
+    def get_equatorial_pole(cls):
+        &quot;&quot;&quot;
+        Return the equatorial pole.
+
+        Returns
+        -------
+        pole : EquatorialCoordinates
+        &quot;&quot;&quot;
+        return EQUATORIAL_POLE</div>
+
+
+<div class="viewcode-block" id="EquatorialCoordinates.get_zero_longitude">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.get_zero_longitude">[docs]</a>
+    @classmethod
+    def get_zero_longitude(cls):
+        &quot;&quot;&quot;
+        Return the zero longitude coordinate.
+
+        Returns
+        -------
+        lon : units.Quantity (float)
+        &quot;&quot;&quot;
+        return cls.ZERO_LONGITUDE</div>
+
+
+<div class="viewcode-block" id="EquatorialCoordinates.to_horizontal_offset">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.to_horizontal_offset">[docs]</a>
+    @classmethod
+    def to_horizontal_offset(cls, offset, position_angle, in_place=True):
+        &quot;&quot;&quot;
+        Convert an equatorial offset to a horizontal offset.
+
+        Parameters
+        ----------
+        offset : Coordinate2D
+            The 2-dimensional equatorial offsets to convert
+        position_angle : units.Quantity
+            The position angle as a scalar or shape (n,).
+        in_place : bool, optional
+            If `True`, perform the conversion in-place.  Otherwise, return a
+            copy while leaving the original `offset` unchanged
+
+        Returns
+        -------
+        horizontal_offset : Coordinate2D
+            The (x, y) horizontal offsets.
+        &quot;&quot;&quot;
+        if not in_place:
+            offset = offset.copy()
+        offset.scale_x(-1)
+        cls.rotate_offsets(offset, -position_angle)
+        return offset</div>
+
+
+<div class="viewcode-block" id="EquatorialCoordinates.set_ra">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.set_ra">[docs]</a>
+    def set_ra(self, ra, copy=True):
+        &quot;&quot;&quot;
+        Set the Right Ascension values.
+
+        Parameters
+        ----------
+        ra : units.Quantity
+        copy : bool, optional
+            If `True`, copy the coordinates.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_longitude(ra, copy=copy)</div>
+
+
+<div class="viewcode-block" id="EquatorialCoordinates.set_dec">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.set_dec">[docs]</a>
+    def set_dec(self, dec, copy=True):
+        &quot;&quot;&quot;
+        Set the Declination values.
+
+        Parameters
+        ----------
+        dec : units.Quantity
+        copy : bool, optional
+            If `True`, copy the coordinates.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_latitude(dec, copy=copy)</div>
+
+
+<div class="viewcode-block" id="EquatorialCoordinates.get_parallactic_angle">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.get_parallactic_angle">[docs]</a>
+    def get_parallactic_angle(self, site, lst):
+        &quot;&quot;&quot;
+        Return the parallactic angle for the coordinates.
+
+        Parameters
+        ----------
+        site : GeodeticCoordinates
+            The site coordinates.
+        lst : units.Quantity
+            The local sidereal time.
+
+        Returns
+        -------
+        angle : units.Quantity
+        &quot;&quot;&quot;
+        if self.coordinates is None:
+            return None
+        ra = self.ra
+        lst = self.correct_factor_dimensions(lst, ra)
+        site_cos_lat = self.correct_factor_dimensions(site.cos_lat, ra)
+        site_sin_lat = self.correct_factor_dimensions(site.sin_lat, ra)
+        h = lst - ra
+        y = site_cos_lat * np.sin(h).value
+        x = site_sin_lat * self.cos_lat
+        x -= site_cos_lat * self.sin_lat * np.cos(h).value
+        return np.arctan2(y, x) * units.Unit(&#39;radian&#39;)</div>
+
+
+<div class="viewcode-block" id="EquatorialCoordinates.get_equatorial_position_angle">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.get_equatorial_position_angle">[docs]</a>
+    def get_equatorial_position_angle(self):
+        &quot;&quot;&quot;
+        Return the equatorial position angle.
+
+        Returns
+        -------
+        position_angle : units.Quantity
+        &quot;&quot;&quot;
+        if self.singular:
+            return 0.0 * units.Unit(&#39;radian&#39;)
+        return np.zeros(self.shape) * units.Unit(&#39;radian&#39;)</div>
+
+
+<div class="viewcode-block" id="EquatorialCoordinates.to_equatorial">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.to_equatorial">[docs]</a>
+    def to_equatorial(self, coordinates=None):
+        &quot;&quot;&quot;
+        Set the given coordinates to these equatorial coordinates.
+
+        Parameters
+        ----------
+        coordinates : EquatorialCoordinates, optional
+            The coordinates to convert.  If not supplied, defaults to *this*.
+
+        Returns
+        -------
+        coordinates : EquatorialCoordinates
+        &quot;&quot;&quot;
+        if coordinates is None:
+            coordinates = self.get_instance(&#39;equatorial&#39;)
+        coordinates.copy_coordinates(self)
+        return coordinates</div>
+
+
+<div class="viewcode-block" id="EquatorialCoordinates.from_equatorial">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.from_equatorial">[docs]</a>
+    def from_equatorial(self, coordinates):
+        &quot;&quot;&quot;
+        Set the equatorial coordinates from those given.
+
+        Parameters
+        ----------
+        coordinates : EquatorialCoordinates
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.copy_coordinates(coordinates)</div>
+
+
+<div class="viewcode-block" id="EquatorialCoordinates.to_horizontal">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.to_horizontal">[docs]</a>
+    def to_horizontal(self, site, lst, equatorial=None, horizontal=None):
+        &quot;&quot;&quot;
+        Convert equatorial coordinates to horizontal coordinates.
+
+        Parameters
+        ----------
+        site : GeodeticCoordinates
+            The site coordinates.
+        lst : units.Quantity
+            The local sidereal time.
+        equatorial : EquatorialCoordinates, optional
+            The equatorial coordinates to convert.  The default are *these*
+            coordinates.
+        horizontal : HorizontalCoordinates, optional
+            The horizontal coordinates to convert to.  The default is a fresh
+            set of HorizontalCoordinates.
+
+        Returns
+        -------
+        horizontal : HorizontalCoordinates
+            The equatorial coordinates as a horizontal representation.
+        &quot;&quot;&quot;
+        if equatorial is None:
+            equatorial = self
+        if horizontal is None:
+            horizontal = self.get_instance(&#39;horizontal&#39;)
+
+        ra = equatorial.ra
+        lst = self.correct_factor_dimensions(lst, ra)
+        if lst.unit == units.Unit(&#39;hour&#39;):
+            lst = lst.value * units.Unit(&#39;hourangle&#39;)
+
+        h = lst - ra
+        cos_h = np.cos(h)
+
+        site_sin_lat = self.correct_factor_dimensions(
+            site.sin_lat, equatorial.sin_lat)
+        site_cos_lat = self.correct_factor_dimensions(
+            site.cos_lat, equatorial.cos_lat)
+
+        sin2_lat = equatorial.sin_lat * site_sin_lat
+        cos2_lat = equatorial.cos_lat * site_cos_lat
+
+        horizontal.set_latitude(np.arcsin(sin2_lat + (cos2_lat * cos_h)),
+                                copy=False)
+        asin_a = -np.sin(h) * cos2_lat
+        acos_a = equatorial.sin_lat - (site_sin_lat * horizontal.sin_lat)
+        horizontal.set_longitude(np.arctan2(asin_a, acos_a), copy=False)
+        return horizontal</div>
+
+
+<div class="viewcode-block" id="EquatorialCoordinates.precess_to_epoch">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.precess_to_epoch">[docs]</a>
+    def precess_to_epoch(self, new_epoch):
+        &quot;&quot;&quot;
+        Precess from one epoch to another.
+
+        Parameters
+        ----------
+        new_epoch : Epoch
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.epoch == new_epoch:
+            return
+        precession = Precession(self.epoch, new_epoch)
+        precession.precess(self)</div>
+
+
+<div class="viewcode-block" id="EquatorialCoordinates.convert">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.convert">[docs]</a>
+    def convert(self, from_coordinates, to_coordinates):
+        &quot;&quot;&quot;
+        Convert one type of coordinates to another.
+
+        The `to_coordinates` will be updated in-place.
+
+        Parameters
+        ----------
+        from_coordinates : CelestialCoordinates
+        to_coordinates : CelestialCoordinates
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().convert(from_coordinates, to_coordinates)
+        if isinstance(from_coordinates, EquatorialCoordinates):
+            from_coordinates.to_equatorial(to_coordinates)
+        elif isinstance(to_coordinates, EquatorialCoordinates):
+            to_coordinates.from_equatorial(from_coordinates)
+        else:
+            temp_equatorial = self.get_equatorial_class()()
+            temp_equatorial.from_equatorial(from_coordinates)
+            temp_equatorial.to_equatorial(to_coordinates)</div>
+
+
+<div class="viewcode-block" id="EquatorialCoordinates.plot">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.plot">[docs]</a>
+    def plot(self, *args, **kwargs):  # pragma: no cover
+        &quot;&quot;&quot;
+        Plot the coordinates.
+
+        Parameters
+        ----------
+        args : values
+            Optional positional parameters to pass into pyplot.plot.
+        kwargs : dict, optional
+            Optional keyword arguments.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        from matplotlib import pyplot as plt
+        plt.ion()
+        c_args = self.ra.ravel(), self.dec.ravel()
+        if args is not None:
+            c_args += args
+
+        plt.plot(*c_args, **kwargs)
+        plt.xlabel(f&#39;{self.longitude_axis.label} ({self.unit})&#39;)
+        plt.ylabel(f&#39;{self.latitude_axis.label} ({self.unit})&#39;)</div>
+
+
+<div class="viewcode-block" id="EquatorialCoordinates.edit_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.html#sofia_redux.scan.coordinate_systems.equatorial_coordinates.EquatorialCoordinates.edit_header">[docs]</a>
+    def edit_header(self, header, key_stem, alt=&#39;&#39;):
+        &quot;&quot;&quot;
+        Edit the header with equatorial coordinate information.
+
+        Parameters
+        ----------
+        header : fits.Header
+            The header to modify.
+        key_stem : str
+            The name of the header key to update.
+        alt : str, optional
+            The alternative coordinate system.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.singular:
+            return  # Can&#39;t do this for multiple coordinates
+        super().edit_header(header, key_stem, alt=alt)
+        header[f&#39;WCSNAME{alt}&#39;] = (self.coordinate_system.name,
+                                   &#39;coordinate system description.&#39;)</div>
+</div>
+
+
+
+EQUATORIAL_POLE = EquatorialCoordinates(
+    np.array([0.0, 90.0]) * units.Unit(&#39;degree&#39;), epoch=J2000)
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

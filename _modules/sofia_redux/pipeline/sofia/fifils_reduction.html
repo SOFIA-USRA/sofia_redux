@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.sofia.fifils_reduction &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.sofia.fifils_reduction</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;FIFI-LS Reduction pipeline steps&quot;&quot;&quot;
+
+import os
+import re
+import warnings
+
+from astropy import log
+from astropy.io import fits
+from astropy.stats import gaussian_fwhm_to_sigma
+import numpy as np
+import psutil
+
+from sofia_redux.pipeline.sofia.sofia_exception import SOFIAImportError
+try:
+    from sofia_redux.instruments import fifi_ls
+except ImportError:
+    raise SOFIAImportError(&#39;FIFI-LS modules not installed&#39;)
+
+from sofia_redux.pipeline.gui.qad_viewer import QADViewer
+from sofia_redux.pipeline.reduction import Reduction
+from sofia_redux.pipeline.sofia.parameters.fifils_parameters \
+    import FIFILSParameters
+from sofia_redux.toolkit.utilities.fits import get_key_value, getheader, \
+    write_hdul, gethdul, hdinsert
+
+# this import is not used here, but is needed to avoid
+# a numba bug on Linux systems
+from sofia_redux.toolkit.resampling import resample_utils
+from sofia_redux.spectroscopy import smoothres
+assert resample_utils
+assert smoothres
+
+__all__ = [&#39;FIFILSReduction&#39;]
+
+
+class HeaderValidationError(ValueError):
+    pass
+
+
+<div class="viewcode-block" id="FIFILSReduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction">[docs]</a>
+class FIFILSReduction(Reduction):
+    &quot;&quot;&quot;
+    FIFI-LS reduction steps.
+
+    Primary image reduction algorithms are defined in the FIFI-LS
+    package (`fifi-ls`).  Some utilities come from the `sofia_redux.toolkit`
+    package or the `sofia_redux.spectroscopy` package.  This reduction object
+    requires that all three packages be installed.
+
+    This reduction object defines a method for each pipeline
+    step that calls the appropriate algorithm from its source
+    packages.
+
+    Attributes
+    ----------
+    prodtype_map : dict
+        Maps the pipeline step to a product type, to assign
+        to the PRODTYPE key. Keys are pipeline step function names.
+    prodnames : dict
+        3-letter file type code, to assign to the output of a pipeline
+        step. Keys are the product types (as defined in prodtype_map).
+    step_map : dict
+        Inverse of the prodtype_map, for looking up pipeline
+        step names from product types.  Keys are the product types.
+    prodtypes : list
+        List of product types, corresponding to the currently
+        loaded recipe.  This list is populated whenever the recipe
+        attribute is set.
+    &quot;&quot;&quot;
+    def __init__(self):
+        &quot;&quot;&quot;Initialize the reduction object.&quot;&quot;&quot;
+        super().__init__()
+
+        # descriptive attributes
+        self.name = &#39;Redux&#39;
+        self.instrument = &#39;FIFI-LS&#39;
+        self.mode = &#39;IFS&#39;
+        self.data_keys = [&#39;File Name&#39;, &#39;OBJECT&#39;, &#39;OBSTYPE&#39;,
+                          &#39;AOR_ID&#39;, &#39;MISSN-ID&#39;, &#39;DATE-OBS&#39;,
+                          &#39;OBS_ID&#39;, &#39;INSTCFG&#39;, &#39;INSTMODE&#39;,
+                          &#39;NODSTYLE&#39;, &#39;DETCHAN&#39;,
+                          &#39;DICHROIC&#39;, &#39;G_ORD_B&#39;,
+                          &#39;SPECTEL1&#39;, &#39;SPECTEL2&#39;,
+                          &#39;ALTI_STA&#39;, &#39;ZA_START&#39;,
+                          &#39;EXPTIME&#39;, &#39;NODBEAM&#39;]
+
+        self.pipe_name = &quot;FIFI_LS_REDUX&quot;
+        self.pipe_version = fifi_ls.__version__.replace(&#39;.&#39;, &#39;_&#39;)
+
+        # parameters for the steps: will be set on load
+        self.parameters = None
+
+        # product type definitions for FIFI-LS steps
+        self.prodtype_map = {&#39;checkhead&#39;: &#39;raw&#39;,
+                             &#39;split_grating_and_chop&#39;: &#39;grating_chop_split&#39;,
+                             &#39;fit_ramps&#39;: &#39;ramps_fit&#39;,
+                             &#39;subtract_chops&#39;: &#39;chop_subtracted&#39;,
+                             &#39;combine_nods&#39;: &#39;nod_combined&#39;,
+                             &#39;lambda_calibrate&#39;: &#39;wavelength_calibrated&#39;,
+                             &#39;spatial_calibrate&#39;: &#39;spatial_calibrated&#39;,
+                             &#39;apply_static_flat&#39;: &#39;flat_fielded&#39;,
+                             &#39;combine_grating_scans&#39;: &#39;scan_combined&#39;,
+                             &#39;telluric_correct&#39;: &#39;telluric_corrected&#39;,
+                             &#39;flux_calibrate&#39;: &#39;flux_calibrated&#39;,
+                             &#39;correct_wave_shift&#39;: &#39;wavelength_shifted&#39;,
+                             &#39;resample&#39;: &#39;resampled&#39;,
+                             &#39;specmap&#39;: &#39;specmap&#39;
+                             }
+
+        # invert the map for quick lookup of step from type
+        self.step_map = {v: k for k, v in self.prodtype_map.items()}
+
+        # this will be populated when the recipe is set
+        self.prodtypes = []
+
+        # product name codes for each step
+        self.prodnames = {&#39;split_grating_and_chop&#39;: &#39;CP0&#39;,
+                          &#39;fit_ramps&#39;: &#39;RP0&#39;,
+                          &#39;subtract_chops&#39;: &#39;CSB&#39;,
+                          &#39;combine_nods&#39;: &#39;NCM&#39;,
+                          &#39;lambda_calibrate&#39;: &#39;WAV&#39;,
+                          &#39;spatial_calibrate&#39;: &#39;XYC&#39;,
+                          &#39;apply_static_flat&#39;: &#39;FLF&#39;,
+                          &#39;combine_grating_scans&#39;: &#39;SCM&#39;,
+                          &#39;telluric_correct&#39;: &#39;TEL&#39;,
+                          &#39;flux_calibrate&#39;: &#39;CAL&#39;,
+                          &#39;correct_wave_shift&#39;: &#39;WSH&#39;,
+                          &#39;resample&#39;: &#39;WXY&#39;,
+                          &#39;specmap&#39;: &#39;SMP&#39;
+                          }
+
+        # default recipe and step names
+        self.recipe = [
+            &#39;checkhead&#39;, &#39;split_grating_and_chop&#39;,
+            &#39;fit_ramps&#39;, &#39;subtract_chops&#39;, &#39;combine_nods&#39;,
+            &#39;lambda_calibrate&#39;, &#39;spatial_calibrate&#39;,
+            &#39;apply_static_flat&#39;, &#39;combine_grating_scans&#39;,
+            &#39;telluric_correct&#39;, &#39;flux_calibrate&#39;,
+            &#39;correct_wave_shift&#39;, &#39;resample&#39;, &#39;specmap&#39;]
+        self.processing_steps = {
+            &#39;checkhead&#39;: &#39;Check Headers&#39;,
+            &#39;split_grating_and_chop&#39;: &#39;Split Grating/Chop&#39;,
+            &#39;fit_ramps&#39;: &#39;Fit Ramps&#39;,
+            &#39;subtract_chops&#39;: &#39;Subtract Chops&#39;,
+            &#39;combine_nods&#39;: &#39;Combine Nods&#39;,
+            &#39;lambda_calibrate&#39;: &#39;Lambda Calibrate&#39;,
+            &#39;spatial_calibrate&#39;: &#39;Spatial Calibrate&#39;,
+            &#39;apply_static_flat&#39;: &#39;Apply Flat&#39;,
+            &#39;combine_grating_scans&#39;: &#39;Combine Scans&#39;,
+            &#39;telluric_correct&#39;: &#39;Telluric Correct&#39;,
+            &#39;flux_calibrate&#39;: &#39;Flux Calibrate&#39;,
+            &#39;correct_wave_shift&#39;: &#39;Correct Wave Shift&#39;,
+            &#39;resample&#39;: &#39;Resample&#39;,
+            &#39;specmap&#39;: &#39;Make Spectral Map&#39;}
+
+        # reduction information
+        self.check_input = True
+        self.output_directory = os.getcwd()
+        self.atran = None
+        self.response = None
+
+        # set up for potential parallel processing via joblib
+        self.max_cores = psutil.cpu_count() // 2
+        if self.max_cores &lt; 2:
+            self.max_cores = None
+
+    def __setattr__(self, name, value):
+        &quot;&quot;&quot;Check if recipe is being set. If so, also set prodtypes.&quot;&quot;&quot;
+        if name == &#39;recipe&#39;:
+            # set the prodtype list
+            try:
+                self.prodtypes = [self.prodtype_map[step] for step in value]
+            except AttributeError:
+                self.prodtypes = []
+        super().__setattr__(name, value)
+
+<div class="viewcode-block" id="FIFILSReduction.set_display_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.set_display_data">[docs]</a>
+    def set_display_data(self, raw=False):
+        &quot;&quot;&quot;
+        Store display data for QAD Viewer.
+
+        Parameters
+        ----------
+        raw : bool
+            If True, display data is taken from self.rawfiles.
+            If False, display data is taken from self.input
+        &quot;&quot;&quot;
+        if raw:
+            data_list = [[hdu.header for hdu in hdul] for hdul in self.input]
+        else:
+            data_list = [gethdul(hdul) for hdul in self.input]
+        self.display_data = {&#39;QADViewer&#39;: data_list}</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.update_output">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.update_output">[docs]</a>
+    def update_output(self, hdul, prodtype):
+        &quot;&quot;&quot;
+        Update output FITS file after a pipeline step.
+
+        Adds a HISTORY message with the pipeline step name and parameters.
+
+        Parameters
+        ----------
+        hdul : `astropy.io.fits.HDUList`
+           Output FITS HDUList.
+        &quot;&quot;&quot;
+        # add a history message with step name
+        step_name = self.step_map[prodtype]
+        step_display_name = self.processing_steps[step_name]
+        msg = &#39;-- Pipeline step: {}&#39;.format(step_display_name)
+        hdinsert(hdul[0].header, &#39;HISTORY&#39;, msg)
+
+        hdinsert(hdul[0].header, &#39;HISTORY&#39;, &#39;Parameters:&#39;)
+        params = self.get_parameter_set()
+        for param in params:
+            if params[param][&#39;hidden&#39;]:
+                # don&#39;t record hidden parameters
+                continue
+            msg = &quot;  {} = {}&quot;.format(param, params.get_value(param))
+            hdinsert(hdul[0].header, &#39;HISTORY&#39;, msg)
+
+        hdinsert(hdul[0].header, &#39;HISTORY&#39;, &#39;--&#39;)
+        hdinsert(hdul[0].header, &#39;HISTORY&#39;, &#39;&#39;)</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.write_output">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.write_output">[docs]</a>
+    def write_output(self, hdul):
+        &quot;&quot;&quot;
+        Write an output FITS file to disk.
+
+        Outname is joined to self.output_directory, before writing.
+
+        Parameters
+        ----------
+        hdul : `astropy.io.fits.HDUList`
+           FITS HDUList to write.
+
+        Returns
+        -------
+        str
+            Full path to the output file.
+        &quot;&quot;&quot;
+        hdul = gethdul(hdul)
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;)
+            outname = write_hdul(hdul, outdir=self.output_directory)
+        self.record_outfile(outname)
+        return outname</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.load">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.load">[docs]</a>
+    def load(self, data):
+        &quot;&quot;&quot;
+        Load input data to make it available to reduction steps.
+
+        The process is:
+
+        - Call the parent load method to initialize data
+          reduction variables.
+        - Use the product type in the first FITS header to determine
+          the data processing recipe.
+        - Load parameters for all steps.
+        - Load the data immediately if starting from an intermediate
+          step; otherwise, just load the raw headers and defer loading
+          the data from the FITS files.
+
+        After this step, the input attribute is populated as required
+        for the first pipeline step in the recipe.
+
+        Parameters
+        ----------
+        data : list of str or str
+            Input file paths to load.
+        &quot;&quot;&quot;
+        # call the parent method to initialize
+        # reduction variables
+        super().load(data)
+
+        # read and save the first FITS header
+        basehead = getheader(self.raw_files[0])
+
+        # get product type to determine recipe
+        intermediate = False
+        prodtype = get_key_value(basehead, &#39;PRODTYPE&#39;).lower()
+
+        # translate an old prodtype, for backward compatibility
+        if prodtype == &#39;wxy_resampled&#39;:  # pragma: no cover
+            prodtype = &#39;resampled&#39;
+
+        # get remaining recipe
+        if prodtype in self.prodtypes:
+            pidx = self.prodtypes.index(prodtype)
+            self.recipe = self.recipe[pidx + 1:]
+            if len(self.recipe) == 0:
+                msg = &quot;No steps to run for prodtype &#39;{}&#39;.&quot;.format(prodtype)
+                log.error(msg)
+                raise ValueError(msg)
+            intermediate = True
+        elif prodtype.upper() != &#39;UNKNOWN&#39;:
+            # necessary for pipeline resets: prodtype
+            # is not in pre-modified recipe, but file should
+            # be loaded in immediately
+            intermediate = True
+
+        # initialize parameters
+        self.parameters = FIFILSParameters(basehead=basehead)
+
+        # if not starting from raw data, load the files in
+        # immediately
+        if intermediate:
+            self.load_fits()
+        else:
+            # just load headers
+            self.input = []
+            for datafile in self.raw_files:
+                try:
+                    hdr = fits.getheader(datafile)
+                except (IndexError, ValueError, TypeError, OSError):
+                    log.warning(&#39;Header could not be read &#39;
+                                &#39;from {}&#39;.format(os.path.basename(datafile)))
+                    hdr = fits.Header()
+                self.input.append([hdr])
+
+        # log all input files
+        for datafile in self.raw_files:
+            log.info(&quot;Input: {}&quot;.format(datafile))
+
+        # log all processing steps
+        log.info(&#39;Processing steps: {}&#39;.format(self.recipe))</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.load_fits">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.load_fits">[docs]</a>
+    def load_fits(self, check_header=False):
+        &quot;&quot;&quot;
+        Load FITS data into memory.
+
+        Handles raw data, as well as intermediate data.
+
+        Loaded data are stored in the input attribute.
+        &quot;&quot;&quot;
+        from sofia_redux.instruments.fifi_ls.readfits import readfits
+
+        self.input = []
+        bad_header = &#39;&#39;
+        for i, datafile in enumerate(self.raw_files):
+            log.debug(&#39;Reading input: {}&#39;.format(datafile))
+
+            # read the fits file and standardize/check header
+            if check_header:
+                input_hdul, success = readfits(datafile,
+                                               checkheader=check_header)
+            else:
+                input_hdul = readfits(datafile,
+                                      checkheader=check_header)
+                success = True
+            if not success:
+                bad_header = &#39;Invalid headers&#39;
+                log.error(bad_header)
+            if input_hdul is None:
+                msg = &#39;Unable to read FITS file&#39;
+                log.error(msg)
+                raise ValueError(msg)
+
+            # touch the data to make sure it is in memory
+            # and store copies in a new HDUList
+            # (this avoids storing a file handle in the HDUList)
+            hdul = fits.HDUList()
+            for hdu in input_hdul:
+                assert hdu.data is None or hdu.data[0] is not None
+                hdul.append(hdu.copy())
+            input_hdul.close()
+
+            self.input.append(hdul)
+
+        # store the data in display variables
+        self.set_display_data(raw=True)
+
+        # raise error for checkhead to catch and handle
+        if bad_header != &#39;&#39;:
+            raise HeaderValidationError(bad_header)</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.register_viewers">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.register_viewers">[docs]</a>
+    def register_viewers(self):
+        &quot;&quot;&quot;Return a new QADViewer.&quot;&quot;&quot;
+        viewers = [QADViewer()]
+        return viewers</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.checkhead">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.checkhead">[docs]</a>
+    def checkhead(self):
+        &quot;&quot;&quot;
+        Check input headers.
+
+        Compares header keywords to requirements.  Halts reduction if the
+        abort parameter is True and the headers do not meet requiremnts.
+        &quot;&quot;&quot;
+        # get parameters
+        param = self.get_parameter_set()
+
+        # read fits files into memory for processing
+        # with header checking
+        try:
+            self.load_fits(check_header=True)
+        except HeaderValidationError:
+            if param.get_value(&#39;abort&#39;):
+                msg = &#39;Invalid headers.&#39;
+                log.error(msg)
+                self.error = msg
+                self.input = []
+                return</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.split_grating_and_chop">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.split_grating_and_chop">[docs]</a>
+    def split_grating_and_chop(self):
+        &quot;&quot;&quot;Split data into separate files/extensions by chop/grating.&quot;&quot;&quot;
+        from sofia_redux.instruments.fifi_ls.split_grating_and_chop \
+            import wrap_split_grating_and_chop
+
+        # get parameters
+        param = self.get_parameter_set()
+        save = param.get_value(&#39;save&#39;)
+        parallel = param.get_value(&#39;parallel&#39;)
+        if parallel:
+            jobs = self.max_cores
+        else:
+            jobs = None
+
+        result = wrap_split_grating_and_chop(self.input, write=False,
+                                             jobs=jobs,
+                                             allow_errors=True)
+        if not result:
+            msg = &#39;Problem in fifi_ls.split_grating_and_chop.&#39;
+            log.error(msg)
+            self.error = msg
+            self.input = []
+            return
+        for hdul in result:
+            self.update_output(hdul, self.prodtypes[self.step_index])
+        self.input = list(result)
+        self.set_display_data()
+        if save:
+            for hdul in self.input:
+                self.write_output(hdul)</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.fit_ramps">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.fit_ramps">[docs]</a>
+    def fit_ramps(self):
+        &quot;&quot;&quot;Fit voltage ramps to derive average flux from samples.&quot;&quot;&quot;
+        from sofia_redux.instruments.fifi_ls.fit_ramps import wrap_fit_ramps
+
+        # get parameters
+        param = self.get_parameter_set()
+        save = param.get_value(&#39;save&#39;)
+        parallel = param.get_value(&#39;parallel&#39;)
+        s2n = param.get_value(&#39;s2n&#39;)
+        thresh = param.get_value(&#39;thresh&#39;)
+        remove = param.get_value(&#39;remove_first&#39;)
+        subtract_bias = param.get_value(&#39;subtract_bias&#39;)
+        indpos_sigma = param.get_value(&#39;indpos_sigma&#39;)
+        badpix_file = param.get_value(&#39;badpix_file&#39;)
+        if str(badpix_file).strip() == &#39;&#39;:
+            badpix_file = None
+        if parallel:
+            jobs = self.max_cores
+        else:
+            jobs = None
+
+        result = wrap_fit_ramps(self.input, write=False, jobs=jobs,
+                                allow_errors=True, s2n=s2n,
+                                threshold=thresh, remove_first=remove,
+                                subtract_bias=subtract_bias,
+                                indpos_sigma=indpos_sigma,
+                                badpix_file=badpix_file)
+        if not result:
+            msg = &#39;Problem in fifi_ls.fit_ramps.&#39;
+            log.error(msg)
+            self.error = msg
+            self.input = []
+            return
+        for hdul in result:
+            self.update_output(hdul, self.prodtypes[self.step_index])
+        self.input = list(result)
+        self.set_display_data()
+        if save:
+            for hdul in self.input:
+                self.write_output(hdul)</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.subtract_chops">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.subtract_chops">[docs]</a>
+    def subtract_chops(self):
+        &quot;&quot;&quot;Subtract chop pairs for sky background removal.&quot;&quot;&quot;
+        from sofia_redux.instruments.fifi_ls.subtract_chops \
+            import wrap_subtract_chops
+
+        # get parameters
+        param = self.get_parameter_set()
+        save = param.get_value(&#39;save&#39;)
+        parallel = param.get_value(&#39;parallel&#39;)
+        if parallel:
+            jobs = self.max_cores
+        else:
+            jobs = None
+
+        # rearrange input into chop pairs by obsid
+        pairs = {}
+        for hdul in self.input:
+            obsid = get_key_value(hdul[0].header, &#39;OBS_ID&#39;)
+            if obsid in pairs:
+                pairs[obsid].append(hdul)
+            else:
+                pairs[obsid] = [hdul]
+        input_list = list(pairs.values())
+
+        result = wrap_subtract_chops(input_list, write=False,
+                                     jobs=jobs,
+                                     allow_errors=True)
+        if not result:
+            msg = &#39;Problem in fifi_ls.subtract_chops.&#39;
+            log.error(msg)
+            self.error = msg
+            self.input = []
+            return
+        for hdul in result:
+            self.update_output(hdul, self.prodtypes[self.step_index])
+        self.input = list(result)
+        self.set_display_data()
+        if save:
+            for hdul in self.input:
+                self.write_output(hdul)</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.combine_nods">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.combine_nods">[docs]</a>
+    def combine_nods(self):
+        &quot;&quot;&quot;Combine nod pairs.&quot;&quot;&quot;
+        from sofia_redux.instruments.fifi_ls.combine_nods import combine_nods
+
+        # get parameters
+        param = self.get_parameter_set()
+        save = param.get_value(&#39;save&#39;)
+        offbeam = param.get_value(&#39;offbeam&#39;)
+        b_nod_method = param.get_value(&#39;b_nod_method&#39;)
+
+        # this function returns a dataframe as the result
+        result = combine_nods(self.input, write=False,
+                              offbeam=offbeam, b_nod_method=b_nod_method)
+        if result is None or result.empty:
+            msg = &#39;Problem in fifi_ls.combine_nods.&#39;
+            log.error(msg)
+            self.error = msg
+            self.input = []
+            return
+
+        # extract the A beams, and check for a combined file
+        abeams = result[result[&#39;nodbeam&#39;] == &#39;A&#39;]
+        chdul = abeams[&#39;chdul&#39;]
+
+        if not chdul.isnull().all():
+            log.info(&#39;Combined A and B nods.&#39;)
+            # propagate combined hduls
+            self.input = list(chdul[chdul.notnull()])
+            if len(self.input) &lt; len(abeams):
+                log.warning(&#39;{}/{} A nods did not find B nods; &#39;
+                            &#39;these will not be propagated.&#39;.format(
+                                len(abeams) - len(self.input),
+                                len(abeams)))
+        elif len(abeams) &gt; 0:
+            # leave self.input as is
+            log.info(&#39;No B nods found; propagating A nods&#39;)
+        else:
+            self.input = []
+            msg = &#39;No A nods found. Use offbeam=True if B &#39; \
+                  &#39;nod propagation is desired.&#39;
+            log.error(msg)
+            self.error = msg
+            return
+
+        for hdul in self.input:
+            self.update_output(hdul, self.prodtypes[self.step_index])
+        self.set_display_data()
+        if save:
+            for hdul in self.input:
+                self.write_output(hdul)</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.lambda_calibrate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.lambda_calibrate">[docs]</a>
+    def lambda_calibrate(self):
+        &quot;&quot;&quot;Calibrate wavelengths.&quot;&quot;&quot;
+        from sofia_redux.instruments.fifi_ls.lambda_calibrate \
+            import wrap_lambda_calibrate
+
+        # get parameters
+        param = self.get_parameter_set()
+        save = param.get_value(&#39;save&#39;)
+        parallel = param.get_value(&#39;parallel&#39;)
+        if parallel:
+            jobs = self.max_cores
+        else:
+            jobs = None
+
+        result = wrap_lambda_calibrate(self.input, write=False,
+                                       jobs=jobs, allow_errors=True)
+        if not result:
+            msg = &#39;Problem in fifi_ls.lambda_calibrate.&#39;
+            log.error(msg)
+            self.error = msg
+            self.input = []
+            return
+        for hdul in result:
+            self.update_output(hdul, self.prodtypes[self.step_index])
+        self.input = list(result)
+        self.set_display_data()
+        if save:
+            for hdul in self.input:
+                self.write_output(hdul)</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.spatial_calibrate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.spatial_calibrate">[docs]</a>
+    def spatial_calibrate(self):
+        &quot;&quot;&quot;Calibrate pixel positions.&quot;&quot;&quot;
+        from sofia_redux.instruments.fifi_ls.spatial_calibrate \
+            import wrap_spatial_calibrate
+
+        # get parameters
+        param = self.get_parameter_set()
+        save = param.get_value(&#39;save&#39;)
+        parallel = param.get_value(&#39;parallel&#39;)
+        rotate = param.get_value(&#39;rotate&#39;)
+        flipsign = param.get_value(&#39;flipsign&#39;)
+        if flipsign == &#39;flip&#39;:
+            flipsign = True
+        elif flipsign == &#39;no flip&#39;:
+            flipsign = False
+        else:
+            flipsign = None
+        if parallel:
+            jobs = self.max_cores
+        else:
+            jobs = None
+
+        result = wrap_spatial_calibrate(self.input, write=False,
+                                        jobs=jobs, allow_errors=True,
+                                        rotate=rotate, flipsign=flipsign)
+        if not result:
+            msg = &#39;Problem in fifi_ls.spatial_calibrate.&#39;
+            log.error(msg)
+            self.error = msg
+            self.input = []
+            return
+        for hdul in result:
+            self.update_output(hdul, self.prodtypes[self.step_index])
+        self.input = list(result)
+        self.set_display_data()
+        if save:
+            for hdul in self.input:
+                self.write_output(hdul)</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.apply_static_flat">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.apply_static_flat">[docs]</a>
+    def apply_static_flat(self):
+        &quot;&quot;&quot;Apply flat correction.&quot;&quot;&quot;
+        from sofia_redux.instruments.fifi_ls.apply_static_flat \
+            import wrap_apply_static_flat
+
+        # get parameters
+        param = self.get_parameter_set()
+        save = param.get_value(&#39;save&#39;)
+        parallel = param.get_value(&#39;parallel&#39;)
+        skip_flat = param.get_value(&#39;skip_flat&#39;)
+        skip_err = param.get_value(&#39;skip_err&#39;)
+        if parallel:
+            jobs = self.max_cores
+        else:
+            jobs = None
+
+        if skip_flat:
+            log.info(&#39;No flat correction performed.&#39;)
+            return
+
+        result = wrap_apply_static_flat(self.input, write=False,
+                                        skip_err=skip_err,
+                                        jobs=jobs, allow_errors=True)
+        if not result:
+            msg = &#39;Problem in fifi_ls.apply_static_flat.&#39;
+            log.error(msg)
+            self.error = msg
+            self.input = []
+            return
+        for hdul in result:
+            self.update_output(hdul, self.prodtypes[self.step_index])
+        self.input = list(result)
+        self.set_display_data()
+        if save:
+            for hdul in self.input:
+                self.write_output(hdul)</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.combine_grating_scans">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.combine_grating_scans">[docs]</a>
+    def combine_grating_scans(self):
+        &quot;&quot;&quot;Combine grating scans.&quot;&quot;&quot;
+        from sofia_redux.instruments.fifi_ls.combine_grating_scans \
+            import wrap_combine_grating_scans
+
+        # get parameters
+        param = self.get_parameter_set()
+        save = param.get_value(&#39;save&#39;)
+        parallel = param.get_value(&#39;parallel&#39;)
+        bias = param.get_value(&#39;bias&#39;)
+        if parallel:
+            jobs = self.max_cores
+        else:
+            jobs = None
+
+        result = wrap_combine_grating_scans(self.input, write=False,
+                                            jobs=jobs,
+                                            allow_errors=True,
+                                            correct_bias=bias)
+        if not result:
+            msg = &#39;Problem in fifi_ls.combine_grating_scans.&#39;
+            log.error(msg)
+            self.error = msg
+            self.input = []
+            return
+        for hdul in result:
+            self.update_output(hdul, self.prodtypes[self.step_index])
+        self.input = list(result)
+        self.set_display_data()
+        if save:
+            for hdul in self.input:
+                self.write_output(hdul)</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.telluric_correct">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.telluric_correct">[docs]</a>
+    def telluric_correct(self):
+        &quot;&quot;&quot;Apply telluric correction.&quot;&quot;&quot;
+        from sofia_redux.instruments.fifi_ls.telluric_correct \
+            import wrap_telluric_correct
+
+        # get parameters
+        param = self.get_parameter_set()
+        save = param.get_value(&#39;save&#39;)
+        parallel = param.get_value(&#39;parallel&#39;)
+        skip_tell = param.get_value(&#39;skip_tell&#39;)
+        cutoff = param.get_value(&#39;cutoff&#39;)
+        atran_dir = param.get_value(&#39;atran_dir&#39;)
+        use_wv = param.get_value(&#39;use_wv&#39;)
+        if parallel:
+            jobs = self.max_cores
+        else:
+            jobs = None
+
+        if str(atran_dir).strip() == &#39;&#39;:
+            atran_dir = None
+
+        if skip_tell:
+            log.info(&#39;ATRAN file is attached, but no correction performed.&#39;)
+
+        result = wrap_telluric_correct(self.input, write=False,
+                                       jobs=jobs, allow_errors=True,
+                                       atran_dir=atran_dir, cutoff=cutoff,
+                                       use_wv=use_wv, skip_corr=skip_tell)
+        if not result:
+            msg = &#39;Problem in fifi_ls.telluric_correct.&#39;
+            log.error(msg)
+            self.error = msg
+            self.input = []
+            return
+        for hdul in result:
+            self.update_output(hdul, self.prodtypes[self.step_index])
+        self.input = list(result)
+        self.set_display_data()
+        if save:
+            for hdul in self.input:
+                self.write_output(hdul)</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.flux_calibrate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.flux_calibrate">[docs]</a>
+    def flux_calibrate(self):
+        &quot;&quot;&quot;Calibrate flux to physical units.&quot;&quot;&quot;
+        from sofia_redux.instruments.fifi_ls.flux_calibrate \
+            import wrap_flux_calibrate
+
+        # get parameters
+        param = self.get_parameter_set()
+        save = param.get_value(&#39;save&#39;)
+        parallel = param.get_value(&#39;parallel&#39;)
+        skip_cal = param.get_value(&#39;skip_cal&#39;)
+        response = param.get_value(&#39;response_file&#39;)
+        if parallel:
+            jobs = self.max_cores
+        else:
+            jobs = None
+        if skip_cal:
+            log.info(&#39;No flux calibration performed.&#39;)
+            return
+
+        if response.strip() == &#39;&#39;:
+            response = None
+        self.response = response
+
+        result = wrap_flux_calibrate(self.input, write=False,
+                                     jobs=jobs,
+                                     allow_errors=True,
+                                     response_file=response)
+        if not result:
+            msg = &#39;Problem in fifi_ls.flux_calibrate.&#39;
+            log.error(msg)
+            self.error = msg
+            self.input = []
+            return
+        for hdul in result:
+            self.update_output(hdul, self.prodtypes[self.step_index])
+        self.input = list(result)
+        self.set_display_data()
+        if save:
+            for hdul in self.input:
+                self.write_output(hdul)</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.correct_wave_shift">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.correct_wave_shift">[docs]</a>
+    def correct_wave_shift(self):
+        &quot;&quot;&quot;Correct wavelengths for barycentric shift.&quot;&quot;&quot;
+        from sofia_redux.instruments.fifi_ls.correct_wave_shift \
+            import wrap_correct_wave_shift
+
+        # get parameters
+        param = self.get_parameter_set()
+        save = param.get_value(&#39;save&#39;)
+        parallel = param.get_value(&#39;parallel&#39;)
+        skip_shift = param.get_value(&#39;skip_shift&#39;)
+        if parallel:
+            jobs = self.max_cores
+        else:
+            jobs = None
+
+        if skip_shift:
+            log.info(&#39;No wavelength shift correction performed.&#39;)
+            return
+
+        result = wrap_correct_wave_shift(self.input, write=False,
+                                         jobs=jobs,
+                                         allow_errors=True)
+        if not result:
+            # in this case, just pass through -- this is likely
+            # because telluric correction was not done, but skip
+            # was not set
+            log.warning(&#39;No wavelength shift correction performed.&#39;)
+            return
+        for hdul in result:
+            self.update_output(hdul, self.prodtypes[self.step_index])
+        self.input = list(result)
+        self.set_display_data()
+        if save:
+            for hdul in self.input:
+                self.write_output(hdul)</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.resample">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.resample">[docs]</a>
+    def resample(self):
+        &quot;&quot;&quot;Resample pixels onto a regular grid.&quot;&quot;&quot;
+        from sofia_redux.instruments.fifi_ls.resample import resample
+
+        # get parameters
+        param = self.get_parameter_set()
+        save = param.get_value(&#39;save&#39;)
+        parallel = param.get_value(&#39;parallel&#39;)
+        max_cores = param.get_value(&#39;max_cores&#39;)
+        check_memory = param.get_value(&#39;check_memory&#39;)
+        skip_coadd = param.get_value(&#39;skip_coadd&#39;)
+        interp = param.get_value(&#39;interpolate&#39;)
+        error_weighting = param.get_value(&#39;error_weighting&#39;)
+        detector_coordinates = param.get_value(&#39;detector_coordinates&#39;)
+
+        xy_oversample = param.get_value(&#39;xy_oversample&#39;)
+        w_oversample = param.get_value(&#39;w_oversample&#39;)
+        xy_pixsize = param.get_value(&#39;xy_pixel_size&#39;)
+        w_pixsize = param.get_value(&#39;w_pixel_size&#39;)
+        xy_order = param.get_value(&#39;xy_order&#39;)
+        w_order = param.get_value(&#39;w_order&#39;)
+        xy_window = param.get_value(&#39;xy_window&#39;)
+
+        adaptive_algorithm = param.get_value(&#39;adaptive_algorithm&#39;)
+        append_weights = param.get_value(&#39;append_weights&#39;)
+        skip_uncorrected = param.get_value(&#39;skip_uncorrected&#39;)
+        w_window = param.get_value(&#39;w_window&#39;)
+        xy_smoothing = param.get_value(&#39;xy_smoothing&#39;)
+        w_smoothing = param.get_value(&#39;w_smoothing&#39;)
+
+        fitthresh = param.get_value(&#39;fitthresh&#39;)
+        posthresh = param.get_value(&#39;posthresh&#39;)
+        negthresh = param.get_value(&#39;negthresh&#39;)
+        xythresh = param.get_value(&#39;xy_edge_threshold&#39;)
+        wthresh = param.get_value(&#39;w_edge_threshold&#39;)
+
+        scan_reduction = param.get_value(&#39;scan_reduction&#39;)
+        save_scan = param.get_value(&#39;save_scan&#39;)
+        scan_options = param.get_value(&#39;scan_options&#39;)
+
+        # fix thresholds to expected defaults
+        if fitthresh &lt;= 0:
+            log.debug(&#39;Turning off fit rejection&#39;)
+            fitthresh = None
+        if negthresh &lt;= 0:
+            log.debug(&#39;Turning off negative rejection pass&#39;)
+            negthresh = None
+        if posthresh &lt;= 0:
+            log.debug(&#39;Turning off outlier rejection&#39;)
+            posthresh = None
+
+        # check for empty pixel size fields
+        test = str(xy_pixsize).strip().lower()
+        if test == &#39;none&#39; or test == &#39;&#39;:
+            xy_pixsize = None
+        test = str(w_pixsize).strip().lower()
+        if test == &#39;none&#39; or test == &#39;&#39;:
+            w_pixsize = None
+
+        if skip_coadd:
+            # iterate over all files
+            files = [[f] for f in self.input]
+        else:
+            # reduce all files together
+            files = [self.input]
+
+        if parallel:
+            max_avail = psutil.cpu_count() - 1
+            try:
+                jobs = int(max_cores)
+                jobs = max_avail if jobs &gt; max_avail else jobs
+                jobs = 1 if jobs &lt; 1 else jobs
+            except (ValueError, TypeError):
+                jobs = max_avail
+        else:
+            jobs = None
+        if jobs is not None:
+            log.info(f&#39;Using {jobs} max cores for parallel processing.&#39;)
+            log.info(&#39;&#39;)
+
+        # set adaptive smoothing for spatial dimensions if desired
+        if adaptive_algorithm in [&#39;scaled&#39;, &#39;shaped&#39;]:
+            # in this case, smoothing must be set to 1 FWHM
+            if not np.allclose(xy_smoothing, gaussian_fwhm_to_sigma,
+                               atol=.01):
+                log.warning(&#39;Setting x/y smoothing radius &#39;
+                            &#39;to Gaussian sigma for adaptive case.&#39;)
+            xy_smoothing = gaussian_fwhm_to_sigma
+            adaptive_threshold = (1.0, 1.0, 0.0)
+        else:
+            log.debug(&#39;Turning off adaptive smoothing&#39;)
+            adaptive_algorithm = None
+            adaptive_threshold = None
+
+        # read in scan options to pass along as kwargs
+        options = dict()
+        if scan_options != &#39;&#39;:  # pragma: no cover
+            all_val = scan_options.split()
+            for val in all_val:
+                try:
+                    k, v = val.split(&#39;=&#39;)
+                except (IndexError, ValueError, TypeError):
+                    pass
+                else:
+                    options[k] = v
+
+        # set detector coordinates to None if not explicitly set
+        if not detector_coordinates:
+            detector_coordinates = None
+
+        results = []
+        for inp_set in files:
+            result = resample(inp_set, write=False, interp=interp,
+                              oversample=(xy_oversample, w_oversample),
+                              spatial_size=xy_pixsize, spectral_size=w_pixsize,
+                              window=(xy_window, xy_window, w_window),
+                              adaptive_algorithm=adaptive_algorithm,
+                              adaptive_threshold=adaptive_threshold,
+                              error_weighting=error_weighting,
+                              smoothing=(xy_smoothing, xy_smoothing,
+                                         w_smoothing),
+                              order=(xy_order, xy_order, w_order),
+                              robust=posthresh,
+                              neg_threshold=negthresh,
+                              fit_threshold=fitthresh,
+                              edge_threshold=(xythresh, xythresh, wthresh),
+                              append_weights=append_weights,
+                              skip_uncorrected=skip_uncorrected,
+                              jobs=jobs, check_memory=check_memory,
+                              detector_coordinates=detector_coordinates,
+                              scan_reduction=scan_reduction,
+                              save_scan=save_scan, scan_kwargs=options)
+            if not result:
+                msg = &#39;Problem in fifi_ls.resample.&#39;
+                log.error(msg)
+                self.error = msg
+                self.input = []
+                return
+            results.append(result)
+
+        for hdul in results:
+            self.update_output(hdul, self.prodtypes[self.step_index])
+        self.input = results
+        self.set_display_data()
+
+        if save:
+            for hdul in self.input:
+                self.write_output(hdul)</div>
+
+
+<div class="viewcode-block" id="FIFILSReduction.specmap">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.html#sofia_redux.pipeline.sofia.fifils_reduction.FIFILSReduction.specmap">[docs]</a>
+    def specmap(self):
+        &quot;&quot;&quot;
+        Generate a quick-look image and spectral plot.
+
+        Calls `sofia_redux.visualization.quicklook.make_image` to
+        make the image.  Calls `sofia_redux.instruments.fifi_ls.get_lines`
+        to get commonly-observed FIFI-LS wavelengths.
+
+        The output from this step is identical to the input, so is
+        not saved.  As a side effect, a PNG file is saved to disk to the
+        same base name as the input file, with a &#39;.png&#39; extension.
+        &quot;&quot;&quot;
+        from astropy import units as u
+        from astropy.coordinates import Angle
+        from astropy.wcs import WCS
+        from scipy.ndimage import gaussian_filter
+        from sofia_redux.visualization.quicklook import \
+            make_image, make_spectral_plot
+
+        # get parameters
+        param = self.get_parameter_set()
+        skip_preview = param.get_value(&#39;skip_preview&#39;)
+
+        # check whether to continue
+        if skip_preview:
+            log.info(&#39;Not making preview image.&#39;)
+            return
+
+        extension = param.get_value(&#39;extension&#39;)
+        slice_method = param.get_value(&#39;slice_method&#39;)
+        point_method = param.get_value(&#39;point_method&#39;)
+        override_slice = param.get_value(&#39;override_slice&#39;)
+        override_point = param.get_value(&#39;override_point&#39;)
+        colormap = param.get_value(&#39;colormap&#39;)
+        scale = param.get_value(&#39;scale&#39;)
+        n_contour = param.get_value(&#39;n_contour&#39;)
+        contour_color = param.get_value(&#39;contour_color&#39;)
+        fill_contours = param.get_value(&#39;fill_contours&#39;)
+        grid = param.get_value(&#39;grid&#39;)
+        beam = param.get_value(&#39;beam&#39;)
+        watermark = param.get_value(&#39;watermark&#39;)
+        ignore_outer = param.get_value(&#39;ignore_outer&#39;)
+        atran_plot = param.get_value(&#39;atran_plot&#39;)
+        error_plot = param.get_value(&#39;error_plot&#39;)
+        spec_scale = param.get_value(&#39;spec_scale&#39;)
+
+        # format override parameters
+        override_slice = re.sub(r&#39;[\s+\[\]\&#39;\&quot;]&#39;, &#39;&#39;,
+                                str(override_slice).lower())
+        if override_slice not in [&#39;&#39;, &#39;none&#39;]:
+            try:
+                override_w = int(override_slice)
+            except ValueError:
+                raise ValueError(f&#39;Bad input for parameter &#39;
+                                 f&#39;override_slice ({override_slice}). &#39;
+                                 f&#39;Specify as an integer.&#39;) from None
+            else:
+                slice_method = &#39;reference&#39;
+        else:
+            override_w = None
+        override_point = re.sub(r&#39;[\s+\[\]\&#39;\&quot;]&#39;, &#39;&#39;,
+                                str(override_point).lower())
+        if override_point not in [&#39;&#39;, &#39;none&#39;]:
+            try:
+                override_xy = [int(f) for f in override_point.split(&#39;,&#39;)]
+                assert len(override_xy) == 2
+            except (ValueError, IndexError, AssertionError):
+                raise ValueError(f&#39;Bad input for parameter &#39;
+                                 f&#39;override_point ({override_point}). &#39;
+                                 f&#39;Specify as 2 comma-separated integers &#39;
+                                 f&#39;(x, y).&#39;) from None
+            else:
+                point_method = &#39;reference&#39;
+        else:
+            override_xy = None
+
+        # set plot scale to default, if it is full range
+        if spec_scale[0] &lt;= 0 and spec_scale[1] &gt;= 100:
+            spec_scale = None
+
+        for i, hdul in enumerate(self.input):
+            header = hdul[0].header
+            wave = hdul[&#39;WAVELENGTH&#39;].data
+            xunit = hdul[&#39;WAVELENGTH&#39;].header.get(&#39;BUNIT&#39;, &#39;um&#39;)
+
+            # set text for title and subtitle in plot
+            obj = header.get(&#39;OBJECT&#39;, &#39;UNKNOWN&#39;)
+            channel = header.get(&#39;CHANNEL&#39;, &#39;UNKNOWN&#39;)
+            basename = os.path.basename(header.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;))
+
+            # get reference wavelength and position
+            # These keys should always be in the header - let it
+            # fail if they aren&#39;t
+            if channel == &#39;RED&#39;:
+                ref_wave = header[&#39;G_WAVE_R&#39;]
+            else:
+                ref_wave = header[&#39;G_WAVE_B&#39;]
+            ref_ra = header[&#39;OBSRA&#39;] * 15.0
+            ref_dec = header[&#39;OBSDEC&#39;]
+
+            # check for older style beam units in header
+            if &#39;BMAJ&#39; in header and &#39;arcsec&#39; in header.comments[&#39;BMAJ&#39;]:
+                for hdu in hdul:
+                    if &#39;BMAJ&#39; in hdu.header:
+                        hdu.header[&#39;BMAJ&#39;] /= 3600
+                        hdu.header[&#39;BMIN&#39;] /= 3600
+
+            # get flux
+            if &#39;UNCOR&#39; in str(extension).upper():
+                log.info(&#39;Displaying UNCORRECTED_FLUX&#39;)
+                flux = hdul[&#39;UNCORRECTED_FLUX&#39;].data
+                err = hdul[&#39;UNCORRECTED_ERROR&#39;].data
+            elif extension == &#39;FLUX&#39;:
+                flux = hdul[&#39;FLUX&#39;].data
+                err = hdul[&#39;ERROR&#39;].data
+            else:
+                raise ValueError(f&#39;Invalid extension for plot: {extension}&#39;)
+
+            # pull data from cube with specified method
+            x, y, spec_peak, spec_wv, spec_flux, spec_err = \
+                None, None, None, None, None, None
+
+            if slice_method == &#39;reference&#39;:
+                spec_peak, spec_wv = None, None
+                if override_w is not None:
+                    nearest = override_w
+                else:
+                    # don&#39;t allow out of range references
+                    if wave[0] &gt; ref_wave or wave[-1] &lt; ref_wave:
+                        nearest = -1
+                    else:
+                        # wavelength slice is nearest one to the reference
+                        nearest = int(np.argmin(np.abs(wave - ref_wave)))
+
+                if (0 &lt;= nearest &lt; flux.shape[0]
+                        and not np.all(np.isnan(flux[nearest]))):
+                    spec_peak = nearest
+                    spec_wv = wave[nearest]
+                if spec_peak is None:
+                    log.warning(f&#39;Reference wavelength slice at index &#39;
+                                f&#39;{nearest} is empty; using peak method.&#39;)
+                    slice_method = &#39;peak&#39;
+                else:
+                    if override_w is not None:
+                        log.info(f&#39;Plotting at {spec_wv:.3f} {xunit}, &#39;
+                                 f&#39;index {nearest}&#39;)
+                    else:
+                        log.info(f&#39;Plotting at {spec_wv:.3f} {xunit}, &#39;
+                                 f&#39;near reference wavelength at &#39;
+                                 f&#39;{ref_wave} {xunit}&#39;)
+
+                    # image pixel is highest flux in selected slice
+                    try:
+                        img_peak = np.unravel_index(
+                            np.nanargmax(flux[spec_peak]),
+                            (flux.shape[1], flux.shape[2]))
+                    except ValueError:  # pragma: no cover
+                        # this shouldn&#39;t be reachable under ordinary
+                        # circumstances, since NaNs are accounted for in
+                        # the line search
+                        img_peak = flux.shape[1] / 2, flux.shape[2] / 2
+                    y, x = [int(i) for i in img_peak]
+
+            if slice_method == &#39;peak&#39;:
+                # looking for best signal-to-noise voxel in cube,
+                # smoothed by a couple pixels
+                sigma = 2.0
+                sflux = gaussian_filter(flux, sigma=sigma,
+                                        mode=&#39;constant&#39;, cval=np.nan,
+                                        truncate=2)
+                serr = gaussian_filter(err, sigma=sigma,
+                                       mode=&#39;constant&#39;, cval=np.nan,
+                                       truncate=2)
+
+                # set the outer N% of frames to NaN
+                wstart = int(ignore_outer * len(wave))
+                wend = int((1 - ignore_outer) * len(wave))
+                sflux[:wstart] = np.nan
+                sflux[wend:] = np.nan
+
+                try:
+                    img_peak = np.unravel_index(np.nanargmax(sflux / serr),
+                                                flux.shape)[1:]
+                except ValueError:
+                    img_peak = flux.shape[1] / 2, flux.shape[2] / 2
+
+                # peak in the real spectrum at that location
+                y, x = [int(i) for i in img_peak]
+                spec_flux = flux[:, y, x]
+                try:
+                    spec_peak = \
+                        int(np.nanargmax(spec_flux[wstart:wend])) + wstart
+                except ValueError:
+                    try:
+                        spec_peak = int(np.nanargmax(spec_flux))
+                    except ValueError:
+                        log.error(&#39;No good data; not creating map&#39;)
+                        return
+                spec_wv = wave[spec_peak]
+                log.info(f&#39;Plotting at S/N peak {spec_wv:.3f} {xunit}&#39;)
+
+            # x and y selected so far are at peak; override if
+            # reference is desired
+            hwcs = WCS(hdul[extension].header)
+            if point_method == &#39;reference&#39;:
+                if override_xy is not None:
+                    rx, ry = override_xy
+                else:
+                    rx, ry, rw = hwcs.wcs_world2pix(ref_ra, ref_dec,
+                                                    spec_wv, 0)
+                if (np.any(np.isnan([rx, ry]))
+                        or rx &lt;= 0 or rx &gt;= flux.shape[2]
+                        or ry &lt;= 0 or ry &gt;= flux.shape[1]):
+                    if override_xy:
+                        log.warning(f&#39;Reference spatial position at index &#39;
+                                    f&#39;{rx},{ry} out of range; using peak &#39;
+                                    f&#39;pixel at {x},{y}.&#39;)
+                    else:
+                        log.warning(f&#39;Reference spatial position at &#39;
+                                    f&#39;RA={ref_ra}, Dec={ref_dec} out of &#39;
+                                    f&#39;range; using peak pixel at {x},{y}.&#39;)
+                else:
+                    if override_xy:
+                        log.info(f&#39;Spectral plot taken at pixel &#39;
+                                 f&#39;{rx},{ry}&#39;)
+                    else:
+                        log.info(f&#39;Spectral plot taken at reference position &#39;
+                                 f&#39;near RA={ref_ra} Dec={ref_dec}&#39;)
+                    x, y = int(rx), int(ry)
+            else:
+                log.info(f&#39;Spectral plot taken at peak flux, pixel {x},{y}&#39;)
+
+            # get spectral flux at selected image point
+            spec_flux = flux[:, y, x]
+            spec_err = err[:, y, x]
+
+            # get sky location of chosen point for display
+            ra, dec, wv = hwcs.wcs_pix2world(x, y, spec_peak, 0)
+            ra_str = Angle(ra, unit=u.deg).to_string(unit=u.hour)
+            dec_str = Angle(dec, unit=u.deg).to_string(unit=u.deg)
+
+            # get atran data for overplot if needed
+            if atran_plot:
+                aplot = [wave, hdul[&#39;TRANSMISSION&#39;].data]
+            else:
+                aplot = None
+
+            # titles for plot
+            title = f&#39;Object: {obj}, Channel: {channel}&#39;
+            subtitle = f&#39;Filename: {basename}&#39;
+            subsubtitle = f&#39;Wavelength slice at {spec_wv:.2f} {xunit}&#39;
+            spectitle = f&#39;Spectrum at RA={ra_str}, Dec={dec_str}&#39;
+            yunit = hdul[&#39;FLUX&#39;].header.get(&#39;BUNIT&#39;, &#39;UNKNOWN&#39;)
+
+            # make the image figure
+            fig = make_image(hdul, extension=extension, colormap=colormap,
+                             scale=scale, n_contour=n_contour,
+                             contour_color=contour_color,
+                             fill_contours=fill_contours, title=title,
+                             subtitle=subtitle, subsubtitle=subsubtitle,
+                             grid=grid, beam=beam,
+                             plot_layout=(2, 1), cube_slice=spec_peak,
+                             watermark=watermark)
+
+            # mark the spectral position
+            ax1 = fig.axes[0]
+            ax1.scatter(x, y, c=contour_color, marker=&#39;x&#39;, s=20,
+                        alpha=0.8)
+
+            # add a spectral plot
+            ax = fig.add_subplot(2, 1, 2)
+            spec_err = None if not error_plot else spec_err
+            make_spectral_plot(ax, wave, spec_flux, spectral_error=spec_err,
+                               scale=spec_scale, colormap=colormap,
+                               xunit=xunit, yunit=yunit, title=spectitle,
+                               marker=[spec_wv, spec_flux[spec_peak]],
+                               marker_color=contour_color,
+                               overplot=aplot,
+                               overplot_label=&#39;Atmospheric Transmission&#39;,
+                               watermark=watermark)
+
+            # output filename for image
+            fname = os.path.splitext(basename)[0] + &#39;.png&#39;
+            outname = os.path.join(self.output_directory, fname)
+
+            fig.savefig(outname, dpi=300)
+            log.info(f&#39;Saved image to {outname}&#39;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

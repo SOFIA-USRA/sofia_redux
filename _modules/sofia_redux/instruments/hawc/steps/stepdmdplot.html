@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepdmdplot &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepdmdplot</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Diagnostic plots pipeline step.&quot;&quot;&quot;
+
+import os
+
+from astropy import log
+import astropy.units as u
+from matplotlib.backends.backend_agg \
+    import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
+import matplotlib.gridspec as gridspec
+import numpy as np
+
+from sofia_redux.instruments.hawc.stepparent import StepParent
+from sofia_redux.instruments.hawc.datafits import DataFits
+
+__all__ = [&#39;StepDmdPlot&#39;]
+
+
+<div class="viewcode-block" id="StepDmdPlot">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepdmdplot.StepDmdPlot.html#sofia_redux.instruments.hawc.steps.stepdmdplot.StepDmdPlot">[docs]</a>
+class StepDmdPlot(StepParent):
+    &quot;&quot;&quot;
+    Produce diagnostic plots for demodulated data.
+
+    This pipeline step produces a set of diagnostic plots from demodulated
+    chop/nod data. For data that are not from the internal calibrator,
+    the data is checked for possible door vignetting. For
+    data that are from the internal calibrator, images of phase
+    differences from expected values are displayed.
+
+    This step requires demodulated data as input, as produced by
+    the `sofia_redux.instruments.hawc.steps.StepDemodulate` step.
+    The input table should include columns for Chop Mask and
+    Samples, RA, Dec, TrackErrAoi3, TrackErrAoi4,
+    and either CentroidAoi or SofiaHkTrkAoi; R array, R array Imag,
+    T array, T array Imag; CentroidExpMsec; HWP Angle, HWP Index and
+    Nod Index.
+
+    The output from this step is identical to the input. As a side
+    effect, a PNG file is saved to disk to the same base name as the input
+    file, with &#39;DPL&#39; replacing the product type indicator.
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepDmdPlot.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepdmdplot.StepDmdPlot.html#sofia_redux.instruments.hawc.steps.stepdmdplot.StepDmdPlot.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;dmdplot&#39;, and are named with
+        the step abbreviation &#39;DPL&#39;.
+
+        Parameters defined for this step are:
+
+        door_threshold : float
+            Ratio of real to imaginary median stds, for door
+            vignetting warnings.
+        detector_i : int
+            i-location of detector pixel to plot.
+        detector_j : int
+            j-location of detector pixel to plot.
+        data_sigma : float
+            Value for sigma-clipping of detector data in computing
+            averages.
+        data_iters : int
+            Number of iterations for sigma-clipping.
+        ref_phase_file : str
+            Path to a FITS file containing reference phase values,
+            for comparison with CALMODE = INT_CAL data. Set to
+            &#39;0.0&#39; to skip the comparison.
+        user_freq : float
+            Expected chop frequency for science data. Used to compute
+            phases in degrees from CALMODE = INT_CAL data.
+        phase_thresh : float
+            Threshold for phase outliers. Values above this number
+            are ignored.
+        save_phase : bool
+            If set, phase images are saved as FITS files to the
+            input base name with &#39;PHS&#39; replacing the product type
+            indicator.
+        savefolder : str
+            Folder to save plots to. An empty string indicates the
+            same folder as the input file.
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;dmdplot&#39;
+        self.description = &#39;Make Demod Plots&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        # the step gets the procname from datain
+        self.procname = &#39;dpl&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+
+        # Append parameters
+        self.paramlist.append([&#39;door_threshold&#39;, 2.0,
+                               &quot;ratio of real to imaginary median &quot;
+                               &quot;stds for door vignetting warnings&quot;])
+        self.paramlist.append([&#39;detector_i&#39;, 14,
+                               &quot;i-location of detector pixel to plot&quot;])
+        self.paramlist.append([&#39;detector_j&#39;, 24,
+                               &quot;j-location of detector pixel to plot&quot;])
+        self.paramlist.append([&#39;data_sigma&#39;, 5.0,
+                               &quot;value for sigma-clipping of detector data&quot;])
+        self.paramlist.append([&#39;data_iters&#39;, 3,
+                               &quot;number of iterations for data clipping&quot;])
+        self.paramlist.append([&#39;ref_phase_file&#39;, &#39;0.0&#39;,
+                               &quot;INT_CAL: path to reference phase file &quot;
+                               &quot;in degrees (0.0 is none)&quot;])
+        self.paramlist.append([&#39;user_freq&#39;, 10.2,
+                               &quot;INT_CAL: user frequency in Hz&quot;])
+        self.paramlist.append([&#39;phase_thresh&#39;, 50.0,
+                               &#39;threshold in phase uncertainty (deg)&#39;])
+        self.paramlist.append([&#39;save_phase&#39;, False,
+                               &#39;Save phase images to PHS suffix&#39;])
+        self.paramlist.append([&#39;savefolder&#39;, &#39;&#39;,
+                               &quot;folder to save plots to. &#39;&#39; means same &quot;
+                               &quot;as input file.&quot;])</div>
+
+
+<div class="viewcode-block" id="StepDmdPlot.get_gapindex">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepdmdplot.StepDmdPlot.html#sofia_redux.instruments.hawc.steps.stepdmdplot.StepDmdPlot.get_gapindex">[docs]</a>
+    def get_gapindex(self, timeseries, thresh=0.12):
+        &quot;&quot;&quot;
+        Find indices of time gaps above a threshhold.
+
+        Parameters
+        ----------
+        timeseries : array-like
+            Sorted array of times.
+
+        thresh : float, optional
+            Threshold for determining a gap.
+
+        Returns
+        -------
+        gapindex : array-like of int
+            index at which to insert None values to indicate gaps
+        &quot;&quot;&quot;
+        timedelt = timeseries[1:] - timeseries[:-1]
+        with np.errstate(invalid=&#39;ignore&#39;):
+            gapindex = np.where(timedelt &gt; thresh)[0] + 1
+        return gapindex</div>
+
+
+<div class="viewcode-block" id="StepDmdPlot.calc_phase">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepdmdplot.StepDmdPlot.html#sofia_redux.instruments.hawc.steps.stepdmdplot.StepDmdPlot.calc_phase">[docs]</a>
+    def calc_phase(self, real_part, imag_part,
+                   chop_freq, user_freq, phaseref=None):
+        &quot;&quot;&quot;
+        Calculate a phase image.
+
+        Parameters
+        ----------
+        real_part : array-like
+            Array of real values.
+        imag_part : array-like
+            Array of imaginary values.
+        chop_freq : float
+            Chopper frequency of the data.
+        user_freq : float
+            User-specified frequency.
+        phaseref : astropy.units.Quantity with units of degrees, optional
+            If specified, subtract this reference phase.
+
+        Returns
+        -------
+        phase : array of astropy.units.Quantity with units of degrees
+            Phase in degrees, in range -180 deg to 180 deg.
+        &quot;&quot;&quot;
+        if phaseref is None:
+            phaseref = np.zeros_like(real_part) * u.rad
+        phase = -np.arctan2(imag_part, real_part) * u.rad - \
+            np.deg2rad(phaseref)
+        phase *= (user_freq / chop_freq)
+        phase = (phase + np.pi * u.rad) % (2 * np.pi * u.rad) - \
+            np.pi * u.rad
+        phase = np.rad2deg(phase)
+        return phase</div>
+
+
+<div class="viewcode-block" id="StepDmdPlot.sigma_mask">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepdmdplot.StepDmdPlot.html#sofia_redux.instruments.hawc.steps.stepdmdplot.StepDmdPlot.sigma_mask">[docs]</a>
+    def sigma_mask(self, array, sigma=5, iters=3):
+        &quot;&quot;&quot;
+        Mask array along axis 0 using sigma-clipping and median.
+
+        Parameters
+        ----------
+        array : array-like
+            Data array.
+
+        sigma : float, optional
+            Threshold for sigma-clipping, with median.
+
+        iters : int, optional
+            Number of iterations.
+
+        Returns
+        -------
+        msk_array : masked array
+            Masked array with mask from sigma-clipping.
+        &quot;&quot;&quot;
+        from numpy.ma import masked_where
+        with np.errstate(invalid=&#39;ignore&#39;):
+            if iters &gt; 0:
+                msk_array = masked_where(
+                    np.ma.abs(array
+                              - np.ma.median(array, axis=0))
+                    &gt; sigma * np.ma.std(array, axis=0),
+                    array, copy=True)
+                if iters &gt; 1:
+                    for i in range(iters - 1):
+                        msk_array = masked_where(
+                            np.ma.abs(msk_array
+                                      - np.ma.median(msk_array, axis=0))
+                            &gt; sigma * np.ma.std(msk_array, axis=0), msk_array)
+            else:
+                msk_array = np.ma.asarray(array)
+
+        return msk_array</div>
+
+
+<div class="viewcode-block" id="StepDmdPlot.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepdmdplot.StepDmdPlot.html#sofia_redux.instruments.hawc.steps.stepdmdplot.StepDmdPlot.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        This step is run as a single-in single-out (SISO) step:
+        self.datain should be a DataFits object, and output will also
+        be a single DataFits, stored in self.dataout.
+
+        The process is:
+
+        1. For all data types, plot the RA and Dec in one panel; TrackErrAoi3
+           and TrackErrAoi4 in another panel; HWP angle in yet another panel;
+           and the sigma-clipped data values of the user-specified detector
+           in the final panel. If present, CentroidAoi or SofiaHkTrkAoi are
+           used to indicate which of TrackErrAoi3 and TrackErrAoi4 are
+           active. Green shading indicates which samples will be passed by
+           StepDmdCut; for this purpose, this step reads the StepDmdCut
+           parameters from the configuration.
+
+        2. For all data not taken with the internal calibrator, calculate the
+           ratio of real to imaginary data in a 5x5 pixel box centered on the
+           user-specified pixel used for plotting. The signals are
+           sigma-clipped before the ratios of medians are computed. The
+           values are output in a table at the upper left corner of the plot.
+           If either the R ratio or T ratio exceeds the parameter
+           door_threshold, warnings are output to the plot and to the
+           logger that possible door vignetting may have occurred. In
+           separate panels, CentroidExpMsec, and both Nod Index and HWP
+           Index, are plotted.
+
+        3. For data taken with the internal calibrator, images of the
+           detector phase are plotted. If the ref_phase_file is
+           specified, it is subtracted from the calculated phases. The
+           algorithm includes these steps:
+
+           - Discard the first and last chops and any NaN values, then
+             calculate the mean along the first (time) axis of the R and T
+             arrays, for both real and imaginary signals.
+
+           - For each of R and T, compute -arctan2(imaginary, real) and
+             convert to degrees.
+
+           - Subtract the reference phase if it is provided.
+
+           - Multiply by the ratio of 10.2 Hz to the value of ‘CHPFREQ’ in
+             the file header (about 3 Hz).
+
+           - Add or subtract multiples of 360 degrees to put values in the
+             branch -180 degrees to +180 degrees
+
+        &quot;&quot;&quot;
+        # Copy dataout
+        self.dataout = self.datain
+
+        # Get parameters
+        door_threshold = self.getarg(&#39;door_threshold&#39;)
+        detector_i = self.getarg(&#39;detector_i&#39;)
+        detector_j = self.getarg(&#39;detector_j&#39;)
+        data_sigma = self.getarg(&#39;data_sigma&#39;)
+        data_iters = self.getarg(&#39;data_iters&#39;)
+        mask_bits = int(self.config[&#39;dmdcut&#39;][&#39;mask_bits&#39;])
+        min_samples = int(self.config[&#39;dmdcut&#39;][&#39;min_samples&#39;])
+
+        table = self.datain.table
+
+        # Apply mask
+        if &#39;Chop Mask&#39; in table.names:
+            chopmask = table[&#39;Chop Mask&#39;]
+        else:
+            log.info(&#39;Chop mask column not found, using zeros&#39;)
+            chopmask = np.zeros(len(self.datain.table), dtype=np.int32)
+        nsamples = table[&#39;Samples&#39;]
+
+        with np.errstate(invalid=&#39;ignore&#39;):
+            keep_where = ((chopmask &amp; mask_bits) == 0) &amp; \
+                         (nsamples &gt;= min_samples)
+
+        reltime = table[&#39;Timestamp&#39;] - table[&#39;Timestamp&#39;][0]
+
+        try:
+            calmode = self.datain.getheadval(&#39;calmode&#39;, errmsg=False)
+        except KeyError:
+            calmode = &#39;UNKNOWN&#39;
+
+        if calmode == &#39;INT_CAL&#39;:
+
+            chpfreq = self.datain.getheadval(&#39;chpfreq&#39;)
+
+            user_freq = float(self.getarg(&#39;user_freq&#39;))
+
+            phase_thresh = float(self.getarg(&#39;phase_thresh&#39;))
+
+            save_phase = self.getarg(&#39;save_phase&#39;)
+
+            array_shape = table[&#39;R array&#39;].shape[1:]
+            r_phaseref = np.zeros(array_shape, dtype=np.float64) * u.deg
+            t_phaseref = np.zeros(array_shape, dtype=np.float64) * u.deg
+            ref_phase_file = os.path.expandvars(self.getarg(&#39;ref_phase_file&#39;))
+            auxphase = False
+            phmin = -180
+            phmax = 180
+            if os.path.isfile(ref_phase_file):
+                # If it&#39;s a file, read it as such
+                phasedata = DataFits(config=self.config)
+                phasedata.load(ref_phase_file)
+                r_phaseref = phasedata.imgdata[0] * u.deg
+                t_phaseref = phasedata.imgdata[1] * u.deg
+                auxphase = True
+                phmin = -40
+                phmax = 40
+
+            mean_r = np.nanmean(table[&#39;R array&#39;][1:-1, :, :], axis=0)
+            std_r = np.nanstd(table[&#39;R array&#39;][1:-1, :, :], axis=0)
+            mean_r_imag = np.nanmean(table[&#39;R array Imag&#39;][1:-1, :, :], axis=0)
+            std_r_imag = np.nanstd(table[&#39;R array Imag&#39;][1:-1, :, :], axis=0)
+            mean_t = np.nanmean(table[&#39;T array&#39;][1:-1, :, :], axis=0)
+            std_t = np.nanstd(table[&#39;T array&#39;][1:-1, :, :], axis=0)
+            mean_t_imag = np.nanmean(table[&#39;T array Imag&#39;][1:-1, :, :], axis=0)
+            std_t_imag = np.nanstd(table[&#39;T array Imag&#39;][1:-1, :, :], axis=0)
+
+            r_phase = self.calc_phase(mean_r, mean_r_imag, chpfreq,
+                                      user_freq, phaseref=r_phaseref)
+            t_phase = self.calc_phase(mean_t, mean_t_imag, chpfreq,
+                                      user_freq, phaseref=t_phaseref)
+            r_plus = self.calc_phase(mean_r + std_r,
+                                     mean_r_imag + std_r_imag,
+                                     chpfreq, user_freq,
+                                     phaseref=r_phaseref)
+            r_minus = self.calc_phase(mean_r - std_r,
+                                      mean_r_imag - std_r_imag,
+                                      chpfreq, user_freq,
+                                      phaseref=r_phaseref)
+            t_plus = self.calc_phase(mean_t + std_t,
+                                     mean_t_imag + std_t_imag,
+                                     chpfreq, user_freq, phaseref=r_phaseref)
+            t_minus = self.calc_phase(mean_t - std_t,
+                                      mean_t_imag - std_t_imag,
+                                      chpfreq, user_freq,
+                                      phaseref=r_phaseref)
+
+            cutval = phase_thresh * u.deg
+            with np.errstate(invalid=&#39;ignore&#39;):
+                r_phase[(np.abs(r_plus - r_phase) &gt; cutval)
+                        | (np.abs(r_minus - r_phase) &gt; cutval)] = np.nan
+                t_phase[(np.abs(t_plus - t_phase) &gt; cutval)
+                        | (np.abs(t_minus - t_phase) &gt; cutval)] = np.nan
+            median_r_phase = np.nanmedian(r_phase.value)
+            median_t_phase = np.nanmedian(t_phase.value)
+            log.info(&#39;&#39;)
+            if auxphase:
+                log.info(&#39;median R phase offset = %.2f deg&#39; %
+                         float(median_r_phase))
+                log.info(&#39;median T phase offset = %.2f deg&#39; %
+                         float(median_t_phase))
+            else:
+                log.info(&#39;median R phase = %.2f deg&#39; %
+                         float(median_r_phase))
+                log.info(&#39;median T phase = %.2f deg&#39; %
+                         float(median_t_phase))
+            log.info(&#39;&#39;)
+
+            if save_phase:
+                phasename = self.datain.filenamebegin + &#39;PHS&#39; + \
+                    self.datain.filenameend
+                phaseproduct = DataFits(config=self.datain.config)
+
+                phaseproduct.imageset(r_phase.value, &#39;RPHASE&#39;)
+                phaseproduct.imageset(t_phase.value, &#39;TPHASE&#39;)
+
+                phaseproduct.header = self.datain.header.copy()
+                phaseproduct.setheadval(&#39;BUNIT&#39;, &#39;deg&#39;)
+                phaseproduct.setheadval(&#39;CHPFREQ&#39;, chpfreq,
+                                        &#39;Input chop freq [Hz]&#39;)
+                phaseproduct.setheadval(&#39;USERFREQ&#39;, user_freq,
+                                        &#39;User-specified chop freq [Hz]&#39;)
+                phaseproduct.setheadval(&#39;PHASEREF&#39;, ref_phase_file,
+                                        &#39;Phase reference&#39;)
+                phaseproduct.setheadval(&#39;PRODTYPE&#39;, &#39;phaseoffset&#39;)
+                phaseproduct.setheadval(&#39;PROCSTAT&#39;, &#39;LEVEL_2&#39;)
+                phaseproduct.save(phasename)
+
+            fig = Figure(figsize=(20, 24))
+            FigureCanvas(fig)
+            outer = gridspec.GridSpec(5, 1, wspace=0.2, hspace=0.2)
+
+            # Plot RA and Dec first
+            ax1 = fig.add_subplot(outer[0])
+            ax1.plot(reltime, table[&#39;RA&#39;], &#39;b-&#39;, label=&#39;RA&#39;)
+            ax1.set_xlabel(&#39;Time [sec]&#39;, fontsize=15)
+
+            # Make the y-axis label, ticks and tick labels
+            # match the line color
+            ax1.set_ylabel(&#39;RA [deg]&#39;, color=&#39;b&#39;, fontsize=15)
+            ax1.tick_params(&#39;y&#39;, colors=&#39;b&#39;)
+
+            ax2 = ax1.twinx()
+            ax2.plot(reltime, table[&#39;DEC&#39;], &#39;r-&#39;, label=&#39;Dec&#39;)
+            ax2.set_ylabel(&#39;Dec [deg]&#39;, color=&#39;r&#39;, fontsize=15)
+            ax2.tick_params(&#39;y&#39;, colors=&#39;r&#39;)
+            with np.errstate(invalid=&#39;ignore&#39;):
+                idx = (((chopmask &amp; mask_bits) == 0)
+                       &amp; (nsamples &gt;= min_samples))
+            ax2.fill_between(reltime, ax2.get_ylim()[0], ax2.get_ylim()[1],
+                             where=idx, facecolor=&#39;green&#39;, alpha=0.3)
+
+            # Plot title
+            ax1.set_title(&#39;Plots for %s&#39; %
+                          os.path.basename(self.datain.filename),
+                          fontsize=20, fontweight=&#39;bold&#39;)
+
+            # Plot TrackErrAoi3 and 4 next
+            ax = fig.add_subplot(outer[1])
+            aoikey = None
+            if &#39;SofHkTrkaoi&#39; in table.names:
+                aoikey = &#39;SofHkTrkaoi&#39;
+            elif &#39;CentroidAoi&#39; in table.names:
+                aoikey = &#39;CentroidAoi&#39;
+            if aoikey is not None:
+                log.debug(&#39;Found AOI key: {}&#39;.format(aoikey))
+                centroidaoi = table[aoikey]
+                on3 = centroidaoi == 3.0
+                on4 = centroidaoi == 4.0
+                off3 = np.not_equal(centroidaoi, 3.0)
+                off4 = np.not_equal(centroidaoi, 4.0)
+                gidxon3 = self.get_gapindex(reltime[on3])
+                gidxon4 = self.get_gapindex(reltime[on4])
+                gidxoff3 = self.get_gapindex(reltime[off3])
+                gidxoff4 = self.get_gapindex(reltime[off4])
+                ontime3 = np.insert(reltime[on3], gidxon3, None)
+                onaoi3 = np.insert(table[&#39;TrackErrAoi3&#39;][on3],
+                                   gidxon3, None)
+                offtime3 = np.insert(reltime[off3], gidxoff3, None)
+                offaoi3 = np.insert(table[&#39;TrackErrAoi3&#39;][off3],
+                                    gidxoff3, None)
+                ontime4 = np.insert(reltime[on4], gidxon4, None)
+                onaoi4 = np.insert(table[&#39;TrackErrAoi4&#39;][on4],
+                                   gidxon4, None)
+                offtime4 = np.insert(reltime[off4], gidxoff4, None)
+                offaoi4 = np.insert(table[&#39;TrackErrAoi4&#39;][off4],
+                                    gidxoff4, None)
+                ax.plot(ontime3, onaoi3, &#39;b-&#39;,
+                        linewidth=2, alpha=1.0, label=&#39;Aoi3 Active&#39;)
+                ax.plot(ontime4, onaoi4, &#39;r-&#39;,
+                        linewidth=2, alpha=1.0, label=&#39;Aoi4 Active&#39;)
+                ax.plot(offtime3, offaoi3, &#39;b-&#39;, alpha=0.2,
+                        linewidth=5, label=&#39;Aoi3 Off&#39;)
+                ax.plot(offtime4, offaoi4, &#39;r-&#39;, alpha=0.2,
+                        linewidth=5, label=&#39;Aoi4 Off&#39;)
+            else:
+                try:
+                    ax.plot(reltime, table[&#39;TrackErrAoi3&#39;], &#39;b-&#39;,
+                            linewidth=2, alpha=1.0, label=&#39;Aoi3&#39;)
+                    ax.plot(reltime, table[&#39;TrackErrAoi4&#39;], &#39;r-&#39;,
+                            linewidth=2, alpha=1.0, label=&#39;Aoi4&#39;)
+                    log.debug(&#39;Found AOI keys: TrackErrAoi3, TrackErrAoi4&#39;)
+                except KeyError:
+                    log.debug(&#39;Found no AOI keys&#39;)
+
+            ax.set_yscale(&#39;symlog&#39;, linthresh=10)
+            ax.legend()
+            ax.set_ylabel(&#39;TrackErr [arcsec]&#39;, fontsize=15)
+            ax.fill_between(reltime, ax.get_ylim()[0], ax.get_ylim()[1],
+                            where=idx, facecolor=&#39;green&#39;, alpha=0.3)
+
+            # Plot phases
+            inner = gridspec.GridSpecFromSubplotSpec(
+                1, 2, subplot_spec=outer[2], wspace=0.1, hspace=0.1)
+            ax = fig.add_subplot(inner[0])
+            im = ax.imshow(r_phase.value, cmap=&#39;coolwarm&#39;, vmin=phmin,
+                           vmax=phmax, origin=&#39;lower&#39;)
+            cb = fig.colorbar(im, ax=ax)
+            if auxphase:
+                ax.set_title(&#39;R phase offset from %s, median=%.2f deg&#39; %
+                             (os.path.basename(ref_phase_file),
+                              float(median_r_phase)))
+                cb.set_label(&#39;Phase offset [degrees at %.2f Hz]&#39; % user_freq,
+                             fontsize=12)
+            else:
+                ax.set_title(&#39;R phase, median=%.2f deg&#39; % median_r_phase)
+                cb.set_label(&#39;Phase [degrees at %.2f Hz]&#39; % user_freq,
+                             fontsize=12)
+
+            ax = fig.add_subplot(inner[1])
+            im = ax.imshow(t_phase.value, cmap=&#39;coolwarm&#39;, vmin=phmin,
+                           vmax=phmax, origin=&#39;lower&#39;)
+            cb = fig.colorbar(im, ax=ax)
+            if auxphase:
+                ax.set_title(&#39;T phase offset from %s, median=%.2f deg&#39; %
+                             (os.path.basename(ref_phase_file),
+                              float(median_t_phase)))
+                cb.set_label(&#39;Phase offset [degrees at %.2f Hz]&#39; % user_freq,
+                             fontsize=12)
+            else:
+                ax.set_title(&#39;T phase, median=%.2f deg&#39; % median_t_phase)
+                cb.set_label(&#39;Phase [degrees at %.2f Hz]&#39; % user_freq,
+                             fontsize=12)
+
+            # Plot HWP Angle
+            ax = fig.add_subplot(outer[3])
+            ax.plot(reltime, table[&#39;HWP Angle&#39;], &#39;b-&#39;, label=&#39;HWP Angle&#39;)
+            # Make the y-axis label, ticks and tick labels
+            # match the line color
+            ax.set_ylabel(&#39;HWP Angle&#39;, fontsize=15)
+            ax.fill_between(reltime, ax.get_ylim()[0], ax.get_ylim()[1],
+                            where=idx, facecolor=&#39;green&#39;, alpha=0.3)
+
+            # Plot R and T signal at specified location
+            log.debug(&#39;Plotting R0 and T0 at &#39;
+                      &#39;i={:d}, j={:d}&#39;.format(detector_i, detector_j))
+            ax1 = fig.add_subplot(outer[4])
+            r_real = np.array(table[&#39;R array&#39;])
+            r_masked = self.sigma_mask(r_real[:, detector_j, detector_i],
+                                       data_sigma, iters=data_iters)
+
+            ax1.plot(reltime, r_masked, &#39;b-&#39;, label=&#39;R0&#39;)
+            ax1.set_xlabel(&#39;Time [sec]&#39;, fontsize=15)
+            ax1.set_ylabel(&#39;R0&#39;, color=&#39;b&#39;, fontsize=15)
+            if data_iters &gt; 0:
+                ax1.set_title(&#39;Detector signals at i={:d}, j={:d}, &#39;
+                              &#39;{:.1f}-sigma clipped w/ {:d} &#39;
+                              &#39;iterations&#39;.format(detector_i, detector_j,
+                                                  data_sigma, data_iters))
+            else:
+                ax1.set_title(&#39;Detector signals at i={:d}, &#39;
+                              &#39;j={:d}&#39;.format(detector_j, detector_i))
+            ax1.tick_params(&#39;y&#39;, colors=&#39;b&#39;)
+
+            t_real = np.array(table[&#39;T array&#39;])
+            ax2 = ax1.twinx()
+            t_masked = self.sigma_mask(t_real[:, detector_j, detector_i],
+                                       data_sigma, iters=data_iters)
+
+            ax2.plot(reltime, t_masked, &#39;r-&#39;, label=&#39;T0&#39;)
+            ax2.set_ylabel(&#39;T0&#39;, color=&#39;r&#39;, fontsize=15)
+            ax2.tick_params(&#39;y&#39;, colors=&#39;r&#39;)
+            ax2.fill_between(reltime, ax2.get_ylim()[0], ax2.get_ylim()[1],
+                             where=idx, facecolor=&#39;green&#39;, alpha=0.3)
+        else:
+            # Set up plot
+            fig = Figure(figsize=(20, 24))
+            FigureCanvas(fig)
+
+            # Plot RA and Dec
+            ax1 = fig.add_subplot(6, 1, 1)
+            ax1.plot(reltime, table[&#39;RA&#39;], &#39;b-&#39;, label=&#39;RA&#39;)
+            ax1.set_xlabel(&#39;Time [sec]&#39;, fontsize=15)
+
+            # Make the y-axis label, ticks and tick labels
+            # match the line color
+            ax1.set_ylabel(&#39;RA [deg]&#39;, color=&#39;b&#39;, fontsize=15)
+            ax1.tick_params(&#39;y&#39;, colors=&#39;b&#39;)
+
+            ax2 = ax1.twinx()
+            ax2.plot(reltime, table[&#39;DEC&#39;], &#39;r-&#39;, label=&#39;Dec&#39;)
+            ax2.set_ylabel(&#39;Dec [deg]&#39;, color=&#39;r&#39;, fontsize=15)
+            ax2.tick_params(&#39;y&#39;, colors=&#39;r&#39;)
+            ax2.fill_between(reltime, ax2.get_ylim()[0], ax2.get_ylim()[1],
+                             where=keep_where,
+                             facecolor=&#39;green&#39;, alpha=0.3)
+
+            # Plot title
+            ax1.set_title(&#39;Plots for %s&#39; %
+                          os.path.basename(self.datain.filename),
+                          fontsize=20, fontweight=&#39;bold&#39;)
+
+            # Check for a door vignetting event
+            # D.A. Harper&#39;s algorithm: for each nod index
+            # and hwp index, compute standard
+            # deviations for each pixel and then take array median
+            # If ratio of imaginary part to real part exceeds
+            # door threshold, mark on plot
+            n_door_events = 0
+            msg_counter = 0
+
+            with np.errstate(invalid=&#39;ignore&#39;):
+                hwplist = sorted(np.unique(
+                    table[&#39;HWP Index&#39;][table[&#39;HWP Index&#39;] &gt;= 0]))
+                nodlist = sorted(np.unique(
+                    table[&#39;Nod Index&#39;][table[&#39;Nod Index&#39;] &gt;= 0]))
+            ax1.annotate(&#39;hwp &#39; + &#39;nod R_ratio T_ratio  &#39; * len(nodlist),
+                         xy=(.10, .98),
+                         xycoords=&#39;figure fraction&#39;,
+                         horizontalalignment=&#39;left&#39;,
+                         verticalalignment=&#39;top&#39;,
+                         fontsize=14, color=&#39;black&#39;)
+            for hwpind in hwplist:
+                nomstr = &#39; {:3d} &#39;.format(hwpind)
+                for nodind in nodlist:
+                    with np.errstate(invalid=&#39;ignore&#39;):
+                        index = (table[&#39;Nod Index&#39;] == nodind) &amp; \
+                                (table[&#39;HWP Index&#39;] == hwpind)
+                    r_real = self.sigma_mask(
+                        np.array(table[&#39;R array&#39;][index,
+                                 detector_j - 2:detector_j + 3,
+                                 detector_i - 2:detector_j + 3]),
+                        data_sigma, iters=data_iters)
+                    r_imag = self.sigma_mask(
+                        np.array(table[&#39;R array Imag&#39;][index,
+                                 detector_j - 2:detector_j + 3,
+                                 detector_i - 2:detector_j + 3]),
+                        data_sigma, iters=data_iters)
+                    t_real = self.sigma_mask(
+                        np.array(table[&#39;T array&#39;][index,
+                                 detector_j - 2:detector_j + 3,
+                                 detector_i - 2:detector_j + 3]),
+                        data_sigma, iters=data_iters)
+                    t_imag = self.sigma_mask(
+                        np.array(table[&#39;T array Imag&#39;][index,
+                                 detector_j - 2:detector_j + 3,
+                                 detector_i - 2:detector_j + 3]),
+                        data_sigma, iters=data_iters)
+                    r_real_medstd = np.ma.median(np.ma.std(r_real, axis=0))
+                    r_imag_medstd = np.ma.median(np.ma.std(r_imag, axis=0))
+                    t_real_medstd = np.ma.median(np.ma.std(t_real, axis=0))
+                    t_imag_medstd = np.ma.median(np.ma.std(t_imag, axis=0))
+                    r_ratio = r_real_medstd / r_imag_medstd
+                    t_ratio = t_real_medstd / t_imag_medstd
+                    log.debug(&#39;hwp {:3d}, nod {:3d}, &#39;
+                              &#39;r_ratio {:.3f}, t_ratio &#39;
+                              &#39;{:.3f}&#39;.format(hwpind, nodind,
+                                              float(r_ratio),
+                                              float(t_ratio)))
+                    if (r_ratio &gt; door_threshold) or \
+                            (t_ratio &gt; door_threshold):
+                        n_door_events += 1
+                        msg = (&#39;Possible door vignetting:hwp {:d}, &#39;
+                               &#39;nod {:d}. R_ratio {:.3f}, T_ratio &#39;
+                               &#39;{:.3f}&#39;.format(hwpind, nodind,
+                                               float(r_ratio), float(t_ratio)))
+                        ax1.annotate(msg,
+                                     xy=(.90, .99 - n_door_events * 0.011),
+                                     xycoords=&#39;figure fraction&#39;,
+                                     horizontalalignment=&#39;right&#39;,
+                                     verticalalignment=&#39;top&#39;,
+                                     fontsize=15, color=&#39;red&#39;,
+                                     fontweight=&#39;bold&#39;)
+                        log.warning(msg)
+
+                    nomstr += &#39; {:3d} {:8.3f} {:8.3f} &#39;.format(
+                        nodind, float(r_ratio), float(t_ratio))
+                msg_counter += 1
+                ax1.annotate(nomstr,
+                             xy=(.10, .976 - msg_counter * 0.006),
+                             xycoords=&#39;figure fraction&#39;,
+                             horizontalalignment=&#39;left&#39;,
+                             verticalalignment=&#39;top&#39;,
+                             fontsize=14, color=&#39;blue&#39;)
+                msg_counter += 1
+
+            # Plot TrackErrAoi3 and 4
+            ax = fig.add_subplot(6, 1, 2)
+            aoikey = None
+            if &#39;SofHkTrkaoi&#39; in table.names:
+                aoikey = &#39;SofHkTrkaoi&#39;
+            elif &#39;CentroidAoi&#39; in table.names:
+                aoikey = &#39;CentroidAoi&#39;
+            if aoikey is not None:
+                log.debug(&#39;Found AOI key: {}&#39;.format(aoikey))
+                centroidaoi = table[aoikey]
+                on3 = centroidaoi == 3.0
+                on4 = centroidaoi == 4.0
+                off3 = np.not_equal(centroidaoi, 3.0)
+                off4 = np.not_equal(centroidaoi, 4.0)
+                gidxon3 = self.get_gapindex(reltime[on3])
+                gidxon4 = self.get_gapindex(reltime[on4])
+                gidxoff3 = self.get_gapindex(reltime[off3])
+                gidxoff4 = self.get_gapindex(reltime[off4])
+                ontime3 = np.insert(reltime[on3], gidxon3, None)
+                onaoi3 = np.insert(table[&#39;TrackErrAoi3&#39;][on3], gidxon3, None)
+                offtime3 = np.insert(reltime[off3], gidxoff3, None)
+                offaoi3 = np.insert(table[&#39;TrackErrAoi3&#39;][off3],
+                                    gidxoff3, None)
+                ontime4 = np.insert(reltime[on4], gidxon4, None)
+                onaoi4 = np.insert(table[&#39;TrackErrAoi4&#39;][on4], gidxon4, None)
+                offtime4 = np.insert(reltime[off4], gidxoff4, None)
+                offaoi4 = np.insert(table[&#39;TrackErrAoi4&#39;][off4],
+                                    gidxoff4, None)
+                ax.plot(ontime3, onaoi3, &#39;b-&#39;,
+                        linewidth=2, alpha=1.0, label=&#39;Aoi3 Active&#39;)
+                ax.plot(ontime4, onaoi4, &#39;r-&#39;,
+                        linewidth=2, alpha=1.0, label=&#39;Aoi4 Active&#39;)
+                ax.plot(offtime3, offaoi3, &#39;b-&#39;,
+                        linewidth=5, alpha=0.2, label=&#39;Aoi3 Off&#39;)
+                ax.plot(offtime4, offaoi4, &#39;r-&#39;,
+                        linewidth=5, alpha=0.2, label=&#39;Aoi4 Off&#39;)
+            else:
+                try:
+                    ax.plot(reltime, table[&#39;TrackErrAoi3&#39;],
+                            &#39;b-&#39;, linewidth=2, alpha=1.0,
+                            label=&#39;Aoi3&#39;)
+                    ax.plot(reltime, table[&#39;TrackErrAoi4&#39;],
+                            &#39;r-&#39;, linewidth=2, alpha=1.0,
+                            label=&#39;Aoi4&#39;)
+                    log.debug(&#39;Found AOI keys: TrackErrAoi3, TrackErrAoi4&#39;)
+                except KeyError:
+                    log.debug(&#39;Found no AOI keys&#39;)
+            ax.set_xlabel(&#39;Time [sec]&#39;, fontsize=15)
+            ax.set_yscale(&#39;symlog&#39;, linthresh=10)
+            ax.legend()
+            ax.set_ylabel(&#39;TrackErr [arcsec]&#39;, fontsize=15)
+            with np.errstate(invalid=&#39;ignore&#39;):
+                idx = (((chopmask &amp; mask_bits) == 0)
+                       &amp; (nsamples &gt;= min_samples))
+            ax.fill_between(reltime, ax.get_ylim()[0], ax.get_ylim()[1],
+                            where=idx, facecolor=&#39;green&#39;, alpha=0.3)
+
+            # Plot CentroidExpMsec
+            ax = fig.add_subplot(6, 1, 3)
+            try:
+                ax.plot(reltime, table[&#39;CentroidExpMsec&#39;],
+                        &#39;b-&#39;, label=&#39;CentroidExpMsec&#39;)
+            except KeyError:
+                log.debug(&#39;CentroidExpMsec not found&#39;)
+            ax.set_xlabel(&#39;Time [sec]&#39;, fontsize=15)
+
+            # Make the y-axis label, ticks and tick
+            # labels match the line color
+            ax.set_ylabel(&#39;CentroidExpMsec&#39;, fontsize=15)
+            ax.fill_between(reltime, ax.get_ylim()[0], ax.get_ylim()[1],
+                            where=idx, facecolor=&#39;green&#39;, alpha=0.3)
+
+            # Plot HWP Angle
+            ax = fig.add_subplot(6, 1, 4)
+            ax.plot(reltime, table[&#39;HWP Angle&#39;], &#39;b-&#39;, label=&#39;HWP Angle&#39;)
+            ax.set_xlabel(&#39;Time [sec]&#39;, fontsize=15)
+            # Make the y-axis label, ticks and tick labels match the line color
+            ax.set_ylabel(&#39;HWP Angle&#39;, fontsize=15)
+            ax.fill_between(reltime, ax.get_ylim()[0], ax.get_ylim()[1],
+                            where=idx, facecolor=&#39;green&#39;, alpha=0.3)
+
+            # Plot Nod Index and HWP Index together
+            ax1 = fig.add_subplot(6, 1, 5)
+            ax1.plot(reltime, table[&#39;Nod Index&#39;], &#39;b-&#39;, label=&#39;Nod Index&#39;)
+            # Make the y-axis label, ticks and tick labels match the line color
+            ax1.set_ylabel(&#39;Nod Index&#39;, color=&#39;b&#39;, fontsize=15)
+            ax1.tick_params(&#39;y&#39;, colors=&#39;b&#39;)
+
+            ax2 = ax1.twinx()
+            ax2.plot(reltime, table[&#39;HWP Index&#39;], &#39;r-&#39;, label=&#39;HWP Index&#39;)
+            ax2.set_ylabel(&#39;HWP Index&#39;, color=&#39;r&#39;, fontsize=15)
+            ax2.tick_params(&#39;y&#39;, colors=&#39;r&#39;)
+
+            ax2.fill_between(reltime, ax2.get_ylim()[0], ax2.get_ylim()[1],
+                             where=idx, facecolor=&#39;green&#39;, alpha=0.3)
+
+            # Plot R and T signal at specified location
+            log.debug(&#39;Plotting R0 and T0 at i={:d}, &#39;
+                      &#39;j={:d}&#39;.format(detector_i, detector_j))
+            ax1 = fig.add_subplot(6, 1, 6)
+            r_real = np.array(table[&#39;R array&#39;])
+            r_masked = self.sigma_mask(
+                r_real[:, detector_j, detector_i],
+                data_sigma, iters=data_iters)
+
+            ax1.plot(reltime, r_masked, &#39;b-&#39;, label=&#39;R0&#39;)
+            ax1.set_xlabel(&#39;Time [sec]&#39;, fontsize=15)
+            ax1.set_ylabel(&#39;R0&#39;, color=&#39;b&#39;, fontsize=15)
+            if data_iters &gt; 0:
+                ax1.set_title(&#39;Detector signals at i={:d}, j={:d}, &#39;
+                              &#39;{:.1f}-sigma clipped w/ {:d} &#39;
+                              &#39;iterations&#39;.format(detector_i, detector_j,
+                                                  data_sigma, data_iters))
+            else:
+                ax1.set_title(&#39;Detector signals at i={:d}, &#39;
+                              &#39;j={:d}&#39;.format(detector_j, detector_i))
+            ax1.tick_params(&#39;y&#39;, colors=&#39;b&#39;)
+
+            t_real = np.array(table[&#39;T array&#39;])
+            ax2 = ax1.twinx()
+            t_masked = self.sigma_mask(
+                t_real[:, detector_j, detector_i],
+                data_sigma, iters=data_iters)
+
+            ax2.plot(reltime, t_masked, &#39;r-&#39;, label=&#39;T0&#39;)
+            ax2.set_ylabel(&#39;T0&#39;, color=&#39;r&#39;, fontsize=15)
+            ax2.tick_params(&#39;y&#39;, colors=&#39;r&#39;)
+            ax2.fill_between(reltime, ax2.get_ylim()[0], ax2.get_ylim()[1],
+                             where=idx, facecolor=&#39;green&#39;, alpha=0.3)
+
+        # Save the image
+        newfname = self.datain.filenamebegin + self.procname.upper() + \
+            self.datain.filenameend
+        pngname = os.path.splitext(newfname)[0] + &#39;.png&#39;
+        if len(self.getarg(&#39;savefolder&#39;)):
+            pngname = os.path.join(self.getarg(&#39;savefolder&#39;),
+                                   os.path.split(pngname)[1])
+        with np.errstate(invalid=&#39;ignore&#39;):
+            fig.savefig(pngname)
+
+        # record output filename
+        self.auxout = [pngname]
+        log.info(&#39;Saved result %s&#39; % pngname)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

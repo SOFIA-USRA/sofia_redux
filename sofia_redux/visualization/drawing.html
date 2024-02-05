@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Artists and Blitting &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../_static/plot_directive.css" />
+    
+    <script src="../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Plotting" href="plotting.html" />
+    <link rel="prev" title="Reference Spectral Data" href="reference.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li class="right">
+	<a href="plotting.html" title="Plotting">
+	  next &raquo;
+	</a>
+      </li>
+      <li class="right">
+	<a href="reference.html" title="Reference Spectral Data">
+	  &laquo; previous
+	</a>
+	 |
+      </li>
+      <li>
+	<a href="../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../index.html" >SOFIA Redux</a> &#187;</li>
+      <li><a href="index.html" accesskey="U">sofia_redux.visualization: The Eye of SOFIA</a> &#187;</li>
+      
+      <li>Artists and Blitting</li> 
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="artists-and-blitting">
+<span id="id1"></span><h1>Artists and Blitting<a class="headerlink" href="#artists-and-blitting" title="Link to this heading">¶</a></h1>
+<section id="background">
+<h2>Background<a class="headerlink" href="#background" title="Link to this heading">¶</a></h2>
+<p>To generate plots in an efficient manner the Eye employs an animation
+technique called blitting. Usually when a matplotlib figure is refreshed,
+like when a new like is plotted for example, the entire figure is
+redrawn. Axis limits are recomputed, all data points are redrawn, labels
+generated again, etc. Most of the time, however, few of these objects
+actually change, meaning a lot of resources were effectively wasted.
+Blitting addresses that by only drawing what changes. It requires the
+code to handle the objects created by plotting with matplotlib more directly,
+since a lot of the automatic features are turned off.</p>
+<p>Updating a plot using blitting consists of two steps. Step one is to refresh
+the background. This includes the splines, axis labels, things that do not
+change. Nothing is regenerated. A copy of the background is stored in the
+<code class="docutils literal notranslate"><span class="pre">Blitter</span></code> class and is merely re-applied. Step two is draw all the animated
+artists. These include all data lines, cursor indicators, pane borders, etc.
+Basically anything that ever changes. The artist objects behind each artist,
+such as the <code class="docutils literal notranslate"><span class="pre">Line2D</span></code> object behind a plotted line, is not regenerated. If the
+line has changed, such as the data points changed due to a units change, then
+the data contained in the <code class="docutils literal notranslate"><span class="pre">Line2D</span></code> object is altered. A new <code class="docutils literal notranslate"><span class="pre">Line2D</span></code> object
+is not created. These “animated” artists are merely redrawn, the bare minimum
+that needs to be done to add the artist to the screen.</p>
+</section>
+<section id="matplotlib-artists">
+<span id="id2"></span><h2>Matplotlib Artists<a class="headerlink" href="#matplotlib-artists" title="Link to this heading">¶</a></h2>
+<p>The bulk of the work in implementing blitting comes from handling the artists.
+They need to be kept track of, and altered when necessary. Matplotlib does
+not make this easy as the different plot types seemingly have divergent APIs.
+The main artists contained in the Eye are:</p>
+<blockquote>
+<div><ol class="arabic">
+<li><p><strong>Line2D</strong>:
+These objects are generated when any data is plotted with the <code class="docutils literal notranslate"><span class="pre">plot</span></code>
+method. They have the most basic API calls. Updating the x-data, for
+instance, is done with:</p>
+<blockquote>
+<div><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">line</span><span class="o">.</span><span class="n">set_xdata</span><span class="p">(</span><span class="n">x_data</span><span class="p">)</span>
+</pre></div>
+</div>
+</div></blockquote>
+</li>
+<li><p><strong>PathCollection</strong>:
+A PathCollection is a combination of list of points that describe how to
+draw a shape (the “Path”) and a list of places to draw that
+shape (the “Collection”). For the Eye, these come up for any kind of
+scatte plot, most notably the cursor location (a scatter plot with
+only one point). When updating the artist to change the data points, the
+“Path” stays the same and the “Collection” is updated. Since the data
+underlying a PathCollection is not a series of points that have to be
+connected in a particular order but instead a set of x,y coordinates,
+there are no methods like <code class="docutils literal notranslate"><span class="pre">set_xdata</span></code>. Instead the coordinates, or
+“offsets” as matplotlib likes to call them, have to be all changed
+at once with:</p>
+<blockquote>
+<div><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span><span class="n">x_data</span><span class="p">,</span> <span class="n">y_data</span><span class="p">))</span>
+<span class="n">line</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+</pre></div>
+</div>
+</div></blockquote>
+</li>
+<li><p><strong>PolyCollection</strong>:
+A PolyCollection describes areas to be drawn, as opposed to the points
+drawn by Line2D and PathCollections. The area is defined bo a set of
+vertices that are connected to create a polygon. In the Eye, this
+artist is used to define the shaded region above and below a line to
+denote the error range and is generated by <code class="docutils literal notranslate"><span class="pre">fill_between</span></code>. Unlike a
+PathCollection or a Line2D object, the PolyCollection does not have a
+simple method for updating its data. The vertices would be the
+property to update, and there are no simple API calls to update the
+vertices. As such, when a PollyCollection needs to be updated,
+it is simpler to remake the artist.</p></li>
+<li><p><strong>Patch</strong>:
+A Patch is generally a geometric shape used to highlight or block
+an area of the figure. Currently the only use for patches in the Eye
+are the highlights around the current pane. The highlight ia a
+Rectangle patch whose bounds are set to the very edges of the axis.
+Since its shape is defined by the axis itself, there is no need to
+reshape it. The only alteration that must be done to the highlight is
+to turn it on or off, which is achieved through the <code class="docutils literal notranslate"><span class="pre">set_visible</span></code>
+method:</p>
+<blockquote>
+<div><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">patch</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div></blockquote>
+<p>The artist handling  and how they are draw in the Eye are handled by
+three classes discussed below: <code class="docutils literal notranslate"><span class="pre">Drawing</span></code> , <code class="docutils literal notranslate"><span class="pre">Gallery</span></code> ,  and the
+<code class="docutils literal notranslate"><span class="pre">BlitManager</span></code> class.</p>
+</li>
+</ol>
+</div></blockquote>
+</section>
+<section id="drawing">
+<h2>Drawing<a class="headerlink" href="#drawing" title="Link to this heading">¶</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">Drawing</span></code> class, found in
+<a class="reference internal" href="index.html#module-sofia_redux.visualization.display.drawing" title="sofia_redux.visualization.display.drawing"><code class="xref py py-class docutils literal notranslate"><span class="pre">sofia_redux.visualization.display.drawing</span></code></a>, is the base artist object
+in the Eye. Each artist object created by matplotlib gets its own <code class="docutils literal notranslate"><span class="pre">Drawing</span></code>
+object. The <code class="docutils literal notranslate"><span class="pre">Drawing</span></code> class also keeps track of various parameters that
+describe what the artist is, such as the model name, the kind of artist it
+is, what axes it belongs to, and what pane it belongs to. This makes it
+easier for the Eye to filter the artists, such as finding all artists that
+were made with a certain model. Additionally the <code class="docutils literal notranslate"><span class="pre">Drawing</span></code> class handles
+all updates to the artist, and provides shortcuts for accessing various
+attributes of the artist such as color and marker.</p>
+<p><code class="docutils literal notranslate"><span class="pre">Drawing</span></code> objects are only made by panes. When a new <code class="docutils literal notranslate"><span class="pre">Drawing</span></code> object is
+created it parses its artist object to determine what kind of artist it is.
+Available kinds are:</p>
+<ul class="simple">
+<li><p>line: Describes an artist created by plotting a dataset</p></li>
+<li><p>error: The error range around a data line</p></li>
+<li><p>cursor: The marker plotted to denote the cursor’s location</p></li>
+<li><p>border: A pane’s border that denotes it is the current pane</p></li>
+<li><p>crosshair: A horizontal and vertical line used when performing a box zoom</p></li>
+<li><p>guide: A vertical line used when selecting a data range to zoom in on or
+perform a fit on</p></li>
+<li><p>fit_line: The line of a model fit overplotted on the data</p></li>
+<li><p>fit_center: A vertical line at the center of a model fit</p></li>
+<li><p>reference: A vertical line at the wavelength of a reference transistion</p></li>
+<li><p>text: A label attached to the reference line denoting the atomic or
+molecular species responsible for the transition</p></li>
+<li><p>patch: Any shapes that might end up being drawn</p></li>
+</ul>
+<section id="line">
+<h3>Line<a class="headerlink" href="#line" title="Link to this heading">¶</a></h3>
+<p>The line drawings holds all artists that describe the data itself. The root
+matplotlib artists is a Line2D object. To simulate a scatter plot the Line2D
+object applies markers to the data points and makes the line segments
+invisible. This keeps the base matplotlib artist class the same regardless
+of the plot type selected by the user, as the scatter plot method implemented
+in matplotlib generates a PathCollection object, not a Line2D object.</p>
+</section>
+<section id="error-range">
+<h3>Error Range<a class="headerlink" href="#error-range" title="Link to this heading">¶</a></h3>
+<p>The error range drawings holds PolyCollection artists, generated by
+<code class="docutils literal notranslate"><span class="pre">fill_between</span></code>. When the data in a line or cursor subtype changes, the
+corresponding artist not re-created, merely updated with the correct data
+points. This is not the case for the error range subtypes. Due to the
+complexities of how a PolyCollection artist is defined, it is more efficient
+to recreate the PolyCollection artist with the new data and replace the
+artist stored in the error range subtype.</p>
+</section>
+<section id="cursor">
+<h3>Cursor<a class="headerlink" href="#cursor" title="Link to this heading">¶</a></h3>
+<p>The cursor drawings only holds PathCollection artists as it shows information
+about the data at the cursor. All the artists in this subtype only have a
+single data point attached. The data point has the same x-value as the cursor
+and the y-value corresponding to the data value at the x-value. The cursor’s
+y-value is not considered. Each artist in the line subtype has a
+corresponding artist in the cursor subtype. The cursor artists are generated
+when the line artist is generated regardless of if the cursor’s location is
+to be shown. If the cursor’s location is not to be shown, the cursor artist
+is kept invisible and not updated. It is more efficient to keep an invisible
+artist in memory than to recreate the artist every time it is needed.</p>
+</section>
+<section id="border">
+<h3>Border<a class="headerlink" href="#border" title="Link to this heading">¶</a></h3>
+<p>The border drawings hold Rectangle objects. Each Pane has one associated
+border drawing that describes the border around it. The border is only
+visible when the associated pane is currently selected. The only updates to
+border drawings are visibility when the current pane changes and color when
+the color cycle changes.</p>
+</section>
+<section id="crosshair">
+<h3>Crosshair<a class="headerlink" href="#crosshair" title="Link to this heading">¶</a></h3>
+<p>The crosshair kind is a unique drawing, as there are only exactly two
+instances. The crosshair plots a dashed vertical line and a dashed horizontal
+line across the span of the current axis, crossing at the cursor’s location.
+The underlying matplotlib artists are Line2D objects.</p>
+</section>
+<section id="guide">
+<h3>Guide<a class="headerlink" href="#guide" title="Link to this heading">¶</a></h3>
+<p>The guide drawings are similar to the crosshair drawings except there can be
+multiple of them. Guides are used to help denote regions of interest for
+actions such as zooming or fitting curves to the data. The guides take the
+form of either vertical or horizontal dotted lines, depending of if the task
+requires selecting <em>x</em> values or <em>y</em> values respectively. The artist is
+created when the user clicks on a location while a selection mode is active.
+The location of the mouse is recorded and used to create the guide artist.
+Once the range selection ends the guides are removed.
+Guide artists are created and destroyed at a higher rate than any other
+artist. Their ephemeral status means guide artists do not require updating.</p>
+</section>
+<section id="fit-line">
+<h3>Fit Line<a class="headerlink" href="#fit-line" title="Link to this heading">¶</a></h3>
+<p>The fit line drawings are created when a model, such as a Gaussian, is fit to
+a selection of data. The resulting fit is evaluated at all wavelength points
+then plotted over the data. The fit lines can be turned on and off through
+the fitting results window. If a fit fails then a fit line drawing is not
+created.</p>
+</section>
+<section id="fit-center">
+<h3>Fit Center<a class="headerlink" href="#fit-center" title="Link to this heading">¶</a></h3>
+<p>When a fit line drawing is created an associated fit center drawing is
+created. The fit center drawing is a vertical line centered at the peak of
+the model feature, ie the mean of the Gaussian. If the model used to fit the
+data doesn’t have a feature, such as a linear fit, then the fit center is
+placed at the midpoint of the wavelength range.</p>
+</section>
+<section id="reference">
+<h3>Reference<a class="headerlink" href="#reference" title="Link to this heading">¶</a></h3>
+<p>Reference drawings are created when reference data is loaded into the Eye.
+Reference data are usually atmospheric absorption lines and are discussed in
+more detail in <a class="reference external" href="https://numpy.org/doc/stable/reference/index.html#reference" title="(in NumPy v1.26)"><span>NumPy reference</span></a> . The associated artists are vertical, grey,
+dashed lines at each reference wavelength. They can be turned on and off in
+the Reference Data window. These drawings are unique in that they are not
+considered when autoscaling the data. As such all lines that lie outside the
+data range are not visible until the <em>x</em>-range is extended. To handle this,
+when autoscaling the data all reference lines are initially made invisible.
+Then the axis is autoscaled based only on visible artists, after which the
+reference lines are made visible again.</p>
+</section>
+<section id="text">
+<h3>Text<a class="headerlink" href="#text" title="Link to this heading">¶</a></h3>
+<p>Text drawings handle all artists that are blocks of text on a plot. They
+accompany reference drawings and serve to label what molecular or atomic
+species is responsible for a given reference transition. Their visibility can
+be controlled independantly of the reference line, however the labels cannot
+be made visible with the reference lines invisbile.</p>
+<p>Labels are place to the left of their reference line, rotated 90 degrees, at
+the bottom of the axes. If two reference lines are close together in
+wavelength space the labels could overlap rendering them illegible. To
+counter this any time the <em>x</em>-axis limits are changed the text boxes are
+scraped and regenerated fresh. Upon creation their initial bounding boxes are
+compared and if two boxes overlap (meaning the labels would overlap) then
+they are combined. The right most label is deleted and its text appended to
+the end of the left most label. This process is repeated until no more
+bounding boxes are overlapping.</p>
+</section>
+<section id="patch">
+<h3>Patch<a class="headerlink" href="#patch" title="Link to this heading">¶</a></h3>
+<p>The patch subtype is used for artists describing basic shapes, such as
+rectangles or circles, and are independent from any data being plotted. The
+most common patch used is the border around the current pane, or the “pane
+highlight”. These artists are created when a Pane is assigned an axis and are
+not changed. The only change to the patches are whether they are visible
+based on if their pane is the current pane.</p>
+</section>
+</section>
+<section id="gallery">
+<span id="id3"></span><h2>Gallery<a class="headerlink" href="#gallery" title="Link to this heading">¶</a></h2>
+<p>The primary purpose of the <code class="docutils literal notranslate"><span class="pre">Gallery</span></code> class (found at
+<a class="reference internal" href="index.html#module-sofia_redux.visualization.display.gallery" title="sofia_redux.visualization.display.gallery"><code class="xref py py-class docutils literal notranslate"><span class="pre">sofia_redux.visualization.display.gallery</span></code></a>) is to manage all
+<code class="docutils literal notranslate"><span class="pre">Drawing</span></code> objects created by the Eye. There is only one instance of the
+<code class="docutils literal notranslate"><span class="pre">Gallery</span></code> class, kept track of by the <code class="docutils literal notranslate"><span class="pre">View</span></code> class. <code class="docutils literal notranslate"><span class="pre">Gallery</span></code> only has
+one attribute, a dictionary that stores the various <code class="docutils literal notranslate"><span class="pre">Drawings</span></code> created by
+panes. The dictionary keys are the different kinds of drawings:</p>
+<ul class="simple">
+<li><p>line</p></li>
+<li><p>line_alt</p></li>
+<li><p>cursor</p></li>
+<li><p>cursor_alt</p></li>
+<li><p>error_range</p></li>
+<li><p>crosshair</p></li>
+<li><p>guide</p></li>
+<li><p>patch</p></li>
+<li><p>fit</p></li>
+<li><p>text</p></li>
+<li><p>ref_line</p></li>
+<li><p>ref_label</p></li>
+</ul>
+<p>Line and cursor drawings are split based on which axis they are on for easy
+access. Other drawings like error range are not split based on their axes
+because they only exist on the primary axes. The values of the dictionary are
+lists. New drawings are appended to the appropriate list.</p>
+<p>In addition to keeping track of all drawings, the <code class="docutils literal notranslate"><span class="pre">Gallery</span></code> also handles
+drawing updates. Whenever a pane is altered, such as a change in color cycle,
+axis scale changed, markers changed, the drawings need to be updated to
+reflect the change. Updates are processed by generating a new <code class="docutils literal notranslate"><span class="pre">Drawing</span></code>
+object with the same identifiers as the target <code class="docutils literal notranslate"><span class="pre">Drawing</span></code> but with the
+<code class="docutils literal notranslate"><span class="pre">updates</span></code> attribute populated with a dictionary describing the updates. For
+example, to update the color to blue, the updates dictionary would look like</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">updates</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;color&#39;</span><span class="p">:</span> <span class="s1">&#39;blue&#39;</span><span class="p">}</span>
+</pre></div>
+</div>
+<p>The updates are then passed to <code class="docutils literal notranslate"><span class="pre">Gallery</span></code> which compares the update
+<code class="docutils literal notranslate"><span class="pre">Drawing</span></code> to all <code class="docutils literal notranslate"><span class="pre">Drawing</span></code> objects of the same kind looking for a match.
+When it finds the match the original <code class="docutils literal notranslate"><span class="pre">Drawing</span></code> object is given the updates
+dictionary and the <code class="docutils literal notranslate"><span class="pre">Drawing</span></code> class applies the update to the actual
+matplotlib artist. In order for two <code class="docutils literal notranslate"><span class="pre">Drawing</span></code> objects to be considered a
+match they must have the same:</p>
+<ul class="simple">
+<li><p>kind</p></li>
+<li><p>High model (the model’s UUID)</p></li>
+<li><p>Mid model (order/aperture number)</p></li>
+<li><p>Data ID (used to identify reference lines and labels)</p></li>
+<li><p>Pane</p></li>
+<li><p>Fields (such as “wavepos”, “spectral_flux”)</p></li>
+<li><p>Axes (such as “primary”, “alt”)</p></li>
+</ul>
+<p>The <code class="docutils literal notranslate"><span class="pre">Gallery</span></code> class also handles things like clearing drawings (such as
+when a datafile is removed from a plot), determining when reference labels
+are overlapping and need to be condensed, determining which drawings are
+involved in a mouse event, and updating artist visibilities.</p>
+</section>
+<section id="blitting">
+<span id="id4"></span><h2>Blitting<a class="headerlink" href="#blitting" title="Link to this heading">¶</a></h2>
+<p>Blitting is the method used to draw all relevant artists in the <code class="docutils literal notranslate"><span class="pre">Gallery</span></code>
+class and is managed by the <code class="docutils literal notranslate"><span class="pre">BlitManager</span></code> class. Its main task is to draw
+the plot backgrounds and artists, rendering them to screen. It keeps track of
+a copy of the background of the canvas.</p>
+<p>The background is defined as any artist in the plot that does not represent
+data. When data are plotted in the <code class="docutils literal notranslate"><span class="pre">Pane</span></code> class, the artists are all
+created with their <code class="docutils literal notranslate"><span class="pre">animated</span></code> flag set to <code class="docutils literal notranslate"><span class="pre">True</span></code>, which exempts them from
+being drawn anytime the standard <code class="docutils literal notranslate"><span class="pre">draw</span></code> function is called. Instead, they
+will only be drawn when the specifically called with the <code class="docutils literal notranslate"><span class="pre">draw_artist</span></code>
+function.</p>
+<p>If the artists are updated but the background is not, then the background is
+restored and the animated artists are drawn upon it. If the background has
+changed, then the background is cleared and redrawn before the animated
+artists are drawn. By keeping the background unchanged whenever possible, the
+processing load of refreshing the plots is greatly reduced, improving
+performance.</p>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+<ul>
+<li><a class="reference internal" href="#">Artists and Blitting</a><ul>
+<li><a class="reference internal" href="#background">Background</a></li>
+<li><a class="reference internal" href="#matplotlib-artists">Matplotlib Artists</a></li>
+<li><a class="reference internal" href="#drawing">Drawing</a><ul>
+<li><a class="reference internal" href="#line">Line</a></li>
+<li><a class="reference internal" href="#error-range">Error Range</a></li>
+<li><a class="reference internal" href="#cursor">Cursor</a></li>
+<li><a class="reference internal" href="#border">Border</a></li>
+<li><a class="reference internal" href="#crosshair">Crosshair</a></li>
+<li><a class="reference internal" href="#guide">Guide</a></li>
+<li><a class="reference internal" href="#fit-line">Fit Line</a></li>
+<li><a class="reference internal" href="#fit-center">Fit Center</a></li>
+<li><a class="reference internal" href="#reference">Reference</a></li>
+<li><a class="reference internal" href="#text">Text</a></li>
+<li><a class="reference internal" href="#patch">Patch</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gallery">Gallery</a></li>
+<li><a class="reference internal" href="#blitting">Blitting</a></li>
+</ul>
+</li>
+</ul>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right">
+    <a href="../../_sources/sofia_redux/visualization/drawing.rst.txt"
+       rel="nofollow">Page Source</a> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

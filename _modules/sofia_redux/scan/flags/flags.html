@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.flags.flags &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.flags.flags</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+from abc import ABC
+import enum
+
+from sofia_redux.scan.flags import flag_numba_functions
+
+__all__ = [&#39;Flags&#39;]
+
+
+<div class="viewcode-block" id="Flags">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags">[docs]</a>
+class Flags(ABC):
+    &quot;&quot;&quot;
+    The Flags class contains methods to manipulate flagging.
+    &quot;&quot;&quot;
+    flags = None
+    descriptions = {}
+    letters = {}
+
+<div class="viewcode-block" id="Flags.all_flags">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.all_flags">[docs]</a>
+    @classmethod
+    def all_flags(cls):
+        &quot;&quot;&quot;
+        Return the flag containing all flags.
+
+        Returns
+        -------
+        all_flags : enum.Enum
+        &quot;&quot;&quot;
+        all_flags = cls.flags(0)
+        for flag in cls.flags:
+            all_flags = all_flags | flag
+        return all_flags</div>
+
+
+<div class="viewcode-block" id="Flags.letter_to_flag">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.letter_to_flag">[docs]</a>
+    @classmethod
+    def letter_to_flag(cls, letter):
+        &quot;&quot;&quot;
+        Return the associated flag for a given string letter identifier.
+
+        Parameters
+        ----------
+        letter : str
+            A length 1 string.
+
+        Returns
+        -------
+        flag : enum.Enum
+        &quot;&quot;&quot;
+        return cls.letters.get(letter, cls.flags(0))</div>
+
+
+<div class="viewcode-block" id="Flags.flag_to_letter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.flag_to_letter">[docs]</a>
+    @classmethod
+    def flag_to_letter(cls, flag):
+        &quot;&quot;&quot;
+        Return a letter representation of a given flag.
+
+        Parameters
+        ----------
+        flag : enum.Enum or None or int or str
+            `None` will return flag(0).  str values will look for that given
+            flag name and may also use the &#39;|&#39; character to provide a
+            combination of flags.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        flag_value = cls.convert_flag(flag)
+        result = &#39;&#39;
+        for letter, test_flag in cls.letters.items():
+            if flag_value &amp; test_flag:
+                result += letter
+        if result == &#39;&#39;:
+            return &#39;-&#39;
+        return result</div>
+
+
+<div class="viewcode-block" id="Flags.flag_to_description">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.flag_to_description">[docs]</a>
+    @classmethod
+    def flag_to_description(cls, flag):
+        &quot;&quot;&quot;
+        Return a description of a given flag.
+
+        Parameters
+        ----------
+        flag : enum.Enum or None or int or str
+            `None` will return flag(0).  str values will look for that given
+            flag name and may also use the &#39;|&#39; character to provide a
+            combination of flags.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        flag_value = cls.convert_flag(flag)
+        descriptions = []
+        for check_flag, description in cls.descriptions.items():
+            if check_flag &amp; flag_value:
+                descriptions.append(description)
+        if len(descriptions) == 0:
+            return &#39;&#39;
+        if len(descriptions) == 1:
+            return descriptions[0]
+        return &#39; &amp; &#39;.join(descriptions)</div>
+
+
+<div class="viewcode-block" id="Flags.parse_string">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.parse_string">[docs]</a>
+    @classmethod
+    def parse_string(cls, text):
+        &quot;&quot;&quot;
+        Return the flag for a string of letter identifiers.
+
+        Parameters
+        ----------
+        text : str
+            A string containing single letter flag identifiers.
+
+        Returns
+        -------
+        flag : enum.Enum
+        &quot;&quot;&quot;
+        flag = cls.flags(0)
+        for letter in str(text).strip():
+            flag = flag | cls.letter_to_flag(letter)
+        return flag</div>
+
+
+<div class="viewcode-block" id="Flags.convert_flag">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.convert_flag">[docs]</a>
+    @classmethod
+    def convert_flag(cls, flag):
+        &quot;&quot;&quot;
+        Convert a flag in various forms to a standard enum format.
+
+        Parameters
+        ----------
+        flag : enum.Enum or None or int or str
+            `None` will return flag(0).  str values will look for that given
+            flag name and may also use the &#39;|&#39; character to provide a
+            combination of flags.
+
+        Returns
+        -------
+        enum.Enum
+        &quot;&quot;&quot;
+        if flag is None:
+            return cls.flags(0)
+        if isinstance(flag, enum.Flag):
+            return flag
+        elif isinstance(flag, (int, np.integer)):
+            flag = int(flag)
+            if flag == -1:
+                return cls.all_flags()
+            else:
+                return cls.flags(flag)
+        elif isinstance(flag, str):
+            if &#39;|&#39; in flag:
+                new_flag = cls.flags(0)
+                for flag_name in flag.split(&#39;|&#39;):
+                    if flag_name in cls.letters:
+                        new_flag |= cls.letter_to_flag(flag_name)
+                    else:
+                        new_flag |= cls.convert_flag(flag_name)
+                return new_flag
+            else:
+                if flag in cls.letters:
+                    return cls.letter_to_flag(flag)
+                else:
+                    return getattr(cls.flags, flag.upper().strip())
+        else:
+            raise ValueError(f&quot;Invalid flag type: {flag}&quot;)</div>
+
+
+<div class="viewcode-block" id="Flags.is_flagged">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.is_flagged">[docs]</a>
+    @classmethod
+    def is_flagged(cls, thing, flag=None, indices=False, exact=False):
+        &quot;&quot;&quot;
+        Return whether a given argument is flagged.
+
+        Parameters
+        ----------
+        thing : numpy.ndarray (int) or str or enum.Enum or int
+            An array of flags or a flag identifier.
+        flag : enum.Enum or int or str, optional
+            The flag to check.
+        indices : bool, optional
+            If `True` return an array of integer indices as returned by
+            :func:`np.nonzero`.  Otherwise, return a boolean mask.
+        exact : bool, optional
+            If `True`, a value will only be considered flagged if it matches
+            the given flag exactly.
+
+        Returns
+        -------
+        flagged : numpy.ndarray (int or bool) or bool or tuple (int)
+            If `indices` is `True` (only applicable when `thing` is an array),
+            returns a numpy array of ints if the number of dimensions is 1.
+            For N-D arrays the output will be similar to :func:`np.nonzero`.
+            If `thing` is an array and `indices` is `False`, a boolean mask
+            will be returned.  If `thing` contains a single value then `True`
+            or `False` will be returned.
+        &quot;&quot;&quot;
+        if flag is not None and not isinstance(flag, int):
+            flag = cls.convert_flag(flag).value
+
+        # For the single-value case
+        if not hasattr(thing, &#39;__len__&#39;) or isinstance(thing, enum.Enum):
+            if not isinstance(thing, int):
+                thing = cls.convert_flag(thing).value
+            if flag is None:
+                return thing != 0
+            elif flag == 0:
+                return thing == 0
+            elif exact:
+                return thing == flag
+            else:
+                return (thing &amp; flag) != 0
+
+        if thing.size == 0:
+            return np.empty(0, dtype=int if indices else bool)
+
+        mask = flag_numba_functions.is_flagged(thing, flag=flag, exact=exact)
+        if not indices:
+            return mask
+
+        result = np.nonzero(mask)
+        return result[0] if mask.ndim == 1 else result</div>
+
+
+<div class="viewcode-block" id="Flags.is_unflagged">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.is_unflagged">[docs]</a>
+    @classmethod
+    def is_unflagged(cls, thing, flag=None, indices=False, exact=False):
+        &quot;&quot;&quot;
+        Return whether a given argument is flagged.
+
+        Parameters
+        ----------
+        thing : numpy.ndarray (int) or str or enum.Enum or int
+            An array of flags or a flag identifier.
+        flag : enum.Enum or int or str, optional
+            The flag to check.
+        indices : bool, optional
+            If `True` return an array of integer indices as returned by
+            :func:`np.nonzero`.  Otherwise, return a boolean mask.
+        exact : bool, optional
+            If `True`, a value will only be considered unflagged if it is not
+            exactly equal to the given flag.
+
+        Returns
+        -------
+        flagged : numpy.ndarray (int or bool) or bool or tuple (int)
+            If `indices` is `True` (only applicable when `thing` is an array),
+            returns a numpy array of ints if the number of dimensions is 1.
+            For N-D arrays the output will be similar to :func:`np.nonzero`.
+            If `thing` is an array and `indices` is `False`, a boolean mask
+            will be returned.  If `thing` contains a single value then `True`
+            or `False` will be returned.
+        &quot;&quot;&quot;
+        if flag is not None and not isinstance(flag, int):
+            flag = cls.convert_flag(flag).value
+
+        # For the single value case.
+        if not hasattr(thing, &#39;__len__&#39;) or isinstance(thing, enum.Enum):
+            if not isinstance(thing, int):
+                thing = cls.convert_flag(thing).value
+            if flag is None:
+                return thing == 0
+            elif flag == 0:
+                return thing != 0
+            elif exact:
+                return thing != flag
+            else:
+                return (thing &amp; flag) == 0
+
+        if thing.size == 0:
+            return np.empty(0, dtype=int if indices else bool)
+
+        mask = flag_numba_functions.is_unflagged(thing, flag=flag, exact=exact)
+        if not indices:
+            return mask
+
+        result = np.nonzero(mask)
+        return result[0] if mask.ndim == 1 else result</div>
+
+
+<div class="viewcode-block" id="Flags.and_operation">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.and_operation">[docs]</a>
+    @classmethod
+    def and_operation(cls, values, flag):
+        &quot;&quot;&quot;
+        Return the result of an &quot;and&quot; operation with a given flag.
+
+        Parameters
+        ----------
+        values : int or str or enum.Enum or numpy.ndarray (int)
+            The values to &quot;and&quot;.
+        flag : int or str or enum.Enum
+            The flag to &quot;and&quot; with.
+
+        Returns
+        -------
+        and_result : int or numpy.ndarray (int)
+        &quot;&quot;&quot;
+        if flag is not None and not isinstance(flag, int):
+            flag = cls.convert_flag(flag).value
+
+        if not hasattr(values, &#39;__len__&#39;) or isinstance(values, enum.Enum):
+            if not isinstance(values, int):
+                values = cls.convert_flag(values).value
+
+        return values &amp; flag</div>
+
+
+<div class="viewcode-block" id="Flags.or_operation">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.or_operation">[docs]</a>
+    @classmethod
+    def or_operation(cls, values, flag):
+        &quot;&quot;&quot;
+        Return the result of an &quot;or&quot; operation with a given flag.
+
+        Parameters
+        ----------
+        values : int or str or enum.Enum or numpy.ndarray (int)
+            The values to &quot;or&quot;.
+        flag : int or str or enum.Enum
+            The flag to &quot;or&quot; with.
+
+        Returns
+        -------
+        or_result : int or numpy.ndarray (int)
+        &quot;&quot;&quot;
+        if flag is not None and not isinstance(flag, int):
+            flag = cls.convert_flag(flag).value
+
+        if not hasattr(values, &#39;__len__&#39;) or isinstance(values, enum.Enum):
+            if not isinstance(values, int):
+                values = cls.convert_flag(values).value
+
+        return values | flag</div>
+
+
+<div class="viewcode-block" id="Flags.discard_mask">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.discard_mask">[docs]</a>
+    @classmethod
+    def discard_mask(cls, flag_array, flag=None, criterion=None):
+        r&quot;&quot;&quot;
+        Return a mask indicating which flags do not match certain conditions.
+
+        Parameters
+        ----------
+        flag_array : numpy.ndarray (int)
+            An array of integer flags to check.
+        flag : int or str or enum.Enum, optional
+            The flag to check against.  If not supplied and non-zero flag is
+            considered fair game in the relevant `criterion` schema.
+        criterion : str, optional
+            May be one of {&#39;DISCARD_ANY&#39;, &#39;DISCARD_ALL&#39;, &#39;DISCARD_MATCH&#39;,
+            &#39;KEEP_ANY&#39;, &#39;KEEP_ALL&#39;, &#39;KEEP_MATCH&#39;}.  If not supplied,
+            &#39;DISCARD_ANY&#39; will be used if a flag is not supplied, and
+            &#39;DISCARD_ALL&#39; will be used if a flag is supplied.  The &#39;_ANY&#39;
+            suffix means `flag` is irrelevant and any non-zero value will be
+            considered &quot;flagged&quot;.  &#39;_ALL&#39; means that flagged values will
+            contain &#39;flag&#39;, and &#39;_MATCH&#39; means that flagged values will
+            exactly equal &#39;flag&#39;.  &#39;KEEP\_&#39; inverts the True/False meaning
+            of the output.
+
+        Returns
+        -------
+        mask : numpy.ndarray (bool)
+            An array the same shape as `flag_array` where `True` indicated that
+            element met the given criterion.
+        &quot;&quot;&quot;
+        flag_array = np.asarray(flag_array)
+
+        if criterion is None:
+            criterion = &#39;DISCARD_ANY&#39; if flag is None else &#39;DISCARD_ALL&#39;
+
+        criterion = criterion.upper().strip()
+
+        if criterion == &#39;DISCARD_ANY&#39;:
+            return cls.is_flagged(flag_array, flag=None)
+        elif criterion == &#39;DISCARD_ALL&#39;:
+            return cls.is_flagged(flag_array, flag=flag)
+        elif criterion == &#39;DISCARD_MATCH&#39;:
+            return cls.is_flagged(flag_array, flag=flag, exact=True)
+        elif criterion == &#39;KEEP_ANY&#39;:
+            return cls.is_unflagged(flag_array, flag=None)
+        elif criterion == &#39;KEEP_ALL&#39;:
+            return cls.is_unflagged(flag_array, flag=flag)
+        elif criterion == &#39;KEEP_MATCH&#39;:
+            return cls.is_unflagged(flag_array, flag=flag, exact=True)
+        else:
+            raise ValueError(f&quot;Invalid criterion flag: {criterion}&quot;)</div>
+
+
+<div class="viewcode-block" id="Flags.flag_mask">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.flag_mask">[docs]</a>
+    @classmethod
+    def flag_mask(cls, flag_array, flag=None, criterion=None):
+        r&quot;&quot;&quot;
+        Return a mask indicating which flags that meet certain conditions.
+
+        This is basically the same as `discard_mask`, but the meanings of
+        KEEP and DISCARD are swapped.
+
+        Parameters
+        ----------
+        flag_array : numpy.ndarray (int)
+            An array of integer flags to check.
+        flag : int or str or enum.Enum, optional
+            The flag to check against.  If not supplied and non-zero flag is
+            considered fair game in the relevant `criterion` schema.
+        criterion : str, optional
+            May be one of {&#39;DISCARD_ANY&#39;, &#39;DISCARD_ALL&#39;, &#39;DISCARD_MATCH&#39;,
+            &#39;KEEP_ANY&#39;, &#39;KEEP_ALL&#39;, &#39;KEEP_MATCH&#39;}.  If not supplied,
+            &#39;KEEP_ANY&#39; will be used if a flag is not supplied, and
+            &#39;KEEP_ALL&#39; will be used if a flag is supplied.  The &#39;_ANY&#39;
+            suffix means `flag` is irrelevant and any non-zero value will be
+            considered &quot;flagged&quot;.  &#39;_ALL&#39; means that flagged values will
+            contain &#39;flag&#39;, and &#39;_MATCH&#39; means that flagged values will
+            exactly equal &#39;flag&#39;.  &#39;KEEP\_&#39; inverts the True/False meaning
+            of the output.
+
+        Returns
+        -------
+        mask : numpy.ndarray (bool)
+            An array the same shape as `flag_array` where `True` indicated that
+            element met the given criterion.
+        &quot;&quot;&quot;
+        flag_array = np.asarray(flag_array)
+
+        if criterion is None:
+            criterion = &#39;KEEP_ANY&#39; if flag is None else &#39;KEEP_ALL&#39;
+        criterion = criterion.upper().strip()
+
+        if criterion == &#39;KEEP_ANY&#39;:
+            return cls.is_flagged(flag_array, flag=None)
+        elif criterion == &#39;KEEP_ALL&#39;:
+            return cls.is_flagged(flag_array, flag=flag)
+        elif criterion == &#39;KEEP_MATCH&#39;:
+            return cls.is_flagged(flag_array, flag=flag, exact=True)
+        elif criterion == &#39;DISCARD_ANY&#39;:
+            return cls.is_unflagged(flag_array, flag=None)
+        elif criterion == &#39;DISCARD_ALL&#39;:
+            return cls.is_unflagged(flag_array, flag=flag)
+        elif criterion == &#39;DISCARD_MATCH&#39;:
+            return cls.is_unflagged(flag_array, flag=flag, exact=True)
+        else:
+            raise ValueError(f&quot;Invalid criterion flag: {criterion}&quot;)</div>
+
+
+<div class="viewcode-block" id="Flags.discard_indices">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.discard_indices">[docs]</a>
+    @classmethod
+    def discard_indices(cls, flag_array, flag=None, criterion=None):
+        r&quot;&quot;&quot;
+        Return indices to discard for a given criterion/flag.
+
+        Parameters
+        ----------
+        flag_array : numpy.ndarray (int)
+            An array of integer flags to check.
+        flag : int or str or enum.Enum, optional
+            The flag to check against.  If not supplied and non-zero flag is
+            considered fair game in the relevant `criterion` schema.
+        criterion : str, optional
+            May be one of {&#39;DISCARD_ANY&#39;, &#39;DISCARD_ALL&#39;, &#39;DISCARD_MATCH&#39;,
+            &#39;KEEP_ANY&#39;, &#39;KEEP_ALL&#39;, &#39;KEEP_MATCH&#39;}.  If not supplied,
+            &#39;DISCARD_ANY&#39; will be used if a flag is not supplied, and
+            &#39;DISCARD_ALL&#39; will be used if a flag is supplied.  The &#39;_ANY&#39;
+            suffix means `flag` is irrelevant and any non-zero value will be
+            considered &quot;flagged&quot;.  &#39;_ALL&#39; means that flagged values will
+            contain &#39;flag&#39;, and &#39;_MATCH&#39; means that flagged values will
+            exactly equal &#39;flag&#39;.  &#39;KEEP\_&#39; inverts the True/False meaning of
+            the output.
+
+        Returns
+        -------
+        indices : numpy.ndarray (int) or tuple (int)
+            The indices to discard.  If `flag_array` has multiple dimensions,
+            the result will be a tuple of integer arrays as would be returned
+            by :func:`np.nonzero`.  Otherwise a 1-D integer array will be
+            returned.
+        &quot;&quot;&quot;
+        indices = np.nonzero(cls.discard_mask(flag_array, flag=flag,
+                                              criterion=criterion))
+        return indices[0] if len(indices) == 1 else indices</div>
+
+
+<div class="viewcode-block" id="Flags.flagged_indices">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.flagged_indices">[docs]</a>
+    @classmethod
+    def flagged_indices(cls, flag_array, flag=None, criterion=None):
+        r&quot;&quot;&quot;
+        Return indices to for a given criterion/flag.
+
+        This is the same as `discard_indices` with switched meanings of
+        &#39;DISCARD&#39; and &#39;KEEP&#39;.
+
+        Parameters
+        ----------
+        flag_array : numpy.ndarray (int)
+            An array of integer flags to check.
+        flag : int or str or enum.Enum, optional
+            The flag to check against.  If not supplied and non-zero flag is
+            considered fair game in the relevant `criterion` schema.
+        criterion : str, optional
+            May be one of {&#39;DISCARD_ANY&#39;, &#39;DISCARD_ALL&#39;, &#39;DISCARD_MATCH&#39;,
+            &#39;KEEP_ANY&#39;, &#39;KEEP_ALL&#39;, &#39;KEEP_MATCH&#39;}.  If not supplied,
+            &#39;KEEP_ANY&#39; will be used if a flag is not supplied, and
+            &#39;KEEP_ALL&#39; will be used if a flag is supplied.  The &#39;_ANY&#39;
+            suffix means `flag` is irrelevant and any non-zero value will be
+            considered &quot;flagged&quot;.  &#39;_ALL&#39; means that flagged values will
+            contain &#39;flag&#39;, and &#39;_MATCH&#39; means that flagged values will
+            exactly equal &#39;flag&#39;.  &#39;KEEP\_&#39; inverts the True/False meaning
+            of the output.
+
+        Returns
+        -------
+        indices : numpy.ndarray (int) or tuple (int)
+            The indices to discard.  If `flag_array` has multiple dimensions,
+            the result will be a tuple of integer arrays as would be returned
+            by :func:`np.nonzero`.  Otherwise a 1-D integer array will be
+            returned.
+        &quot;&quot;&quot;
+        indices = np.nonzero(cls.flag_mask(flag_array, flag=flag,
+                                           criterion=criterion))
+        return indices[0] if len(indices) == 1 else indices</div>
+
+
+<div class="viewcode-block" id="Flags.all_excluding">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.all_excluding">[docs]</a>
+    @classmethod
+    def all_excluding(cls, flag):
+        &quot;&quot;&quot;
+        Return all available flags with the exception of the one given here.
+
+        Parameters
+        ----------
+        flag : str or int or enum.Enum
+            The flag to not include.
+
+        Returns
+        -------
+        flag : enum.Enum
+        &quot;&quot;&quot;
+        return cls.unflag(cls.all_flags(), flag)</div>
+
+
+<div class="viewcode-block" id="Flags.unflag">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.unflag">[docs]</a>
+    @classmethod
+    def unflag(cls, flag, remove_flag):
+        &quot;&quot;&quot;
+        Return the result of unflagging one flag by another.
+
+        Parameters
+        ----------
+        flag : int or str or enum.Enum
+            The base flag.
+        remove_flag : int or str or enum.Enum
+            The flag to remove.
+
+        Returns
+        -------
+        enum.Enum
+        &quot;&quot;&quot;
+        flag = cls.convert_flag(flag)
+        remove_flag = cls.convert_flag(remove_flag)
+
+        if (flag.value &amp; remove_flag.value) != 0:
+            return flag ^ remove_flag
+        else:
+            return flag</div>
+
+
+<div class="viewcode-block" id="Flags.edit_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.edit_header">[docs]</a>
+    @classmethod
+    def edit_header(cls, header, prefix=&#39;&#39;):
+        &quot;&quot;&quot;
+        Add the flags to a FITS header.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The FITS header to edit.
+        prefix : str, optional
+            An optional prefix to add to the header key name.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if cls.flags is None:
+            return
+        if prefix is None:
+            prefix = &#39;&#39;
+        flags = cls.flags
+        flag_class_name = flags.__name__
+        for flag_name, flag_value in flags.__dict__.items():
+            if flag_name.startswith(&#39;_&#39;):
+                continue
+            if isinstance(flag_value, enum.Enum):
+                bit = flag_value.value
+                key = f&#39;{prefix}FLAG{bit}&#39;
+                value = flag_name
+                description = cls.flag_to_description(flag_value)
+                letter = cls.to_letters(flag_value)
+                comment = f&#39;{flag_class_name}&#39;
+                if description != &#39;&#39;:
+                    comment += f&#39; {description}&#39;
+                if letter not in [None, &#39;&#39;, &#39;-&#39;]:
+                    comment += f&#39; ({letter})&#39;
+                header[key] = value, comment</div>
+
+
+<div class="viewcode-block" id="Flags.to_letters">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.flags.Flags.html#sofia_redux.scan.flags.flags.Flags.to_letters">[docs]</a>
+    @classmethod
+    def to_letters(cls, flag):
+        &quot;&quot;&quot;
+        Convert a flag or flags to a string representation.
+
+        Parameters
+        ----------
+        flag : str or int or enum.Enum or iterable
+            The flag(s) to convert.
+
+        Returns
+        -------
+        str or numpy.ndarray (str)
+        &quot;&quot;&quot;
+        if not hasattr(flag, &#39;__len__&#39;) or isinstance(flag, enum.Enum):
+            return cls.flag_to_letter(flag)
+
+        flag_array = np.asarray(flag).copy()
+        result = np.full(flag_array.shape, &#39;?&#39; * len(cls.letters))
+        unique_flags = np.unique(flag_array)
+        for flag in unique_flags:
+            try:
+                letter_representation = cls.flag_to_letter(flag)
+            except ValueError:
+                letter_representation = &#39;-&#39;
+            result[flag_array == flag] = letter_representation
+        return result.astype(str)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

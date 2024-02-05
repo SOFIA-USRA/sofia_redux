@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.example.scan.scan &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.example.scan.scan</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy.io import fits
+
+from sofia_redux.scan.scan.scan import Scan
+
+__all__ = [&#39;ExampleScan&#39;]
+
+
+<div class="viewcode-block" id="ExampleScan">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.example.scan.scan.ExampleScan.html#sofia_redux.scan.custom.example.scan.scan.ExampleScan">[docs]</a>
+class ExampleScan(Scan):
+
+    def __init__(self, channels, reduction=None):
+        &quot;&quot;&quot;
+        Initialize a scan for the example instrument.
+
+        Parameters
+        ----------
+        channels : ExampleChannels
+            The channels for the example instrument.
+        reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
+            The reduction to which the scan belongs.
+        &quot;&quot;&quot;
+        self.hdul = None
+        super().__init__(channels, reduction=reduction)
+
+    @property
+    def referenced_attributes(self):
+        &quot;&quot;&quot;
+        Return the names of attributes that are referenced during a copy.
+
+        Returns
+        -------
+        attribute_names : set (str)
+        &quot;&quot;&quot;
+        attributes = super().referenced_attributes
+        attributes.add(&#39;hdul&#39;)
+        return attributes
+
+<div class="viewcode-block" id="ExampleScan.get_integration_instance">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.example.scan.scan.ExampleScan.html#sofia_redux.scan.custom.example.scan.scan.ExampleScan.get_integration_instance">[docs]</a>
+    def get_integration_instance(self):
+        &quot;&quot;&quot;
+        Return an integration instance of the correct type for the scan.
+
+        Returns
+        -------
+        integration : ExampleIntegration
+        &quot;&quot;&quot;
+        return super().get_integration_instance()</div>
+
+
+<div class="viewcode-block" id="ExampleScan.read">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.example.scan.scan.ExampleScan.html#sofia_redux.scan.custom.example.scan.scan.ExampleScan.read">[docs]</a>
+    def read(self, filename, read_fully=True):
+        &quot;&quot;&quot;
+        Read a filename to populate the scan.
+
+        The read should validate the channels before instantiating integrations
+        for reading.
+
+        Parameters
+        ----------
+        filename : str
+            The name of the file to read.
+        read_fully : bool, optional
+            If `True`, perform a full read (default)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if isinstance(filename, fits.HDUList):
+            self.hdul = filename
+        else:
+            self.hdul = fits.open(filename)
+        self.read_hdul(self.hdul, read_fully=read_fully)
+        self.close_fits()</div>
+
+
+<div class="viewcode-block" id="ExampleScan.close_fits">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.example.scan.scan.ExampleScan.html#sofia_redux.scan.custom.example.scan.scan.ExampleScan.close_fits">[docs]</a>
+    def close_fits(self):
+        &quot;&quot;&quot;
+        Close the scan FITS file.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.hdul is None:
+            return
+        self.hdul.close()
+        self.hdul = None</div>
+
+
+<div class="viewcode-block" id="ExampleScan.read_hdul">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.example.scan.scan.ExampleScan.html#sofia_redux.scan.custom.example.scan.scan.ExampleScan.read_hdul">[docs]</a>
+    def read_hdul(self, hdul, read_fully=True):
+        &quot;&quot;&quot;
+        Read an open FITS HDUL.
+
+        Parameters
+        ----------
+        hdul : fits.HDUList
+            The FITS HDU list to read.
+        read_fully : bool, optional
+            If `True` (default), fully read the file.  This is irrelevant for
+            the example instrument.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.info.parse_header(hdul[0].header.copy())
+        self.channels.read_data(hdul)
+        self.channels.validate_scan(self)
+        self.read_integration(self.hdul)</div>
+
+
+<div class="viewcode-block" id="ExampleScan.read_integration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.example.scan.scan.ExampleScan.html#sofia_redux.scan.custom.example.scan.scan.ExampleScan.read_integration">[docs]</a>
+    def read_integration(self, hdul):
+        &quot;&quot;&quot;
+        Add integrations to this scan from a HDU list.
+
+        Parameters
+        ----------
+        hdul : fits.HDUList
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.integrations = []
+        integration = self.get_integration_instance()
+        integration.read(hdul)
+        self.integrations.append(integration)</div>
+
+
+<div class="viewcode-block" id="ExampleScan.get_id">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.example.scan.scan.ExampleScan.html#sofia_redux.scan.custom.example.scan.scan.ExampleScan.get_id">[docs]</a>
+    def get_id(self):
+        &quot;&quot;&quot;
+        Return the scan ID.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return self.info.observation.obs_id</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

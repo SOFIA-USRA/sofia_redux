@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.tracespec &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.tracespec</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import warnings
+
+from astropy import log
+from astropy.stats import gaussian_fwhm_to_sigma
+import numpy as np
+from scipy.optimize import curve_fit
+
+from sofia_redux.toolkit.fitting.polynomial import polyfitnd
+from sofia_redux.toolkit.fitting.fitpeaks1d import \
+    fitpeaks1d, get_x_parname, get_n_submodels
+
+__all__ = [&#39;tracespec&#39;]
+
+
+<div class="viewcode-block" id="tracespec">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.tracespec.tracespec.html#sofia_redux.spectroscopy.tracespec.tracespec">[docs]</a>
+def tracespec(rectimg, positions, orders=None, fwhm=1.0,
+              step=3, sumap=3, winthresh=5, fitorder=2, fitthresh=3,
+              polyfit_kwargs=None, info=None, fast=False, **kwargs):
+    &quot;&quot;&quot;
+    Trace spectral continua in a spatially/spectrally rectified image.
+
+    Determines trace coefficients for the center of the aperture via fits
+    to the continuum.  Within an order, `sumap` columns are added together
+    to increase the total signal.  A Gaussian is then fitted around the
+    guess position.  If within `winthresh` pixels of a guess, the position is
+    stored.  The resulting positions are then fitted with a polynomial of
+    degree `fitorder`.
+
+    The `rectimg` value should come from sofia_redux.spectroscopy.rectify.
+
+    Parameters
+    ----------
+    rectimg : dict
+        Rectified image data, as returned by
+        `sofia_redux.spectroscopy.rectify` with integer keys.
+        Each order value is a dictionary with keys:
+
+            ``&quot;image&quot;``
+                Rectified image array.
+                (ns, nw) array, required.
+            ``&quot;wave&quot;``
+                Wave coordinates along image axis=1.
+                (nw,) array, required.
+            ``&quot;spatial&quot;``
+                Spatial coordinates along image axis=0.
+                (ns,) array, required.
+
+    positions : dict
+        List of aperture positions by order, given as arcsec up the slit.
+        Keys are integers, values are lists of floats.
+    orders : array_like of int, optional
+        Order numbers to process. If not provided, all orders in `positions`
+        will be processed.
+    step : int, optional
+        Pixel step size in the dispersion direction used to determine
+        the trace.
+    sumap : int, optional
+        Number of columns to add together.  Must be odd and less than
+        2 * `step`.
+    winthresh : float, optional
+        The threshold over which an identified peak is ignored.  If the
+        difference between the guess position is larger than `winthresh`,
+        the fitted position is ignored.
+    fitorder : int, optional
+        Polynomial fit degree used to determine the trace coefficients.
+    fitthresh : float, optional
+        Sigma threshold used to identify outliers.
+    polyfit_kwargs : dict, optional
+        Optional keyword arguments for the polynomial fit to the
+        trace (spatial location of peak vs wavecal).  These will
+        be passed to `sofia_redux.toolkit.fitting.polyfit`.
+    info : dict, optional
+        If supplied will be updated as follows:
+            order : int
+                x : numpy.ndarray
+                    (n_apertures, n_steps) array of fitted trace pixel
+                    coordinates in x.
+                y : numpy.ndarray
+                    (n_apertures, n_steps) array of fitted trace pixel
+                    coordinates in y.
+                mask : numpy.ndarray
+                    (n_apertures, n_steps) array of bool where True
+                    indicates that the peak fit on that `step` of columns
+                    was included in the final calculation of trace
+                    coefficients.
+                trace_model : numpy.ndarray
+                    (n_apertures) array containing instances
+                    of `astropy.modeling.polynomial.Polynomial1D` models
+                    if aperture traces.
+                fit : numpy.ndarray
+                    (n_apertures, n_steps, n_parameters) array of
+                    peak fit coefficients calculated by `mc.fitpeaks1d`
+                    at each step.
+                spatial : numpy.ndarray
+                    (n_apertures, n_steps) array containing the
+                    spatial coordinates at each step.
+                wave : numpy.ndarray
+                    (n_apertures, n_steps) array containing the
+                    wave coordinates at each step.
+                peak_model : `astropy.modeling.Fittable1DModel`
+                    model used to fit peaks via `fitpeaks1d`
+    fast : bool, optional
+        If set, use `scipy.optimize.curve_fit` to calculate spatial peak
+        coefficients instead of the more flexible optimization in
+        `sofia_redux.toolkit.fitting.fitpeaks1d`. If NaNs may be present,
+        `fast` must be False.
+    kwargs : dict, optional
+        Keyword arguments for `sofia_redux.toolkit.fitting.fitpeaks1d`.
+        By default this will fit a single 1-D Gaussian peak and a constant
+        background offset to each (median combined +/- sumap/2 @ step
+        interval) column.
+
+    Returns
+    -------
+    trace_coefficients : dict
+        Array of polynomial fit coefficients by aperture and order.
+        Coefficients are of the form:
+
+            spatial_position = c[0] + c[1].w + c[2].w^2 + ... + c[n].w^n
+
+        where n ranges from 0 to fit_order and w is the wave value and
+        c are the trace coefficients for a given order and aperture.
+
+        Keys and values are:
+            order : int
+                (n_apertures, n_coeff) array
+    &quot;&quot;&quot;
+    if orders is None:
+        orders = np.unique(list(positions.keys())).astype(int)
+    else:
+        orders = np.unique(orders).astype(int)
+    polyfit_kwargs = {} if polyfit_kwargs is None else polyfit_kwargs
+    do_info = isinstance(info, dict)
+    dw = int(sumap / 2)
+
+    # Gaussian width from FHWM
+    sigma = gaussian_fwhm_to_sigma * fwhm
+
+    result = {}
+    for order in orders:
+        rectified = rectimg.get(order)
+        if rectified is None:
+            log.warning(f&quot;Order {order} is missing from rectimg.&quot;)
+            continue
+
+        image = rectified.get(&#39;image&#39;)
+        if image is None:
+            log.warning(f&quot;Order {order} is missing image key.&quot;)
+            continue
+
+        wave = rectified.get(&#39;wave&#39;)
+        if wave is None:
+            log.warning(f&quot;Order {order} is missing wave key.&quot;)
+            continue
+
+        spatial = rectified.get(&#39;spatial&#39;)
+        if spatial is None:
+            log.warning(f&quot;Order {order} is missing spatial key.&quot;)
+            continue
+
+        n_cols = wave.size
+        n_rows = spatial.size
+        if image.shape != (n_rows, n_cols):
+            log.warning(f&quot;Invalid image dimensions for order {order}.&quot;)
+            log.warning(f&quot;Should be ({n_rows},{n_cols}) but is {image.shape}.&quot;)
+            continue
+
+        ap_pos = positions.get(order)
+        if ap_pos is None:
+            log.warning(f&quot;Order {order} is missing from positions.&quot;)
+            continue
+        if not hasattr(ap_pos, &#39;__len__&#39;):
+            ap_pos = [ap_pos]
+        n_apertures = len(ap_pos)
+
+        xpar, fitter, columns, model_fit = [None] * 4
+        trace_coeffs = np.full((n_apertures, fitorder + 1), np.nan)
+        y = np.arange(n_rows).astype(float)
+
+        # start &#39;step&#39; columns in, rather than at zero
+        n_step = int((n_cols - step) / step)
+        columns = np.arange(n_step) * step + step
+        peaks_arc = np.full((n_apertures, n_step), np.nan)
+        waves = np.full(n_step, np.nan)
+
+        order_set = False
+        if do_info:
+            info[order] = {}
+            info[order][&#39;x&#39;] = np.repeat([columns], n_apertures, axis=0)
+            info[order][&#39;y&#39;] = np.full((n_apertures, n_step), np.nan)
+            info[order][&#39;mask&#39;] = np.full((n_apertures, n_step), False)
+            info[order][&#39;trace_model&#39;] = [None] * n_apertures
+
+        for stepi, column in enumerate(columns):
+            cr = np.clip([column - dw, column + dw], 0, n_cols - 1)
+            waves[stepi] = wave[column]
+            with warnings.catch_warnings():
+                warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+                slit_image = np.nanmedian(image[:, cr[0]: cr[1] + 1], axis=1)
+
+            for api, position in enumerate(ap_pos):
+
+                kwargs[&#39;guess&#39;] = position
+                kwargs[&#39;npeaks&#39;] = 1
+                kwargs[&#39;stddev&#39;] = sigma
+
+                nn = ~np.isnan(slit_image)
+                try:
+                    model = fitpeaks1d(spatial[nn], slit_image[nn], **kwargs)
+                except ValueError:
+                    log.warning(&#39;Invalid data in initial fit.&#39;)
+                    continue
+
+                if not order_set:
+                    if do_info:
+                        info[order][&#39;fit&#39;] = np.full(
+                            (n_apertures, n_step, model.parameters.size),
+                            np.nan)
+                        info[&#39;peak_model&#39;] = model
+                        info[order][&#39;spatial&#39;] = np.full(
+                            (n_apertures, n_step), np.nan)
+                    if fast:
+                        def model_fit(x, *params):
+                            model.parameters = params
+                            return model(x)
+                    suffix = &#39;_0&#39; if get_n_submodels(model) &gt; 1 else &#39;&#39;
+                    xpar = get_x_parname(model) + suffix
+                    fitter = model.solver
+                    order_set = True
+                else:
+                    if fast:
+                        coeffs, _ = curve_fit(model_fit, spatial[nn],
+                                              slit_image[nn],
+                                              p0=model.parameters)
+                        model.parameters = coeffs
+                    else:
+                        model = fitter(model, spatial[nn], slit_image[nn])
+
+                if do_info:
+                    info[order][&#39;fit&#39;][api, stepi] = model.parameters.copy()
+
+                xval = getattr(model, xpar).value
+
+                # check fit for failure if possible
+                try:
+                    failure = (model.fit_info[&#39;ierr&#39;] not in [1, 2, 3, 4])
+                except (AttributeError, KeyError):  # pragma: no cover
+                    failure = False
+
+                if (np.abs(xval - position) &lt;= winthresh) and not failure:
+                    peaks_arc[api, stepi] = xval
+                    if do_info:
+                        info[order][&#39;y&#39;][api, stepi] = np.interp(
+                            xval, spatial, y)
+                        info[order][&#39;spatial&#39;][api, stepi] = xval
+
+        if do_info:
+            info[order][&#39;wave&#39;] = np.repeat([waves], n_apertures, axis=0)
+
+        for api, arc in enumerate(peaks_arc):
+            trace_model = polyfitnd(waves, arc, fitorder, robust=fitthresh,
+                                    model=True, **polyfit_kwargs)
+            if trace_model.success:
+                trace_coeffs[api] = trace_model.coefficients
+                if do_info:
+                    info[order][&#39;trace_model&#39;][api] = trace_model
+                    info[order][&#39;mask&#39;][api] = trace_model.mask.copy()
+        result[order] = trace_coeffs
+
+    return result</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

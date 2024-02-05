@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.integration.dependents.dependents &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.integration.dependents.dependents</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC
+from copy import deepcopy
+import numpy as np
+
+from sofia_redux.scan.frames.frames import Frames
+from sofia_redux.scan.channels.channel_data.channel_data import ChannelData
+
+__all__ = [&#39;Dependents&#39;]
+
+
+<div class="viewcode-block" id="Dependents">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.integration.dependents.dependents.Dependents.html#sofia_redux.scan.integration.dependents.dependents.Dependents">[docs]</a>
+class Dependents(ABC):
+
+    referenced_attributes = [&#39;integration&#39;]
+
+    def __init__(self, integration, name):
+        &quot;&quot;&quot;
+        Initialize a &quot;dependents&quot; object.
+
+        The Dependents class contains separate float arrays of dependent values
+        for both integration frames and integration channels.  Methods exist
+        to add and subtract dependents from frames or channels.
+
+        Parameters
+        ----------
+        integration : Integration
+            The integration to which the dependents will belong.
+        name : str
+            The name of the dependents object.
+        &quot;&quot;&quot;
+        self.name = name
+        self.integration = integration
+        self.for_frame = np.zeros(integration.size, dtype=float)
+        self.for_channel = np.zeros(integration.channels.size)
+        integration.add_dependents(self)
+
+<div class="viewcode-block" id="Dependents.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.integration.dependents.dependents.Dependents.html#sofia_redux.scan.integration.dependents.dependents.Dependents.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the dependents.
+
+        Returns
+        -------
+        Dependents
+        &quot;&quot;&quot;
+        new = self.__class__(self.integration, self.name)
+        reference = self.referenced_attributes
+        for attribute, value in self.__dict__.items():
+            if attribute in reference:
+                setattr(new, attribute, value)
+            elif hasattr(value, &#39;copy&#39;):
+                setattr(new, attribute, value.copy())
+            else:
+                setattr(new, attribute, deepcopy(value))
+        return new</div>
+
+
+<div class="viewcode-block" id="Dependents.add_async">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.integration.dependents.dependents.Dependents.html#sofia_redux.scan.integration.dependents.dependents.Dependents.add_async">[docs]</a>
+    def add_async(self, channels_or_frames, value):
+        &quot;&quot;&quot;
+        Add values to channel or frame dependents based on input.
+
+        Parameters
+        ----------
+        channels_or_frames : Channels or ChannelData or Frames.
+        value : float or numpy.ndarray (float).
+            If an array, must be the same size as `channels_or_frames`.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if isinstance(channels_or_frames, ChannelData):
+            indices = self.integration.channels.data.find_fixed_indices(
+                channels_or_frames.fixed_index)
+            self.for_channel[indices] += value
+        elif isinstance(channels_or_frames, Frames):
+            self.for_frame += value
+        elif hasattr(channels_or_frames, &#39;data&#39;):
+            self.add_async(channels_or_frames.data, value)
+        else:
+            raise ValueError(f&quot;Must be {ChannelData} or {Frames}.&quot;)</div>
+
+
+<div class="viewcode-block" id="Dependents.add_for_channels">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.integration.dependents.dependents.Dependents.html#sofia_redux.scan.integration.dependents.dependents.Dependents.add_for_channels">[docs]</a>
+    def add_for_channels(self, value):
+        &quot;&quot;&quot;
+        Add values to channel dependents.
+
+        Parameters
+        ----------
+        value : float or numpy.ndarray (float).
+            If an array, must be the same size as channels.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.for_channel += value</div>
+
+
+<div class="viewcode-block" id="Dependents.add_for_frames">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.integration.dependents.dependents.Dependents.html#sofia_redux.scan.integration.dependents.dependents.Dependents.add_for_frames">[docs]</a>
+    def add_for_frames(self, value):
+        &quot;&quot;&quot;
+        Add values to frame dependents.
+
+        Parameters
+        ----------
+        value : float or numpy.ndarray (float).
+            If an array, must be the same size as frames.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.for_frame += value</div>
+
+
+<div class="viewcode-block" id="Dependents.clear">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.integration.dependents.dependents.Dependents.html#sofia_redux.scan.integration.dependents.dependents.Dependents.clear">[docs]</a>
+    def clear(self, channels=None, start=None, end=None):
+        &quot;&quot;&quot;
+        Remove dependents from integration frames and channels.
+
+        Removed dependents will be set to zero internally.
+
+        Parameters
+        ----------
+        channels : Channels or ChannelData, optional
+            If not supplied, use the integration channels.
+        start : int, optional
+            The starting frame to remove dependents.  The default is the
+            first frame.
+        end : int, optional
+            The ending frame (exclusive) to remove dependents.  The default is
+            the last channel.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if channels is None:
+            channels = self.integration.channels
+
+        self.integration.frames.remove_dependents(
+            self.for_frame, start=start, end=end)
+
+        indices = getattr(channels, &#39;indices&#39;, slice(None))
+        channels.remove_dependents(self.for_channel[indices])
+        self.for_channel[...] = 0.0
+        self.for_frame[slice(start, end)] = 0.0</div>
+
+
+<div class="viewcode-block" id="Dependents.apply">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.integration.dependents.dependents.Dependents.html#sofia_redux.scan.integration.dependents.dependents.Dependents.apply">[docs]</a>
+    def apply(self, channels=None, start=None, end=None):
+        &quot;&quot;&quot;
+        Add dependents to integration frames and channels.
+
+        Parameters
+        ----------
+        channels : Channels or ChannelData, optional
+            If not supplied, use the integration channels.
+        start : int, optional
+            The starting frame to remove dependents.  The default is the
+            first frame.
+        end : int, optional
+            The ending frame (exclusive) to remove dependents.  The default is
+            the last channel.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if channels is None:
+            channels = self.integration.channels
+
+        self.integration.frames.add_dependents(
+            self.for_frame, start=start, end=end)
+
+        indices = getattr(channels, &#39;indices&#39;, None)
+        if indices is None:
+            channels.add_dependents(self.for_channel)
+        else:
+            channels.add_dependents(self.for_channel[indices])</div>
+
+
+<div class="viewcode-block" id="Dependents.get">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.integration.dependents.dependents.Dependents.html#sofia_redux.scan.integration.dependents.dependents.Dependents.get">[docs]</a>
+    def get(self, channels_or_frames):
+        &quot;&quot;&quot;
+        Return the frame or channel dependent values.
+
+        Parameters
+        ----------
+        channels_or_frames : Channels or ChannelData or Frames
+
+        Returns
+        -------
+        dependents : numpy.ndarray (float)
+        &quot;&quot;&quot;
+        if isinstance(channels_or_frames, ChannelData):
+            indices = getattr(channels_or_frames, &#39;indices&#39;, None)
+            if indices is None:
+                return self.for_channel.copy()
+            else:
+                return self.for_channel[indices]
+
+        elif isinstance(channels_or_frames, Frames):
+            return self.for_frame.copy()
+
+        elif hasattr(channels_or_frames, &#39;data&#39;):
+            return self.get(channels_or_frames.data)
+
+        else:
+            raise ValueError(f&quot;Must be {ChannelData} or {Frames}.&quot;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

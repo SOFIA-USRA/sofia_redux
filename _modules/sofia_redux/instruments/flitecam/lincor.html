@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.flitecam.lincor &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.flitecam.lincor</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy.io import fits
+from astropy.wcs import WCS
+import numpy as np
+
+from sofia_redux.instruments.flitecam.calcvar import calcvar
+from sofia_redux.toolkit.utilities.fits \
+    import hdinsert, getdata, set_log_level
+
+__all__ = [&#39;lincor&#39;]
+
+
+def _imgpoly(x, coeffs):
+    &quot;&quot;&quot;
+    Evaluate an array of polynomials.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        Independent values. Dimensions should match coeffs.shape[1:].
+    coeffs : np.ndarray
+        Polynomial coefficients.  First dimension is coefficient
+        number, starting with the lowest order coefficient.
+        Remaining dimensions should match the `x` array.
+
+    Returns
+    -------
+    polyval : np.ndarray
+        The polynomial array evaluated at x.  Matches dimensions
+        of input array.
+    &quot;&quot;&quot;
+    polyval = np.zeros_like(x)
+    for j in range(coeffs.shape[0] - 1, -1, -1):
+        c = coeffs[j]
+        polyval *= x
+        polyval += c
+    return polyval
+
+
+def _linearize(image, coeffs, itime, readtime, ndr):
+    &quot;&quot;&quot;
+    Correct a FLITECAM image for linearity.
+
+    Follows 2004PASP..116..352V.
+
+    Parameters
+    ----------
+    image : np.ndarray
+        Raw FLITECAM data, divided by DIVISOR value.
+    coeffs : np.ndarray
+        Linearity coefficients array.
+    itime : float
+        Integration time.
+    readtime : float
+        Readout time.
+    ndr : int
+        Number of non-destructive reads.
+
+    Returns
+    -------
+    linearized : np.ndarray
+        The linearity corrected image.
+    &quot;&quot;&quot;
+    # Following mc_flitecamlincor, from fspextool
+    c0 = coeffs[0]
+
+    # flat pedestal: from lab data used to create coefficients
+    # flat readout time = 197.256 msec (slowcnt=4)
+    flat_tread = 0.197256
+    flatped = c0 * flat_tread
+
+    # correct iteratively
+    niter = 2
+    newimage = image
+    for i in range(niter):
+        # pedestal = ct/s * t_readout/itime * [(ndr+1)/2 - f], with f=0.5
+        pedimage = newimage * readtime * float(ndr) / (2.0 * itime)
+        finimage = image + pedimage
+
+        # correct pedestal
+        c_pedimage = pedimage.copy()
+        idx = (pedimage - flatped &gt;= 0)
+        if np.any(idx):
+            # use the fit only where the value is greater than
+            # the flat pedestal
+            corr = c0 / _imgpoly(pedimage - flatped, coeffs)
+            corr[corr &lt; 1.] = 1.
+
+            cped = pedimage * corr
+            c_pedimage[idx] = cped[idx]
+
+        # correct final image similarly
+        c_finimage = finimage.copy()
+        idx = (finimage - flatped &gt;= 0)
+        if np.any(idx):
+            corr = c0 / _imgpoly(finimage - flatped, coeffs)
+            corr[corr &lt; 1.] = 1.
+            cfin = finimage * corr
+            c_finimage[idx] = cfin[idx]
+
+        newimage = c_finimage - c_pedimage
+
+    return newimage
+
+
+<div class="viewcode-block" id="lincor">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.flitecam.lincor.lincor.html#sofia_redux.instruments.flitecam.lincor.lincor">[docs]</a>
+def lincor(hdul, linfile, saturation=None):
+    &quot;&quot;&quot;
+    Correct input flux data for detector nonlinearity.
+
+    The image is corrected by multiplying it by the factor
+    1 / (1 + (a1/a0) * counts + ... + (an/a0) * counts^n), where the
+    a values are the coefficients given in the input linearity file
+    and the counts are the values given in the input image.
+
+    The output flux is also divided by exposure time to convert from
+    counts (ct) to flux units (ct/s).
+
+    Parameters
+    ----------
+    hdul : fits.HDUList
+        Input data.  Should have a single primary FLUX extension.
+    linfile : str
+        Path to an input FITS file containing linearity coefficients.
+        The file should contain a single primary image extension,
+        with dimensions 1024 x 1024 x n, giving the correction
+        coefficients for each pixel in the FLITECAM array.
+    saturation : float, optional
+        If provided, values (as flux / divisor) above this level are
+        marked as bad in the output BADMASK extension (0 = good, 1 = bad).
+
+    Returns
+    -------
+    fits.HDUList
+        Corrected data, with updated FLUX and additional ERROR
+        and BADMASK extension.
+
+    Raises
+    ------
+    ValueError
+        If the linearity file is bad or missing.
+    &quot;&quot;&quot;
+    # input data
+    header = hdul[0].header
+    data = hdul[0].data
+
+    # read linfile
+    coeffs = getdata(linfile)
+    if coeffs is None:
+        raise ValueError(&#39;Missing linearity file&#39;)
+    if len(coeffs.shape) != 3 or coeffs.shape[1:] != data.shape:
+        raise ValueError(&#39;Linearity file has wrong shape&#39;)
+
+    # exposure keywords
+    itime = header.get(&#39;ITIME&#39;, 0)
+    coadds = header.get(&#39;COADDS&#39;, 0)
+    ndr = header.get(&#39;NDR&#39;, 0)
+    readtime = header.get(&#39;TABLE_MS&#39;, 0) / 1000.
+    divisor = float(header.get(&#39;DIVISOR&#39;, 1.))
+
+    # check for saturation
+    mask = np.zeros(data.shape, dtype=np.int16)
+    if saturation is not None and saturation &gt; 0:
+        saturated = ((data / divisor) &gt; saturation)
+        mask[saturated] = 1
+
+    # correct the flux
+    linearized = _linearize(data / divisor, coeffs, itime, readtime, ndr)
+    linearized *= divisor
+
+    # calculate error plane from linearized data
+    var = calcvar(linearized, header)
+    error = np.sqrt(var)
+
+    # correct data for exposure time
+    exptime = ndr * coadds * itime
+    linearized /= exptime
+
+    # update the primary BUNIT
+    hdinsert(header, &#39;BUNIT&#39;, &#39;ct/s&#39;, &#39;Data units&#39;)
+
+    # add linfile to header
+    hdinsert(header, &#39;LINFILE&#39;, linfile, comment=&#39;Linearity file&#39;)
+
+    # make the output HDUList
+    primary = fits.PrimaryHDU(data=linearized, header=header)
+
+    # make a basic extension header from the WCS in the primary
+    with set_log_level(&#39;CRITICAL&#39;):
+        wcs = WCS(header)
+    ehead = wcs.to_header(relax=True)
+    hdinsert(ehead, &#39;BUNIT&#39;, &#39;ct/s&#39;, &#39;Data units&#39;)
+    err_ext = fits.ImageHDU(data=error, header=ehead, name=&#39;ERROR&#39;)
+    hdinsert(ehead, &#39;BUNIT&#39;, &#39;&#39;, &#39;Data units&#39;)
+    mask_ext = fits.ImageHDU(data=mask, header=ehead, name=&#39;BADMASK&#39;)
+
+    corrected = fits.HDUList([primary, err_ext, mask_ext])
+
+    return corrected</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

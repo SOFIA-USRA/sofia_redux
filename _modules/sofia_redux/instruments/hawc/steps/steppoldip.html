@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.steppoldip &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.steppoldip</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Polarization calibration pipeline step.&quot;&quot;&quot;
+
+import numpy as np
+
+from sofia_redux.instruments.hawc.datafits import DataFits
+from sofia_redux.instruments.hawc.stepparent import StepParent
+
+__all__ = [&#39;StepPolDip&#39;]
+
+
+<div class="viewcode-block" id="StepPolDip">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.steppoldip.StepPolDip.html#sofia_redux.instruments.hawc.steps.steppoldip.StepPolDip">[docs]</a>
+class StepPolDip(StepParent):
+    r&quot;&quot;&quot;
+    Reduce polarized sky dips for instrumental polarization calibration.
+
+    This pipeline step derives the instrumental polarization (q and u)
+    from an unchopped, polarized sky dip observation.  This step should
+    be run after `sofia_redux.instruments.hawc.steps.StepPrepare`.  The
+    output is a DataFits object with several image extensions, used for
+    diagnostic purposes. The instrumental polarization fraction is stored
+    in the &#39;q (instrumental)&#39; and &#39;u (instrumental)&#39; images.
+
+    Notes
+    -----
+    The flux is fit with this signal model:
+
+       .. math:: F = C + Q_0 cos(4 HWP&#39;) + U_0 sin(4 HWP&#39;)
+       .. math::       + V_0 cos(2 HWP&#39;) + W_0 sin(2 HWP&#39;)
+       .. math::       + G [1 + q\ cos(4 HWP&#39;) + u\ sin(4 HWP&#39;)] AM
+       .. math::       + D (T - T_0)
+
+    The following parameters from the model fit are stored in the output:
+       - :math:`C` : FB constant offset
+       - :math:`Q_0` : Q0 (background)
+       - :math:`U_0` : U0 (background)
+       - :math:`G` : radiation gain
+       - :math:`D` : thermal gain
+       - :math:`q` : q (instrumental)
+       - :math:`u` : u (instrumental)
+
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepPolDip.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.steppoldip.StepPolDip.html#sofia_redux.instruments.hawc.steps.steppoldip.StepPolDip.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;poldip&#39;, and are named with
+        the step abbreviation &#39;PDP&#39;.
+
+        Parameters defined for this step are:
+
+        hwp0 : float
+            Reference HWP angle.
+        temp0 : float
+            Reference temperature (ADR set point).
+        maxrms : float
+            Maximum allowed RMS.  Pixels with fit RMS values higher
+            than this threshold are set to NaN.
+        &quot;&quot;&quot;
+
+        # Name of the pipeline reduction step
+        self.name = &#39;poldip&#39;
+        self.description = &#39;Make IP Calibration&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;pdp&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+
+        # Append parameters
+        self.paramlist.append([&#39;hwp0&#39;, 5.0,
+                               &#39;Reference HWP angle&#39;])
+        self.paramlist.append([&#39;temp0&#39;, 0.532,
+                               &#39;Reference temperature (ADR setpoint)&#39;])
+        self.paramlist.append([&#39;maxrms&#39;, 0.1,
+                               &#39;Maximum allowed reduced RMS&#39;])</div>
+
+
+<div class="viewcode-block" id="StepPolDip.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.steppoldip.StepPolDip.html#sofia_redux.instruments.hawc.steps.steppoldip.StepPolDip.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        Because this step is single-in, single-out (SISO),
+        self.datain must be a DataFits object.  The output
+        is also a DataFits object, stored in self.dataout.
+
+        The process is:
+
+        1. Fit the input flux at each pixel with a parametrized model,
+           including the instrumental polarization terms.
+        2. Store the fit parameters as images in the output file.
+        &quot;&quot;&quot;
+
+        # set up variables
+        hwp0 = self.getarg(&#39;hwp0&#39;)
+        temp0 = self.getarg(&#39;temp0&#39;)
+        maxrms = self.getarg(&#39;maxrms&#39;)
+
+        # make new output data
+        self.dataout = DataFits(config=self.config)
+        self.dataout.filename = self.datain.filename
+        self.dataout.header = self.datain.header.copy()
+
+        # get raw flux data and reshape it
+        r_data = self.datain.table[&#39;R array&#39;]
+        t_data = self.datain.table[&#39;T array&#39;]
+        f_data = np.concatenate([r_data, t_data], axis=2)
+
+        shape = f_data.shape
+        img_shape = (shape[1], shape[2])
+        nsample = shape[0]
+        npix = img_shape[0] * img_shape[1]
+
+        f = f_data.reshape((nsample, npix)).transpose()
+
+        # get HWP angles, elevation, and temperature data
+        hwp_data = self.datain.table[&#39;hwpCounts&#39;]
+        el_data = self.datain.table[&#39;Elevation&#39;]
+        dtemp_data = self.datain.table[&#39;ai23&#39;]
+
+        # signal model:
+        #  FB = C + Q0*cos(4*HWP&#39;) + U0*sin(4*HWP&#39;)
+        #         + V0*cos(2*HWP&#39;) + W0*sin(2*HWP&#39;)
+        #         + G*{1 + q*cos(4*HWP&#39;) + u*sin(4*HWP&#39;)}*AM
+        #         + D*(T-T0)
+
+        # calculate approximate airmass
+        am_data = 1 / np.sin(el_data * np.pi / 180.)
+
+        # subtract ADR set point from temperature
+        dtemp_data -= temp0
+
+        # set up some useful quantities from HWP angle
+        # (each have dimension nsample)
+        c4h = np.cos(4.0 * (hwp_data / 4.0 - hwp0) * np.pi / 180.)
+        s4h = np.sin(4.0 * (hwp_data / 4.0 - hwp0) * np.pi / 180.)
+        c2h = np.cos(2.0 * (hwp_data / 4.0 - hwp0) * np.pi / 180.)
+        s2h = np.sin(2.0 * (hwp_data / 4.0 - hwp0) * np.pi / 180.)
+
+        # constant term
+        one = np.ones_like(c4h)
+
+        # set up matrices for linear equations
+        # (c is 9 x nsample)
+        c = np.array([one, c4h, s4h,
+                      am_data, c4h * am_data, s4h * am_data,
+                      dtemp_data, c2h, s2h])
+
+        # a is the same for all pixels
+        # (a is 9 x 9 matrix)
+        a = c.dot(c.T)
+
+        # vector varies by pixel
+        # (b is npix x 9 vector)
+        b = f.dot(c.T)
+
+        # copy of a for each pixel
+        # (aa is npix x 9 x 9)
+        aa = np.tile(a, (npix, 1, 1))
+
+        # solve equations
+        # returns npix solutions, with 9 parameters each
+        solution = np.linalg.solve(aa, b)
+
+        # extract desired constants from solution
+        # (each have dimension npix)
+        c = solution[:, 0]
+        q0 = solution[:, 1]
+        u0 = solution[:, 2]
+        g = solution[:, 3]
+        with np.errstate(invalid=&#39;ignore&#39;):
+            q = solution[:, 4] / g
+            u = solution[:, 5] / g
+        d = solution[:, 6]
+        v0 = solution[:, 7]
+        w0 = solution[:, 8]
+
+        # flux model
+        # (model is npix x nsample, same dimensions as f)
+        model = np.outer(c, one) + \
+            np.outer(q0, c4h) + np.outer(u0, s4h) + \
+            np.outer(v0, c2h) + np.outer(w0, s2h) + \
+            np.outer(g, am_data) + \
+            np.outer(q * g, c4h * am_data) + \
+            np.outer(u * g, s4h * am_data) + \
+            np.outer(d, dtemp_data)
+
+        # RMS: sqrt of sum over time series of (data - model)^2,
+        #   over sqrt(N)
+        rms = np.sqrt(np.sum((f - model)**2, axis=1) / nsample)
+
+        # reduced RMS: divide by absolute value of radiation gain
+        reduced_rms = rms / np.abs(g)
+
+        # mask deviant data
+        with np.errstate(invalid=&#39;ignore&#39;):
+            idx = (reduced_rms &gt; maxrms)
+        q[idx] = np.nan
+        u[idx] = np.nan
+
+        # save images in dataout
+        dataset = [c.transpose().reshape(img_shape),
+                   q0.transpose().reshape(img_shape),
+                   u0.transpose().reshape(img_shape),
+                   g.transpose().reshape(img_shape),
+                   d.transpose().reshape(img_shape),
+                   q.transpose().reshape(img_shape),
+                   u.transpose().reshape(img_shape),
+                   rms.transpose().reshape(img_shape),
+                   reduced_rms.transpose().reshape(img_shape),
+                   nsample + np.zeros(img_shape)]
+        datanames = [&#39;FB constant offset&#39;,
+                     &#39;Q0 (background)&#39;, &#39;U0 (background)&#39;,
+                     &#39;radiation gain&#39;, &#39;thermal gain&#39;,
+                     &#39;q (instrumental)&#39;, &#39;u (instrumental)&#39;,
+                     &#39;RMS&#39;, &#39;RMS/radiation gain&#39;,
+                     &#39;number of samples&#39;]
+        dataunits = [&#39;FB units&#39;,
+                     &#39;FB units&#39;, &#39;FB units&#39;,
+                     &#39;FB units/airmass&#39;, &#39;FB units/thermometer units&#39;,
+                     &#39;dimensionless fraction&#39;, &#39;dimensionless fraction&#39;,
+                     &#39;FB units&#39;, &#39;dimensionless fraction&#39;,
+                     &#39;dimensionless number&#39;]
+
+        for i, data in enumerate(dataset):
+            self.dataout.imageset(data, datanames[i])
+            self.dataout.setheadval(&#39;BUNIT&#39;, dataunits[i],
+                                    comment=&#39;Data units&#39;,
+                                    dataname=datanames[i])
+
+        # update SOFIA mandated keywords (since this is first pipe step)
+        obsid = &#39;P_&#39; + self.dataout.getheadval(&#39;OBS_ID&#39;)
+        self.dataout.setheadval(&#39;OBS_ID&#39;, obsid)
+        self.dataout.setheadval(&#39;PROCSTAT&#39;, &#39;LEVEL_2&#39;)
+        self.dataout.setheadval(&#39;PIPELINE&#39;, &#39;HAWC_DRP&#39;,
+                                &#39;Data processing pipeline&#39;)
+
+        # set ASSC_AOR and ASSC_MSN value in output header
+        try:
+            self.dataout.setheadval(&#39;ASSC_AOR&#39;,
+                                    self.dataout.getheadval(&#39;AOR_ID&#39;),
+                                    &#39;Associated AORs&#39;)
+        except KeyError:
+            pass
+        try:
+            self.dataout.setheadval(&#39;ASSC_MSN&#39;,
+                                    self.dataout.getheadval(&#39;MISSN-ID&#39;),
+                                    &#39;Associated Mission IDs&#39;)
+        except KeyError:
+            pass</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

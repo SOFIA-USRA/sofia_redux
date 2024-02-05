@@ -1,0 +1,2533 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.scan.scan &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.scan.scan</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC, abstractmethod
+from astropy import log, units
+from astropy.io import fits
+from astropy.table import vstack as table_vstack
+from astropy.time import Time
+import cloudpickle
+from copy import deepcopy
+import os
+import numpy as np
+
+from sofia_redux.scan.utilities import utils, numba_functions
+from sofia_redux.scan.utilities.class_provider import get_scan_class
+from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
+    EquatorialCoordinates
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
+    SphericalCoordinates
+from sofia_redux.scan.coordinate_systems.epoch.epoch import J2000
+from sofia_redux.scan.source_models.astro_intensity_map import \
+    AstroIntensityMap
+from sofia_redux.scan.info.weather_info import WeatherInfo
+from sofia_redux.scan.flags.mounts import Mount
+from sofia_redux.scan.source_models.beams.elliptical_source import \
+    EllipticalSource
+from sofia_redux.scan.coordinate_systems.offset_2d import Offset2D
+from sofia_redux.scan.coordinate_systems.celestial_coordinates import \
+    CelestialCoordinates
+from sofia_redux.scan.coordinate_systems.focal_plane_coordinates import \
+    FocalPlaneCoordinates
+from sofia_redux.scan.source_models.beams.instant_focus import InstantFocus
+from sofia_redux.scan.utilities.range import Range
+from sofia_redux.scan.utilities.class_provider import get_integration_class
+from sofia_redux.scan.utilities.utils import round_values, get_float_list
+
+__all__ = [&#39;Scan&#39;]
+
+
+<div class="viewcode-block" id="Scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan">[docs]</a>
+class Scan(ABC):
+
+    def __init__(self, channels, reduction=None):
+        &quot;&quot;&quot;
+        Initialize a scan.
+
+        The scan is a high level class operated on by the reduction and
+        reduction pipeline containing all of the information from an
+        astronomical scan.  It contains a set of integrations (time stream
+        data) from the scan for all of the instrument channels as well as
+        it&#39;s own individual source model which may contribute to the overall
+        reduction source.
+
+        Notes
+        -----
+        The integration configurations are based off the scan configuration,
+        but are not linked and are distinct objects.  The scan configuration is
+        generally only accessed for scan specific operations or parameters.
+        Therefore, do not expect that modifying the scan configuration will
+        propagate down to the integrations, where the bulk of processing
+        occurs.
+
+        Parameters
+        ----------
+        channels : sofia_scan.scan.channels.channels.Channels
+            The instrument channels for this scan.
+        reduction : sofia_scan.scan.reduction.reduction.Reduction, optional
+            The reduction to which this scan belongs.
+        &quot;&quot;&quot;
+        self.serial_number = -1
+        self.filename = None
+        self.map_range = None
+        self.weight = 1.0
+        self.source_points = 0
+        self.is_split = False
+        self.pointing = None
+        self.source_model = None
+        self.source_model_pickle_file = None
+        self.integrations = None
+        self.gain = 1.0
+        self.map_range = Coordinate2D(np.zeros((2, 2), dtype=float),
+                                      unit=&#39;arcsec&#39;)
+        self.pointing_correction = Coordinate2D()
+
+        self.channels = None
+        self.reduction = reduction
+        self.temp_source_file = None
+        self.set_channels(channels)
+
+    @property
+    def referenced_attributes(self):
+        &quot;&quot;&quot;
+        Return the names of attributes that are referenced during a copy.
+
+        Returns
+        -------
+        attribute_names : set (str)
+        &quot;&quot;&quot;
+        return {&#39;channels&#39;, &#39;reduction&#39;, &#39;source_model&#39;, &#39;integrations&#39;}
+
+<div class="viewcode-block" id="Scan.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the scan.  Certain attributes will be referenced only.
+
+        Returns
+        -------
+        scan : Scan
+        &quot;&quot;&quot;
+        new = self.__class__(channels=self.channels)
+        referenced = self.referenced_attributes
+        for attribute, value in self.__dict__.items():
+            if attribute in referenced:
+                setattr(new, attribute, value)
+            elif hasattr(value, &#39;copy&#39;):
+                setattr(new, attribute, value.copy())
+            else:
+                setattr(new, attribute, deepcopy(value))
+
+        return new</div>
+
+
+<div class="viewcode-block" id="Scan.set_channels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.set_channels">[docs]</a>
+    def set_channels(self, channels):
+        &quot;&quot;&quot;
+        Set the instrument channels for the scan.
+
+        Parameters
+        ----------
+        channels : Channels
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if channels is None:
+            return
+        self.channels = channels.copy()
+        self.channels.set_parent(self)</div>
+
+
+    def __len__(self):
+        &quot;&quot;&quot;
+        Return the number of integrations in the scan.
+
+        Returns
+        -------
+        n_integrations : int
+        &quot;&quot;&quot;
+        if self.integrations is None:
+            return 0
+        return len(self.integrations)
+
+    def __getitem__(self, index):
+        &quot;&quot;&quot;
+        Return an integration(s) at the correct index.
+
+        Parameters
+        ----------
+        index : int or slice
+
+        Returns
+        -------
+        integration : Integration or list (Integration)
+        &quot;&quot;&quot;
+        return self.integrations[index]
+
+    def __setitem__(self, index, integration):
+        &quot;&quot;&quot;
+        Set the integration(s) for a given index.
+
+        Parameters
+        ----------
+        index : int or slice
+        integration : Integration or list (Integration)
+            The integration(s) to set.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.integrations[index] = integration
+
+    @property
+    def info(self):
+        &quot;&quot;&quot;
+        Return the information object for the scan.
+
+        The information object contains the reduction configuration and various
+        parameters pertaining the this scan.
+
+        Returns
+        -------
+        Info
+        &quot;&quot;&quot;
+        if self.channels is None:
+            return None
+        return self.channels.info
+
+    @property
+    def astrometry(self):
+        &quot;&quot;&quot;
+        Return the scan astrometry information.
+
+        Returns
+        -------
+        info : AstrometryInfo
+        &quot;&quot;&quot;
+        if self.info is None:
+            return None
+        return self.info.astrometry
+
+    @property
+    def channel_flagspace(self):
+        &quot;&quot;&quot;
+        Return the flagspace for the scan channels.
+
+        Returns
+        -------
+        flagspace : ChannelFlags
+        &quot;&quot;&quot;
+        if self.channels is None:
+            return None
+        return self.channels.flagspace
+
+    @property
+    def instrument_name(self):
+        &quot;&quot;&quot;
+        Return the name of the instrument in the scan.
+
+        Returns
+        -------
+        instrument : str
+        &quot;&quot;&quot;
+        return self.info.instrument.name
+
+    @property
+    def frame_flagspace(self):
+        &quot;&quot;&quot;
+        Return the flagspace for the scan frames.
+
+        Returns
+        -------
+        flagspace : FrameFlags
+        &quot;&quot;&quot;
+        if self.size == 0:
+            return None
+        return self.integrations[0].flagspace
+
+<div class="viewcode-block" id="Scan.class_from_instrument_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.class_from_instrument_name">[docs]</a>
+    @classmethod
+    def class_from_instrument_name(cls, name):
+        &quot;&quot;&quot;
+        Return the appropriate scan instance for an instrument name.
+
+        Parameters
+        ----------
+        name : str
+            The instrument name.
+
+        Returns
+        -------
+        Scan
+            A scan instance.
+        &quot;&quot;&quot;
+        return get_scan_class(name)</div>
+
+
+    @property
+    def size(self):
+        &quot;&quot;&quot;
+        Return the number of integrations in the scan.
+
+        Returns
+        -------
+        n_integrations : int
+        &quot;&quot;&quot;
+        return self.__len__()
+
+    @property
+    def mjd(self):
+        &quot;&quot;&quot;
+        Get the scan Modified Julian Date (MJD).
+
+        Returns
+        -------
+        mjd : float
+        &quot;&quot;&quot;
+        if self.astrometry is None:
+            return None
+        return self.astrometry.mjd
+
+    @mjd.setter
+    def mjd(self, value):
+        &quot;&quot;&quot;
+        Set the Modified Julian Date (MJD) and apply configuration options.
+
+        Parameters
+        ----------
+        value : float
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.astrometry is None:
+            return
+        self.astrometry.set_mjd(value)
+
+    @property
+    def lst(self):
+        &quot;&quot;&quot;
+        Get the scan Local Sidereal Time (LST).
+
+        Returns
+        -------
+        lst : astropy.units.Quantity
+            The LST as an hour angle.
+        &quot;&quot;&quot;
+        if self.astrometry is None:
+            return None
+        return self.astrometry.lst
+
+    @lst.setter
+    def lst(self, value):
+        &quot;&quot;&quot;
+        Set the scan Local Sidereal Time (LST).
+
+        Parameters
+        ----------
+        value : astropy.units.Quantity
+            The value (in hourangle units) to set.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.astrometry is None:
+            return
+        self.astrometry.lst = value
+
+    @property
+    def source_name(self):
+        &quot;&quot;&quot;
+        Return the name of the observation source.
+
+        Returns
+        -------
+        name : str
+        &quot;&quot;&quot;
+        if self.configuration is None:
+            return None
+        else:
+            return self.info.observation.source_name
+
+    @source_name.setter
+    def source_name(self, value):
+        &quot;&quot;&quot;
+        Set the name of the source.
+
+        Parameters
+        ----------
+        value : str
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.configuration is None:
+            return
+        self.info.observation.set_source(value)
+
+    @property
+    def configuration(self):
+        &quot;&quot;&quot;
+        Return the scan configuration.
+
+        Returns
+        -------
+        Configuration
+        &quot;&quot;&quot;
+        if self.info is None:
+            return None
+        return self.info.configuration
+
+    @property
+    def is_nonsidereal(self):
+        &quot;&quot;&quot;
+        Return whether the observation is non-sidereal.
+
+        Returns
+        -------
+        non_sidereal : bool
+        &quot;&quot;&quot;
+        if self.astrometry is None:
+            return False
+        return self.astrometry.is_nonsidereal
+
+    @is_nonsidereal.setter
+    def is_nonsidereal(self, value):
+        &quot;&quot;&quot;
+        Set the non-sidereal flag for the observation.
+
+        Parameters
+        ----------
+        value : bool
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.astrometry is None:
+            return
+        self.astrometry.is_nonsidereal = utils.get_bool(value)
+
+    @property
+    def equatorial(self):
+        &quot;&quot;&quot;
+        Return the scan equatorial position.
+
+        Returns
+        -------
+        equatorial_coordinate : EquatorialCoordinates
+        &quot;&quot;&quot;
+        if self.astrometry is None:
+            return None
+        return self.astrometry.equatorial
+
+    @equatorial.setter
+    def equatorial(self, value):
+        &quot;&quot;&quot;
+        Set the scan equatorial position.
+
+        Parameters
+        ----------
+        value : EquatorialCoordinates
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.astrometry is None:
+            return
+        self.astrometry.equatorial = value
+
+    @property
+    def horizontal(self):
+        &quot;&quot;&quot;
+        Get the scan horizontal coordinate position.
+
+        Returns
+        -------
+        horizontal_coordinate : HorizontalCoordinate
+        &quot;&quot;&quot;
+        if self.astrometry is None:
+            return None
+        return self.astrometry.horizontal
+
+    @horizontal.setter
+    def horizontal(self, value):
+        &quot;&quot;&quot;
+        Set the scan horizontal coordinate position.
+
+        Parameters
+        ----------
+        value : HorizontalCoordinates
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.astrometry is None:
+            return
+        self.astrometry.horizontal = value
+
+    @property
+    def site(self):
+        &quot;&quot;&quot;
+        Return the location of the site of the observation.
+
+        Returns
+        -------
+        site_location : GeodeticCoordinates
+        &quot;&quot;&quot;
+        if self.astrometry is None:
+            return None
+        return self.astrometry.site
+
+    @site.setter
+    def site(self, value):
+        &quot;&quot;&quot;
+        Set the coordinates of the site location for the observation.
+
+        Parameters
+        ----------
+        value : GeodeticCoordinates
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.astrometry is None:
+            return
+        self.astrometry.site = value
+
+    @property
+    def apparent(self):
+        &quot;&quot;&quot;
+        Return the apparent equatorial coordinate of the observation.
+
+        Returns
+        -------
+        apparent_coordinate : EquatorialCoordinate
+        &quot;&quot;&quot;
+        if self.astrometry is None:
+            return None
+        return self.astrometry.apparent
+
+    @apparent.setter
+    def apparent(self, value):
+        &quot;&quot;&quot;
+        Set the apparent equatorial coordinate of the observation.
+
+        Parameters
+        ----------
+        value : EquatorialCoordinates
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.astrometry is None:
+            return
+        self.astrometry.apparent = value
+
+    @property
+    def is_tracking(self):
+        &quot;&quot;&quot;
+        Return whether the telescope is tracking.
+
+        Returns
+        -------
+        tracking : bool
+        &quot;&quot;&quot;
+        if self.info is None:
+            return False
+        return self.info.telescope.is_tracking
+
+    @property
+    def serial(self):
+        &quot;&quot;&quot;
+        Return the scan serial number.
+
+        Returns
+        -------
+        serial_number : int
+        &quot;&quot;&quot;
+        return self.serial_number
+
+    @serial.setter
+    def serial(self, value):
+        &quot;&quot;&quot;
+        Set the scan serial number.
+
+        Parameters
+        ----------
+        value : int
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.serial_number = value
+        self.info.configuration.set_serial(value)
+
+<div class="viewcode-block" id="Scan.has_option">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.has_option">[docs]</a>
+    def has_option(self, option):
+        &quot;&quot;&quot;
+        Check whether an option is set in the configuration.
+
+        Parameters
+        ----------
+        option : str
+            The configuration option.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        if self.configuration is None:
+            return False
+        return self.configuration.is_configured(option)</div>
+
+
+<div class="viewcode-block" id="Scan.have_equatorial">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.have_equatorial">[docs]</a>
+    def have_equatorial(self):
+        &quot;&quot;&quot;
+        Return whether equatorial coordinates exist for the scan.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self.equatorial is not None and self.equatorial.size != 0</div>
+
+
+<div class="viewcode-block" id="Scan.have_horizontal">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.have_horizontal">[docs]</a>
+    def have_horizontal(self):
+        &quot;&quot;&quot;
+        Return whether horizontal coordinates exist for the scan.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self.horizontal is not None and self.horizontal.size != 0</div>
+
+
+<div class="viewcode-block" id="Scan.have_site">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.have_site">[docs]</a>
+    def have_site(self):
+        &quot;&quot;&quot;
+        Return whether site coordinates exist for the scan.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self.site is not None and self.site.size != 0</div>
+
+
+<div class="viewcode-block" id="Scan.have_apparent">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.have_apparent">[docs]</a>
+    def have_apparent(self):
+        &quot;&quot;&quot;
+        Return whether horizontal coordinates exist for the scan.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self.apparent is not None and self.apparent.size != 0</div>
+
+
+<div class="viewcode-block" id="Scan.validate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.validate">[docs]</a>
+    def validate(self):
+        &quot;&quot;&quot;
+        Validate the scan after a read.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.integrations is None:
+            log.warning(&#39;No integrations to validate&#39;)
+            return
+
+        log.info(&quot;Processing scan data:&quot;)
+
+        if self.configuration.get_bool(&#39;subscan.merge&#39;):
+            self.merge_integrations()
+
+        if self.has_option(&#39;segment&#39;):
+            segment_time = self.configuration.get_float(
+                &#39;segment&#39;, default=60.0) * units.Unit(&#39;second&#39;)
+            self.segment_to(segment_time)
+
+        self.is_nonsidereal |= self.has_option(&#39;moving&#39;)
+
+        first_frame = self.integrations[0].get_first_frame()
+        last_frame = self.integrations[-1].get_last_frame()
+        if np.isnan(self.mjd):  # pragma: no cover
+            # this doesn&#39;t seem reachable under normal conditions
+            self.mjd = first_frame.mjd
+        if np.isnan(self.lst):
+            self.lst = 0.5 * (first_frame.lst + last_frame.lst)
+
+        if not self.configuration.get_bool(&#39;lab&#39;):
+
+            if not self.have_equatorial():
+                self.calculate_equatorial()
+
+            # Use J2000 coordinates
+            if self.equatorial.epoch != J2000:
+                self.precess(J2000)
+
+            log.info(f&quot;Equatorial: {self.equatorial}&quot;)
+
+            # Calculate apparent and approximate horizontal coordinates
+            if not self.have_apparent():
+                self.calculate_apparent()
+
+            if not self.have_horizontal() and self.have_site():
+                self.calculate_horizontal()
+
+            if self.have_horizontal():
+                log.info(f&quot;Horizontal: {self.horizontal}&quot;)
+
+        for i, integration in enumerate(self.integrations):
+            log.info(f&quot;Processing integration {i + 1}:&quot;)
+            integration.validate()
+            n_valid = integration.get_frame_count(match_flag=0)
+            t = integration.get_exposure_time()
+            log.debug(f&quot;Integration has {n_valid} valid frames.&quot;)
+            log.debug(f&quot;Total exposure time: {t}&quot;)
+
+        if not self.have_valid_integrations():
+            log.warning(&quot;No valid integrations exist&quot;)
+            return
+
+        if self.has_option(&#39;jackknife&#39;):
+            self.source_name += &#39;-JK&#39;
+
+        if self.has_option(&#39;pointing&#39;):
+            pointing_options = self.configuration.get_branch(&#39;pointing&#39;)
+            correction = self.get_pointing_correction(pointing_options)
+            self.pointing_at(correction)
+
+        self.channels.calculate_overlaps(point_size=self.get_point_size())</div>
+
+
+<div class="viewcode-block" id="Scan.validate_integrations">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.validate_integrations">[docs]</a>
+    def validate_integrations(self):
+        &quot;&quot;&quot;
+        Remove any invalid integrations from the scan.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.integrations is None:
+            return
+        self.integrations = [x for x in self.integrations if x.is_valid]</div>
+
+
+<div class="viewcode-block" id="Scan.is_valid">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.is_valid">[docs]</a>
+    def is_valid(self):
+        &quot;&quot;&quot;
+        Return whether the scan contains any valid integrations.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        self.validate_integrations()
+        return self.size &gt; 0</div>
+
+
+<div class="viewcode-block" id="Scan.have_valid_integrations">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.have_valid_integrations">[docs]</a>
+    def have_valid_integrations(self):
+        &quot;&quot;&quot;
+        Return whether valid integrations exist in the scan.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        if self.integrations is None:
+            return False
+        for integration in self.integrations:
+            if integration.is_valid:
+                return True
+        return False</div>
+
+
+<div class="viewcode-block" id="Scan.set_iteration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.set_iteration">[docs]</a>
+    def set_iteration(self, iteration, rounds=None):
+        r&quot;&quot;&quot;
+        Set the configuration for a given iteration
+
+        Parameters
+        ----------
+        iteration : float or int or str
+            The iteration to set.  A positive integer defines the exact
+            iteration number.  A negative integer defines the iteration
+            relative to the last (e.g. -1 is the last iteration). A float
+            represents a fraction (0-&gt;1) of the number of rounds, and
+            a string may be parsed in many ways such as last, first, a float,
+            integer, or percentage (if suffixed with a %).
+        rounds : int, optional
+            The maximum number of iterations.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if rounds is not None:
+            self.configuration.iterations.max_iteration = rounds
+        self.configuration.set_iteration(iteration)
+
+        self.channels.calculate_overlaps(self.get_point_size())
+        if self.integrations is not None:
+            for integration in self.integrations:
+                if integration.channels is not self.channels:
+                    integration.set_iteration(iteration, rounds=rounds)</div>
+
+
+<div class="viewcode-block" id="Scan.get_short_date_string">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_short_date_string">[docs]</a>
+    def get_short_date_string(self):
+        &quot;&quot;&quot;
+        Return a short date representation of the MJD time.
+
+        Returns
+        -------
+        date : str
+            The MJD date in YYYY-MM-DD format.
+        &quot;&quot;&quot;
+        return Time(self.mjd, format=&#39;mjd&#39;, scale=&#39;utc&#39;).isot.split(&#39;T&#39;)[0]</div>
+
+
+<div class="viewcode-block" id="Scan.get_pointing_correction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_pointing_correction">[docs]</a>
+    def get_pointing_correction(self, options):
+        &quot;&quot;&quot;
+        Return the pointing corrections.
+
+        Parameters
+        ----------
+        options : dict
+            The pointing options.  Relevant keys are &#39;value&#39; and &#39;offset&#39;.
+
+        Returns
+        -------
+        correction : Coordinate2D
+            Contains the (x, y) pointing offsets.
+        &quot;&quot;&quot;
+        size_unit = self.info.instrument.get_size_unit()
+        if isinstance(options, dict):
+            value = get_float_list(options.get(&#39;value&#39;))
+            offset = get_float_list(options.get(&#39;offset&#39;))
+            if value is not None and len(value) == 2:
+                correction = Coordinate2D(value, unit=size_unit)
+            else:
+                correction = Coordinate2D([0.0, 0.0], unit=size_unit)
+            if offset is not None and len(offset) == 2:
+                add_offset = Coordinate2D(offset, unit=size_unit)
+            else:
+                add_offset = Coordinate2D([0.0, 0.0], unit=size_unit)
+            correction.add(add_offset)
+
+        elif isinstance(options, str) or hasattr(options, &#39;__len__&#39;):
+            list_correction = get_float_list(options)
+            if len(list_correction) == 2:
+                correction = Coordinate2D(list_correction, unit=size_unit)
+            else:
+                correction = Coordinate2D([0.0, 0.0], unit=size_unit)
+        else:
+            correction = Coordinate2D(np.zeros(2, dtype=float), unit=size_unit)
+        return correction</div>
+
+
+<div class="viewcode-block" id="Scan.pointing_at">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.pointing_at">[docs]</a>
+    def pointing_at(self, correction):
+        &quot;&quot;&quot;
+        Apply a pointing correction.
+
+        If a new pointing correction is provided, it will be added to the
+        existing pointing correction.
+
+        Parameters
+        ----------
+        correction : Coordinate2D
+            The pointing (x, y) offset.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not isinstance(correction, Coordinate2D):
+            return
+        log.info(f&quot;Adjusting pointing by {correction}&quot;)
+        if self.integrations is None:
+            return
+        for integration in self.integrations:
+            integration.pointing_at(correction)
+
+        if (self.pointing_correction is None
+                or self.pointing_correction.size) == 0:
+            self.pointing_correction = correction
+        else:
+            self.pointing_correction.add(correction)</div>
+
+
+<div class="viewcode-block" id="Scan.precess">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.precess">[docs]</a>
+    def precess(self, epoch):
+        &quot;&quot;&quot;
+        Precess coordinates to a new epoch and update integrations.
+
+        The scan and all integration frames will be precessed to a new epoch
+        if necessary.
+
+        Parameters
+        ----------
+        epoch : Epoch
+            The new epoch.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.info.astrometry.precess(epoch, scan=self)</div>
+
+
+<div class="viewcode-block" id="Scan.calculate_equatorial">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.calculate_equatorial">[docs]</a>
+    def calculate_equatorial(self):
+        &quot;&quot;&quot;
+        Calculate the equatorial coordinates of the scan.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.info.astrometry.calculate_equatorial()</div>
+
+
+<div class="viewcode-block" id="Scan.calculate_apparent">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.calculate_apparent">[docs]</a>
+    def calculate_apparent(self):
+        &quot;&quot;&quot;
+        Calculate the apparent equatorial coordinates of the scan.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.info.astrometry.calculate_apparent()</div>
+
+
+<div class="viewcode-block" id="Scan.calculate_horizontal">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.calculate_horizontal">[docs]</a>
+    def calculate_horizontal(self):
+        &quot;&quot;&quot;
+        Calculate the horizontal coordinates of the scan.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.info.astrometry.calculate_horizontal()</div>
+
+
+<div class="viewcode-block" id="Scan.get_native_coordinates">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_native_coordinates">[docs]</a>
+    def get_native_coordinates(self):
+        &quot;&quot;&quot;
+        Return the native coordinates of the scan.
+
+        Returns
+        -------
+        SphericalCoordinates
+        &quot;&quot;&quot;
+        return self.info.astrometry.get_native_coordinates()</div>
+
+
+<div class="viewcode-block" id="Scan.get_position_reference">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_position_reference">[docs]</a>
+    def get_position_reference(self, system=None):
+        &quot;&quot;&quot;
+        Return position reference in the defined coordinate frame.
+
+        By default, the equatorial coordinates are returned, but many other
+        frame systems may be specified.  All astropy coordinate frames may
+        be used but may raise conversion errors depending on the type.  If
+        an error is encountered during conversion, or the frame system is
+        unavailable, equatorial coordinates will be returned.
+
+        Parameters
+        ----------
+        system : str
+            Name of the coordinate frame.  Available values are:
+            {&#39;horizontal&#39;, &#39;native&#39;, &#39;focalplane&#39;} and all Astropy frame
+            type names.  Note that focalplane is not currently implemented and
+            will raise an error.
+
+        Returns
+        -------
+        coordinates : SphericalCoordinates
+            Coordinates of the specified type.
+        &quot;&quot;&quot;
+        return self.info.astrometry.get_position_reference(system=system)</div>
+
+
+<div class="viewcode-block" id="Scan.get_first_integration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_first_integration">[docs]</a>
+    def get_first_integration(self):
+        &quot;&quot;&quot;
+        Return the first integration of the scan.
+
+        Returns
+        -------
+        integration : Integration or None
+            Will be `None` if no integrations exist.
+        &quot;&quot;&quot;
+        if self.size == 0:
+            return None
+        return self.integrations[0]</div>
+
+
+<div class="viewcode-block" id="Scan.get_last_integration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_last_integration">[docs]</a>
+    def get_last_integration(self):
+        &quot;&quot;&quot;
+        Return the last integration of the scan.
+
+        Returns
+        -------
+        integration : Integration or None
+            Will be `None` if no integrations exist.
+        &quot;&quot;&quot;
+        if self.size == 0:
+            return None
+        return self.integrations[-1]</div>
+
+
+<div class="viewcode-block" id="Scan.get_first_frame">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_first_frame">[docs]</a>
+    def get_first_frame(self):
+        &quot;&quot;&quot;
+        Return the first frame of the first integration.
+
+        Returns
+        -------
+        Frames
+        &quot;&quot;&quot;
+        return self.get_first_integration().get_first_frame()</div>
+
+
+<div class="viewcode-block" id="Scan.get_last_frame">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_last_frame">[docs]</a>
+    def get_last_frame(self):
+        &quot;&quot;&quot;
+        Return the last frame of the last integration.
+
+        Returns
+        -------
+        Frames
+        &quot;&quot;&quot;
+        return self.get_last_integration().get_last_frame()</div>
+
+
+<div class="viewcode-block" id="Scan.read">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.read">[docs]</a>
+    @abstractmethod
+    def read(self, filename, read_fully=True):
+        &quot;&quot;&quot;
+        Read a filename to populate the scan.
+
+        The read should validate the channels before instantiating integrations
+        for reading.
+
+        Parameters
+        ----------
+        filename : str
+            The name of the file to read.
+        read_fully : bool, optional
+            If `True`, perform a full read (default)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass  # pragma: no cover</div>
+
+
+<div class="viewcode-block" id="Scan.get_integration_instance">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_integration_instance">[docs]</a>
+    def get_integration_instance(self):
+        &quot;&quot;&quot;
+        Return an integration instance of the correct type for the scan.
+
+        Returns
+        -------
+        integration : Integration
+        &quot;&quot;&quot;
+        integration_class = get_integration_class(self.instrument_name)
+        integration = integration_class(self)
+        return integration</div>
+
+
+<div class="viewcode-block" id="Scan.merge_integrations">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.merge_integrations">[docs]</a>
+    def merge_integrations(self):
+        &quot;&quot;&quot;
+        Merge integrations as necessary.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.configuration.get_bool(&quot;subscan.merge&quot;):
+            return
+        if self.size &lt; 2:
+            return
+        log.info(f&quot;Merging {self.size} integrations.&quot;)
+
+        dt = self.info.instrument.sampling_interval
+        max_discontinuity = self.configuration.get_float(
+            &quot;subscan.merge.maxgap&quot;, default=np.nan) * units.Unit(&#39;second&#39;)
+
+        if np.isnan(max_discontinuity):
+            max_gap = np.inf
+        else:
+            max_gap = int(np.ceil(max_discontinuity / dt).decompose().value)
+
+        new_integrations = []
+        merged = self.integrations[0]
+        day = units.Unit(&#39;day&#39;)
+        # Remove invalid frames from the end
+        merged.trim(start=False, end=True)
+        last_mjd = merged.frames.get_last_frame_value(&#39;mjd&#39;) * day
+
+        for integration in self.integrations[1:]:
+            integration.trim(start=True, end=True)
+            next_mjd = integration.frames.get_first_frame_value(&#39;mjd&#39;) * day
+            gap = round_values(
+                ((next_mjd - last_mjd - dt) / dt).decompose().value)
+            last_mjd = integration.frames.get_last_frame_value(&#39;mjd&#39;) * day
+
+            if gap &gt; 0:
+                if gap &lt; max_gap:
+                    log.debug(f&quot;  &gt; Padding with {gap} frames before &quot;
+                              f&quot;integration {integration.get_id()}.&quot;)
+                    insert_indices = np.zeros(gap, dtype=int)
+                    integration.frames.insert_blanks(insert_indices)
+                else:
+                    log.debug(f&quot;  &gt; Large gap before &quot;
+                              f&quot;integration {integration.get_id()}. &quot;
+                              f&quot;Starting new merge.&quot;)
+                    new_integrations.append(merged)
+                    merged = integration
+                    continue
+
+            # Merge integration frames onto the merged integration.
+            merged.merge(integration)
+
+        merged.reindex()
+        new_integrations.append(merged)
+        self.integrations = new_integrations
+        self.sort_integrations()
+        log.info(&quot;  &gt; New total exposure times:&quot;)
+        for integration in self.integrations:
+            int_id, t = integration.get_id(), integration.get_exposure_time()
+            log.info(f&quot;  &gt; Integration {int_id}: {t}&quot;)</div>
+
+
+<div class="viewcode-block" id="Scan.get_pa">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_pa">[docs]</a>
+    def get_pa(self):
+        &quot;&quot;&quot;
+        Return the position angle derived from mid point values of frames.
+
+        The position angle is the mean of the position angle from the first
+        frame of the first integration, and the last frame of the last
+        integration.
+
+        Returns
+        -------
+        angle : astropy.units.Quantity
+            The position angle in degrees.
+        &quot;&quot;&quot;
+        angle1 = np.arctan2(self[0].frames.get_first_frame_value(&#39;sin_pa&#39;),
+                            self[0].frames.get_first_frame_value(&#39;cos_pa&#39;))
+
+        angle2 = np.arctan2(self[-1].frames.get_last_frame_value(&#39;sin_pa&#39;),
+                            self[-1].frames.get_last_frame_value(&#39;cos_pa&#39;))
+
+        return ((angle1 + angle2) / 2.0 * units.Unit(&#39;radian&#39;)).to(&#39;degree&#39;)</div>
+
+
+<div class="viewcode-block" id="Scan.get_summary_hdu">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_summary_hdu">[docs]</a>
+    def get_summary_hdu(self, configuration=None):
+        &quot;&quot;&quot;
+        Create a FITS HDU from the scan given a configuration.
+
+        Parameters
+        ----------
+        configuration : Configuration, optional
+            The configuration from which to create the HDU.  If not supplied
+            defaults to the scan configuration.
+
+        Returns
+        -------
+        astropy.io.fits.hdu.table.BinTableHDU
+        &quot;&quot;&quot;
+        if configuration is None:
+            configuration = self.configuration
+        get_details = configuration.get_bool(&#39;write.scandata.details&#39;)
+        full_table = None
+        for integration in self.integrations:
+            table = integration.get_fits_data()
+            if get_details:
+                table = integration.add_details(table)
+            if full_table is None:
+                full_table = table
+            else:
+                full_table = table_vstack((full_table, table))
+
+        hdu = fits.BinTableHDU(data=full_table)
+        self.edit_scan_header(hdu.header)
+        self.configuration.configuration_difference(configuration).edit_header(
+            hdu.header)
+
+        return hdu</div>
+
+
+<div class="viewcode-block" id="Scan.edit_scan_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.edit_scan_header">[docs]</a>
+    def edit_scan_header(self, header):
+        &quot;&quot;&quot;
+        Edit scan FITS header information.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The header to edit.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        header[&#39;EXTNAME&#39;] = f&quot;Scan-{self.get_id()}&quot;, &#39;Scan data&#39;
+        header[&#39;INSTRUME&#39;] = (f&quot;{self.info.instrument.name}&quot;,
+                              &#39;The instrument name&#39;)
+        header[&#39;SCANID&#39;] = self.get_id(), &#39;Scan ID.&#39;
+
+        if self.serial_number &gt; 0:
+            header[&#39;SCANNO&#39;] = self.serial_number, &#39;Serial number for the scan&#39;
+        if self.info.origin.descriptor is not None:
+            header[&#39;SCANSPEC&#39;] = (self.info.origin.descriptor,
+                                  &#39;Scan descriptor&#39;)
+        if self.info.origin.observer is not None:
+            header[&#39;OBSERVER&#39;] = (self.info.origin.observer,
+                                  &#39;Name(s) of the observer(s)&#39;)
+        if self.info.observation.project is not None:
+            header[&#39;PROJECT&#39;] = (self.info.observation.project,
+                                 &#39;Description of the project&#39;)
+        if self.info.origin.creator is not None:
+            header[&#39;CREATOR&#39;] = (self.info.origin.creator,
+                                 &quot;Software that wrote the scan data.&quot;)
+        if self.info.astrometry.time_stamp is not None:
+            header[&#39;DATE-OBS&#39;] = (self.info.astrometry.time_stamp,
+                                  &quot;Start of observation&quot;)
+
+        header[&#39;OBJECT&#39;] = (self.info.observation.source_name,
+                            &#39;Object catalog name&#39;)
+
+        system = &#39;FK5&#39; if self.equatorial.epoch.is_julian else &#39;FK4&#39;
+        header[&#39;RADESYS&#39;] = system, &#39;World coordinate system id&#39;
+
+        if np.isfinite(self.equatorial.ra):
+            header[&#39;RA&#39;] = (
+                str(self.equatorial.ra.to(&#39;hourangle&#39;).round(2).value),
+                &#39;Human Readable Right Ascension&#39;)
+
+        if np.isfinite(self.equatorial.dec):
+            header[&#39;DEC&#39;] = (
+                str(self.equatorial.dec.to(&#39;degree&#39;).round(1).value),
+                &#39;Human Readable Declination&#39;)
+
+        header[&#39;EQUINOX&#39;] = (self.equatorial.epoch.equinox.value,
+                             &#39;Precession epoch&#39;)
+        if np.isfinite(self.mjd):
+            header[&#39;MJD&#39;] = self.mjd, &#39;Modified Julian Day&#39;
+
+        if self.astrometry.ground_based:
+            if np.isfinite(self.lst):
+                header[&#39;LST&#39;] = (self.lst.to(&#39;hourangle&#39;).value,
+                                 &#39;Local Sidereal Time (hours)&#39;)
+            if self.horizontal is not None:
+                if np.isfinite(self.horizontal.az):
+                    header[&#39;AZ&#39;] = (self.horizontal.az.to(&#39;degree&#39;).value,
+                                    &#39;Azimuth (deg).&#39;)
+                if np.isfinite(self.horizontal.el):
+                    header[&#39;EL&#39;] = (self.horizontal.el.to(&#39;degree&#39;).value,
+                                    &#39;Elevation (deg).&#39;)
+            if self.site is not None:
+                header[&#39;SITELON&#39;] = (
+                    self.site.longitude.to(&#39;degree&#39;).round(1).value,
+                    &#39;Geodetic longitude of the observing site (deg)&#39;)
+                header[&#39;SITELAT&#39;] = (
+                    self.site.latitude.to(&#39;degree&#39;).round(1).value,
+                    &#39;Geodetic latitude of the observing site (deg)&#39;)
+
+            position_angle = self.get_pa()
+            if np.isfinite(position_angle):
+                header[&#39;PA&#39;] = (position_angle.to(&#39;degree&#39;).value,
+                                &#39;Direction of zenith w.r.t. North (deg)&#39;)
+
+        header[&#39;WEIGHT&#39;] = self.weight, &#39;Relative source weight of the scan&#39;
+        header[&#39;TRACKIN&#39;] = (
+            self.is_tracking,
+            &#39;Was the telescope tracking during the observation?&#39;)
+
+        if self.pointing is not None:
+            self.edit_pointing_header_info(header)
+        self.channels.edit_scan_header(header)</div>
+
+
+<div class="viewcode-block" id="Scan.edit_pointing_header_info">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.edit_pointing_header_info">[docs]</a>
+    def edit_pointing_header_info(self, header):
+        &quot;&quot;&quot;
+        Edit pointing information in a header.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The FITS header to edit.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.pointing is None:
+            return
+
+        relative = self.get_native_pointing_increment(self.pointing)
+
+        header[&#39;COMMENT&#39;] = &quot;&lt;------ Fitted Pointing / &quot; \
+                            &quot;Calibration Info ------&gt;&quot;
+        header[&#39;PNT_DX&#39;] = (relative.x.value,
+                            f&#39;({relative.unit}) pointing offset in native X.&#39;)
+        header[&#39;PNT_DY&#39;] = (relative.y.value,
+                            f&#39;({relative.unit}) pointing offset in native Y.&#39;)
+
+        self.pointing.edit_header(
+            header, size_unit=self.info.instrument.get_size_unit())</div>
+
+
+<div class="viewcode-block" id="Scan.set_source_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.set_source_model">[docs]</a>
+    def set_source_model(self, source_model):
+        &quot;&quot;&quot;
+        Set the source model based on whether pickling is enabled or not.
+
+        Parameters
+        ----------
+        source_model : SourceModel
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if (self.configuration.get_bool(&#39;source.pickle_scanmaps&#39;)
+                and isinstance(self.source_model_pickle_file, str)):
+            with open(self.source_model_pickle_file, &#39;wb&#39;) as f:
+                cloudpickle.dump(source_model, f)
+            self.source_model = None
+        else:
+            self.source_model = source_model</div>
+
+
+<div class="viewcode-block" id="Scan.get_observing_time">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_observing_time">[docs]</a>
+    def get_observing_time(self):
+        &quot;&quot;&quot;
+        Return the scan observing time in seconds.
+
+        Returns
+        -------
+        observing_time : astropy.units.Quantity
+            The observing time in seconds.
+        &quot;&quot;&quot;
+        observing_time = 0.0 * units.Unit(&#39;s&#39;)
+        if self.size == 0:
+            return observing_time
+
+        for integration in self.integrations:
+            discard_flag = ~(integration.flagspace.flags.CHOP_LEFT
+                             | integration.flagspace.flags.CHOP_RIGHT)
+            n_frames = integration.get_frame_count(discard_flag=discard_flag)
+            t = n_frames * integration.info.instrument.integration_time
+            observing_time += t
+
+        return observing_time</div>
+
+
+<div class="viewcode-block" id="Scan.get_frame_count">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_frame_count">[docs]</a>
+    def get_frame_count(self, keep_flag=None, discard_flag=None,
+                        match_flag=None):
+        &quot;&quot;&quot;
+        Return the number of frames in the scan.
+
+        Optionally provide flags to indicate which
+
+        Parameters
+        ----------
+        keep_flag : int or FrameFlagTypes
+        discard_flag : int or FrameFlagTypes
+        match_flag : int or FrameFlagTypes
+
+        Returns
+        -------
+        n_frames : int
+            The number of frames in the scan.
+        &quot;&quot;&quot;
+        if self.size == 0:
+            return 0
+        n_frames = 0
+        for integration in self.integrations:
+            n_frames += integration.get_frame_count(keep_flag=keep_flag,
+                                                    discard_flag=discard_flag,
+                                                    match_flag=match_flag)
+        return n_frames</div>
+
+
+<div class="viewcode-block" id="Scan.get_table_entry">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Return a parameter value for the given name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the parameter to retrieve.
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        if not self.have_horizontal() and (self.have_equatorial()
+                                           and self.have_site()):
+            self.horizontal = self.equatorial.to_horizontal(
+                self.site, self.lst)
+
+        source_model = self.get_source_model()
+
+        if source_model is None:
+            source_type = &#39;model&#39;
+        else:
+            source_type = source_model.logging_id
+
+        if name.startswith(&#39;?&#39;):
+            name = name[1:].lower()
+
+            value = self.configuration.get(name)
+            if value is None:
+                return None
+
+            if len(value) == 0:
+                # The configuration value exists, but is not set
+                return True
+
+            return value
+
+        source_key = f&#39;{source_type}.&#39;
+        if name.startswith(source_key):
+            if source_model is None:
+                return None
+            source_entry = &#39;&#39;.join(name.split(source_key)[1:])
+            return source_model.get_table_entry(source_entry)
+
+        point_key = &#39;pnt.&#39;
+        if name.startswith(point_key):
+            if self.pointing is None:
+                return None
+            return self.get_pointing_data().get(name[len(point_key):])
+
+        astro_key = &#39;src.&#39;
+        if name.startswith(astro_key):
+            if self.pointing is None:
+                return None
+            if not isinstance(source_model,
+                              AstroIntensityMap):  # pragma: no cover
+                # not reachable under normal circumstances
+                return None
+
+            astro_entry = name[len(astro_key):]
+            pointing = self.pointing.get_representation(source_model.map.grid)
+            pointing_data = pointing.get_data(
+                source_model.map,
+                size_unit=self.info.instrument.get_size_unit())
+            return pointing_data.get(astro_entry)
+
+        info = self.info
+        if name == &#39;object&#39;:
+            return self.source_name
+        if name == &#39;id&#39;:
+            return self.get_id()
+        if name == &#39;serial&#39;:
+            return self.serial_number
+        if name == &#39;MJD&#39;:
+            return self.mjd
+        if name == &#39;UT&#39;:
+            return self.mjd - np.floor(self.mjd)
+        if name == &#39;UTh&#39;:
+            return (self.mjd - np.floor(self.mjd)) * 24
+        if name == &#39;PA&#39;:
+            return self.get_pa().value
+        if name == &#39;PAd&#39;:
+            return self.get_pa().to(&#39;degree&#39;).value
+        if name == &#39;AZ&#39;:
+            if self.horizontal is None:
+                return None
+            else:
+                return self.horizontal.az.decompose().value
+        if name == &#39;EL&#39;:
+            if self.horizontal is None:
+                return None
+            else:
+                return self.horizontal.el.decompose().value
+        if name == &#39;RA&#39;:
+            return self.equatorial.ra.to(&#39;hourangle&#39;).value
+        if name == &#39;DEC&#39;:
+            return self.equatorial.dec.to(&#39;degree&#39;).value
+        if name == &#39;AZd&#39;:
+            if self.horizontal is None:
+                return None
+            else:
+                return self.horizontal.az.to(&#39;degree&#39;).value
+        if name == &#39;ELd&#39;:
+            if self.horizontal is None:
+                return None
+            else:
+                return self.horizontal.el.to(&#39;degree&#39;).value
+        if name == &#39;RAd&#39;:
+            return self.equatorial.ra.to(&#39;degree&#39;).value
+        if name == &#39;RAh&#39;:
+            two_pi = 2 * np.pi * units.Unit(&#39;radian&#39;)
+            ra_h = (self.equatorial.ra + two_pi).to(&#39;hourangle&#39;).value
+            return ra_h % 24
+        if name == &#39;DECd&#39;:
+            return self.equatorial.dec.to(&#39;degree&#39;).value
+        if name == &#39;epoch&#39;:
+            return str(self.equatorial.epoch)
+        if name == &#39;epochY&#39;:
+            return self.equatorial.epoch.year
+        if name == &#39;LST&#39;:
+            return self.lst.decompose().value
+        if name == &#39;LSTh&#39;:
+            return self.lst.to(&#39;hourangle&#39;).value
+        if name == &#39;date&#39;:
+            return Time(self.mjd, format=&#39;mjd&#39;, scale=&#39;utc&#39;).isot
+        if name == &#39;obstime&#39;:
+            return self.get_observing_time().to(&#39;second&#39;).value
+        if name == &#39;obsmins&#39;:
+            return self.get_observing_time().to(&#39;minute&#39;).value
+        if name == &#39;obshours&#39;:
+            return self.get_observing_time().to(&#39;hour&#39;).value
+        if name == &#39;weight&#39;:
+            return self.weight
+        if name == &#39;frames&#39;:
+            return self.get_frame_count(match_flag=0)
+        if name == &#39;project&#39;:
+            return info.observation.project
+        if name == &#39;observer&#39;:
+            return info.origin.observer
+        if name == &#39;creator&#39;:
+            return info.origin.creator
+        if name == &#39;integrations&#39;:
+            return self.size
+        if name == &#39;generation&#39;:
+            return self.get_source_generation()
+
+        if isinstance(info, WeatherInfo):
+            if name == &#39;Tamb&#39;:
+                return info.get_ambient_kelvins().to(
+                    &#39;Celsius&#39;, equivalencies=units.temperature()).value
+            if name == &#39;humidity&#39;:
+                return info.get_ambient_humidity().value
+            if name == &#39;pressure&#39;:
+                return info.get_ambient_pressure().to(&#39;hPa&#39;).value
+            if name == &#39;windspeed&#39;:
+                return info.get_wind_speed().to(&#39;m/s&#39;).value
+            if name == &#39;windpeak&#39;:
+                return info.get_wind_peak().to(&#39;m/s&#39;).value
+            if name == &#39;winddir&#39;:
+                return info.get_wind_direction().to(&#39;degree&#39;).value
+
+        if source_model is not None:
+            model_entry = source_model.get_table_entry(name)
+            if model_entry is not None:
+                return model_entry
+
+        if self.size &gt; 0:
+            return self.get_first_integration().get_table_entry(name)
+
+        return None</div>
+
+
+<div class="viewcode-block" id="Scan.get_source_generation">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_source_generation">[docs]</a>
+    def get_source_generation(self):
+        &quot;&quot;&quot;
+        Return the source generation.
+
+        Returns
+        -------
+        source_generation : int
+        &quot;&quot;&quot;
+        max_generation = 0
+        if self.integrations is None:
+            return max_generation
+        for integration in self.integrations:
+            if integration.source_generation &gt; max_generation:
+                max_generation = integration.source_generation
+        return max_generation</div>
+
+
+<div class="viewcode-block" id="Scan.write_products">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.write_products">[docs]</a>
+    def write_products(self):
+        &quot;&quot;&quot;
+        Write the scan information to file.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.size &gt; 0:
+            for integration in self.integrations:
+                integration.write_products()
+
+        if not self.configuration.get_bool(&#39;lab&#39;):
+            self.report_focus()
+            self.report_pointing()</div>
+
+
+<div class="viewcode-block" id="Scan.report_focus">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.report_focus">[docs]</a>
+    def report_focus(self):
+        &quot;&quot;&quot;
+        Report the focus information for the scan.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.pointing is not None:
+            log.info(f&quot;Instant Focus Results for Scan {self.get_id()}:\n\n&quot;
+                     f&quot;{self.get_focus_string()}&quot;)
+        elif self.has_option(&#39;pointing&#39;):
+            source_model = self.get_source_model()
+            if source_model.is_valid():
+                method = self.configuration.get_string(&#39;pointing&#39;)
+                if method in [&#39;suggest&#39;, &#39;auto&#39;]:
+                    log.warning(
+                        f&quot;Cannot suggest focus for scan {self.get_id()}.&quot;)</div>
+
+
+<div class="viewcode-block" id="Scan.report_pointing">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.report_pointing">[docs]</a>
+    def report_pointing(self):
+        &quot;&quot;&quot;
+        Return the pointing results for the scan.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.pointing is not None:
+            log.info(f&quot;Pointing Results for Scan {self.get_id()}:\n\n&quot;
+                     f&quot;{self.get_pointing_string()}&quot;)
+        elif self.has_option(&#39;pointing&#39;):
+            source_model = self.get_source_model()
+            if source_model is not None:
+                method = self.configuration.get_string(&#39;pointing&#39;)
+                if method in [&#39;suggest&#39;, &#39;auto&#39;]:
+                    log.warning(
+                        f&quot;Cannot suggest pointing for scan {self.get_id()}.&quot;)</div>
+
+
+<div class="viewcode-block" id="Scan.split">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.split">[docs]</a>
+    def split(self):
+        &quot;&quot;&quot;
+        Split this scan into multiple scans.
+
+        Returns a list of scans each containing a single integration.
+
+        Returns
+        -------
+        list (Scan)
+        &quot;&quot;&quot;
+        log.info(&quot;Splitting subscans into separate scans.&quot;)
+        if self.size &lt;= 1:
+            return [self]
+
+        scans = []
+        for integration in self.integrations:
+            scan = self.copy()
+            scan.integrations = []
+            scan.channels = integration.channels
+            integration.scan = scan
+            scan.integrations = [integration]
+            scans.append(scan)
+
+        return scans</div>
+
+
+<div class="viewcode-block" id="Scan.update_gains">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.update_gains">[docs]</a>
+    def update_gains(self, modality_name):
+        &quot;&quot;&quot;
+        Update all gains in the scan for a given modality.
+
+        Parameters
+        ----------
+        modality_name : str
+            The name of the modality
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.configuration.get_bool(&#39;gains&#39;):
+            return
+        if self.has_option(f&#39;correlated.{modality_name}.nogains&#39;):
+            return
+        robust = self.configuration.get_string(&#39;gains.estimator&#39;) == &#39;median&#39;
+        have_gains = False
+        gains = np.zeros(self.channels.size, dtype=np.float64)
+        gain_weights = np.zeros(self.channels.size, dtype=np.float64)
+        for integration in self.integrations:
+            modality = integration.channels.modalities.get(modality_name)
+            if modality is None:
+                continue
+            if modality.trigger is not None:
+                if not self.configuration.check_trigger(modality.trigger):
+                    continue
+            modality.average_gains(integration, gains, gain_weights,
+                                   robust=robust)
+            have_gains = True
+
+        if not have_gains:
+            return
+
+        # Apply the gain increment
+        for integration in self.integrations:
+            modality = integration.channels.modalities.get(modality_name)
+            if modality is None:  # pragma: no cover
+                # not reachable under normal conditions
+                continue
+            flagged = modality.apply_gains(integration, gains, gain_weights)
+            if flagged:
+                integration.channels.census()
+                integration.comments.append(
+                    f&#39;{integration.channels.n_mapping_channels}&#39;)</div>
+
+
+<div class="viewcode-block" id="Scan.decorrelate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.decorrelate">[docs]</a>
+    def decorrelate(self, modality_name):
+        &quot;&quot;&quot;
+        Decorrelate a modality.
+
+        Parameters
+        ----------
+        modality_name : str
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.configuration.get_bool(f&#39;correlated.{modality_name}&#39;):
+            log.debug(f&quot;correlated.{modality_name} is not configured: will &quot;
+                      f&quot;not decorrelate.&quot;)
+            return
+
+        robust = self.configuration.get_string(&#39;estimator&#39;) == &#39;median&#39;
+        if (self.configuration.get_bool(f&#39;correlated.{modality_name}.span&#39;)
+                or self.configuration.get_bool(&#39;gains.span&#39;)):
+            for integration in self.integrations:
+                integration.decorrelate_signals(modality_name, robust=robust)
+            self.update_gains(modality_name)
+        else:
+            for integration in self.integrations:
+                integration.decorrelate(modality_name, robust=robust)
+        for integration in self.integrations:
+            if integration.comments is None or len(integration.comments) == 0:
+                integration.comments = [&#39; &#39;]
+            elif integration.comments[-1] != &#39; &#39;:
+                integration.comments.append(&#39; &#39;)</div>
+
+
+<div class="viewcode-block" id="Scan.perform">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.perform">[docs]</a>
+    def perform(self, task):
+        &quot;&quot;&quot;
+        Perform a reduction task on the scan.
+
+        Parameters
+        ----------
+        task : str
+            The name of the task.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if task.startswith(&#39;correlated.&#39;):
+            self.decorrelate(task.split(&#39;.&#39;)[1])
+        else:
+            for integration in self.integrations:
+                integration.perform(task)</div>
+
+
+<div class="viewcode-block" id="Scan.get_id">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_id">[docs]</a>
+    def get_id(self):
+        &quot;&quot;&quot;
+        Return the scan simple ID.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if self.serial_number is None:
+            return &#39;1&#39;
+        else:
+            return str(self.serial_number)</div>
+
+
+<div class="viewcode-block" id="Scan.get_pointing_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_pointing_data">[docs]</a>
+    def get_pointing_data(self):
+        &quot;&quot;&quot;
+        Return pointing data information.
+
+        Returns
+        -------
+        data : dict
+        &quot;&quot;&quot;
+        if self.pointing is None:
+            raise ValueError(f&quot;No pointing data for scan {self.get_id()}&quot;)
+
+        relative = self.get_native_pointing_increment(self.pointing)
+        absolute = self.get_native_pointing(self.pointing)
+        data = {}
+
+        if isinstance(relative, SphericalCoordinates):
+            name_x = relative.longitude_axis.short_label
+            name_y = relative.latitude_axis.short_label
+        else:
+            name_x = &#39;X&#39;
+            name_y = &#39;Y&#39;
+
+        size_unit = self.info.instrument.get_size_unit()
+        data[&#39;dX&#39;] = relative.x.to(size_unit)
+        data[&#39;dY&#39;] = relative.y.to(size_unit)
+        data[f&#39;d{name_x}&#39;] = relative.x.to(size_unit)
+        data[f&#39;d{name_y}&#39;] = relative.y.to(size_unit)
+        data[name_x] = absolute.x.to(size_unit)
+        data[name_y] = absolute.y.to(size_unit)
+
+        # Print Nasmyth offsets if applicable
+        mount = self.info.instrument.mount
+        if mount == Mount.LEFT_NASMYTH or mount == Mount.RIGHT_NASMYTH:
+            nasmyth = self.get_nasmyth_offset(relative)
+            data[&#39;dNasX&#39;] = nasmyth.x.to(size_unit)
+            data[&#39;dNasY&#39;] = nasmyth.y.to(size_unit)
+            nasmyth = self.get_nasmyth_offset(absolute)
+            data[&#39;NasX&#39;] = nasmyth.x.to(size_unit)
+            data[&#39;NasY&#39;] = nasmyth.y.to(size_unit)
+
+        percent = units.Unit(&#39;percent&#39;)
+        asymmetry = self.get_source_asymmetry(self.pointing)
+        data[&#39;asymX&#39;] = 100 * asymmetry.x * percent
+        data[&#39;asymY&#39;] = 100 * asymmetry.y * percent
+        data[&#39;dasymX&#39;] = 100 * asymmetry.x_rms * percent
+        data[&#39;dasymY&#39;] = 100 * asymmetry.y_rms * percent
+
+        if isinstance(self.pointing, EllipticalSource):
+            ellipse = self.pointing
+            data[&#39;elong&#39;] = 100 * percent * ellipse.elongation
+            data[&#39;delong&#39;] = 100 * percent * ellipse.elongation_rms
+            data[&#39;angle&#39;] = ellipse.position_angle.to(&#39;degree&#39;)
+            data[&#39;dangle&#39;] = ellipse.position_angle.to(&#39;degree&#39;)
+            (elongation_x,
+             elongation_rms) = self.get_source_elongation_x(ellipse)
+            data[&#39;elongX&#39;] = 100 * percent * elongation_x
+            data[&#39;delongX&#39;] = 100 * percent * elongation_rms
+
+        return data</div>
+
+
+<div class="viewcode-block" id="Scan.get_pointing_string">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_pointing_string">[docs]</a>
+    def get_pointing_string(self):
+        &quot;&quot;&quot;
+        Return a string representing the pointing information.
+
+        Returns
+        -------
+        info : str
+        &quot;&quot;&quot;
+        info = [&#39;&#39;]
+        source_model = self.get_source_model()
+        if isinstance(source_model, AstroIntensityMap):
+            info.extend(self.pointing.pointing_info(source_model.map))
+
+        increment = self.get_native_pointing_increment(self.pointing)
+        info.append(self.get_pointing_string_from_increment(increment))
+        return &#39;\n&#39;.join(info)</div>
+
+
+<div class="viewcode-block" id="Scan.get_source_asymmetry">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_source_asymmetry">[docs]</a>
+    def get_source_asymmetry(self, region):
+        &quot;&quot;&quot;
+        Return the source model asymmetry.
+
+        Parameters
+        ----------
+        region : CircularRegion
+
+        Returns
+        -------
+        Asymmetry2D
+        &quot;&quot;&quot;
+        source = self.get_source_model()
+        if not isinstance(source, AstroIntensityMap):
+            return None
+        radial_range = Range()
+        point_size = self.info.instrument.get_point_size()
+        radial_range.min = point_size
+        radial_range.max = self.configuration.get_float(
+            &#39;focus.r&#39;, default=2.5) * point_size
+
+        if (not source.grid.is_equatorial()) or source.grid.is_horizontal():
+            return region.get_asymmetry_2d(
+                image=source.map,
+                angle=0.0 * units.Unit(&#39;radian&#39;),
+                radial_range=radial_range)
+
+        if self.astrometry.ground_based and source.grid.is_equatorial():
+            angle = self.get_pa()
+        else:
+            angle = 0.0 * units.Unit(&#39;radian&#39;)
+
+        return region.get_asymmetry_2d(image=source.map.get_significance(),
+                                       angle=angle,
+                                       radial_range=radial_range)</div>
+
+
+<div class="viewcode-block" id="Scan.get_source_elongation_x">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_source_elongation_x">[docs]</a>
+    def get_source_elongation_x(self, ellipse):
+        &quot;&quot;&quot;
+        Return the elliptical source elongation in x.
+
+        Parameters
+        ----------
+        ellipse : EllipticalSource
+
+        Returns
+        -------
+        elongation_x, elongation_x_weight : float, float
+        &quot;&quot;&quot;
+        elongation = ellipse.elongation
+        weight = ellipse.elongation_weight
+        angle = ellipse.position_angle
+
+        if self.astrometry.ground_based and isinstance(
+                self.pointing.coordinates, EquatorialCoordinates):
+            angle -= self.get_pa()
+
+        factor = np.cos(2 * angle)
+        if isinstance(factor, units.Quantity):
+            factor = factor.value
+        elongation *= factor
+        weight /= factor ** 2
+        return elongation, weight</div>
+
+
+<div class="viewcode-block" id="Scan.get_focus_string">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_focus_string">[docs]</a>
+    def get_focus_string(self, asymmetry=None, elongation=None, weight=None):
+        &quot;&quot;&quot;
+        Return a string representing focus.
+
+        Parameters
+        ----------
+        asymmetry : Asymmetry2D, optional
+            The source asymmetry.  If not supplied, will be determined from the
+            scan pointing.
+        elongation : float, optional
+            The elongation of the source in x.  If not supplied, will be
+            determined from the pointing elongation.
+        weight : float, optional
+            The weight of the elongation.  If not supplied will be determined
+            from the pointing elongation.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if asymmetry is None:
+            asymmetry = self.get_source_asymmetry(self.pointing)
+
+        if elongation is None or weight is None:
+            if isinstance(self.pointing, EllipticalSource):
+                e, w = self.get_source_elongation_x(self.pointing)
+            else:
+                e = w = None
+            elongation = e if elongation is None else elongation
+            weight = w if weight is None else weight
+
+        result = &quot;&quot; if asymmetry is None else f&quot;{asymmetry}\n&quot;
+        if elongation is not None:
+            result += f&quot;  Elongation: {elongation * 100:.3f}%\n&quot;
+
+        relative_fwhm = (
+            self.pointing.fwhm / self.get_point_size()).decompose().value
+        force_focus = self.has_option(&#39;focus&#39;)
+        if force_focus or (0.8 &lt; relative_fwhm &lt;= 2.0):
+            focus = InstantFocus()
+            focus.derive_from(self.configuration,
+                              asymmetry=asymmetry,
+                              elongation=elongation,
+                              elongation_weight=weight)
+            result += self.info.instrument.get_focus_string(focus)
+        else:
+            if relative_fwhm &lt;= 0.8:
+                log.warning(&quot;Source FWHM unrealistically low&quot;)
+            else:
+                log.warning(&quot;Source is either too extended or too defocused.\n&quot;
+                            &quot;No focus correction is suggested. You can force\n&quot;
+                            &quot;calculate suggested focus values by setting\n&quot;
+                            &quot;&#39;focus&#39; option when running SOFSCAN.&quot;)
+
+        return result</div>
+
+
+<div class="viewcode-block" id="Scan.get_point_size">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_point_size">[docs]</a>
+    def get_point_size(self):
+        &quot;&quot;&quot;
+        Return the point size of the scan.
+
+        The point size will be the maximum of either the scan or source model
+        (if available).
+
+        Returns
+        -------
+        astropy.units.Quantity
+            The point size.
+        &quot;&quot;&quot;
+        point_size = self.info.instrument.get_point_size()
+        source_model = self.get_source_model()
+        if source_model is None:
+            return point_size
+        return max(point_size, source_model.get_point_size())</div>
+
+
+<div class="viewcode-block" id="Scan.get_pointing_string_from_increment">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_pointing_string_from_increment">[docs]</a>
+    def get_pointing_string_from_increment(self, increment):
+        &quot;&quot;&quot;
+        Return a pointing string given an increment offset.
+
+        Parameters
+        ----------
+        increment : Offset2D
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if increment is None:
+            return &#39;&#39;
+        size_unit = self.info.instrument.get_size_unit()
+        try:
+            coordinates = increment.get_coordinate_class()()
+            system = coordinates.local_coordinate_system
+            name_x = system.axes[0].short_label
+            name_y = system.axes[1].short_label
+        except Exception as err:
+            log.warning(f&quot;Could not retrieve local coordinate system.  Using &quot;
+                        f&quot;(x,y) default: {err}&quot;)
+            name_x = &#39;x&#39;
+            name_y = &#39;y&#39;
+
+        result = f&quot;  Offset: {increment.x.to(size_unit):.3f}, &quot;
+        result += f&quot;{increment.y.to(size_unit):.3f} ({name_x}, {name_y})&quot;
+
+        # Also print Nasmyth offsets if applicable
+        if (self.info.instrument.mount == Mount.LEFT_NASMYTH
+                or self.info.instrument.mount == Mount.RIGHT_NASMYTH):
+            nasmyth = self.get_nasmyth_offset(increment)
+            result += f&quot;\n  Offset: {nasmyth.x.to(size_unit)}, &quot;
+            result += f&quot;{nasmyth.y.to(size_unit)} (nasmyth)&quot;
+
+        return result</div>
+
+
+<div class="viewcode-block" id="Scan.get_equatorial_pointing">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_equatorial_pointing">[docs]</a>
+    def get_equatorial_pointing(self, source):
+        &quot;&quot;&quot;
+        Return the equatorial pointing.
+
+        Parameters
+        ----------
+        source : GaussianSource
+
+        Returns
+        -------
+        coordinates : Coordinate2D
+        &quot;&quot;&quot;
+        source_coordinates = source.coordinates
+        source_model = self.get_source_model()
+        if source_coordinates.__class__ != source_model.reference.__class__:
+            raise ValueError(&quot;Pointing source is in a different coordinate &quot;
+                             &quot;system from source model.&quot;)
+
+        if isinstance(source_coordinates, EquatorialCoordinates):
+            reference = source_model.reference
+            if source_coordinates.epoch != self.equatorial.epoch:
+                source_coordinates.precess(self.equatorial.epoch)
+        else:
+            equatorial_coordinates = self.equatorial.copy()
+            reference = self.equatorial.copy()
+            source_coordinates.to_equatorial(equatorial_coordinates)
+            source_model.reference.to_equatorial(reference)
+            self.set_source_model(source_model)
+
+        return source_coordinates.get_offset_from(reference)</div>
+
+
+<div class="viewcode-block" id="Scan.get_native_pointing">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_native_pointing">[docs]</a>
+    def get_native_pointing(self, source):
+        &quot;&quot;&quot;
+        Get the native pointing from a Gaussian source.
+
+        Parameters
+        ----------
+        source : GaussianSource
+
+        Returns
+        -------
+        Offset2D
+        &quot;&quot;&quot;
+        pointing = self.get_native_pointing_increment(source)
+        if (self.pointing_correction is not None
+                and self.pointing_correction.size &gt; 0):
+            pointing.add(self.pointing_correction)
+        return pointing</div>
+
+
+<div class="viewcode-block" id="Scan.get_native_pointing_increment">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_native_pointing_increment">[docs]</a>
+    def get_native_pointing_increment(self, source):
+        &quot;&quot;&quot;
+        Return the native pointing increment of the map from the pointing.
+
+        Parameters
+        ----------
+        source : GaussianSource
+
+        Returns
+        -------
+        Offset2D
+        &quot;&quot;&quot;
+        source_model = self.get_source_model()
+
+        if source.coordinates.__class__ != source_model.reference.__class__:
+            raise ValueError(&quot;pointing source is in a different coordinate &quot;
+                             &quot;system from the source model.&quot;)
+
+        source_coordinates = source.coordinates
+        native_coordinates = self.get_native_coordinates()
+        reference = source_model.get_reference()
+
+        if source_coordinates.__class__ == native_coordinates.__class__:
+            return Offset2D(
+                reference,
+                coordinates=source_coordinates.get_offset_from(reference))
+
+        elif isinstance(source_coordinates, EquatorialCoordinates):
+            source_offsets = source_coordinates.get_offset_from(reference)
+            source_offset = Offset2D(reference, coordinates=source_offsets)
+            return self.get_native_offset_of(source_offset)
+
+        elif isinstance(source_coordinates, CelestialCoordinates):
+            source_equatorial = source_coordinates.to_equatorial()
+            reference_equatorial = reference.to_equatorial()
+            source_offsets = source_equatorial.get_offset_from(
+                reference_equatorial)
+            source_offset = Offset2D(
+                reference_equatorial, coordinates=source_offsets)
+            return self.get_native_offset_of(source_offset)
+
+        elif isinstance(source_coordinates, FocalPlaneCoordinates):
+            offset = source_coordinates.get_offset_from(reference)
+            first_frame = self.get_first_integration().get_first_frame()
+            last_frame = self.get_last_integration().get_last_frame()
+            first_angle = np.atleast_1d(first_frame.get_rotation())
+            last_angle = np.atleast_1d(last_frame.get_rotation())
+            angle = 0.5 * (first_angle[0] + last_angle[0])
+            Coordinate2D.rotate_offsets(offset, -angle)
+            return Offset2D(FocalPlaneCoordinates([0.0, 0.0]), offset)
+
+        else:  # pragma: no cover
+            # not reachable under normal circumstances
+            return None</div>
+
+
+<div class="viewcode-block" id="Scan.get_native_offset_of">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_native_offset_of">[docs]</a>
+    def get_native_offset_of(self, equatorial_offset):
+        &quot;&quot;&quot;
+        Get the native offset of equatorial offsets.
+
+        Parameters
+        ----------
+        equatorial_offset : Offset2D
+            The equatorial (x, y) offsets w.r.t. a reference position.
+
+        Returns
+        -------
+        Offset2D
+        &quot;&quot;&quot;
+
+        if not isinstance(equatorial_offset.get_coordinate_class()(),
+                          EquatorialCoordinates):
+            raise ValueError(&quot;Not an equatorial offset.&quot;)
+
+        offset = Coordinate2D(equatorial_offset)
+        from_offset = self.get_first_frame().equatorial_to_native_offset(
+            equatorial_offset.copy())
+        to_offset = self.get_last_frame().equatorial_to_native_offset(
+            equatorial_offset.copy())
+        offset.set_x(0.5 * (from_offset.x + to_offset.x), copy=False)
+        offset.set_y(0.5 * (from_offset.y + to_offset.y), copy=False)
+        return Offset2D(self.get_native_coordinates(), coordinates=offset)</div>
+
+
+<div class="viewcode-block" id="Scan.get_nasmyth_offset">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_nasmyth_offset">[docs]</a>
+    def get_nasmyth_offset(self, pointing):
+        &quot;&quot;&quot;
+        Return the Nasmyth pointing offset w.r.t the reference position.
+
+        Parameters
+        ----------
+        pointing : Offset2D
+
+        Returns
+        -------
+        Coordinate2D
+        &quot;&quot;&quot;
+        reference = self.get_native_coordinates()
+        if pointing.get_coordinate_class() != reference.__class__:
+            raise ValueError(&quot;Non-native pointing offset.&quot;)
+        if self.info.instrument.mount == Mount.LEFT_NASMYTH:
+            sin_a = -reference.sin_lat
+        else:
+            sin_a = reference.sin_lat
+        cos_a = reference.cos_lat
+        nasmyth = Coordinate2D()
+        nasmyth.set_x((cos_a * pointing.x) + (sin_a * pointing.y), copy=False)
+        nasmyth.set_y((cos_a * pointing.y) - (sin_a * pointing.x), copy=False)
+        return nasmyth</div>
+
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the scan.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return f&#39;Scan {self.get_id()}&#39;
+
+<div class="viewcode-block" id="Scan.segment_to">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.segment_to">[docs]</a>
+    def segment_to(self, segment_time):
+        &quot;&quot;&quot;
+        Split integrations such that each are approximately the same length.
+
+        Integrations are merged together, and then split such that each
+        integration is of length `segment_time`.  All previous dependents,
+        signals, and filter objects will unset.
+
+        Parameters
+        ----------
+        segment_time : astropy.units.Quantity
+            The maximum time for an integration.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.size &gt; 1:
+            self.merge_integrations()
+        merged = self.integrations[0]
+        n_frames = merged.frames_for(segment_time)
+        n_segments = numba_functions.roundup_ratio(merged.size, n_frames)
+        if n_segments &lt;= 1:
+            return
+
+        log.info(f&quot;Segmenting into {n_segments} integrations.&quot;)
+        integrations = []
+        for i in range(n_segments):
+            start_frame = i * n_frames
+            end_frame = np.clip(start_frame + n_frames, None, merged.size)
+            new_integration = merged.clone()
+            new_integration.frames = merged.frames[start_frame:end_frame]
+            new_integration.frames.integration = new_integration
+            new_integration.integration_number = i
+            new_integration.reindex()
+
+            integrations.append(new_integration)
+
+        self.integrations = integrations</div>
+
+
+<div class="viewcode-block" id="Scan.time_order_scans">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.time_order_scans">[docs]</a>
+    @staticmethod
+    def time_order_scans(scans):
+        &quot;&quot;&quot;
+        Return a list or scans in time order (by MJD).
+
+        Parameters
+        ----------
+        scans : list (Scan)
+            A list of scans.
+
+        Returns
+        -------
+        list (Scan)
+        &quot;&quot;&quot;
+        result = []
+        indices = np.argsort([scan.mjd for scan in scans])
+        for index in indices:
+            result.append(scans[index])
+        return result</div>
+
+
+<div class="viewcode-block" id="Scan.calculate_precessions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.calculate_precessions">[docs]</a>
+    def calculate_precessions(self, epoch):
+        &quot;&quot;&quot;
+        Calculate the precessions to and from the apparent coordinates.
+
+        epoch : int or float or str or Epoch
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.info.astrometry.calculate_precessions(epoch)</div>
+
+
+<div class="viewcode-block" id="Scan.frame_midpoint_value">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.frame_midpoint_value">[docs]</a>
+    def frame_midpoint_value(self, frame_field):
+        &quot;&quot;&quot;
+        Return the midpoint value of a given frame field.
+
+        The midpoint is defined as the mean of the first valid frame value from
+        the first integration, and the last frame of the last integration.
+
+        Parameters
+        ----------
+        frame_field : str
+            The name of the frame field.
+
+        Returns
+        -------
+        midpoint
+        &quot;&quot;&quot;
+        frames1 = self.get_first_integration().frames
+        frames2 = self.get_last_integration().frames
+        value1 = getattr(frames1, frame_field, None)
+        if value1 is None:
+            raise ValueError(f&quot;{frames1} does not contain a &quot;
+                             f&quot;{frame_field} field.&quot;)
+        value2 = getattr(frames1, frame_field, None)
+        value1 = value1[frames1.get_first_frame_index()]
+        value2 = value2[frames2.get_last_frame_index()]
+        return (value1 + value2) / 2</div>
+
+
+<div class="viewcode-block" id="Scan.sort_integrations">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.sort_integrations">[docs]</a>
+    def sort_integrations(self):
+        &quot;&quot;&quot;
+        Sort scan integrations based on MJD.
+
+        The integration IDs are also updated.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        mjds = [x.frames.get_first_frame_value(&#39;mjd&#39;)
+                for x in self.integrations]
+        sort_idx = list(np.argsort(mjds))
+        new_integrations = []
+        for i, idx in enumerate(sort_idx):
+            integration = self.integrations[idx]
+            integration.integration_number = i
+            new_integrations.append(integration)
+        self.integrations = new_integrations</div>
+
+
+<div class="viewcode-block" id="Scan.get_source_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.scan.scan.Scan.html#sofia_redux.scan.scan.scan.Scan.get_source_model">[docs]</a>
+    def get_source_model(self):
+        &quot;&quot;&quot;
+        Return the source model which may be loaded from file.
+
+        Returns
+        -------
+        SourceModel or None
+        &quot;&quot;&quot;
+        if self.source_model is not None:
+            return self.source_model
+        elif isinstance(self.source_model_pickle_file, str) and os.path.isfile(
+                self.source_model_pickle_file):
+            with open(self.source_model_pickle_file, &#39;rb&#39;) as f:
+                source_model = cloudpickle.load(f)
+                source_model.set_info(self.info)
+                source_model.reduction = self.reduction
+                source_model.scans = [self]
+                return source_model
+        else:
+            return None</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

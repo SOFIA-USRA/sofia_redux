@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.fifi_ls.split_grating_and_chop &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.fifi_ls.split_grating_and_chop</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from datetime import datetime
+import os
+
+from astropy import log
+from astropy.io import fits
+from astropy.table import Table
+from astropy.time import Time
+import numpy as np
+
+from sofia_redux.instruments.fifi_ls.make_header import make_header
+from sofia_redux.toolkit.utilities \
+    import (hdinsert, write_hdul, gethdul, multitask, valid_num)
+
+
+__all__ = [&#39;get_channel&#39;, &#39;get_split_params&#39;, &#39;trim_data&#39;,
+           &#39;name_output_files&#39;, &#39;separate_chops&#39;,
+           &#39;split_grating_and_chop&#39;, &#39;wrap_split_grating_and_chop&#39;]
+
+
+<div class="viewcode-block" id="get_channel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.split_grating_and_chop.get_channel.html#sofia_redux.instruments.fifi_ls.split_grating_and_chop.get_channel">[docs]</a>
+def get_channel(hdul, channel_index=3):
+    &quot;&quot;&quot;
+    Returns RED or BLUE channel extracted from header and data.
+
+    If the channel cannot be read from the prime header, it is read
+    from the data header.
+
+    Parameters
+    ----------
+    hdul : fits.HDUList
+    channel_index : int, optional
+        data header location determining channel
+
+    Returns
+    -------
+    str
+        RED, BLUE, or UNKNOWN
+    &quot;&quot;&quot;
+    channel = str(hdul[0].header.get(&#39;CHANNEL&#39;, &#39;UNKNOWN&#39;))
+    result = &#39;UNKNOWN&#39;
+    channel = channel.strip().upper()
+    if valid_num(channel):
+        if channel == &#39;1&#39;:
+            result = &#39;BLUE&#39;
+        elif channel == &#39;0&#39;:
+            result = &#39;RED&#39;
+    elif channel != &#39;UNKNOWN&#39;:
+        if channel in [&#39;BLUE&#39;, &#39;RED&#39;]:
+            result = channel
+    else:
+        blue = (hdul[1].data[&#39;HEADER&#39;][0][channel_index] &amp; 2) // 2 == 1
+        result = &#39;BLUE&#39; if blue else &#39;RED&#39;
+    return result</div>
+
+
+
+<div class="viewcode-block" id="get_split_params">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.split_grating_and_chop.get_split_params.html#sofia_redux.instruments.fifi_ls.split_grating_and_chop.get_split_params">[docs]</a>
+def get_split_params(hdul, channel_index=3, sample_index=4,
+                     ramp_index=5):
+    &quot;&quot;&quot;
+    Check if a file can be split by basic header checks.  If so,
+    return the necessary parameters for splitting the file.
+
+    Parameters
+    ----------
+    hdul : fits.HDUList
+    channel_index : int, optional
+        data header index indicating channel
+    sample_index : int, optional
+        data header index indicating number of samples in data
+    ramp_index : int, optional
+        data header index indicating number of ramps in data
+
+    Returns
+    -------
+    dict
+        G_STRT (int) -&gt; grating/inductosyn start
+        G_PSUP (int) -&gt; number of grating positions going up
+        G_SZUP (int) -&gt; step size on the way up
+        G_PSDN (int) -&gt; number of grating positions coming down
+        G_SZDN (int) -&gt; step size on the way down
+        G_CYC (int) -&gt; number of grating sweeps (up-down)
+        C_CYC (int) -&gt; number of chop cycles per grating position
+        P_STRT (int) -&gt; primary array start
+        P_PSUP (int) -&gt; primary array number of positions going up
+        P_SZUP (int) -&gt; primary array step size on the way up
+        RAMPLN (int) -&gt; ramp length
+        CHOPLN (int) -&gt; chop length
+        C_AMP (float) -&gt; chop amplitude
+        CHANNEL (str) -&gt; channel &#39;RED&#39; or &#39;BLUE&#39;
+        success (bool) -&gt; True indicates all parameters are valid
+    &quot;&quot;&quot;
+    x = {&#39;success&#39;: True}
+    header = hdul[0].header
+    chop_scheme = str(header.get(&#39;C_SCHEME&#39;, &#39;UNKNOWN&#39;)).strip()
+    fname = header.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;)
+    if chop_scheme != &#39;2POINT&#39;:
+        log.error(&quot;Invalid chopper scheme for file %s&quot; % fname)
+        x[&#39;success&#39;] = False
+    try:
+        x[&#39;C_SCHEME&#39;] = int(chop_scheme[0])
+    except ValueError:
+        x[&#39;success&#39;] = False
+        x[&#39;C_SCHEME&#39;] = None
+
+    x[&#39;channel_index&#39;] = channel_index
+    x[&#39;sample_index&#39;] = sample_index
+    x[&#39;ramp_index&#39;] = ramp_index
+
+    x[&#39;CHANNEL&#39;] = get_channel(hdul, channel_index=x[&#39;channel_index&#39;])
+    if x[&#39;CHANNEL&#39;] not in [&#39;RED&#39;, &#39;BLUE&#39;]:
+        log.error(&quot;Invalid spectral channel for file %s&quot; % fname)
+        x[&#39;success&#39;] = False
+    hdinsert(header, &#39;CHANNEL&#39;, x[&#39;CHANNEL&#39;], comment=&#39;Detector channel&#39;)
+    x[&#39;CHOPLN&#39;] = header.get(&#39;C_CHOPLN&#39;)
+    x[&#39;C_AMP&#39;] = header.get(&#39;C_AMP&#39;, 0)
+    for key in [&#39;G_STRT&#39;, &#39;G_PSUP&#39;, &#39;G_SZUP&#39;, &#39;G_PSDN&#39;,
+                &#39;G_SZDN&#39;, &#39;G_CYC&#39;, &#39;C_CYC&#39;, &#39;RAMPLN&#39;]:
+        color_key = key + &#39;_%s&#39; % (&#39;R&#39; if x[&#39;CHANNEL&#39;] == &#39;RED&#39; else &#39;B&#39;)
+        x[key] = header.get(color_key)
+
+    x[&#39;PRIMARAY&#39;] = header.get(&#39;PRIMARAY&#39;, &#39;UNKNOWN&#39;).upper().strip()
+    suffix = &#39;R&#39; if x[&#39;PRIMARAY&#39;] == &#39;RED&#39; else &#39;B&#39;
+    for key in [&#39;STRT&#39;, &#39;PSUP&#39;, &#39;SZUP&#39;]:
+        x[&#39;P_&#39; + key] = header.get(&#39;G_%s_%s&#39; % (key, suffix))
+
+    for key, value in x.items():
+        if key in [&#39;CHANNEL&#39;, &#39;PRIMARAY&#39;, &#39;success&#39;]:
+            continue
+        if not valid_num(value) or float(value) == -9999:
+            log.error(&quot;Invalid %s for file %s&quot; % (key, fname))
+            x[&#39;success&#39;] = False
+        else:
+            dtype = float if key == &#39;C_AMP&#39; else int
+            x[key] = dtype(value)
+
+    rl, cl = x[&#39;RAMPLN&#39;], x[&#39;CHOPLN&#39;]
+    # ramp length and chop length must be integer multiples of each other
+    try:
+        lengths = sorted([rl, cl])
+    except TypeError:
+        log.error(&quot;Bad choplength or ramplength&quot;)
+        x[&#39;success&#39;] = False
+    else:
+        if int(lengths[1] / lengths[0]) * lengths[0] != lengths[1]:
+            log.error(
+                &quot;Choplength is not an integer multiple/quotient of ramplength&quot;)
+            x[&#39;success&#39;] = False
+
+        if rl == cl:
+            log.error(&quot;Unexpected 2POINT chop, case 1: &quot;
+                      &quot;ramplength = choplength for file %s&quot; % fname)
+            x[&#39;success&#39;] = False
+
+        if (rl &gt; cl) and (rl // cl) % 2 == 0:
+            log.error(&quot;Unexpected 2POINT chop, case 2: &quot;
+                      &quot;ramplength = 2*n*choplength where &quot;
+                      &quot;n = 1, 2, 3... for file %s&quot; % fname)
+            x[&#39;success&#39;] = False
+
+    # if c_amp is zero, the chop length is irrelevant - set to rampln
+    if x[&#39;C_AMP&#39;] == 0:
+        x[&#39;CHOPLN&#39;] = x[&#39;RAMPLN&#39;]
+
+    return x</div>
+
+
+
+<div class="viewcode-block" id="trim_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.split_grating_and_chop.trim_data.html#sofia_redux.instruments.fifi_ls.split_grating_and_chop.trim_data">[docs]</a>
+def trim_data(hdul, params):
+    &quot;&quot;&quot;
+    Remove partial ramps and &quot;unpaired&quot; chop plateaus.
+
+    Note that 4POINT chop is untested
+
+    Assumptions:
+      1. file starts with chop0
+      2. chop0 and a following chop1 (2POINT) / chop2 (4POINT)
+         makes a pair (chop1 and chop3 makes another pair for
+         4POINT chop scheme).
+      3. no missing ramps except at beginning or end of file
+
+    Parameters
+    ----------
+    hdul : fits.HDUList
+    params : dict
+
+    Returns
+    -------
+    fits.HDUList
+    &quot;&quot;&quot;
+    # get scan position data if present
+    if &#39;SCANPOS&#39; in hdul:
+        posdata = hdul[&#39;SCANPOS&#39;].data
+    else:
+        posdata = None
+
+    # remove partial ramps
+    data = hdul[1].data
+    head = np.argwhere(data[&#39;header&#39;][:, params[&#39;sample_index&#39;]] == 0)
+    head = 0 if len(head) == 0 else head[0, 0]
+    last_frame = data[&#39;header&#39;][-1][params[&#39;sample_index&#39;]]
+    tail = len(data)
+    if last_frame != (params[&#39;RAMPLN&#39;] - 1):
+        last_ramp = data[&#39;header&#39;][-1][params[&#39;ramp_index&#39;]]
+        tail = np.argwhere(data[&#39;header&#39;][:, params[&#39;ramp_index&#39;]]
+                           &gt;= last_ramp)
+        tail = tail[tail &gt; head]
+        tail = tail[0] if len(tail) != 0 else len(data)
+    data = data[head:tail]
+    if posdata is not None:
+        posdata = posdata[head:tail]
+
+    # Remove unpaired chops
+    # number of ramps per chop phase or number of ramps to co-add in fit_ramps
+    n = params[&#39;CHOPLN&#39;] // params[&#39;RAMPLN&#39;]
+    if n &gt; 0:
+        index = data[&#39;header&#39;][:, params[&#39;ramp_index&#39;]] // n
+        chop_phase = index % params[&#39;C_SCHEME&#39;]
+        head = np.argwhere(chop_phase == 0)
+        head = head[0, 0] if len(head) != 0 else 0
+        tail = np.argwhere(chop_phase == np.nanmax(chop_phase))
+        tail = (tail[-1, 0] + 1) if len(tail) != 0 else len(chop_phase)
+        data = data[head:tail]
+        if posdata is not None:
+            posdata = posdata[head:tail]
+
+    hdu1 = fits.BinTableHDU(data, header=hdul[1].header)
+    hdul[1] = hdu1
+
+    if posdata is not None:
+        hdul[&#39;SCANPOS&#39;] = fits.BinTableHDU(posdata, name=&#39;SCANPOS&#39;)
+
+    return hdul</div>
+
+
+
+<div class="viewcode-block" id="name_output_files">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.split_grating_and_chop.name_output_files.html#sofia_redux.instruments.fifi_ls.split_grating_and_chop.name_output_files">[docs]</a>
+def name_output_files(hdul):
+    &quot;&quot;&quot;
+    Names the split files.
+
+    Parameters
+    ----------
+    hdul : fits.HDUList
+
+    Returns
+    -------
+    2-tuple
+        str : chop0 filename
+        str : chop1 filename
+    &quot;&quot;&quot;
+    filenum = hdul[0].header.get(&#39;FILENUM&#39;, &#39;UNKNOWN&#39;)
+    aorid = hdul[0].header.get(&#39;AOR_ID&#39;, &#39;UNKNOWN&#39;).strip().replace(&#39;_&#39;, &#39;&#39;)
+    if aorid == &#39;&#39;:
+        aorid = &#39;UNKNOWN&#39;
+    flight = hdul[0].header.get(&#39;MISSN-ID&#39;, &#39;UNKNOWN&#39;).split(&#39;_&#39;)[-1][1:]
+    if valid_num(flight):
+        flight = &#39;F%04i&#39; % int(flight)
+    else:
+        flight = &#39;UNKNOWN&#39;
+    channel = get_channel(hdul)
+    if channel in [&#39;RED&#39;, &#39;BLUE&#39;]:
+        channel = channel[:3]
+    else:
+        channel = &#39;UN&#39;
+    result = tuple(&#39;%s_FI_IFS_%s_%s_CP%i_%s.fits&#39; %
+                   (flight, aorid, channel, i, filenum) for i in range(2))
+    return result</div>
+
+
+
+<div class="viewcode-block" id="separate_chops">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.split_grating_and_chop.separate_chops.html#sofia_redux.instruments.fifi_ls.split_grating_and_chop.separate_chops">[docs]</a>
+def separate_chops(hdul, params):
+    &quot;&quot;&quot;
+    Separate data into different files, by chop index.
+
+    Parameters
+    ----------
+    hdul : fits.HDUList
+    params : dict
+
+    Returns
+    -------
+    list of fits.HDUList
+    &quot;&quot;&quot;
+    if params[&#39;RAMPLN&#39;] &gt; params[&#39;CHOPLN&#39;]:
+        log.error(&quot;Case where ramplength &gt; choplength not accounted for&quot;)
+        return
+    elif params[&#39;RAMPLN&#39;] == params[&#39;CHOPLN&#39;] and params[&#39;C_AMP&#39;] != 0:
+        log.error(&quot;Case where ramplength &gt;= choplength not accounted for&quot;)
+        return
+
+    # Make arrays of inductosyn positions
+    pos = params[&#39;G_STRT&#39;] + np.arange(params[&#39;G_PSUP&#39;]) * params[&#39;G_SZUP&#39;]
+
+    # For reference in spatial offset calculations, later
+    prime = params[&#39;P_STRT&#39;] + np.arange(params[&#39;P_PSUP&#39;]) * params[&#39;P_SZUP&#39;]
+
+    # This shouldn&#39;t happen, but just in case: if the number of primary
+    # positions is somehow less than the number of secondary positions,
+    # extend the array and copy the last primary position into all
+    # remaining elements
+    if len(prime) &lt; len(pos):
+        prime = np.concatenate(
+            (prime, np.full(len(pos) - len(prime), prime[-1])))
+    n = params[&#39;CHOPLN&#39;] // params[&#39;RAMPLN&#39;]  # ramps per chop phase
+
+    data = hdul[1].data
+    readouts = len(data)
+    log.debug(&quot;number of readouts = %i&quot; % readouts)
+    log.debug(&quot;ramplength = %i&quot; % params[&#39;RAMPLN&#39;])
+    log.debug(&quot;chop amplitude = %f&quot; % params[&#39;C_AMP&#39;])
+    binsize = readouts // (n * (params[&#39;G_PSUP&#39;] + params[&#39;G_PSDN&#39;]))
+    log.debug(&quot;grating and chop binsize = %i&quot; % binsize)
+
+    # get scan position data if present
+    if &#39;SCANPOS&#39; in hdul:
+        posdata = hdul[&#39;SCANPOS&#39;].data
+    else:
+        posdata = None
+
+    outfiles = name_output_files(hdul)
+    if params[&#39;C_AMP&#39;] != 0:
+        data_header = hdul[1].data[&#39;HEADER&#39;]
+        chop = ((data_header[:, params[&#39;ramp_index&#39;]] // n).astype(int)) % 2
+    else:
+        chop = np.zeros(len(data), dtype=int)
+
+    nodpos = hdul[0].header.get(&#39;NODPOS&#39;, 0)
+    fname = hdul[0].header.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;)
+    result = []
+    for idx, outfile in enumerate(outfiles):
+        if not (chop == idx).any():
+            continue
+        hdu0 = hdul[0].copy()
+        primehead = hdu0.header
+        chop_idx = np.argwhere(chop == idx).ravel()
+        primehead[&#39;HISTORY&#39;] = &#39;----------------------&#39;
+        primehead[&#39;HISTORY&#39;] = &#39;Data reduction history&#39;
+        primehead[&#39;HISTORY&#39;] = &#39;----------------------&#39;
+        primehead[&#39;HISTORY&#39;] = &#39;Chops split into separate filenames&#39;
+        primehead[&#39;HISTORY&#39;] = &#39;Grating scans split into separate extensions&#39;
+        hdinsert(primehead, &#39;NGRATING&#39;, params[&#39;G_PSUP&#39;],
+                 &#39;Number of grating positions&#39;)
+        hdinsert(primehead, &#39;CHOPNUM&#39;, idx, &#39;Chop number&#39;)
+        hdinsert(primehead, &#39;PRODTYPE&#39;, &#39;grating_chop_split&#39;)
+        hdinsert(primehead, &#39;FILENAME&#39;, outfile)
+
+        newhdul = fits.HDUList([hdu0])
+
+        for i in range(params[&#39;G_PSUP&#39;]):
+            try:
+                ext = data[chop_idx[(i * binsize): (i + 1) * binsize]]
+            except (IndexError, TypeError):
+                log.error(&quot;Array data does not match header &quot;
+                          &quot;data for file %s&quot; % fname)
+                return
+
+            image_data = ext[&#39;DATA&#39;]
+            image_hdr = fits.ImageHDU(image_data).header
+            t = Time(datetime.utcnow(), format=&#39;datetime&#39;).isot.split(&#39;.&#39;)[0]
+            image_hdr[&#39;DATE&#39;] = t, &#39;Creation UTC data of FITS header&#39;
+            image_hdr[&#39;INDPOS&#39;] = pos[i], &#39;Inductosyn position &#39;
+            image_hdr[&#39;INDPOS_P&#39;] = (
+                prime[i], &#39;Prime array inductosyn position&#39;)
+            image_hdr[&#39;CHOPNUM&#39;] = idx
+            image_hdr[&#39;NODPOS&#39;] = nodpos
+            image_hdr[&#39;BUNIT&#39;] = (&#39;adu&#39;, &#39;Data units&#39;)
+            newext = fits.ImageHDU(
+                image_data, name=f&#39;FLUX_G{i}&#39;,
+                header=image_hdr)
+            newhdul.append(newext)
+
+            if posdata is not None:
+                posd = posdata[chop_idx[(i * binsize): (i + 1) * binsize]]
+                newhdul.append(
+                    fits.BinTableHDU(posd, name=f&#39;SCANPOS_G{i}&#39;))
+
+        result.append(newhdul)
+    return result</div>
+
+
+
+def _derive_positions(hdul, params):
+    &quot;&quot;&quot;
+    Derive position data for OTF scans.
+
+    Parameters
+    ----------
+    hdul : fits.HDUList
+        Input OTF A nod data.
+    params : dict
+        Split parameters, as returned from get_split_params.
+
+    Returns
+    -------
+    fits.HDUList
+        Updated HDUList with &#39;SCANPOS&#39; binary table attached.
+    &quot;&quot;&quot;
+    header = hdul[0].header
+
+    # sample size
+    data = hdul[1].data[&#39;DATA&#39;]
+    nreadout = data.shape[0]
+
+    # time keys
+    # start of frame 1
+    unixstart = header[&#39;UNIXSTRT&#39;]
+    # start of scan motion
+    otfstart = header[&#39;OTFSTART&#39;]
+    # data rate (sec / frame)
+    alpha = header[&#39;ALPHA&#39;]
+    # scan duration
+    duration = header[&#39;TRK_DRTN&#39;]
+
+    # first valid frame/ramp after motion starts
+    frame1 = int(np.ceil((otfstart - unixstart) / alpha))
+    ramp_start = frame1 - frame1 % params[&#39;RAMPLN&#39;]
+
+    # check start and end values.
+    # If bad, warn but allow it
+    if ramp_start &lt; 0 or frame1 &lt; 0:
+        log.warning(f&quot;Bad OTF keywords for file &quot;
+                    f&quot;{header.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;)}: calculated &quot;
+                    f&quot;scan start {ramp_start} &lt; 0.&quot;)
+        log.warning(&#39;Check UNIXSTRT, OTFSTART.&#39;)
+        log.warning(&#39;Setting scan start to start of readouts.&#39;)
+        ramp_start = 0
+        frame1 = 0
+
+    # last valid frame/ramp after motion ends
+    frame2 = int(np.floor(frame1 + duration / alpha))
+    ramp_end = frame2 + params[&#39;RAMPLN&#39;] - frame2 % params[&#39;RAMPLN&#39;] - 1
+    if ramp_end &gt;= nreadout:
+        log.warning(f&quot;Bad OTF keywords for file &quot;
+                    f&quot;{header.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;)}: calculated scan &quot;
+                    f&quot;end {ramp_end} &gt; {nreadout} readouts&quot;)
+        log.warning(&#39;Check UNIXSTRT, OTFSTART, TRK_DRTN.&#39;)
+        log.warning(&#39;Setting scan end to end of readouts.&#39;)
+        ramp_end = nreadout - 1
+
+    # flag useful range
+    log.debug(f&#39;Useful OTF range: readout {ramp_start} to {ramp_end} &#39;
+              f&#39;out of {nreadout}&#39;)
+    flag = np.full(nreadout, True)
+    flag[:ramp_start] = False
+    flag[ramp_end + 1:] = False
+
+    # compute UNIX time for center of ramp
+    ftime = np.full(nreadout, unixstart, dtype=float)
+    ftime += np.arange(nreadout, dtype=float) * alpha + alpha / 2.0
+
+    # update exptime in header, subtracting time for unusable data
+    header[&#39;EXPTIME&#39;] -= (~flag).sum() * alpha
+
+    # scan speed in RA/Dec directions, in arcsec/sec
+    obslamv = header[&#39;OBSLAMV&#39;]
+    obsbetv = header[&#39;OBSBETV&#39;]
+
+    # check for zero speed in either direction
+    if np.allclose(obslamv, 0):
+        obslamv = 0.0
+    if np.allclose(obsbetv, 0):
+        obsbetv = 0.0
+
+    # base position
+    dlam_base = header[&#39;DLAM_MAP&#39;]
+    dbet_base = header[&#39;DBET_MAP&#39;]
+
+    # update positions for motion: allow extrapolation
+    # within the first and last valid ramps
+    motion_index = np.arange(nreadout) - frame1
+    dlam = dlam_base + obslamv * alpha * motion_index
+    dbet = dbet_base + obsbetv * alpha * motion_index
+
+    # set to assumed position beyond ramp ends
+    dlam[:ramp_start] = dlam[ramp_start]
+    dbet[:ramp_start] = dbet[ramp_start]
+    dlam[ramp_end + 1:] = dlam[ramp_end]
+    dbet[ramp_end + 1:] = dbet[ramp_end]
+
+    positions = Table()
+    positions[&#39;DLAM_MAP&#39;] = dlam
+    positions[&#39;DBET_MAP&#39;] = dbet
+    positions[&#39;FLAG&#39;] = flag
+    positions[&#39;UNIXTIME&#39;] = ftime
+
+    hdul.append(fits.BinTableHDU(positions, name=&#39;SCANPOS&#39;))
+
+    return hdul
+
+
+<div class="viewcode-block" id="split_grating_and_chop">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.split_grating_and_chop.split_grating_and_chop.html#sofia_redux.instruments.fifi_ls.split_grating_and_chop.split_grating_and_chop">[docs]</a>
+def split_grating_and_chop(filename, write=False, outdir=None):
+    &quot;&quot;&quot;
+    Split FIFI-LS raw data file into separate FITS files.
+
+    Files are split based on the chop cycle, with each of the grating
+    positions in a separate FITS extension in each file.
+
+    The procedure is:
+
+        1. Read a raw data FITS file
+        2. (optional) Check header for compliance with SOFIA requirements.
+           Abort if failure.
+        3. Reorganize data according to chopper phase and inductosyn
+           position.
+        4. (optional) Write output files to disk
+
+    FITS files written to disk will each contain data from a single
+    chopper phase.  The typical case is a 2-point chop, for which two
+    FITS files are written.  No-chop mode is also supported, in which
+    case one file is written to disk.  The zeroth extension in the output
+    file contains the prime header only.  There are n_scan image
+    extensions, containing a header (includes the keyword INDPOS,
+    indicating the inductosyn positions of the scan) and a data array,
+    with dimensions [26, 18] x (readout frames).
+
+    For A nods taken in OTF (scanning) mode, an additional binary table is
+    attached to the file, containing the on-sky position for each readout
+    sample.  The table has columns DLAM_MAP, DBET_MAP, FLAG, and UNIXTIME,
+    where DLAM_MAP and DBET_MAP indicate the RA and Dec offset from the
+    base position, respectively, and UNIXTIME indicates the time in UNIX
+    seconds for the readout.  The FLAG column holds a Boolean value
+    indicating scanning status: if True, the telescope was in scanning
+    motion for the readout; if False, scanning motion had either not
+    begun, or had stopped prior to the readout.  Readouts for which the
+    FLAG is False may not have accurate position data.
+
+    Only 2-point chopper schemes are allowed (C_SCHEME=&#39;2POINT&#39;).  If the
+    chop amplitude (C_AMP) is zero, it will be treated as a no-chop
+    (&quot;total power&quot;) observation.
+
+    The output file name is generated from the flight number, AOR-ID,
+    detector channel, and raw file number, as::
+
+        chop 0 = &lt;FLIGHT&gt;_FI_IFS_&lt;AOR-ID&gt;_&lt;DETCHAN&gt;_CP0_&lt;FILENUM&gt;.fits
+        chop 1 = &lt;FLIGHT&gt;_FI_IFS_&lt;AOR-ID&gt;_&lt;DETCHAN&gt;_CP1_&lt;FILENUM&gt;.fits
+
+    The prime header is also modified from the original, to conform to
+    SOFIA standards (via fifi_ls.make_header).
+
+    Parameters
+    ----------
+    filename : str
+        File path to the raw FITS data file.
+    write : bool, optional
+        If True, write generated HDU Lists to file
+    outdir : str, optional
+        Name of the output path.  By default new files will be saved
+        to the same directory as `filename`.
+
+    Returns
+    -------
+    tuple of fits.HDUList or tuple of str
+        Contains HDULists is write is False, otherwise paths to output
+        files
+    &quot;&quot;&quot;
+    if isinstance(outdir, str):
+        if not os.path.isdir(outdir):
+            log.error(&quot;Output directory %s does not exist&quot; % outdir)
+            return
+
+    hdul = gethdul(filename, verbose=True)
+    if hdul is None:
+        return
+    if isinstance(filename, str):
+        # input file is string: standardize header
+        new_header = make_header(hdul[0].header)
+        if new_header is None:
+            log.error(&#39;Problem updating header&#39;)
+    else:
+        # assume header is already standardized;
+        # get filename from header
+        filename = hdul[0].header[&#39;FILENAME&#39;]
+
+    if not isinstance(outdir, str):
+        outdir = os.path.dirname(filename)
+
+    if len(hdul) &lt; 2:
+        log.error(&quot;HDUList missing extension 1 for file %s&quot; % filename)
+        return
+
+    if hdul[1].header.get(&#39;XTENSION&#39;).strip().upper() != &#39;BINTABLE&#39;:
+        log.error(&quot;Expected BINTABLE extension in extension 1 for file %s&quot; %
+                  filename)
+        return
+
+    extname = hdul[1].header.get(&#39;EXTNAME&#39;, &#39;UNKNOWN&#39;).strip().upper()
+    if extname != &#39;FIFILS_RAWDATA&#39;:
+        log.error(&quot;Can only split FIFILS_rawdata: &quot;
+                  &quot;extension 1 EXTNAME = %s for %s&quot; % (extname, filename))
+        return
+
+    colnames = hdul[1].data.columns.names
+    colnames = [x.strip().upper() for x in colnames]
+    if &#39;HEADER&#39; not in colnames or &#39;DATA&#39; not in colnames:
+        log.error(&#39;Missing expected DATA and HEADER columns in BINTABLE %s&#39; %
+                  filename)
+        return
+
+    params = get_split_params(hdul)
+    if not params[&#39;success&#39;]:
+        log.error(&#39;Problem getting split parameters&#39;)
+        return
+
+    # attach a position offset table for OTF mode scans
+    instmode = str(hdul[0].header.get(&#39;INSTMODE&#39;, &#39;UNKNOWN&#39;)).upper()
+    nodbeam = str(hdul[0].header.get(&#39;NODBEAM&#39;, &#39;B&#39;)).upper().strip()
+    if &#39;OTF&#39; in instmode and nodbeam == &#39;A&#39;:
+        try:
+            hdul = _derive_positions(hdul, params)
+        except KeyError:
+            log.error(&quot;Missing required keywords for OTF position data&quot;)
+            hdul = None
+        if hdul is None:
+            log.error(&#39;Problem reading OTF data data&#39;)
+            return
+
+    hdul = trim_data(hdul, params)
+    if hdul is None:
+        log.error(&#39;Problem trimming data&#39;)
+        return
+
+    hduls = separate_chops(hdul, params)
+    if hduls is None:
+        log.error(&#39;Problem separating chops&#39;)
+        return
+
+    if not write:
+        return hduls
+    else:
+        result = []
+        for hdul in hduls:
+            result.append(write_hdul(hdul, outdir=outdir, overwrite=True))
+        return result</div>
+
+
+
+def split_wrap_helper(_, kwargs, filename):
+    return split_grating_and_chop(filename, **kwargs)
+
+
+<div class="viewcode-block" id="wrap_split_grating_and_chop">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.split_grating_and_chop.wrap_split_grating_and_chop.html#sofia_redux.instruments.fifi_ls.split_grating_and_chop.wrap_split_grating_and_chop">[docs]</a>
+def wrap_split_grating_and_chop(files, outdir=None,
+                                allow_errors=False, write=False,
+                                jobs=None):
+    &quot;&quot;&quot;
+    Wrapper for split_grating_and_chop over multiple files.
+
+    Parameters
+    ----------
+    files : array_like of str
+        list of filepaths to FIFI-LS FITS files
+    outdir : str, optional
+        name of the output path.  If None, will be saved to the same
+        directory as the input file used to generate the split files.
+    allow_errors : bool, optional
+        If True, return all created files on error.  Otherwise, return None
+    write : bool, optional
+        If True, write the output to disk and return the filename instead
+        of the HDU.
+    jobs : int, optional
+        Specifies the maximum number of concurrently running jobs.
+        Values of 0 or 1 will result in serial processing.  A negative
+        value sets jobs to `n_cpus + 1 + jobs` such that -1 would use
+        all cpus, and -2 would use all but one cpu.
+
+    Returns
+    -------
+    tuple of str
+        output filenames written to disk
+    &quot;&quot;&quot;
+    if isinstance(files, str):
+        files = [files]
+    if not hasattr(files, &#39;__len__&#39;):
+        log.error(&quot;Invalid input files type (%s)&quot; % repr(files))
+        return
+
+    kwargs = {&#39;outdir&#39;: outdir, &#39;write&#39;: write}
+
+    output = multitask(split_wrap_helper, files, None, kwargs,
+                       jobs=jobs)
+
+    failure = False
+    result = []
+    for x in output:
+        if x is None:
+            failure = True
+        else:
+            result.extend(x)
+    if failure:
+        if len(result) &gt; 0:
+            if not allow_errors:
+                log.error(&quot;Errors were encountered but the following &quot;
+                          &quot;files were created:\n%s&quot; % &#39;\n&#39;.join(result))
+                return
+
+    return tuple(result)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

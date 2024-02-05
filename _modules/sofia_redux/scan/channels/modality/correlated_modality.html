@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.channels.modality.correlated_modality &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.channels.modality.correlated_modality</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.scan.configuration.configuration import Configuration
+from sofia_redux.scan.channels.modality.modality import Modality
+from sofia_redux.scan.utilities import utils
+from sofia_redux.scan.utilities.range import Range
+
+__all__ = [&#39;CorrelatedModality&#39;]
+
+
+<div class="viewcode-block" id="CorrelatedModality">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.modality.correlated_modality.CorrelatedModality.html#sofia_redux.scan.channels.modality.correlated_modality.CorrelatedModality">[docs]</a>
+class CorrelatedModality(Modality):
+
+    def __init__(self, name=None, identity=None, channel_division=None,
+                 gain_provider=None, mode_class=None):
+        &quot;&quot;&quot;
+        Create a correlated modality.
+
+        A Modality is a collection of channel modes.  A channel mode
+        extracts/sets/operates-on gains from a channel group (collection
+        of channels).  Modes are created by the modality from a channel
+        division which is a collection of channel groups.  The type of
+        mode may be explicitly defined or will be set to a default mode
+        class for the modality.
+
+        The name of the modality should be set, as it is used by the
+        modality to apply specific configuration options.
+
+        The correlated modality is similar to the standard Modality but allows
+        additional functionality to operate on correlated modes such as the
+        ability to update signals in an integration.
+
+        Parameters
+        ----------
+        name : str, optional
+            The name of the modality.
+        identity : str, optional
+            A shorthand abbreviation for the modality.
+        channel_division : ChannelDivision, optional
+            A ChannelDivision object containing groups from which to create
+            channel modes.
+        gain_provider : GainProvider or str, optional
+            If a string is provided, a FieldGainProvider will be created that
+            defined the gain as that field of the channel group data.
+            If a gain provider is explicitly provided, it will be used instead.
+        mode_class : Mode, optional
+            The mode class to be used when creating modes from the channel
+            groups inside the channel division.  If not supplied, the default
+            mode class for a modality will be used.
+        &quot;&quot;&quot;
+        super().__init__(name=name,
+                         identity=identity,
+                         channel_division=channel_division,
+                         gain_provider=gain_provider,
+                         mode_class=mode_class)
+        self.gain_range = Range()
+        self.solve_signal = True
+
+<div class="viewcode-block" id="CorrelatedModality.set_options">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.modality.correlated_modality.CorrelatedModality.html#sofia_redux.scan.channels.modality.correlated_modality.CorrelatedModality.set_options">[docs]</a>
+    def set_options(self, configuration, branch=None):
+        &quot;&quot;&quot;
+        Apply a configuration to the modality and modes therein.
+
+        The following information is extracted and applied:
+
+        1. resolution (in seconds)
+        2. triggers
+        3. whether to solve for gains
+        4. whether phase gains are used
+        5. the gain range
+        6. whether SIGNED or BIDIRECTIONAL gain flagging should be applied
+        7. whether no gain fields exist (gain provider is disabled)
+        8. whether to solve signals.
+
+        Parameters
+        ----------
+        configuration : Configuration or dict
+            Either a configuration object, or a specific subsection of
+            a configuration relevant to the modality.
+        branch : str, optional
+            If a configuration object was provided, specifies the branch
+            that applies to this modality.  If not supplied, the branch
+            name is defined as the modality name.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if branch is None:
+            branch = f&#39;correlated.{self.name}&#39;
+
+        super().set_options(configuration, branch=branch)
+
+        if isinstance(configuration, Configuration):
+            self.solve_signal = not configuration.get_bool(
+                f&#39;{branch}.nosignals&#39;)
+        elif isinstance(configuration, dict):
+            self.solve_signal = not utils.get_bool(
+                configuration.get(&#39;nosignals&#39;))</div>
+
+
+<div class="viewcode-block" id="CorrelatedModality.set_skip_flags">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.modality.correlated_modality.CorrelatedModality.html#sofia_redux.scan.channels.modality.correlated_modality.CorrelatedModality.set_skip_flags">[docs]</a>
+    def set_skip_flags(self, gain_skip_flag):
+        &quot;&quot;&quot;
+        Sets the gain skip flags in each mode of the modality.
+
+        Parameters
+        ----------
+        gain_skip_flag : ChannelFlagTypes or str or int
+            The gain flag marking channel types that should not be considered
+            valid channels.  A string can be supplied such as &#39;GAIN&#39;, &#39;DEAD&#39;,
+            etc., the flag type itself, or an integer.  Integers should be used
+            with care since meaning may vary between various flag types.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        gain_skip_flag = self.flagspace.convert_flag(gain_skip_flag)
+        for mode in self.modes:
+            mode.skip_flags = gain_skip_flag</div>
+
+
+<div class="viewcode-block" id="CorrelatedModality.update_signals">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.channels.modality.correlated_modality.CorrelatedModality.html#sofia_redux.scan.channels.modality.correlated_modality.CorrelatedModality.update_signals">[docs]</a>
+    def update_signals(self, integration, robust=False):
+        &quot;&quot;&quot;
+        Update integration signals for each mode in the modality.
+
+        Parameters
+        ----------
+        integration : Integration
+        robust : bool, optional
+             If `True`, use the &quot;robust&quot; method to update signals.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for mode in self.modes:
+            if not np.isnan(self.resolution):
+                mode.resolution = self.resolution
+                try:
+                    mode.update_signals(integration, robust=robust)
+                except Exception as err:
+                    log.error(err)
+                    raise err</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

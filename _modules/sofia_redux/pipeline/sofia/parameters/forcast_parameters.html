@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.sofia.parameters.forcast_parameters &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.sofia.parameters.forcast_parameters</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;FORCAST parameter sets.&quot;&quot;&quot;
+
+from copy import deepcopy
+
+from astropy.io import fits
+
+from sofia_redux.pipeline.parameters import Parameters
+
+__all__ = [&#39;FORCASTParameters&#39;]
+
+
+# Store default values for all parameters here.
+# They could equivalently be read from a file, or
+# constructed programmatically.  All keys are optional;
+# defaults are specified in the ParameterSet object.
+# All &#39;key&#39; values should be unique.
+DEFAULT = {
+    &#39;checkhead&#39;: [
+        {&#39;key&#39;: &#39;abort&#39;,
+         &#39;name&#39;: &#39;Abort reduction for invalid headers&#39;,
+         &#39;value&#39;: True,
+         &#39;description&#39;: &#39;If set, the reduction will be &#39;
+                        &#39;aborted if the input headers &#39;
+                        &#39;do not meet requirements&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;}
+    ],
+    &#39;clean&#39;: [
+        {&#39;key&#39;: &#39;save&#39;,
+         &#39;name&#39;: &#39;Save output&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;Save output data to disk&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;badfile&#39;,
+         &#39;name&#39;: &#39;Bad pixel map&#39;,
+         &#39;value&#39;: &#39;&#39;,
+         &#39;description&#39;: &#39;FITS file containing bad pixel locations&#39;,
+         &#39;dtype&#39;: &#39;str&#39;,
+         &#39;wtype&#39;: &#39;pick_file&#39;},
+        {&#39;key&#39;: &#39;autoshift&#39;,
+         &#39;name&#39;: &#39;Automatically detect readout shift&#39;,
+         &#39;value&#39;: True,
+         &#39;description&#39;: &#39;If set, data will be checked and &#39;
+                        &#39;corrected for a 16-pixel readout shift.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;shiftfile&#39;,
+         &#39;name&#39;: &#39;Image number to shift (if not auto)&#39;,
+         &#39;value&#39;: &#39;&#39;,
+         &#39;description&#39;: &#39;Specify &quot;all&quot;, or semicolon-separated &#39;
+                        &#39;image numbers, starting with 1. \nFor &#39;
+                        &#39;example, to shift the 1st and 3rd image, &#39;
+                        &#39;specify &quot;1;3&quot;.&#39;,
+         &#39;dtype&#39;: &#39;str&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;interpolate&#39;,
+         &#39;name&#39;: &#39;Interpolate over bad pixels&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;If set, bad pixels will be interpolated over.\n&#39;
+                        &#39;If not set, they will be propagated as NaN.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+    ],
+    &#39;droop&#39;: [
+        {&#39;key&#39;: &#39;save&#39;,
+         &#39;name&#39;: &#39;Save output&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;Save output data to disk&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;fracdroop&#39;,
+         &#39;name&#39;: &#39;Droop fraction&#39;,
+         &#39;value&#39;: &#39;&#39;,
+         &#39;description&#39;: &#39;Numerical factor for droop correction amplitude.&#39;,
+         &#39;dtype&#39;: &#39;float&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+    ],
+    &#39;nonlin&#39;: [
+        {&#39;key&#39;: &#39;save&#39;,
+         &#39;name&#39;: &#39;Save output&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;Save output data to disk&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;secctr&#39;,
+         &#39;name&#39;: &#39;Background section center&#39;,
+         &#39;value&#39;: &#39;&#39;,
+         &#39;description&#39;: &quot;Specify the center point in integers as &#39;x,y&#39;.&quot;,
+         &#39;dtype&#39;: &#39;str&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;secsize&#39;,
+         &#39;name&#39;: &#39;Background section size&#39;,
+         &#39;value&#39;: &#39;&#39;,
+         &#39;description&#39;: &quot;Specify in integers as &#39;size_x,size_y&#39;.&quot;,
+         &#39;dtype&#39;: &#39;str&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+    ],
+    &#39;stack&#39;: [
+        {&#39;key&#39;: &#39;save&#39;,
+         &#39;name&#39;: &#39;Save output&#39;,
+         &#39;value&#39;: True,
+         &#39;description&#39;: &#39;Save output data to disk&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;add_frames&#39;,
+         &#39;name&#39;: &quot;Add all frames instead of subtracting&quot;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;Generates a sky image, for diagnostic purposes.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;jbclean&#39;,
+         &#39;name&#39;: &quot;Apply &#39;jailbar&#39; correction&quot;,
+         &#39;value&#39;: True,
+         &#39;description&#39;: &#39;If set, the jailbar pattern will be &#39;
+                        &#39;removed after stacking.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;bgscale&#39;,
+         &#39;name&#39;: &#39;Scale frames to common level&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;If set, a multiplicative scaling will be applied.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;bgsub&#39;,
+         &#39;name&#39;: &#39;Subtract residual background&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;If set, an additive background level &#39;
+                        &#39;will be removed.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;secctr&#39;,
+         &#39;name&#39;: &#39;Background section center&#39;,
+         &#39;value&#39;: &#39;&#39;,
+         &#39;description&#39;: &quot;Specify the center point in integers as &#39;x,y&#39;.&quot;,
+         &#39;dtype&#39;: &#39;str&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;secsize&#39;,
+         &#39;name&#39;: &#39;Background section size&#39;,
+         &#39;value&#39;: &#39;&#39;,
+         &#39;description&#39;: &quot;Specify in integers as &#39;size_x,size_y&#39;.&quot;,
+         &#39;dtype&#39;: &#39;str&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;bgstat&#39;,
+         &#39;name&#39;: &#39;Residual background statistic&#39;,
+         &#39;wtype&#39;: &#39;combo_box&#39;,
+         &#39;options&#39;: [&#39;median&#39;, &#39;mode&#39;],
+         &#39;option_index&#39;: 0,
+         &#39;description&#39;: &#39;Select the statistic to use to calculate &#39;
+                        &#39;the residual background.&#39;},
+    ],
+}
+
+
+<div class="viewcode-block" id="FORCASTParameters">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.forcast_parameters.FORCASTParameters.html#sofia_redux.pipeline.sofia.parameters.forcast_parameters.FORCASTParameters">[docs]</a>
+class FORCASTParameters(Parameters):
+    &quot;&quot;&quot;Reduction parameters for the FORCAST pipeline.&quot;&quot;&quot;
+    def __init__(self, default=None,
+                 drip_cal_config=None, drip_config=None):
+        &quot;&quot;&quot;
+        Initialize parameters with default values.
+
+        The various config files are used to override certain
+        parameter defaults for particular observation modes,
+        or dates, etc.
+
+        Parameters
+        ----------
+        drip_cal_config : dict-like, optional
+            Reduction mode and auxiliary file configuration mapping,
+            as returned from the sofia_redux.instruments.forcast
+            `getcalpath` function.
+        drip_config : dict-like, optional
+            DRIP configuration, as loaded by the
+            sofia_redux.instruments.forcast `configuration` function.
+        &quot;&quot;&quot;
+        if default is None:  # pragma: no cover
+            default = DEFAULT
+        super().__init__(default=default)
+
+        self.drip_cal_config = drip_cal_config
+        self.drip_config = drip_config
+
+<div class="viewcode-block" id="FORCASTParameters.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.forcast_parameters.FORCASTParameters.html#sofia_redux.pipeline.sofia.parameters.forcast_parameters.FORCASTParameters.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the parameters.
+
+        Overrides default copy to add in config attributes.
+
+        Returns
+        -------
+        Parameters
+        &quot;&quot;&quot;
+        new = super().copy()
+        new.drip_cal_config = deepcopy(self.drip_cal_config)
+        new.drip_config = deepcopy(self.drip_config)
+        return new</div>
+
+
+<div class="viewcode-block" id="FORCASTParameters.clean">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.forcast_parameters.FORCASTParameters.html#sofia_redux.pipeline.sofia.parameters.forcast_parameters.FORCASTParameters.clean">[docs]</a>
+    def clean(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the clean step.
+
+        Sets default badfile, using `drip_cal_config`.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        if (self.drip_cal_config is not None
+                and &#39;badfile&#39; in self.drip_cal_config):
+            self.current[step_index].set_value(
+                &#39;badfile&#39;, self.drip_cal_config[&#39;badfile&#39;])</div>
+
+
+<div class="viewcode-block" id="FORCASTParameters.droop">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.forcast_parameters.FORCASTParameters.html#sofia_redux.pipeline.sofia.parameters.forcast_parameters.FORCASTParameters.droop">[docs]</a>
+    def droop(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the droop step.
+
+        Sets default droop fraction (fracdroop), using
+        `drip_config`.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        if self.drip_config is not None:
+            from sofia_redux.instruments.forcast.getpar import getpar
+            fracdroop = getpar(fits.Header(), &#39;fracdroop&#39;,
+                               dtype=float, default=0.0)
+            self.current[step_index].set_value(&#39;fracdroop&#39;, fracdroop)</div>
+
+
+<div class="viewcode-block" id="FORCASTParameters.nonlin">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.forcast_parameters.FORCASTParameters.html#sofia_redux.pipeline.sofia.parameters.forcast_parameters.FORCASTParameters.nonlin">[docs]</a>
+    def nonlin(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the nonlin step.
+
+        Sets default section center and size (secctr, secsize),
+        using `drip_config`.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        # read background section from config file if possible
+        if self.drip_config is not None:
+            # assume config has already been
+            # loaded into sofia_redux.instruments.forcast.configuration
+            from sofia_redux.instruments.forcast.read_section \
+                import read_section
+
+            # assume image is standard 256x256 size
+            datasec = read_section(256, 256)
+
+            self.current[step_index].set_value(
+                &#39;secctr&#39;, &#39;{:.0f},{:.0f}&#39;.format(datasec[0], datasec[1]))
+            self.current[step_index].set_value(
+                &#39;secsize&#39;, &#39;{:.0f},{:.0f}&#39;.format(datasec[2], datasec[3]))</div>
+
+
+<div class="viewcode-block" id="FORCASTParameters.stack">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.forcast_parameters.FORCASTParameters.html#sofia_redux.pipeline.sofia.parameters.forcast_parameters.FORCASTParameters.stack">[docs]</a>
+    def stack(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the stack step.
+
+        Sets default background scaling and subtraction flags
+        (bgscale, bgsub) and section location (secctr, secsize),
+        using `drip_config` and `drip_cal_config`.
+
+        If the data is grism mode or C2NC2, background
+        subtraction and scaling are turned off by default. Otherwise,
+        the default is read from the DRIP config file.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        # read background settings from config file
+        if (self.drip_config is not None
+                and self.drip_cal_config is not None):
+            from sofia_redux.instruments.forcast.getpar import getpar
+            header = fits.Header()
+            bgscale = getpar(header, &#39;BGSCALE&#39;, dtype=bool, default=False)
+            bgsub = getpar(header, &#39;BGSUB&#39;, dtype=bool, default=False)
+
+            # modify bg params by sky and grism mode
+            if (self.drip_cal_config[&#39;gmode&#39;] != -1
+                    or self.drip_cal_config[&#39;cnmode&#39;] in [&#39;C2NC2&#39;, &#39;C2NC4&#39;]):
+                bgsub = 0
+                bgscale = 0
+
+            # set parameter values in current set
+            self.current[step_index].set_value(&#39;bgscale&#39;, bgscale)
+            self.current[step_index].set_value(&#39;bgsub&#39;, bgsub)
+
+            # read section from config, as for nonlin
+            from sofia_redux.instruments.forcast.read_section \
+                import read_section
+            datasec = read_section(256, 256)
+            self.current[step_index].set_value(
+                &#39;secctr&#39;, &#39;{:.0f},{:.0f}&#39;.format(datasec[0], datasec[1]))
+            self.current[step_index].set_value(
+                &#39;secsize&#39;, &#39;{:.0f},{:.0f}&#39;.format(datasec[2], datasec[3]))</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

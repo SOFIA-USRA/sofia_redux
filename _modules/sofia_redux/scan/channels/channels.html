@@ -1,0 +1,2495 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.channels.channels &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.channels.channels</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC
+from astropy import log, units
+from copy import deepcopy
+import numpy as np
+
+from sofia_redux.scan.coordinate_systems.coordinate import Coordinate
+from sofia_redux.scan.coordinate_systems.coordinate_2d1 import Coordinate2D1
+from sofia_redux.scan.utilities import utils
+from sofia_redux.scan.utilities.range import Range
+from sofia_redux.scan.channels.channel_group.channel_group import ChannelGroup
+from sofia_redux.scan.channels.division.division import ChannelDivision
+from sofia_redux.scan.channels.modality.modality import Modality
+from sofia_redux.scan.channels.modality.correlated_modality import (
+    CorrelatedModality)
+from sofia_redux.scan.channels.modality.coupled_modality import (
+    CoupledModality)
+from sofia_redux.scan.channels.modality.non_linear_modality import (
+    NonlinearModality)
+from sofia_redux.scan.channels.mode.pointing_response import PointingResponse
+from sofia_redux.scan.channels.mode.acceleration_response import (
+    AccelerationResponse)
+from sofia_redux.scan.channels.mode.chopper_response import ChopperResponse
+from sofia_redux.scan.channels import channel_numba_functions as cnf
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+
+__all__ = [&#39;Channels&#39;]
+
+
+<div class="viewcode-block" id="Channels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels">[docs]</a>
+class Channels(ABC):
+
+    def __init__(self, name=None, parent=None, info=None, size=0):
+        &quot;&quot;&quot;
+        Creates a Channels instance.
+
+        The Channels class holds and operates on each &quot;channel&quot; of an
+        instrument.  The channel information generally consists of time-
+        independent characteristics for a single measuring element of the
+        instrument.
+
+        A typical example would be camera pixels.  Each pixel in the array
+        will have certain characteristics such as a position that does not
+        vary over time.  This will also contain flagging information such
+        as whether a channel is working correctly etc.  The `data` attribute
+        contains a numpy array for each &quot;field&quot; (characteristic) with each
+        element representing a single channel.
+
+        The Channels class also breaks down individual channels into groups
+        (a collection of channels), divisions (a collection of groups), and
+        modalities (a collection of modes).  Each mode in a modality is created
+        from a group in a division.  A mode is an object defining the gain
+        properties of a channel group.  i.e., a mode reads channel group
+        information to retrieve or set gain.
+
+        Parameters
+        ----------
+        name : str, optional
+            The name for the channels.
+        parent : object, optional
+            The owner of the channels such as a Reduction, Scan or Integration.
+        info : Info, optional
+            The channel information.
+        size : int, optional
+            The number of stored channels.
+        &quot;&quot;&quot;
+        self.info = None
+        self.data = None
+        self.groups = None
+        self.divisions = None
+        self.modalities = None
+        self.standard_weights = False
+        self.fixed_source_gains = False
+        self.overlap_point_size = np.nan * units.Unit(&#39;arcsec&#39;)
+        self.is_initialized = False
+        self.is_valid = False
+
+        if info is not None:
+            self.set_info(info)
+        if parent is not None:
+            self.set_parent(parent)
+
+        if self.info is not None:
+            if name is None:
+                self.set_name(self.info.instrument.name)
+            else:
+                self.set_name(name)
+            self.data = self.get_channel_data_instance()
+
+        self.startup_info = info
+        self.n_store_channels = size
+
+<div class="viewcode-block" id="Channels.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Create and return a copy.
+
+        Returns
+        -------
+        Channels
+        &quot;&quot;&quot;
+        new = self.__class__(name=self.get_name(),
+                             parent=self.parent,
+                             info=self.info)
+        for attribute, value in self.__dict__.items():
+            if attribute in self.reference_attributes:
+                setattr(new, attribute, value)
+            elif hasattr(value, &#39;copy&#39;):
+                copied_value = value.copy()
+                if attribute == &#39;data&#39;:
+                    copied_value.channels = new
+                setattr(new, attribute, copied_value)
+            else:
+                setattr(new, attribute, deepcopy(value))
+        if new.info is not None:
+            new.info.unlink_configuration()
+        new.set_data(new.data)
+        new.groups = None
+        new.divisions = None
+        new.modalities = None
+        if not isinstance(self.overlap_point_size,
+                          (Coordinate, Coordinate2D1)):
+            if (np.isfinite(self.overlap_point_size)
+                    and self.overlap_point_size &gt; 0):
+                new.overlap_point_size = np.nan
+                new.calculate_overlaps(self.overlap_point_size)
+        elif (self.overlap_point_size.is_finite()
+              and not self.overlap_point_size.is_null()):  # pragma: no cover
+            # For later development
+            new.overlap_point_size = self.overlap_point_size.__class__()
+            new.calculate_overlaps(self.overlap_point_size)
+
+        if self.is_initialized:
+            new.is_initialized = False
+            new.initialize()
+
+        return new</div>
+
+
+    @property
+    def reference_attributes(self):
+        &quot;&quot;&quot;
+        Return attributes that should be referenced rather than copied.
+
+        Returns
+        -------
+        set
+        &quot;&quot;&quot;
+        return {&#39;parent&#39;}
+
+    @property
+    def flagspace(self):
+        &quot;&quot;&quot;
+        Return the appropriate channel flag space.
+
+        Returns
+        -------
+        Flags
+        &quot;&quot;&quot;
+        if self.data is None:
+            return None
+        return self.data.flagspace
+
+    @property
+    def configuration(self):
+        &quot;&quot;&quot;
+        Return the configuration.
+
+        Returns
+        -------
+        Configuration
+        &quot;&quot;&quot;
+        if self.info is None:
+            return None
+        return self.info.configuration
+
+    @property
+    def size(self):
+        &quot;&quot;&quot;
+        Return the number of channels.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        if self.data is None:
+            return 0
+        return self.data.size
+
+    @property
+    def sourceless_flags(self):
+        &quot;&quot;&quot;
+        Return the flag marking a channel as having no source.
+
+        Returns
+        -------
+        flag : enum.Enum
+        &quot;&quot;&quot;
+        if self.flagspace is None:
+            return None
+        return self.flagspace.sourceless_flags()
+
+    @property
+    def non_detector_flags(self):
+        &quot;&quot;&quot;
+        Return the flags marking a channel as a non-detector.
+
+        Returns
+        -------
+        flag : enum.Enum
+        &quot;&quot;&quot;
+        if self.flagspace is None:
+            return None
+        return self.flagspace.non_detector_flags()
+
+    @property
+    def n_store_channels(self):
+        &quot;&quot;&quot;
+        Return the number of stored channels (total) in the instrument.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        if self.info is None:
+            return 0
+        return self.info.instrument.n_store_channels
+
+    @n_store_channels.setter
+    def n_store_channels(self, value):
+        &quot;&quot;&quot;
+        Set the number of stored channels.
+
+        Parameters
+        ----------
+        value : int
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.info is None:
+            return
+        self.info.instrument.n_store_channels = value
+
+    @property
+    def n_mapping_channels(self):
+        &quot;&quot;&quot;
+        Return the number of mapping channels in the instrument.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        if self.info is None:
+            return 0
+        return self.info.instrument.n_mapping_channels
+
+    @n_mapping_channels.setter
+    def n_mapping_channels(self, value):
+        &quot;&quot;&quot;
+        Set the number of mapping channels.
+
+        Parameters
+        ----------
+        value : int
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.info is None:
+            return
+        self.info.instrument.n_mapping_channels = value
+
+    @property
+    def parent(self):
+        &quot;&quot;&quot;
+        Return the channel instance owner.
+
+        Returns
+        -------
+        object
+        &quot;&quot;&quot;
+        if self.info is None:
+            return None
+        return self.info.parent
+
+    @parent.setter
+    def parent(self, owner):
+        &quot;&quot;&quot;
+        set the channel instance owner.
+
+        Parameters
+        ----------
+        owner : object
+            The owner of the info.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_parent(owner)
+
+<div class="viewcode-block" id="Channels.has_option">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.has_option">[docs]</a>
+    def has_option(self, option):
+        &quot;&quot;&quot;
+        Check whether an option is set in the configuration.
+
+        Parameters
+        ----------
+        option : str
+            The configuration option.
+
+        Returns
+        -------
+        is_configured : bool
+        &quot;&quot;&quot;
+        if self.configuration is None:
+            return False
+        return self.configuration.is_configured(option)</div>
+
+
+    def __getitem__(self, indices):
+        &quot;&quot;&quot;
+        Return a selection of the channel data.
+
+        Parameters
+        ----------
+        indices : int or slice or numpy.ndarray (int or bool)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.data is None:
+            raise IndexError(&#39;No data loaded&#39;)
+        return self.data[indices]
+
+<div class="viewcode-block" id="Channels.set_parent">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.set_parent">[docs]</a>
+    def set_parent(self, parent):
+        &quot;&quot;&quot;
+        Set the parent object for channels.
+
+        Parameters
+        ----------
+        parent : object
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.info is None:
+            return
+        self.info.set_parent(parent)</div>
+
+
+<div class="viewcode-block" id="Channels.set_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.set_data">[docs]</a>
+    def set_data(self, data):
+        &quot;&quot;&quot;
+        Set the channel data object.
+
+        Parameters
+        ----------
+        data : ChannelData
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.data = data
+        if self.data is not None:
+            self.data.set_parent(self)</div>
+
+        # if self.groups is not None:
+        #     for group_name, group in self.groups.values():
+        #         new_group = group.copy()
+        #         new_group.data = data
+        #         self.groups[group_name] = new_group
+
+<div class="viewcode-block" id="Channels.set_info">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.set_info">[docs]</a>
+    def set_info(self, info):
+        &quot;&quot;&quot;
+        Load the static instrument settings, which are date-independent.
+
+        Parameters
+        ----------
+        info : Info
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.info = info
+        self.is_valid = False
+        self.is_initialized = False
+        self.startup_info = None</div>
+
+
+<div class="viewcode-block" id="Channels.get_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_name">[docs]</a>
+    def get_name(self):
+        &quot;&quot;&quot;
+        Return the name of the channels.
+
+        Returns
+        -------
+        name : str
+        &quot;&quot;&quot;
+        if self.info is None:
+            return None
+        return self.info.get_name()</div>
+
+
+<div class="viewcode-block" id="Channels.set_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.set_name">[docs]</a>
+    def set_name(self, name):
+        &quot;&quot;&quot;
+        Set the name for the channels.
+
+        Parameters
+        ----------
+        name : str
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.info is None:
+            return
+        self.info.set_name(name)</div>
+
+
+<div class="viewcode-block" id="Channels.initialize">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.initialize">[docs]</a>
+    def initialize(self):
+        &quot;&quot;&quot;
+        Initializes channel groups, divisions, and modalities.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.init_groups()
+        self.init_divisions()
+        self.init_modalities()
+        self.is_initialized = True</div>
+
+
+<div class="viewcode-block" id="Channels.validate_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.validate_scan">[docs]</a>
+    def validate_scan(self, scan):
+        &quot;&quot;&quot;
+        Validate the channel data with a scan.
+
+        The steps are:
+
+        1. Load the channel data
+        2. Set appropriate flags
+        3. Initialize channel groups, divisions, and modalities.
+        4. Apply the configuration options
+
+        Parameters
+        ----------
+        scan : Scan
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.startup_info = self.info.copy()
+        self.load_channel_data()
+        self.flag_channels()
+        self.initialize()
+        self.info.validate_scan(self)
+        self.apply_configuration()
+        self.census(report=True)
+        self.is_valid = True</div>
+
+
+<div class="viewcode-block" id="Channels.apply_configuration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Apply the configuration options to the channels.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.configuration.get_bool(&#39;scramble&#39;):
+            self.scramble()
+
+        if self.configuration.get_bool(&#39;flatweights&#39;):
+            self.flatten_weights()
+
+        if self.configuration.get_bool(&#39;uniform&#39;):
+            self.data.set_uniform_gains()
+
+        gain_noise = self.configuration.get_float(&#39;gainnoise&#39;, default=np.nan)
+        if np.isfinite(gain_noise):
+            random_noise = np.random.normal(loc=0.0, scale=1.0, size=self.size)
+            self.data.gain *= 1 + (gain_noise * random_noise)
+
+        if self.has_option(&#39;sourcegains&#39;):
+            log.debug(&quot;Incorporating pixel coupling correlated signal gains.&quot;)
+            self.data.gain *= self.data.coupling
+            self.data.coupling.fill(1.0)
+
+        self.normalize_array_gains()
+
+        if self.configuration.get_bool(&#39;source.fixedgains&#39;):
+            self.set_fixed_source_gains()
+            log.debug(&quot;Will use static source gains.&quot;)
+
+        if self.configuration.get_bool(&#39;jackknife.channels&#39;):
+            self.jackknife()
+
+        self.data.spikes[:] = 0
+        self.data.dof[:] = 1.0
+        self.data.validate_weights()</div>
+
+
+<div class="viewcode-block" id="Channels.jackknife">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.jackknife">[docs]</a>
+    def jackknife(self):
+        &quot;&quot;&quot;
+        Randomly inverts half of the channel couplings.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        log.debug(&quot;JACKKNIFE: Randomly inverted channels in source.&quot;)
+        random_half_channels = np.random.random(self.size) &lt; 0.5
+        self.data.coupling[random_half_channels] *= -1</div>
+
+
+<div class="viewcode-block" id="Channels.flag_channels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.flag_channels">[docs]</a>
+    def flag_channels(self):
+        &quot;&quot;&quot;
+        Flag certain channels.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.configuration.has_option(&#39;blind&#39;):
+            self.set_blind_channels(
+                self.configuration.get_int_list(
+                    &#39;blind&#39;, is_positive=True, default=[]))
+        if self.configuration.has_option(&#39;flag&#39;):
+            self.flag_channel_list(
+                self.configuration.get_int_list(
+                    &#39;flag&#39;, is_positive=True, default=[]))
+        flag_branch = self.configuration.get_branch(&#39;flag&#39;, default=None)
+        if flag_branch is not None:
+            self.flag_fields(flag_branch)
+        self.data.set_flags(&#39;BLIND&#39;, indices=(self.data.weight == 0))
+        self.set_channel_flag_defaults()</div>
+
+
+<div class="viewcode-block" id="Channels.set_channel_flag_defaults">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.set_channel_flag_defaults">[docs]</a>
+    def set_channel_flag_defaults(self):
+        &quot;&quot;&quot;
+        Sets data values based on currently set flags.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.data.set_flag_defaults()</div>
+
+
+<div class="viewcode-block" id="Channels.scramble">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.scramble">[docs]</a>
+    def scramble(self):
+        &quot;&quot;&quot;
+        Randomly shuffle position data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        log.warning(&quot;Scrambling pixel position data (noise map only)&quot;)
+        indices = np.arange(self.size)
+        np.random.shuffle(indices)
+        self.data.position = self.data.position[indices]</div>
+
+
+<div class="viewcode-block" id="Channels.normalize_array_gains">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.normalize_array_gains">[docs]</a>
+    def normalize_array_gains(self):
+        &quot;&quot;&quot;
+        Normalize the relative channel gains in observing channels.
+
+        Returns
+        -------
+        average_gain : float
+            The average gain prior to normalization.
+        &quot;&quot;&quot;
+        log.debug(&quot;Normalizing relative channel gains.&quot;)
+        array = self.modalities.get(&#39;obs-channels&#39;)[0]
+        return array.normalize_gains()</div>
+
+
+<div class="viewcode-block" id="Channels.get_channel_data_instance">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_channel_data_instance">[docs]</a>
+    def get_channel_data_instance(self):
+        &quot;&quot;&quot;
+        Return a channel data instance for these channels.
+
+        Returns
+        -------
+        ChannelData
+        &quot;&quot;&quot;
+        if self.info is None:
+            raise ValueError(&quot;Info must be set before acquiring channel data.&quot;)
+        data_class = self.info.get_channel_data_class()
+        return data_class(channels=self)</div>
+
+
+<div class="viewcode-block" id="Channels.get_scan_instance">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_scan_instance">[docs]</a>
+    def get_scan_instance(self):
+        &quot;&quot;&quot;
+        Return a scan instance for these channels.
+
+        Returns
+        -------
+        Scan
+        &quot;&quot;&quot;
+        if self.info is None:
+            raise ValueError(&quot;Info must be set before acquiring scan.&quot;)
+        scan_class = self.info.get_scan_class()
+        scan = scan_class(self.copy())
+        scan.info.scan = scan
+        return scan</div>
+
+
+<div class="viewcode-block" id="Channels.read_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.read_scan">[docs]</a>
+    def read_scan(self, filename, read_fully=True):
+        &quot;&quot;&quot;
+        Read a file and return a scan using these channels.
+
+        Parameters
+        ----------
+        filename : str
+            The file path to the scan.
+        read_fully : bool, optional
+            If `True`, fully read the scan.
+
+        Returns
+        -------
+        Scan
+        &quot;&quot;&quot;
+        scan = self.get_scan_instance()
+        scan.read(filename, read_fully=read_fully)
+
+        valid_integrations = []
+        if scan.integrations is not None:
+            for integration in scan.integrations:
+                if integration.size &gt; 0:
+                    valid_integrations.append(integration)
+        scan.integrations = valid_integrations
+        return scan</div>
+
+
+<div class="viewcode-block" id="Channels.get_pixel_count">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_pixel_count">[docs]</a>
+    def get_pixel_count(self):
+        &quot;&quot;&quot;
+        Return the number of pixels in the channels.
+
+        Returns
+        -------
+        pixels : int
+        &quot;&quot;&quot;
+        if self.data is None:
+            return 0
+        return self.data.get_pixel_count()</div>
+
+
+<div class="viewcode-block" id="Channels.get_pixels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_pixels">[docs]</a>
+    def get_pixels(self):
+        &quot;&quot;&quot;
+        Return the pixels.
+
+        Returns
+        -------
+        ChannelData
+        &quot;&quot;&quot;
+        if self.data is None:
+            return None
+        return self.data.get_pixels()</div>
+
+
+<div class="viewcode-block" id="Channels.get_perimeter_pixels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_perimeter_pixels">[docs]</a>
+    def get_perimeter_pixels(self, sections=None):
+        &quot;&quot;&quot;
+        Return the pixels at the perimeter positions.
+
+        The algorithm to determine perimeter pixels divides the pixel array
+        into `sections` angular slices about the mean pixel position, and then
+        returns the furthest pixel from the central position for that slice.
+        If no pixels exist in that slice, the slice is excluded.
+
+        Parameters
+        ----------
+        sections : int, optional
+            The number of perimeter pixels to return (approximate).  If not
+            supplied, will be determined from the configuration.
+
+        Returns
+        -------
+        perimeter_pixels : ChannelGroup
+        &quot;&quot;&quot;
+        if sections is None:
+            if self.configuration.get_string(
+                    &#39;perimeter&#39;, default=&#39;none&#39;).lower() == &#39;auto&#39;:
+                sections = int(np.ceil(7 * np.sqrt(self.size)))
+            else:
+                sections = self.configuration.get_int(&#39;perimeter&#39;, default=0)
+
+        mapping_pixels = self.get_mapping_pixels(
+            discard_flag=self.flagspace.sourceless_flags())
+        if sections &lt;= 0:
+            return mapping_pixels
+
+        centroid = mapping_pixels.position.mean()
+        pi = np.pi * units.Unit(&#39;radian&#39;)
+        da = (2 * pi / sections).to(&#39;degree&#39;)
+        relative = Coordinate2D(mapping_pixels.position)
+        relative.subtract(centroid)
+        angle = relative.angle().to(&#39;degree&#39;)
+        bins = np.floor((angle + pi) / da).decompose().value.astype(int)
+        distance = relative.length
+
+        perimeter_indices = np.full(sections, -1)
+        for i in range(sections):
+            check = np.nonzero(bins == i)[0]
+            if check.size &gt; 0:
+                perimeter_indices[i] = check[np.argmax(distance[check])]
+        perimeter_indices = np.unique(
+            perimeter_indices[perimeter_indices &gt;= 0])
+
+        return mapping_pixels.create_data_group(indices=perimeter_indices,
+                                                name=&#39;perimeter_pixels&#39;)</div>
+
+
+<div class="viewcode-block" id="Channels.find_fixed_indices">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.find_fixed_indices">[docs]</a>
+    def find_fixed_indices(self, fixed_indices, cull=True):
+        &quot;&quot;&quot;
+        Returns the actual indices given fixed indices.
+
+        The fixed indices are those that are initially loaded.  Returned
+        indices are their locations in the data arrays.
+
+        Parameters
+        ----------
+        fixed_indices : int or np.ndarray (int)
+            The fixed indices.
+        cull : bool, optional
+            If `True`, do not include fixed indices not found in the result.
+            If `False`, missing indices will be replaced by -1.
+
+        Returns
+        -------
+        indices : numpy.ndarray (int)
+            The indices of `fixed_indices` in the data arrays.  A tuple will
+            be returned, in the case where we are examining more than one
+            dimension.
+        &quot;&quot;&quot;
+        return self.data.find_fixed_indices(fixed_indices, cull=cull)</div>
+
+
+<div class="viewcode-block" id="Channels.get_division">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_division">[docs]</a>
+    def get_division(self, name, field, keep_flag=None, discard_flag=None,
+                     match_flag=None):
+        &quot;&quot;&quot;
+        Creates a channel division based on a given data field.
+
+        A single group will be created for each unique field value.  The name
+        of each group will be &lt;field&gt;-&lt;value&gt;.  Channels may be discarded from
+        any groups using the standard flagging mechanisms (keep, discard_flag,
+        match).
+
+        Parameters
+        ----------
+        name : str
+            The name of the channel division.
+        field : str
+            The data field on which to base division creation.
+        keep_flag : int or str or ChannelFlagTypes, optional
+            If supplied, all groups in the division will only contain channels
+            flagged with `keep_flag`.
+        discard_flag : int or str or ChannelFlagTypes, optional
+            If supplied, all groups in the division will not contain any
+            channels flagged with `discard_flag`.
+        match_flag : int or str or ChannelFlagTypes, optional
+            If supplied, all groups in the division will only contain channels
+            containing flags exactly matching `match_flag`.  Overrides
+            `keep_flag` and `discard_flag`.
+
+        Returns
+        -------
+        ChannelDivision
+            The newly created channel division.
+        &quot;&quot;&quot;
+        values = getattr(self.data, field, None)
+        if values is None:
+            raise ValueError(f&quot;Data does not contain &#39;{field}&#39;.&quot;)
+
+        indices = self.data.get_flagged_indices(keep_flag=keep_flag,
+                                                discard_flag=discard_flag,
+                                                match_flag=match_flag)
+        mask = np.full(self.size, False)
+        mask[indices] = True
+        unique_values = np.unique(values)
+        groups = []
+        for unique_value in unique_values:
+            group_name = f&#39;{field}-{unique_value}&#39;
+            indices = np.nonzero(mask &amp; (values == unique_value))[0]
+            groups.append(
+                self.create_channel_group(indices=indices, name=group_name))
+
+        division = ChannelDivision(name)
+        for group in groups:
+            division.groups.append(group)
+
+        return division</div>
+
+
+<div class="viewcode-block" id="Channels.add_group">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.add_group">[docs]</a>
+    def add_group(self, channel_group, name=None):
+        &quot;&quot;&quot;
+        Add a channel group to the groups dictionary.
+
+        Parameters
+        ----------
+        channel_group : Group
+            A channel group.
+        name : str, optional
+            The name of the group.  If not supplied, will be determined from
+            the name of the group.  If supplied, will set the group object name
+            if not previously set.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if channel_group is None:
+            return
+        if not isinstance(channel_group, ChannelGroup):
+            raise ValueError(
+                f&quot;The groups dictionary can only contain {ChannelGroup}. &quot;
+                f&quot;Received {type(channel_group)}.&quot;)
+        if name is None:
+            name = channel_group.name
+        elif channel_group.name is None:
+            channel_group.name = name
+        self.groups[name] = channel_group</div>
+
+
+<div class="viewcode-block" id="Channels.add_division">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.add_division">[docs]</a>
+    def add_division(self, channel_division):
+        &quot;&quot;&quot;
+        Adds a channel division to the divisions dictionary.
+
+        A channel division contains sets of groups.  Will also add any groups
+        to the groups dictionary.
+
+        Parameters
+        ----------
+        channel_division : ChannelDivision
+            The channel division to add.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if channel_division is None:
+            return
+        if not isinstance(channel_division, ChannelDivision):
+            raise ValueError(
+                f&quot;The divisions dictionary can only &quot;
+                f&quot;contain {ChannelDivision}. &quot;
+                f&quot;Received {type(channel_division)}.&quot;)
+
+        self.divisions[channel_division.name] = channel_division
+        for group in channel_division.groups:
+            self.add_group(group)</div>
+
+
+<div class="viewcode-block" id="Channels.add_modality">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.add_modality">[docs]</a>
+    def add_modality(self, modality):
+        &quot;&quot;&quot;
+        Add a modality to the modalities dictionary.
+
+        Parameters
+        ----------
+        modality : Modality
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if modality is None:
+            return
+        if not isinstance(modality, Modality):
+            raise ValueError(
+                f&quot;The modalities dictionary can only contain {Modality}. &quot;
+                f&quot;Received {type(modality)}.&quot;)
+        self.modalities[modality.name] = modality</div>
+
+
+<div class="viewcode-block" id="Channels.list_divisions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.list_divisions">[docs]</a>
+    def list_divisions(self):
+        &quot;&quot;&quot;
+        Return a list of all division names.
+
+        Returns
+        -------
+        list (str)
+        &quot;&quot;&quot;
+        if self.divisions is None:
+            return []
+        return sorted(self.divisions.keys())</div>
+
+
+<div class="viewcode-block" id="Channels.list_modalities">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.list_modalities">[docs]</a>
+    def list_modalities(self):
+        &quot;&quot;&quot;
+        Return a list of all modality names.
+
+        Returns
+        -------
+        list (str)
+        &quot;&quot;&quot;
+        if self.modalities is None:
+            return []
+        return sorted(self.modalities.keys())</div>
+
+
+<div class="viewcode-block" id="Channels.flatten_weights">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.flatten_weights">[docs]</a>
+    def flatten_weights(self):
+        &quot;&quot;&quot;
+        Flattens weight according to gain^2.
+
+        Does not include hardware gains.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        log.debug(&quot;Switching to flag channel weights.&quot;)
+        self.data.flatten_weights()</div>
+
+
+<div class="viewcode-block" id="Channels.uniform_gains">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.uniform_gains">[docs]</a>
+    def uniform_gains(self, field=None):
+        &quot;&quot;&quot;
+        Sets the gain and coupling to 1.0 for all channels.
+
+        Parameters
+        ----------
+        field : str, optional
+            If supplied, sets all values of the requested field to unity.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.data.set_uniform_gains(field=field)</div>
+
+
+<div class="viewcode-block" id="Channels.set_fixed_source_gains">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.set_fixed_source_gains">[docs]</a>
+    def set_fixed_source_gains(self):
+        &quot;&quot;&quot;
+        Multiplies coupling by gain only if this has not been done before.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.fixed_source_gains:
+            return
+        self.data.coupling *= self.data.gain
+        self.fixed_source_gains = True</div>
+
+
+<div class="viewcode-block" id="Channels.get_channel_flag_key">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_channel_flag_key">[docs]</a>
+    def get_channel_flag_key(self, prepend=&#39;&#39;):
+        &quot;&quot;&quot;
+        Return the channel flags and values.
+
+        Parameters
+        ----------
+        prepend : str
+            A string to prepend to all names.
+
+        Returns
+        -------
+        dict
+            A key containing key=name, value=value (int).
+        &quot;&quot;&quot;
+        result = []
+        for flag in self.flagspace.flags:
+            letter = self.flagspace.flag_to_letter(flag)
+            code = flag.value
+            description = self.flagspace.descriptions[flag]
+            result.append(f&quot;{prepend}&#39;{letter}&#39; - {code} - {description}&quot;)
+
+        return result</div>
+
+
+<div class="viewcode-block" id="Channels.write_channel_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.write_channel_data">[docs]</a>
+    def write_channel_data(self, filename, header=None):
+        &quot;&quot;&quot;
+        Write the channel data to a file.
+
+        Parameters
+        ----------
+        filename : str
+            The file name to write to.
+        header : str, optional
+            An optional header line to write to the file.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        with open(filename, &#39;w&#39;) as f:
+            print(&quot;# SOFSCAN Pixel Data File&quot;, file=f)
+            print(&quot;#&quot;, file=f)
+
+            if header is not None:
+                print(header, file=f)
+                print(&quot;#&quot;, file=f)
+
+            flag_key = self.get_channel_flag_key(prepend=&#39;# Flag &#39;)
+            for key_line in flag_key:
+                print(key_line, file=f)
+            print(&quot;#&quot;, file=f)
+
+            self.set_standard_weights()
+            data_strings = self.data.to_string().split(&#39;\n&#39;)
+            self.set_sample_weights()
+
+            data_header = f&#39;# {data_strings[0]}&#39;
+            data_body = &#39;\n&#39;.join(data_strings[1:])
+            print(data_header, file=f)
+            print(data_body, file=f)
+
+        log.info(f&quot;Written {filename}&quot;)</div>
+
+
+<div class="viewcode-block" id="Channels.print_correlated_modalities">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.print_correlated_modalities">[docs]</a>
+    def print_correlated_modalities(self):
+        &quot;&quot;&quot;
+        Print all correlated modalities to the log.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.is_initialized:
+            self.initialize()
+        log.info(f&quot;Available pixel divisions for &quot;
+                 f&quot;{self.info.instrument.name}: &quot;)
+        for name, modality in self.modalities.items():
+            if isinstance(modality, CorrelatedModality):
+                configured = self.configuration.has_option(
+                    f&#39;correlated.{name}&#39;)
+                log.info(f&quot; {&#39;(*)&#39; if configured else &#39;   &#39;} {name}&quot;)</div>
+
+
+<div class="viewcode-block" id="Channels.print_response_modalities">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.print_response_modalities">[docs]</a>
+    def print_response_modalities(self):
+        &quot;&quot;&quot;
+        Print all response modalities to the log.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.print_correlated_modalities()</div>
+
+
+<div class="viewcode-block" id="Channels.reindex">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.reindex">[docs]</a>
+    def reindex(self):
+        &quot;&quot;&quot;
+        Reset the channel indices to range sequentially from 0 -&gt; size.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for group in self.groups.values():
+            group.reindex()
+            group.data = self.data
+
+        for channel_division in self.divisions.values():
+            if channel_division.groups is not None:
+                for group in channel_division.groups:
+                    if group is not None:
+                        group.reindex()
+                        group.data = self.data
+
+        for modality in self.modalities.values():
+            if modality.modes is not None:
+                for mode in modality.modes:
+                    if mode.channel_group is not None:
+                        mode.channel_group.reindex()
+                        mode.channel_group.data = self.data</div>
+
+
+<div class="viewcode-block" id="Channels.slim">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.slim">[docs]</a>
+    def slim(self, reindex=True):
+        &quot;&quot;&quot;
+        Remove all DEAD or DISCARD flagged channels.
+
+        Will also update channel groups, divisions, and modalities.
+
+        Parameters
+        ----------
+        reindex : bool, optional
+            If `True`, reindex channels if slimmed.
+
+        Returns
+        -------
+        slimmed : bool
+            `True` if channels were discarded, `False` otherwise.
+        &quot;&quot;&quot;
+        old_size = self.size
+        flag = self.flagspace.flags.DEAD | self.flagspace.flags.DISCARD
+        self.discard(flag=flag, criterion=&#39;DISCARD_ALL&#39;)
+        self.slim_groups()
+        if self.size &lt; old_size:
+            log.debug(f&quot;Slimmed to {self.size} live pixels.&quot;)
+            if reindex:
+                self.reindex()
+            return True
+        else:
+            return False</div>
+
+
+<div class="viewcode-block" id="Channels.slim_groups">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.slim_groups">[docs]</a>
+    def slim_groups(self):
+        &quot;&quot;&quot;
+        Remove invalid channels from channel groups, divisions, and modalities.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for channel_group in self.groups.values():
+            self.slim_group(channel_group)
+
+        for channel_division in self.divisions.values():
+            for channel_group in channel_division.groups:
+                self.slim_group(channel_group)
+
+        for modality in self.modalities.values():
+            for mode in modality.modes:
+                self.slim_group(mode.channel_group)</div>
+
+
+<div class="viewcode-block" id="Channels.slim_group">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.slim_group">[docs]</a>
+    def slim_group(self, channel_group):
+        &quot;&quot;&quot;
+        Remove indices from a channel group not present in the channel data.
+
+        Parameters
+        ----------
+        channel_group : ChannelGroup
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        fixed_indices = np.intersect1d(self.data.fixed_index,
+                                       channel_group.fixed_indices)
+        # Setting the fixed indices also updates standard indexing (property)
+        channel_group.fixed_indices = fixed_indices</div>
+
+
+<div class="viewcode-block" id="Channels.discard">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.discard">[docs]</a>
+    def discard(self, flag, criterion=None):
+        r&quot;&quot;&quot;
+        Given a flag, remove channels from data and dependent structures.
+
+        Will also remove discarded channels from channel groups, divisions,
+        and modalities.
+
+        Parameters
+        ----------
+        flag : int or ChannelFlagTypes, optional
+            The flag to discard_flag.
+        criterion : str, optional
+            One of {&#39;DISCARD_ANY&#39;, &#39;DISCARD_ALL&#39;, &#39;DISCARD_MATCH&#39;,
+            &#39;KEEP_ANY&#39;, &#39;KEEP_ALL&#39;, &#39;KEEP_MATCH&#39;}.  \*_ANY refers to any flag
+            that is not zero (unflagged).  \*_ALL refers to any flag that
+            contains `flag`, and \*_MATCH refers to any flag that exactly
+            matches `flag`.  The default (`None`), uses DISCARD_ANY if
+            `flag` is None, and DISCARD_ALL otherwise.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.remove(self.flagspace.discard_indices(self.data.flag, flag,
+                                                   criterion=criterion))</div>
+
+
+<div class="viewcode-block" id="Channels.load_temporary_hardware_gains">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.load_temporary_hardware_gains">[docs]</a>
+    def load_temporary_hardware_gains(self):
+        &quot;&quot;&quot;
+        Load the temporary hardware gains in the channel data.
+
+        The hardware gains are also reset from the info.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.data.set_hardware_gain(self.info)
+        self.data.temp = self.data.hardware_gain.copy()</div>
+
+
+<div class="viewcode-block" id="Channels.get_source_gains">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_source_gains">[docs]</a>
+    def get_source_gains(self, filter_corrected=True):
+        &quot;&quot;&quot;
+        Return the source gains.
+
+        The source gains are taken from the coupling data.  If gains are not
+        fixed (as determined by &quot;source.fixedgains&quot;), gains are multiplied by
+        the channel gains.  It will also be multiplied by the source filter
+        if `filter_corrected` is `True`.
+
+        Parameters
+        ----------
+        filter_corrected : bool, optional
+            Apply source filtering.
+
+        Returns
+        -------
+        gains : numpy.ndarray (float)
+            The source gains.
+        &quot;&quot;&quot;
+        fixed_gains = self.configuration.get_bool(&#39;source.fixedgains&#39;)
+        gain_factor = 1.0 if fixed_gains else self.data.gain
+        gains = self.data.coupling * gain_factor
+        if filter_corrected:
+            gains *= self.data.source_filtering
+        return gains</div>
+
+
+<div class="viewcode-block" id="Channels.get_min_beam_fwhm">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_min_beam_fwhm">[docs]</a>
+    def get_min_beam_fwhm(self):
+        &quot;&quot;&quot;
+        Return the minimum beam FWHM.
+
+        Returns
+        -------
+        fwhm : astropy.units.Quantity
+        &quot;&quot;&quot;
+        return np.nanmin(self.data.resolution)</div>
+
+
+<div class="viewcode-block" id="Channels.get_max_beam_fwhm">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_max_beam_fwhm">[docs]</a>
+    def get_max_beam_fwhm(self):
+        &quot;&quot;&quot;
+        Return the maximum beam FWHM.
+
+        Returns
+        -------
+        fwhm : astropy.units.Quantity
+        &quot;&quot;&quot;
+        return np.nanmax(self.data.resolution)</div>
+
+
+<div class="viewcode-block" id="Channels.get_average_beam_fwhm">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_average_beam_fwhm">[docs]</a>
+    def get_average_beam_fwhm(self):
+        &quot;&quot;&quot;
+        Return the average beam FWHM.
+
+        Returns
+        -------
+        fwhm : astropy.units.Quantity
+        &quot;&quot;&quot;
+        return np.nanmean(self.data.resolution)</div>
+
+
+<div class="viewcode-block" id="Channels.get_average_filtering">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_average_filtering">[docs]</a>
+    def get_average_filtering(self):
+        &quot;&quot;&quot;
+        Return the average source filtering.
+
+        Returns
+        -------
+        filtering : float
+        &quot;&quot;&quot;
+        source_gain = self.get_source_gains(filter_corrected=False)
+        valid = self.data.is_unflagged()
+        weight = self.data.weight[valid] * source_gain[valid] ** 2
+        phi = self.data.source_filtering[valid]
+        g = np.nansum(weight * phi)
+        g2 = np.nansum(weight * (phi ** 2))
+        return (g2 / g) if (g &gt; 0) else 0.0</div>
+
+
+<div class="viewcode-block" id="Channels.flag_weights">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.flag_weights">[docs]</a>
+    def flag_weights(self):
+        &quot;&quot;&quot;
+        Flag channels based on channel weights and gain.
+
+        Only detector channels are used during flagging (based on noise
+        weights, not source weights).  Channels with zero degrees of
+        freedom are flagged with the DOF channel flag and unflagged when
+        the degrees of freedom are greater than zero.
+
+        The &#39;weighting.noiserange&#39; configuration option sets the minimum and
+        maximum allowable noise ranges for a channel in standard deviations.
+        The mean value of the channel gain is taken from all detector channels
+        that have sufficient DOF, weight, and gain.
+
+        Those channels that fall outside the acceptable noise ranges are
+        flagged with the SENSITIVITY channel flag, whereas any others will be
+        unflagged.
+
+        Errors will be raised if there are no channels with nonzero DOF, or
+        all channels are flagged as insensitive.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        weight_range = Range()
+        if self.configuration.has_option(&#39;weighting.noiserange&#39;):
+            noise_range = self.configuration.get_range(&#39;weighting.noiserange&#39;,
+                                                       is_positive=True)
+            weight_range.min = (1.0 / (noise_range.max ** 2))
+            if noise_range.min &gt; 0:
+                weight_range.max = (1.0 / (noise_range.min ** 2))
+
+        channels = self.get_detector_channels()
+        valid_points, sum_wg2, channels.flag = cnf.flag_weights(
+            channel_gain=channels.gain,
+            channel_weight=channels.weight,
+            channel_dof=channels.dof,
+            channel_flags=channels.flag,
+            min_weight=weight_range.min,
+            max_weight=weight_range.max,
+            exclude_flag=(self.flagspace.hardware_flags()
+                          | self.flagspace.flags.GAIN).value,
+            dof_flag=self.flagspace.convert_flag(&#39;DOF&#39;).value,
+            sensitivity_flag=self.flagspace.convert_flag(&#39;SENSITIVITY&#39;).value,
+            default_weight=channels.default_field_types[&#39;weight&#39;])
+
+        if valid_points == 0:
+            log.warning(&quot;Degrees of freedom: No valid channels.&quot;)
+        elif sum_wg2 == 0:
+            if self.n_mapping_channels == 0:
+                log.warning(&quot;No mapping channels.&quot;)
+            else:
+                log.warning(&quot;All channels flagged.&quot;)
+
+        self.census()</div>
+
+
+<div class="viewcode-block" id="Channels.get_source_nefd">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_source_nefd">[docs]</a>
+    def get_source_nefd(self, gain=1.0):
+        &quot;&quot;&quot;
+        Returns the source Noise-Equivalent-Flux-Density (NEFD).
+
+        The NEFD is given as:
+
+        nefd = sqrt(n * t / sum(g^2 / v)) / abs(integration_gain)
+
+        where n are the number of mapping channels (unflagged and positive
+        weights), t is the integration time, g is the source gain, and v is the
+        channel variance.  Note that t will be converted to units of seconds if
+        necessary.
+
+        Parameters
+        ----------
+        gain : float, optional
+            Normalizing gain value.  The default is 1.0.
+
+        Returns
+        -------
+        source_nefd : float
+        &quot;&quot;&quot;
+        return cnf.get_source_nefd(
+            filtered_source_gains=self.get_source_gains(filter_corrected=True),
+            weight=self.data.weight,
+            variance=self.data.variance,
+            flags=self.data.flag,
+            integration_time=self.info.integration_time.to(&#39;second&#39;).value,
+            integration_gain=gain)</div>
+
+
+<div class="viewcode-block" id="Channels.get_stability">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_stability">[docs]</a>
+    def get_stability(self):
+        &quot;&quot;&quot;
+        Return the instrument stability in seconds.
+
+        Will look in the configuration for &quot;stability&quot;, and if not found, will
+        return 10 seconds.
+
+        Returns
+        -------
+        stability_time : astropy.units.Quantity
+            The stability time in seconds.
+        &quot;&quot;&quot;
+        return (self.configuration.get_float(&#39;stability&#39;, 10.0)
+                * units.Unit(&#39;s&#39;))</div>
+
+
+<div class="viewcode-block" id="Channels.get_one_over_f_stat">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_one_over_f_stat">[docs]</a>
+    def get_one_over_f_stat(self):
+        &quot;&quot;&quot;
+        Return the 1/frequency statistic (pink noise) of the channels.
+
+        Returns
+        -------
+        float
+            The 1/frequency statistic.
+        &quot;&quot;&quot;
+        channels = self.get_observing_channels()
+        return cnf.get_one_over_f_stat(
+            weights=channels.weight,
+            one_over_f_stats=channels.one_over_f_stat,
+            flags=channels.flag)</div>
+
+
+<div class="viewcode-block" id="Channels.get_fits_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_fits_data">[docs]</a>
+    def get_fits_data(self, data):
+        &quot;&quot;&quot;
+        Add channel data to the FITS data.
+
+        Parameters
+        ----------
+        data : dict
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        gains = np.full(self.n_store_channels, np.nan)
+        weights = np.full(self.n_store_channels, np.nan)
+        flags = np.full(self.n_store_channels, self.flagspace.flags.DEAD.value)
+
+        self.set_standard_weights()
+        gains[self.data.fixed_index] = self.data.gain
+        weights[self.data.fixed_index] = self.data.weight
+        flags[self.data.fixed_index] = self.data.flag
+        self.set_sample_weights()
+
+        data[&#39;Channel_Gains&#39;] = gains
+        data[&#39;Channel_Weights&#39;] = weights
+        data[&#39;Channel_Flags&#39;] = flags</div>
+
+
+<div class="viewcode-block" id="Channels.edit_scan_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.edit_scan_header">[docs]</a>
+    def edit_scan_header(self, header, scans=None, configuration=None):
+        &quot;&quot;&quot;
+        Edit a scan header with available information.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The FITS header to edit.
+        scans : list (Scan), optional
+            A list of scans to use during editing.
+        configuration : Configuration, optional
+            A different configuration to use if necessary
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if configuration is None:
+            configuration = self.configuration
+        if configuration.get_bool(&#39;write.scandata.details&#39;):
+            self.flagspace.edit_header(header, prefix=&#39;C&#39;)</div>
+
+
+<div class="viewcode-block" id="Channels.calculate_overlaps">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.calculate_overlaps">[docs]</a>
+    def calculate_overlaps(self, point_size=None):
+        &quot;&quot;&quot;
+        Calculate channel overlaps.
+
+        Parameters
+        ----------
+        point_size : astropy.units.Quantity, optional
+            The overlap point size (beam FWHM for example).  The default
+            is the instrument spatial resolution.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if point_size is None:
+            point_size = self.info.resolution
+        elif isinstance(point_size, units.Quantity):
+            point_size = point_size.to(self.info.size_unit)
+        else:
+            point_size = point_size * self.info.size_unit
+
+        if point_size == self.overlap_point_size:
+            return  # don&#39;t need to do anything if already calculated.
+
+        self.data.calculate_overlaps(point_size)
+        self.overlap_point_size = point_size</div>
+
+
+<div class="viewcode-block" id="Channels.get_table_entry">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Return a channel parameter for the given name.
+
+        Parameters
+        ----------
+        name : str
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        size_unit = self.info.size_unit
+        if name == &#39;gain&#39;:
+            return self.info.gain
+        elif name == &#39;sampling&#39;:
+            return self.info.sampling_interval.to(&#39;second&#39;).value
+        elif name == &#39;rate&#39;:
+            return (1.0 / self.info.sampling_interval).to(&#39;Hz&#39;).value
+        elif name == &#39;okchannels&#39;:
+            return self.n_mapping_channels
+        elif name == &#39;maxchannels&#39;:
+            return self.n_store_channels
+        elif name == &#39;mount&#39;:
+            return self.info.instrument.mount.name
+        elif name == &#39;resolution&#39;:
+            return self.info.resolution.to(size_unit).value
+        elif name == &#39;sizeunit&#39;:
+            return size_unit.name
+        elif name == &#39;ptfilter&#39;:
+            return self.get_average_filtering()
+        elif name == &#39;FWHM&#39;:
+            return self.get_average_beam_fwhm().to(size_unit).value
+        elif name == &#39;minFWHM&#39;:
+            return self.get_min_beam_fwhm().to(size_unit).value
+        elif name == &#39;maxFWHM&#39;:
+            return self.get_max_beam_fwhm().to(size_unit).value
+        elif name == &#39;stat1f&#39;:
+            return self.get_one_over_f_stat()
+        else:
+            return None</div>
+
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Return a string representing the channels.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return f&quot;Instrument {self.get_name()}&quot;
+
+<div class="viewcode-block" id="Channels.troubleshoot_few_pixels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.troubleshoot_few_pixels">[docs]</a>
+    def troubleshoot_few_pixels(self):
+        &quot;&quot;&quot;
+        Return suggestions as to how to remedy too few pixels in the model.
+
+        Returns
+        -------
+        suggestions : list (str)
+        &quot;&quot;&quot;
+        suggestions = [
+            &#39; * Disable gain estimation for one or more modalities. E.g.:&#39;]
+
+        for modality in self.list_modalities():
+            if not self.configuration.has_option(f&#39;correlated.{modality}&#39;):
+                continue
+            if self.configuration.get_bool(f&#39;correlated.{modality}.nogains&#39;):
+                continue
+            suggestions.append(f&#39;\t-correlated.{modality}.nogains=True&#39;)
+
+        if self.configuration.get_bool(&#39;gains&#39;):
+            suggestions.append(&quot; * Disable gain estimation globally with &quot;
+                               &quot;&#39;-forget=gains&#39;.&quot;)
+        if self.configuration.has_option(&#39;despike&#39;):
+            suggestions.append(&quot; * Disable despiking with &#39;-forget=despike&#39;.&quot;)
+        if self.configuration.has_option(&#39;weighting.noiserange&#39;):
+            suggestions.append(&quot; * Adjust noise flagging via &quot;
+                               &quot;&#39;weighting.noiserange&#39;.&quot;)
+        return suggestions</div>
+
+
+<div class="viewcode-block" id="Channels.flag_field">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.flag_field">[docs]</a>
+    def flag_field(self, field, specs):
+        &quot;&quot;&quot;
+        Given a data field name and list of specifications, flag as DEAD.
+
+        The specifications may define a single value or range of values.  Any
+        data value within that range or equal to a specified value will be
+        flagged as dead.
+
+        Parameters
+        ----------
+        field : str
+            The data field name.
+        specs : list of str
+            Each element may contain a single value or range of values
+            (marked by lower-upper or lower:upper) that should be flagged as
+            dead.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.data.flag_field(field, specs)</div>
+
+
+<div class="viewcode-block" id="Channels.flag_fields">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.flag_fields">[docs]</a>
+    def flag_fields(self, fields):
+        &quot;&quot;&quot;
+        Flag channel data by fields.
+
+        Parameters
+        ----------
+        fields : dict
+            The fields dict should have the field names for keys (attributes
+            in channel data to flag) and channel ranges for values.  values
+            may be in the form lower-upper, lower:upper.  Any channels with
+            that field attribute in the given range will be flagged as DEAD.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not isinstance(fields, dict):
+            return
+        for field, specs in fields.items():
+            self.data.flag_field(field, specs)</div>
+
+
+<div class="viewcode-block" id="Channels.flag_channel_list">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.flag_channel_list">[docs]</a>
+    def flag_channel_list(self, channel_list):
+        &quot;&quot;&quot;
+        Flag channels as DEAD from a list of channel ranges/fixed indices.
+
+        Parameters
+        ----------
+        channel_list : list or str
+            If provided as a string, elements should be comma delimited.  Each
+            element can be an int or string specifying fixed indices to flag.
+            Note that ranges can be specified via &#39;min:max&#39; or &#39;min-max&#39;.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.data.flag_channel_list(channel_list)</div>
+
+
+<div class="viewcode-block" id="Channels.kill_channels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.kill_channels">[docs]</a>
+    def kill_channels(self, flag=None):
+        &quot;&quot;&quot;
+        Given a flag, sets all matching elements to DEAD only flag status.
+
+        Parameters
+        ----------
+        flag : int or ChannelFlagTypes
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.data.kill_channels(flag=flag)</div>
+
+
+<div class="viewcode-block" id="Channels.set_blind_channels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.set_blind_channels">[docs]</a>
+    def set_blind_channels(self, fixed_indices):
+        &quot;&quot;&quot;
+        Set BLIND flag for elements based on fixed indices.
+
+        Will kill (set flag to only DEAD) any previously defined BLIND
+        channels. All new blinded channels will only have the BLIND flag.
+
+        Parameters
+        ----------
+        fixed_indices : numpy.ndarray of int
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.data.set_blind_channels(fixed_indices)</div>
+
+
+<div class="viewcode-block" id="Channels.load_channel_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.load_channel_data">[docs]</a>
+    def load_channel_data(self):
+        &quot;&quot;&quot;
+        Load the channel data.
+
+        The pixel data and wiring data files should be defined in the
+        configuration.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if &#39;pixeldata&#39; in self.configuration:
+            pixel_data_file = self.configuration.priority_file(&#39;pixeldata&#39;)
+            if pixel_data_file is None:
+                log.error(f&quot;Pixel data file &quot;
+                          f&quot;{self.configuration.get(&#39;pixeldata&#39;)} not found.&quot;)
+                log.warning(&quot;Cannot read pixel data. &quot;
+                            &quot;Using default gains and flags.&quot;)
+            else:
+                self.read_pixel_data(pixel_data_file)
+
+        if &#39;wiring&#39; in self.configuration:
+            wiring_data_file = self.configuration.priority_file(&#39;wiring&#39;)
+            if wiring_data_file is None:
+                log.warning(f&quot;Wiring data file &quot;
+                            f&quot;{self.configuration.get(&#39;wiring&#39;)} not found.&quot;)
+                log.warning(&quot;Cannot read wiring data. &quot;
+                            &quot;Specific channel divisions not established.&quot;)
+            else:
+                self.read_wiring_data(wiring_data_file)</div>
+
+
+<div class="viewcode-block" id="Channels.read_pixel_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.read_pixel_data">[docs]</a>
+    def read_pixel_data(self, filename):
+        &quot;&quot;&quot;
+        Read the pixel data file.
+
+        If the instrument integration time is greater than zero, will set
+        weighting accordingly.  Otherwise, standard weights are used.
+
+        Parameters
+        ----------
+        filename : str
+            Path to the pixel data file.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        log.info(f&quot;Loading pixel data from {filename}&quot;)
+
+        self.data.read_pixel_data(filename)
+        self.standard_weights = True
+        if self.info.instrument.integration_time &gt; 0:
+            self.set_sample_weights()</div>
+
+
+<div class="viewcode-block" id="Channels.read_wiring_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.read_wiring_data">[docs]</a>
+    def read_wiring_data(self, filename):
+        &quot;&quot;&quot;
+        Read the wiring data.
+
+        Parameters
+        ----------
+        filename : str
+            Path to the wiring data file.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="Channels.set_standard_weights">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.set_standard_weights">[docs]</a>
+    def set_standard_weights(self):
+        &quot;&quot;&quot;
+        Set standard weighting.
+
+        If not already applied, divides the channels weights by
+        sqrt(integration_time)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.standard_weights:
+            return
+        time = self.info.instrument.integration_time
+        if isinstance(time, units.Quantity):
+            time = time.decompose().value
+        self.data.weight /= np.sqrt(time)
+        self.standard_weights = True</div>
+
+
+<div class="viewcode-block" id="Channels.set_sample_weights">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.set_sample_weights">[docs]</a>
+    def set_sample_weights(self):
+        &quot;&quot;&quot;
+        Set the sample weighting.
+
+        If not already applied, multiplies the channel weighting by
+        sqrt(integration_time).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.standard_weights:
+            return
+        time = self.info.instrument.integration_time
+        if isinstance(time, units.Quantity):
+            time = time.decompose().value
+        self.data.weight *= np.sqrt(time)
+        self.standard_weights = False</div>
+
+
+<div class="viewcode-block" id="Channels.remove">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.remove">[docs]</a>
+    def remove(self, indices):
+        &quot;&quot;&quot;Remove channel indices and dependent data.
+
+        In addition to removing channels from the channel data, also remove
+        those channel references from channel groups, divisions, and
+        modalities.
+
+        Parameters
+        ----------
+        indices : numpy.ndarray of int
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if len(indices) == 0:
+            return
+        self.data.delete_indices(indices)
+        self.slim_groups()</div>
+
+
+<div class="viewcode-block" id="Channels.get_typical_gain_magnitude">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_typical_gain_magnitude">[docs]</a>
+    def get_typical_gain_magnitude(self, gains, keep_flag=None,
+                                   discard_flag=None, match_flag=None):
+        r&quot;&quot;&quot;
+        Return the mean gain value of data.
+
+        The mean value may be calculated given a number of flag criteria.  The
+        outer 10% of log(1 + \|gain\|) are excluded from the mean calculation.
+
+        Parameters
+        ----------
+        gains : numpy.ndarray (float)
+        keep_flag : int or ChannelFlagTypes, optional
+            Flag values to keep in the calculation.
+        discard_flag : int or ChannelFlagTypes, optional
+            Flag values to discard_flag from the calculation.
+        match_flag : int or ChannelFlagTypes, optional
+            Only matching flag values will be used in the calculation.
+
+        Returns
+        -------
+        mean : float
+            The mean gain value.
+        &quot;&quot;&quot;
+        return self.data.get_typical_gain_magnitude(gains,
+                                                    keep_flag=keep_flag,
+                                                    discard_flag=discard_flag,
+                                                    match_flag=match_flag)</div>
+
+
+<div class="viewcode-block" id="Channels.get_observing_channels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_observing_channels">[docs]</a>
+    def get_observing_channels(self):
+        &quot;&quot;&quot;
+        Returns the &#39;obs-channels&#39; channel group.
+
+        Returns
+        -------
+        obs_channels : ChannelGroup
+        &quot;&quot;&quot;
+        if self.groups is None:
+            return None
+        return self.groups.get(&#39;obs-channels&#39;)</div>
+
+
+<div class="viewcode-block" id="Channels.get_live_channels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_live_channels">[docs]</a>
+    def get_live_channels(self):
+        &quot;&quot;&quot;
+        Returns the &#39;live&#39; channel group.
+
+        Returns
+        -------
+        live_channels : ChannelGroup
+        &quot;&quot;&quot;
+        if self.groups is None:
+            return None
+        return self.groups.get(&#39;live&#39;)</div>
+
+
+<div class="viewcode-block" id="Channels.get_detector_channels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_detector_channels">[docs]</a>
+    def get_detector_channels(self):
+        &quot;&quot;&quot;
+        Returns the &#39;detectors&#39; channel group.
+
+        Returns
+        -------
+        detector_channels : ChannelGroup
+        &quot;&quot;&quot;
+        if self.groups is None:
+            return None
+        return self.groups.get(&#39;detectors&#39;)</div>
+
+
+<div class="viewcode-block" id="Channels.get_sensitive_channels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_sensitive_channels">[docs]</a>
+    def get_sensitive_channels(self):
+        &quot;&quot;&quot;
+        Returns the &#39;sensitive&#39; channel group.
+
+        Returns
+        -------
+        sensitive_channels : ChannelGroup
+        &quot;&quot;&quot;
+        if self.groups is None:
+            return None
+        return self.groups.get(&#39;sensitive&#39;)</div>
+
+
+<div class="viewcode-block" id="Channels.get_blind_channels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_blind_channels">[docs]</a>
+    def get_blind_channels(self):
+        &quot;&quot;&quot;
+        Returns the &#39;blinds&#39; channel group.
+
+        Returns
+        -------
+        blind_channels : ChannelGroup
+        &quot;&quot;&quot;
+        if self.groups is None:
+            return None
+        return self.groups.get(&#39;blinds&#39;)</div>
+
+
+<div class="viewcode-block" id="Channels.census">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.census">[docs]</a>
+    def census(self, report=False):
+        &quot;&quot;&quot;
+        Update the number of available mapping channels.
+
+        Parameters
+        ----------
+        report : bool, optional
+            If `True`, produce a log message for the number of mapping channels
+            and number of mapping pixels.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.modalities is None:
+            log.error(&quot;Modalities are not initialized.&quot;)
+            obs_channels = None
+        else:
+            obs_channels = self.get_observing_channels()
+
+        if obs_channels is None:
+            self.n_mapping_channels = 0
+        else:
+            self.n_mapping_channels = np.sum(
+                obs_channels.is_unflagged() &amp; (obs_channels.weight &gt; 0))
+
+        if not report:
+            return
+
+        mapping_pixels = self.get_mapping_pixels(
+            discard_flag=self.flagspace.sourceless_flags())
+
+        log.debug(f&quot;Mapping channels: {self.n_mapping_channels}&quot;)
+        log.debug(f&quot;Mapping pixels: {mapping_pixels.size}&quot;)</div>
+
+
+<div class="viewcode-block" id="Channels.create_channel_group">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.create_channel_group">[docs]</a>
+    def create_channel_group(self, indices=None, name=None, keep_flag=None,
+                             discard_flag=None, match_flag=None):
+        &quot;&quot;&quot;
+        Creates and returns a channel group.
+
+        A channel group is a referenced subset of the channel data.  Operations
+        performed on a channel group will be applied to the original channel
+        data.
+
+        Parameters
+        ----------
+        indices : numpy.ndarray (int), optional
+            The indices to reference.  If not supplied, defaults to all
+            channels.
+        name : str, optional
+            The name of the channel group.  If not supplied, defaults to the
+            name of the channel data.
+        discard_flag : int or str or ChannelFlagTypes, optional
+            Flags to discard_flag from the new group.
+        keep_flag : int or str or ChannelFlagTypes, optional
+            Keep channels with these matching flags.
+        match_flag : int or str or ChannelFlagTypes, optional
+            Keep only channels with a flag exactly matching this flag.
+
+        Returns
+        -------
+        Group
+            A newly created channel group.
+        &quot;&quot;&quot;
+        if indices is None:
+            indices = np.arange(self.size)
+
+        for flag in [keep_flag, discard_flag, match_flag]:
+            if flag is not None:
+                flag_indices = self.data.get_flagged_indices(
+                    keep_flag=keep_flag, discard_flag=discard_flag,
+                    match_flag=match_flag)
+                indices = np.intersect1d(indices, flag_indices)
+                break
+
+        group_class = self.info.get_channel_group_class()
+        return group_class(self.data, indices=indices, name=name)</div>
+
+
+<div class="viewcode-block" id="Channels.init_groups">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.init_groups">[docs]</a>
+    def init_groups(self):
+        &quot;&quot;&quot;
+        Initializes channel groups.
+
+        Each group contains a subset of the channel data, referenced by index.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        flags = self.flagspace.flags
+        self.groups = dict()
+        non_detector_flag = self.flagspace.non_detector_flags()
+        self.add_group(self.create_channel_group(
+            indices=np.arange(self.size), name=&#39;all&#39;))
+
+        live_indices = self.data.is_unflagged(flags.DEAD, indices=True)
+        self.add_group(self.create_channel_group(
+            indices=live_indices, name=&#39;live&#39;))
+
+        detector_indices = self.data.is_unflagged(non_detector_flag,
+                                                  indices=True)
+        self.add_group(
+            self.create_channel_group(indices=detector_indices,
+                                      name=&#39;detectors&#39;))
+
+        obs_indices = self.data.is_unflagged(non_detector_flag | flags.BLIND,
+                                             indices=True)
+        self.add_group(self.create_channel_group(indices=obs_indices,
+                                                 name=&#39;obs-channels&#39;))
+
+        sensitive_indices = self.data.is_unflagged(
+            non_detector_flag | flags.BLIND | flags.SENSITIVITY,
+            indices=True)
+        self.add_group(self.create_channel_group(
+            indices=sensitive_indices, name=&#39;sensitive&#39;))
+
+        blinds = self.data.is_unflagged(non_detector_flag)
+        blinds &amp;= self.data.is_flagged(flags.BLIND)
+        self.add_group(self.create_channel_group(
+            indices=np.nonzero(blinds)[0], name=&#39;blinds&#39;))
+
+        add_groups = self.configuration.get_branch(&#39;group&#39;)
+        if not isinstance(add_groups, dict):
+            return
+
+        for group_name, channel_strings in add_groups.items():
+            value = channel_strings.get(&#39;value&#39;, None)
+            fixed_indices = utils.get_int_list(value, default=None)
+            if fixed_indices is None:
+                raise ValueError(
+                    f&quot;Could not parse group: {group_name}={value}&quot;)
+            indices = self.data.find_fixed_indices(fixed_indices, cull=True)
+            indices = np.unique(indices)
+            indices = indices[self.data.is_unflagged(flags.DEAD)[indices]]
+
+            self.add_group(self.create_channel_group(indices=indices,
+                                                     name=group_name))</div>
+
+
+<div class="viewcode-block" id="Channels.init_divisions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.init_divisions">[docs]</a>
+    def init_divisions(self):
+        &quot;&quot;&quot;
+        Initializes channel divisions.
+
+        Divisions contain sets of channel groups.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.divisions = dict()
+        self.add_division(ChannelDivision(&#39;all&#39;, self.groups.get(&#39;all&#39;)))
+        self.add_division(ChannelDivision(&#39;live&#39;, self.groups.get(&#39;live&#39;)))
+        self.add_division(
+            ChannelDivision(&#39;detectors&#39;, self.groups.get(&#39;detectors&#39;)))
+        self.add_division(
+            ChannelDivision(&#39;obs-channels&#39;, self.groups.get(&#39;obs-channels&#39;)))
+        self.add_division(
+            ChannelDivision(&#39;sensitive&#39;, self.groups.get(&#39;sensitive&#39;)))
+        self.add_division(ChannelDivision(&#39;blinds&#39;, self.groups.get(&#39;blinds&#39;)))
+
+        add_divisions = self.configuration.get_keys(&#39;division&#39;)
+        if add_divisions is None or len(add_divisions) == 0:
+            return
+
+        for division_name in add_divisions:
+            groups = []
+            group_names = self.configuration.get_list(
+                f&#39;division.{division_name}&#39;)
+            for group_name in group_names:
+                if group_name not in self.groups:
+                    log.warning(f&quot;Channel group {group_name} is undefined for &quot;
+                                f&quot;division {division_name}.&quot;)
+                else:
+                    groups.append(self.groups[group_name])
+            self.add_division(ChannelDivision(division_name, groups))</div>
+
+
+<div class="viewcode-block" id="Channels.init_modalities">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.init_modalities">[docs]</a>
+    def init_modalities(self):
+        &quot;&quot;&quot;
+        Initializes channel modalities.
+
+        A modality is based of a channel division and contains a mode for each
+        channel group in the channel division.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.modalities = dict()
+
+        # Begin with correlated modalities
+        correlated_modalities_descriptions = [
+            (&#39;all&#39;, &#39;Ca&#39;, &#39;all&#39;, &#39;gain&#39;),
+            (&#39;live&#39;, &#39;Cl&#39;, &#39;live&#39;, &#39;gain&#39;),
+            (&#39;detectors&#39;, &#39;Cd&#39;, &#39;detectors&#39;, &#39;gain&#39;),
+            (&#39;obs-channels&#39;, &#39;C&#39;, &#39;obs-channels&#39;, &#39;gain&#39;),
+            (&#39;coupling&#39;, &#39;Cc&#39;, &#39;obs-channels&#39;, &#39;coupling&#39;),
+        ]
+        for description in correlated_modalities_descriptions:
+            name, identity, division_name, gain_field = description
+            division = self.divisions.get(division_name)
+            if division is None:
+                log.warning(f&quot;Could not create modality from {division_name}: &quot;
+                            f&quot;division does not exist.&quot;)
+                continue
+            self.add_modality(CorrelatedModality(name=name,
+                                                 identity=identity,
+                                                 channel_division=division,
+                                                 gain_provider=gain_field))
+
+        obs_modality = self.modalities.get(&#39;obs-channels&#39;)
+        if obs_modality is not None:
+            self.add_modality(
+                CoupledModality(modality=obs_modality,
+                                name=&#39;sky&#39;,
+                                identity=&#39;Cs&#39;,
+                                gain_provider=&#39;coupling&#39;))
+
+            self.add_modality(
+                NonlinearModality(modality=obs_modality,
+                                  name=&#39;nonlinearity&#39;,
+                                  identity=&#39;n&#39;,
+                                  gain_provider=&#39;nonlinearity&#39;))
+
+        # Pointing and response modes
+        # Note that the actual applied motion is dependent on the identifier
+        # in the name after the &#39;-&#39;.  i.e., ...-x means the x direction.
+        response_descriptions = [
+            (&#39;telescope-x&#39;, &#39;Tx&#39;, PointingResponse),
+            (&#39;telescope-y&#39;, &#39;Ty&#39;, PointingResponse),
+            (&#39;accel-x&#39;, &#39;ax&#39;, AccelerationResponse),
+            (&#39;accel-y&#39;, &#39;ay&#39;, AccelerationResponse),
+            (&#39;accel-x^2&#39;, &#39;axs&#39;, AccelerationResponse),
+            (&#39;accel-y^2&#39;, &#39;ays&#39;, AccelerationResponse),
+            (&#39;accel-|x|&#39;, &#39;a|x|&#39;, AccelerationResponse),
+            (&#39;accel-|y|&#39;, &#39;a|y|&#39;, AccelerationResponse),
+            (&#39;accel-mag&#39;, &#39;am&#39;, AccelerationResponse),
+            (&#39;accel-norm&#39;, &#39;an&#39;, AccelerationResponse),
+            (&#39;chopper-x&#39;, &#39;cx&#39;, ChopperResponse),
+            (&#39;chopper-y&#39;, &#39;cy&#39;, ChopperResponse),
+            (&#39;chopper-x^2&#39;, &#39;cxs&#39;, ChopperResponse),
+            (&#39;chopper-y^2&#39;, &#39;cys&#39;, ChopperResponse),
+            (&#39;chopper-|x|&#39;, &#39;c|x|&#39;, ChopperResponse),
+            (&#39;chopper-|y|&#39;, &#39;c|y|&#39;, ChopperResponse),
+            (&#39;chopper-mag&#39;, &#39;cm&#39;, ChopperResponse),
+            (&#39;chopper-norm&#39;, &#39;cn&#39;, ChopperResponse)
+        ]
+
+        division = self.divisions.get(&#39;detectors&#39;)
+        for (name, identity, mode_class) in response_descriptions:
+            self.add_modality(Modality(name=name,
+                                       identity=identity,
+                                       channel_division=division,
+                                       mode_class=mode_class))
+
+        # Add a blind modality if necessary
+        if self.configuration.has_option(&#39;blind&#39;):
+            division = self.divisions.get(&#39;blinds&#39;)
+            if division is not None:
+                if &#39;temperature_gain&#39; not in division[0].fields:
+                    log.warning(f&quot;{division[0]} has no &#39;temperature_gain&#39; &quot;
+                                f&quot;field for blind correction.&quot;)
+                else:  # pragma: no cover
+                    # not used for any current instruments
+                    blind_modality = CorrelatedModality(
+                        name=&#39;blinds&#39;,
+                        identity=&#39;Bl&#39;,
+                        channel_division=division,
+                        gain_provider=&#39;temperature_gain&#39;)
+                    for mode in blind_modality.modes:
+                        mode.skip_flags = mode.flagspace.flags.DEAD
+                    self.add_modality(blind_modality)
+
+        # Set the correct gain flags for certain modalities.
+        for modality_name in [&#39;all&#39;, &#39;live&#39;, &#39;detectors&#39;, &#39;obs-channels&#39;]:
+            modality = self.modalities.get(modality_name)
+            if modality is None:
+                continue
+            modality.set_gain_flag(modality.flagspace.flags.GAIN)
+
+        division_options = self.configuration.get_branch(&#39;division&#39;)
+        if division_options is not None:
+            for division_name, options in division_options.items():
+                division = self.divisions.get(division_name)
+                if division is None:
+                    log.warning(f&quot;Configuration division {division_name} &quot;
+                                f&quot;does not exist.&quot;)
+                    continue
+                elif division.size == 0:
+                    log.warning(f&quot;Configuration division {division_name} &quot;
+                                f&quot;does not contain any channel groups.&quot;)
+                    continue
+                identity = options.get(&#39;id&#39;, division_name)
+                gain_field = options.get(&#39;gainfield&#39;)
+                if gain_field is not None:  # pragma: no cover
+                    # not used in current instruments
+                    gain_field = str(gain_field)
+                    if gain_field not in division.fields:
+                        log.warning(
+                            f&quot;Configuration division {division_name} &quot;
+                            f&quot;does not contain {gain_field} gain field.&quot;)
+                        continue
+                self.add_modality(
+                    CorrelatedModality(name=division_name, identity=identity,
+                                       gain_provider=gain_field,
+                                       channel_division=division))
+                if &#39;gainflag&#39; in options:  # pragma: no cover
+                    # not used in current instruments
+                    try:
+                        gain_flag = int(options[&#39;gainflag&#39;])
+                    except ValueError:
+                        gain_flag = options[&#39;gainflag&#39;]
+
+                    self.modalities[division_name].set_gain_flag(gain_flag)</div>
+
+
+<div class="viewcode-block" id="Channels.get_mapping_pixels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_mapping_pixels">[docs]</a>
+    def get_mapping_pixels(self, discard_flag=None, keep_flag=None,
+                           match_flag=None):
+        &quot;&quot;&quot;
+        Return the mapping pixels.
+
+        Parameters
+        ----------
+        discard_flag : int or str or ChannelFlagTypes
+        keep_flag : int or str or ChannelFlagTypes
+        match_flag : int or str or ChannelFlagTypes
+
+        Returns
+        -------
+        ChannelGroup
+        &quot;&quot;&quot;
+        return self.data.get_mapping_pixels(discard_flag=discard_flag,
+                                            keep_flag=keep_flag,
+                                            match_flag=match_flag)</div>
+
+
+<div class="viewcode-block" id="Channels.remove_dependents">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.remove_dependents">[docs]</a>
+    def remove_dependents(self, dependents):
+        &quot;&quot;&quot;
+        Remove dependents from channel data.
+
+        Parameters
+        ----------
+        dependents : numpy.ndarray (float)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.data.remove_dependents(dependents)</div>
+
+
+<div class="viewcode-block" id="Channels.add_dependents">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.add_dependents">[docs]</a>
+    def add_dependents(self, dependents):
+        &quot;&quot;&quot;
+        Add dependents to channel data.
+
+        Parameters
+        ----------
+        dependents : numpy.ndarray (float)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.data.add_dependents(dependents)</div>
+
+
+<div class="viewcode-block" id="Channels.get_filtering">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.channels.channels.Channels.html#sofia_redux.scan.channels.channels.Channels.get_filtering">[docs]</a>
+    def get_filtering(self, integration):
+        &quot;&quot;&quot;
+        Return the filtering for a given integration.
+
+        Parameters
+        ----------
+        integration : Integration
+
+        Returns
+        -------
+        filtering : numpy.ndarray (float)
+        &quot;&quot;&quot;
+        return self.data.get_filtering(integration)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.imgshift_header &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.imgshift_header</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.instruments.forcast.getpar import getpar
+
+__all__ = [&#39;imgshift_header&#39;]
+
+
+<div class="viewcode-block" id="imgshift_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.imgshift_header.imgshift_header.html#sofia_redux.instruments.forcast.imgshift_header.imgshift_header">[docs]</a>
+def imgshift_header(header, chop=True, nod=True, dither=True,
+                    dripconf=True):
+    &quot;&quot;&quot;
+    Calculates the shift_image in the pixel frame for merging an image
+
+    Reads the chop/nod/dither amplitudes, angles, and transform from the
+    sky to the detector frame depending on the coordinate system.
+
+    The chop/nod angle was defined in the opposite sense in flights
+    earlier than 103.  This distinction is recorded in the ANGLCONV
+    keyword value in the header.  If &quot;positive&quot;, as for 99 and earlier,
+    use the angle as written in the header; otherwise, angles
+    will need to be converted to negative values.
+
+    The chop, nod, and dither coordinate systems (CHPCRSYS, NODCRSYS,
+    DTHCRSYS in the header) may take values of SIRF (science instrument
+    reference frame), TARF (telescope assembly reference frame), or
+    ERF (equatorial reference frame).  If these keywords are not
+    available in the header, we check the CHPCOORD, NODCOORD, and
+    DTHRCS) keywords.  The COORD/CS keyword values are integers where
+    0=SIRF, 1=TARF, and 2=ERF.  If the coordinate system cannot be
+    be determined, SIRF is used by default.  TARF is seen as equivalent
+    to SIRF for the purposes of this algorithm.
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+        A FITS header
+    chop : bool, optional
+        Indicates whether to perform the calculation of chop shift_image
+    nod : bool, optional
+        Indicates whether to perform the calculation of nod shift_image
+    dither : bool, optional
+        Indicates whether to perform the calculation of dither shift_image
+    dripconf : bool, optional
+        Indicates whether configuration values can overwrite header
+        keyword values.
+
+    Returns
+    -------
+    dict
+        A dict containing the X and Y shifts necessary to merge or
+        coadd an image based on the header keywords.
+    &quot;&quot;&quot;
+
+    shift = {&#39;chopx&#39;: 0., &#39;chopy&#39;: 0., &#39;chopcoord&#39;: &#39;&#39;,
+             &#39;nodx&#39;: 0., &#39;nody&#39;: 0., &#39;nodcoord&#39;: &#39;&#39;,
+             &#39;ditherx&#39;: 0., &#39;dithery&#39;: 0., &#39;dithercoord&#39;: &#39;&#39;,
+             &#39;sky_angle&#39;: 0.}
+
+    if not isinstance(header, fits.header.Header):
+        log.error(&quot;header is not %s&quot; % fits.header.Header)
+        return shift
+
+    # Get plate scale - assume square pixels
+    # may be in degrees, in pltscale
+    pixsize = header.get(&#39;PLTSCALE&#39;, None)
+    if pixsize is None:
+        telescope = header.get(&#39;TELESCOP&#39;, &#39;SOFIA&#39;).strip().upper()
+        if telescope == &#39;PIXELS&#39;:
+            plate_scale = [1.0, 1.0]
+        else:
+            # assume forcast default
+            plate_scale = [0.768, 0.768]
+    else:
+        pixsize *= 3600.
+        plate_scale = [pixsize, pixsize]
+
+    sky_angle = getpar(header, &#39;SKY_ANGL&#39;, dripconf=dripconf,
+                       dtype=float, default=0.0)
+    shift[&#39;sky_angle&#39;] = sky_angle
+    sky_angle = np.radians(sky_angle)
+    cosa, sina = np.cos(sky_angle), np.sin(sky_angle)
+    skyrot = np.array(((cosa, -sina), (sina, cosa))).T
+
+    # Determine angle convention +1/-1
+    angle_convention = getpar(
+        header, &#39;ANGLCONV&#39;, dripconf=dripconf, dtype=str,
+        default=&#39;UNKNOWN&#39;,
+        comment=&quot;Chopping/Nodding angle conventions&quot;).strip().lower()
+    angle_convention = 1 if angle_convention == &#39;positive&#39; else -1
+
+    # Get chop distances
+    if int(header.get(&#39;CHOPPING&#39;, 0)) and chop:
+        dchop = getpar(header, &#39;CHPAMP1&#39;, dtype=float, default=0) * 2
+        chop_angle = getpar(header, &#39;CHPANGLE&#39;, dtype=float,
+                            default=0, dripconf=dripconf)
+        chop_angle = np.radians(chop_angle) * angle_convention
+        shift[&#39;chopx&#39;] = dchop * np.sin(chop_angle) / plate_scale[0]
+        shift[&#39;chopy&#39;] = dchop * np.cos(chop_angle) / plate_scale[1]
+        coordsys = getpar(header, &#39;CHPCRSYS&#39;, dripconf=dripconf,
+                          default=&#39;unknown&#39;, dtype=str).upper().strip()
+        if coordsys not in [&#39;ERF&#39;, &#39;SIRF&#39;]:
+            val = getpar(header, &#39;CHPCOORD&#39;, default=0,
+                         dtype=int, dripconf=dripconf)
+            coordsys = &#39;ERF&#39; if val == 2 else &#39;SIRF&#39;
+        if coordsys == &#39;ERF&#39;:
+            shift[&#39;chopx&#39;], shift[&#39;chopy&#39;] = \
+                skyrot @ (shift[&#39;chopx&#39;], shift[&#39;chopy&#39;])
+        shift[&#39;chopcoord&#39;] = coordsys
+
+    # Get nod distances
+    if int(header.get(&#39;NODDING&#39;, 0)) and nod:
+        dnod = getpar(header, &#39;NODAMP&#39;, default=0,
+                      dtype=float, dripconf=dripconf)
+        nod_angle = getpar(header, &#39;NODANGLE&#39;, default=0,
+                           dtype=float, dripconf=dripconf)
+        nod_angle = np.radians(nod_angle) * angle_convention
+        shift[&#39;nodx&#39;] = dnod * np.sin(nod_angle) / plate_scale[0]
+        shift[&#39;nody&#39;] = dnod * np.cos(nod_angle) / plate_scale[1]
+        coordsys = getpar(header, &#39;NODCRSYS&#39;, dripconf=dripconf,
+                          default=&#39;unknown&#39;, dtype=str).upper().strip()
+        if coordsys not in [&#39;ERF&#39;, &#39;SIRF&#39;]:
+            val = getpar(header, &#39;NODCOORD&#39;, default=0,
+                         dtype=int, dripconf=dripconf)
+            coordsys = &#39;ERF&#39; if val == 2 else &#39;SIRF&#39;
+        if coordsys == &#39;ERF&#39;:
+            shift[&#39;nodx&#39;], shift[&#39;nody&#39;] = \
+                skyrot @ (shift[&#39;nodx&#39;], shift[&#39;nody&#39;])
+        shift[&#39;nodcoord&#39;] = coordsys
+
+    # Get dither distances
+    if int(header.get(&#39;DITHER&#39;, 0)) and dither:
+        x = getpar(header, &#39;DITHERX&#39;, dtype=float,
+                   default=0, dripconf=dripconf)
+        y = getpar(header, &#39;DITHERY&#39;, dtype=float,
+                   default=0, dripconf=dripconf)
+
+        # from newest coordinate system header keyword to oldest
+        for dthcrsys in [&#39;DTHCRSYS&#39;, &#39;DTHRCS&#39;, &#39;DITHERCS&#39;]:
+            if dthcrsys in header:
+                coordsys = str(header.get(dthcrsys)).strip().upper()
+                break
+        else:
+            coordsys = &#39;unknown&#39;
+        if coordsys not in [&#39;ERF&#39;, &#39;SIRF&#39;]:
+            coordsys = &#39;ERF&#39; if coordsys == &#39;2&#39; else &#39;SIRF&#39;
+
+        if coordsys == &#39;SIRF&#39;:
+            rot_angle = np.pi - sky_angle
+            cosa, sina = np.cos(rot_angle), np.sin(rot_angle)
+            # clockwise rotation
+            sirf_x = (x * cosa) + (y * sina)
+            sirf_y = (-x * sina) + (y * cosa)
+            # x dither in the SIRF coorsys has the opposite sign
+            x, y = sirf_x, sirf_y
+        else:
+            # ERF coordsys as dither values in arcseconds
+            x /= -plate_scale[0]
+            y /= plate_scale[1]
+
+        shift[&#39;ditherx&#39;], shift[&#39;dithery&#39;] = x, y
+        shift[&#39;dithercoord&#39;] = coordsys
+
+    return shift</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

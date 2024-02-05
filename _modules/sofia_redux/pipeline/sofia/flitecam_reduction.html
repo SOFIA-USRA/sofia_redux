@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.sofia.flitecam_reduction &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.sofia.flitecam_reduction</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;FLITECAM Reduction pipeline steps&quot;&quot;&quot;
+
+import os
+import re
+
+from astropy import log
+
+from sofia_redux.pipeline.sofia.sofia_exception import SOFIAImportError
+try:
+    import sofia_redux.instruments.flitecam
+except ImportError:
+    raise SOFIAImportError(&#39;FLITECAM modules not installed&#39;)
+
+from sofia_redux.pipeline.reduction import Reduction
+from sofia_redux.pipeline.sofia.forcast_reduction \
+    import FORCASTReduction
+from sofia_redux.pipeline.sofia.parameters.flitecam_parameters \
+    import FLITECAMParameters
+from sofia_redux.toolkit.utilities.fits import hdinsert
+
+__all__ = [&#39;FLITECAMReduction&#39;]
+
+
+<div class="viewcode-block" id="FLITECAMReduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.flitecam_reduction.FLITECAMReduction.html#sofia_redux.pipeline.sofia.flitecam_reduction.FLITECAMReduction">[docs]</a>
+class FLITECAMReduction(FORCASTReduction):
+    &quot;&quot;&quot;
+    FLITECAM reduction steps.
+
+    Primary image reduction algorithms are defined in the flitecam
+    package (`sofia_redux.instruments.flitecam`).  Calibration-related
+    algorithms are pulled from the `sofia_redux.calibration` package, and
+    some utilities come from the `sofia_redux.toolkit` package.  This
+    reduction object requires that all three packages be installed.
+
+    This reduction object defines a method for each pipeline
+    step, that calls the appropriate algorithm from its source
+    packages.
+
+    Attributes
+    ----------
+    prodtype_map : dict
+        Maps the pipeline step to a product type, to assign
+        to the PRODTYPE key. Keys are pipeline step function names.
+    prodnames : dict
+        3-letter file type code, to assign to the output of a pipeline
+        step. Keys are the product types (as defined in prodtype_map).
+    step_map : dict
+        Inverse of the prodtype_map, for looking up pipeline
+        step names from product types.  Keys are the product types.
+    prodtypes : list
+        List of product types, corresponding to the currently
+        loaded recipe.  This list is populated whenever the recipe
+        attribute is set.
+    cal_conf : dict-like
+        Flux calibration and atmospheric correction configuration,
+        as returned from the pipecal `pipecal_config` function.
+    &quot;&quot;&quot;
+    def __init__(self):
+        &quot;&quot;&quot;Initialize the reduction object.&quot;&quot;&quot;
+        super().__init__()
+
+        # descriptive attributes
+        self.name = &#39;Redux&#39;
+        self.instrument = &#39;FLITECAM&#39;
+        self.mode = &#39;any&#39;
+        self.data_keys = [&#39;File Name&#39;, &#39;OBJECT&#39;, &#39;OBSTYPE&#39;,
+                          &#39;AOR_ID&#39;, &#39;MISSN-ID&#39;, &#39;DATE-OBS&#39;,
+                          &#39;INSTCFG&#39;, &#39;INSTMODE&#39;,
+                          &#39;SPECTEL1&#39;, &#39;SPECTEL2&#39;,
+                          &#39;SLIT&#39;, &#39;ALTI_STA&#39;, &#39;ZA_START&#39;,
+                          &#39;EXPTIME&#39;, &#39;DTHINDEX&#39;, &#39;NODBEAM&#39;]
+
+        self.pipe_name = &quot;FLITECAM_REDUX&quot;
+        self.pipe_version = \
+            sofia_redux.instruments.flitecam.__version__.replace(&#39;.&#39;, &#39;_&#39;)
+
+        # associations: this will be instantiated on load
+        self.parameters = None
+
+        # product type definitions for FLITECAM steps
+        self.prodtype_map = {
+            &#39;check_header&#39;: &#39;raw&#39;,
+            &#39;correct_linearity&#39;: &#39;linearized&#39;,
+        }
+        self.prodnames = {
+            &#39;raw&#39;: &#39;RAW&#39;,
+            &#39;linearized&#39;: &#39;LNZ&#39;,
+        }
+
+        # invert the map for quick lookup of step from type
+        self.step_map = {v: k for k, v in self.prodtype_map.items()}
+
+        # this will be populated when the recipe is set
+        self.prodtypes = []
+
+        # default recipe and step names
+        self.recipe = [&#39;check_header&#39;, &#39;correct_linearity&#39;]
+        self.processing_steps = {
+            &#39;check_header&#39;: &#39;Check Headers&#39;,
+            &#39;correct_linearity&#39;: &#39;Correct Nonlinearity&#39;,
+        }
+
+        # reduction information
+        self.output_directory = os.getcwd()
+
+        # reference file and obsmode configuration
+        self.calres = {}
+
+        # photometric flux calibration information
+        self.cal_conf = None
+
+<div class="viewcode-block" id="FLITECAMReduction.getfilenum">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.flitecam_reduction.FLITECAMReduction.html#sofia_redux.pipeline.sofia.flitecam_reduction.FLITECAMReduction.getfilenum">[docs]</a>
+    def getfilenum(self, filename):
+        r&quot;&quot;&quot;
+        Get the file number from a file name.
+
+        Returns UNKNOWN if file number can&#39;t be parsed.
+
+        Parameters
+        ----------
+        filename : str
+            File name to parse.  Raw filenames (not starting with
+            F[\d]+) are assumed to be \\*[_-][filenum].?.fits.
+            Processed filenames are assumed to be \\*_[filenum].fits.
+
+        Returns
+        -------
+        str or list
+            File number(s), formatted to 4 digits.
+        &quot;&quot;&quot;
+        basename = os.path.basename(filename)
+        try:
+            if re.match(r&#39;^F\d+&#39;, basename):
+                numstr = re.split(&#39;[_.]&#39;, basename)[-2]
+            elif basename.endswith(&#39;.a.fits&#39;):
+                numstr = re.split(&#39;[_.-]&#39;, basename)[-3]
+            else:
+                numstr = re.split(&#39;[_.-]&#39;, basename)[-2]
+            try:
+                filenum = &#39;{0:04d}&#39;.format(int(numstr))
+            except ValueError:
+                filenum = [&#39;{0:04d}&#39;.format(int(n))
+                           for n in numstr.split(&#39;-&#39;)]
+        except (ValueError, IndexError):
+            filenum = &#39;UNKNOWN&#39;
+        return filenum</div>
+
+
+<div class="viewcode-block" id="FLITECAMReduction.getfilename">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.flitecam_reduction.FLITECAMReduction.html#sofia_redux.pipeline.sofia.flitecam_reduction.FLITECAMReduction.getfilename">[docs]</a>
+    def getfilename(self, header, update=True, prodtype=&#39;RAW&#39;,
+                    filenum=&#39;UNKNOWN&#39;):
+        &quot;&quot;&quot;
+        Create an output filename from an input header.
+
+        Parameters
+        ----------
+        header : fits.Header
+            Header to create filename from.
+        update : bool, optional
+            If set, FILENAME key will be added or updated
+            in the header.
+        prodtype : str, optional
+            Three letter product type designator.
+        filenum : str or list, optional
+            List of file numbers to concatenate for filename.
+
+        Returns
+        -------
+        str
+           The output name.
+        &quot;&quot;&quot;
+        # get flight number
+        missn = header.get(&#39;MISSN-ID&#39;, &#39;UNKNOWN&#39;)
+        flight = missn.split(&#39;_&#39;)[-1].lstrip(&#39;F&#39;)
+        try:
+            flight = &#39;F{0:04d}&#39;.format(int(flight))
+        except ValueError:
+            flight = &#39;UNKNOWN&#39;
+
+        # get AOR_ID
+        aorid = header.get(&#39;AOR_ID&#39;, &#39;UNKNOWN&#39;).replace(&#39;_&#39;, &#39;&#39;)
+
+        # get filter
+        spectel = header.get(&#39;SPECTEL1&#39;, &#39;UNKNOWN&#39;).replace(&#39;_&#39;, &#39;&#39;)
+
+        # get config
+        instcfg = header.get(&#39;INSTCFG&#39;, &#39;UNKNOWN&#39;).strip().upper()
+        if instcfg in [&#39;SPECTROSCOPY&#39;, &#39;GRISM&#39;]:
+            inst = &#39;FC_GRI&#39;
+        else:
+            inst = &#39;FC_IMA&#39;
+
+        # concatenate file numbers
+        filenumstr = self._catfilenum(filenum)
+
+        # join outname
+        outname = &#39;_&#39;.join([flight, inst, aorid, spectel,
+                            prodtype, filenumstr]).upper()
+        outname = outname + &#39;.fits&#39;
+
+        if update:
+            hdinsert(header, &#39;FILENAME&#39;, outname, comment=&#39;File name&#39;)
+
+        return outname</div>
+
+
+<div class="viewcode-block" id="FLITECAMReduction.load">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.flitecam_reduction.FLITECAMReduction.html#sofia_redux.pipeline.sofia.flitecam_reduction.FLITECAMReduction.load">[docs]</a>
+    def load(self, data, param_class=None):
+        &quot;&quot;&quot;
+        Load input data to make it available to reduction steps.
+
+        The process is:
+
+        - Call the parent load method to initialize data
+          reduction variables.
+        - Use the first loaded FITS header to determine and load
+          the configuration.
+        - Use the loaded configuration and the product type in the
+          base header to determine the data processing recipe.
+        - Load parameters for all steps.
+        - Load the data immediately if starting from an intermediate
+          step; otherwise, just load the raw headers and defer loading
+          the data from the FITS files.
+
+        After this step, the input attribute is populated as required
+        for the first pipeline step in the recipe.
+
+        Parameters
+        ----------
+        data : list of str or str
+            Input file paths to load.
+        param_class : class, optional
+            Parameters to instantiate, if not FLITECAMParameters.
+        &quot;&quot;&quot;
+        # imports for this step
+        from sofia_redux.calibration.pipecal_config import pipecal_config
+        from sofia_redux.instruments.flitecam.getcalpath import getcalpath
+        from sofia_redux.toolkit.utilities.fits import getheader
+
+        # call the parent method to initialize
+        # reduction variables
+        Reduction.load(self, data)
+
+        # read the first FITS header and use to configure reduction
+        self.basehead = getheader(self.raw_files[0])
+        self.calres = getcalpath(self.basehead)
+
+        log.debug(&#39;Full configuration:&#39;)
+        for key, value in self.calres.items():
+            log.debug(&#39;  {}: {}&#39;.format(key, value))
+
+        # get product type to determine recipe
+        intermediate = False
+        prodtype = self.basehead.get(&#39;PRODTYPE&#39;, default=&#39;UNKNOWN&#39;)
+
+        # get remaining recipe for input prodtype
+        if prodtype in self.prodtypes:
+            pidx = self.prodtypes.index(prodtype)
+            self.recipe = self.recipe[pidx + 1:]
+            if len(self.recipe) == 0:
+                msg = f&quot;No steps to run for prodtype &#39;{prodtype}&#39;.&quot;
+                log.error(msg)
+                raise ValueError(msg)
+
+        if str(prodtype).strip().upper() != &#39;UNKNOWN&#39;:
+            intermediate = True
+
+        # read in the pipecal configuration
+        if self.calres[&#39;name&#39;] == &#39;IMA&#39;:
+            self.cal_conf = pipecal_config(self.basehead)
+            log.debug(&#39;Full pipecal configuration:&#39;)
+            for key, value in self.cal_conf.items():
+                log.debug(&#39;  {}: {}&#39;.format(key, value))
+
+        if param_class is None:  # pragma: no cover
+            # this option is not currently used
+            self.parameters = FLITECAMParameters(
+                config=self.calres,
+                pipecal_config=self.cal_conf)
+        else:
+            self.parameters = param_class(
+                config=self.calres,
+                pipecal_config=self.cal_conf)
+
+        # if not starting from raw data, load the files in
+        # immediately
+        if intermediate:
+            self.load_fits(intermediate=True)
+        else:
+            # just load headers
+            self.input = []
+            for datafile in self.raw_files:
+                self.input.append(getheader(datafile))</div>
+
+
+    def _load_raw_data(self, datafile):
+        &quot;&quot;&quot;
+        Robustly read raw FLITECAM data.
+
+        Parameters
+        ----------
+        datafile : str
+            Input filename.
+
+        Returns
+        -------
+        fits.HDUList
+            Flux and error data, as a FITS HDU list.
+        &quot;&quot;&quot;
+        from sofia_redux.instruments.flitecam.readfits import readfits
+        hdul = readfits(datafile)
+        return hdul
+
+<div class="viewcode-block" id="FLITECAMReduction.check_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.flitecam_reduction.FLITECAMReduction.html#sofia_redux.pipeline.sofia.flitecam_reduction.FLITECAMReduction.check_header">[docs]</a>
+    def check_header(self):
+        &quot;&quot;&quot;
+        Check input headers.
+
+        Calls sofia_redux.instruments.flitecam.hdcheck.hdcheck to
+        compare header keywords to requirements.  Halts reduction if
+        the abort parameter is True and the headers do not meet
+        requirements.
+        &quot;&quot;&quot;
+        from sofia_redux.instruments.flitecam.hdcheck import hdcheck
+
+        # get parameters
+        param = self.get_parameter_set()
+
+        # check headers loaded into self.input
+        valid = hdcheck(self.input, kwfile=self.calres[&#39;kwfile&#39;])
+        if not valid and param.get_value(&#39;abort&#39;):
+            msg = &#39;Invalid headers.&#39;
+            log.error(msg)
+            self.error = msg
+            self.input = []
+            return
+
+        # if data passed validation,
+        # read fits files into memory for processing
+        self.load_fits()</div>
+
+
+<div class="viewcode-block" id="FLITECAMReduction.correct_linearity">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.flitecam_reduction.FLITECAMReduction.html#sofia_redux.pipeline.sofia.flitecam_reduction.FLITECAMReduction.correct_linearity">[docs]</a>
+    def correct_linearity(self):
+        &quot;&quot;&quot;
+        Correct flux for nonlinearity.
+
+        Also calculates the error on the flux, after linearity
+        correction.
+        &quot;&quot;&quot;
+        from sofia_redux.instruments.flitecam.lincor import lincor
+
+        # get parameters
+        param = self.get_parameter_set()
+        saturation = param.get_value(&#39;saturation&#39;)
+
+        linfile = param.get_value(&#39;linfile&#39;)
+        if os.path.isfile(linfile):
+            log.info(f&#39;Using linearity file {linfile}&#39;)
+        else:
+            raise ValueError(&#39;No linearity file provided.&#39;)
+
+        if str(saturation).strip() == &#39;&#39;:
+            saturation = None
+
+        outdata = []
+        for i, hdul in enumerate(self.input):
+            log.info(&#39;&#39;)
+            log.info(f&quot;Input: {hdul[0].header.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;)}&quot;)
+
+            result = lincor(hdul, linfile, saturation=saturation)
+
+            outname = self.update_output(
+                result, self.filenum[i], self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(result, outname)
+
+            outdata.append(result)
+
+        self.input = outdata
+
+        # set display data to input
+        self.set_display_data()</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

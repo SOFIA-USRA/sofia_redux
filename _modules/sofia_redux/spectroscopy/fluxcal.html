@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.fluxcal &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.fluxcal</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.toolkit.image.adjust import shift
+from sofia_redux.toolkit.fitting.polynomial import Polyfit
+from sofia_redux.toolkit.interpolate import interpolate_nans
+
+__all__ = [&#39;get_wave_shift&#39;, &#39;fluxcal&#39;]
+
+
+<div class="viewcode-block" id="get_wave_shift">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.fluxcal.get_wave_shift.html#sofia_redux.spectroscopy.fluxcal.get_wave_shift">[docs]</a>
+def get_wave_shift(flux, correction, shift_limit, model_order,
+                   subsample=10):
+    &quot;&quot;&quot;
+    Get pixel shift between flux and correction curve.
+
+    Flux is directly shifted then corrected to determine shift value with
+    lowest RMS, compared to a low order polynomial model.
+
+    The correction curve is typically atmospheric transmission * response.
+
+    Parameters
+    ----------
+    flux : numpy.ndarray of float
+        Spectral flux (nw,).
+    correction : numpy.ndarray of float
+        Correction curve (nw,)
+    shift_limit : float
+        Maximum shift to consider.
+    model_order : int
+        Polynomial order of continuum model, for calculating optimum
+        residuals.
+    subsample : int, optional
+        Subsampling for sub-pixel shifts.  Set to 1 to get whole pixel
+        shifts only.
+
+    Returns
+    -------
+    float
+        The wavelength shift in pixels.
+    &quot;&quot;&quot;
+    # subsample data to get sub-pixel lag info
+    xin = np.arange(flux.size, dtype=float)
+    if subsample &gt; 1:
+        xout = np.arange(flux.size * subsample, dtype=float) / subsample
+        sflux = interpolate_nans(xin, flux, xout)
+        scorrect = interpolate_nans(xin, correction, xout)
+    else:
+        xout = xin
+        subsample = 1
+        sflux = flux.copy()
+        scorrect = correction.copy()
+
+    good = ~np.isnan(sflux) &amp; ~np.isnan(scorrect)
+    if not np.any(good):
+        return np.nan
+
+    # lag array: distance from center wavelength
+    ns = sflux.size
+    lag = np.arange(ns, dtype=float) - ns / 2
+    lag /= subsample
+
+    fit_rchisq = []
+    fit_shift = []
+    fit_corr = []
+    for sval in lag[np.abs(lag) &lt; shift_limit]:
+        test_flux = np.interp(xout, xout + sval, sflux,
+                              left=np.nan, right=np.nan)
+        corr_data = test_flux / scorrect
+
+        poly = Polyfit(xout[good], corr_data[good], model_order)
+        fit_rchisq.append(poly.stats.rchi2)
+        fit_shift.append(sval)
+        fit_corr.append(corr_data)
+
+    # find the best shift by minimizing residuals
+    min_idx = np.argmin(fit_rchisq)
+    shiftval = fit_shift[min_idx]
+
+    &quot;&quot;&quot;
+    # plotting code for debugging
+    from matplotlib import pyplot as plt
+    plt.plot((xin - flux.size / 2.0),
+             flux / np.mean(flux), label=&#39;input flux&#39;)
+    plt.plot(lag, sflux / np.mean(sflux[good]), label=&#39;subsampled flux&#39;)
+    plt.plot(lag, scorrect / np.mean(scorrect[good]),
+             label=&#39;correction curve&#39;)
+    plt.plot(lag + shiftval, sflux / np.mean(sflux[good]),
+             label=&#39;shifted flux&#39;)
+    plt.plot(lag, fit_corr[min_idx] / np.nanmean(fit_corr[min_idx]),
+             label=&#39;corrected flux&#39;)
+    plt.legend()
+    plt.show()
+    plt.plot(fit_shift, fit_rchisq, label=&#39;reduced chi-squared&#39;)
+    plt.axvline(shiftval)
+    plt.title(f&#39;Shift value: {shiftval}&#39;)
+    plt.legend()
+    plt.show()
+    #&quot;&quot;&quot;
+
+    return shiftval</div>
+
+
+
+<div class="viewcode-block" id="fluxcal">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.fluxcal.fluxcal.html#sofia_redux.spectroscopy.fluxcal.fluxcal">[docs]</a>
+def fluxcal(spectra, atran, response=None,
+            auto_shift=False, shift_limit=5.0,
+            shift_subsample=10, model_order=1):
+    &quot;&quot;&quot;
+    Calibrate and telluric correct spectral flux.
+
+    The provided atmospheric transmission and response values are
+    interpolated onto the wavelength range for each order.  The correction
+    curve is computed as transmission * response.
+
+    Optionally, an optimum wavelength shift for the 1D spectra, relative
+    to the correction curve, may be computed by minimizing the residuals
+    in the corrected spectrum. If the calculated shift is greater than
+    0.1 pixel and less than `shift_limit`, the spectrum is shifted by
+    this amount, via a linear interpolation, along the wavelength dimension
+    before correction.
+
+    The 1D spectral_flux and spectral error provided are divided by the
+    correction curve.  For the 2D spectral flux and error, each
+    row is divided by the correction curve.
+
+    If multiple ATRAN data sets are provided, then the optimum correction
+    will be determined by fitting a low order polynomial to the corrected
+    1D spectrum.  The correction curve that produces the lowest chi-squared
+    residuals on the fit is selected.  The index of the ATRAN data set
+    chosen is returned in the output dictionary, with key &#39;atran_index&#39;.
+
+    The calculated wavelength shift and the interpolated transmission,
+    response, and response error are stored in the output dictionary,
+    with keys &#39;wave_shift&#39;, &#39;transmission&#39;, &#39;response&#39;, and
+    &#39;response_error&#39;, respectively.
+
+    Parameters
+    ----------
+    spectra : dict
+        Spectra to calibrate.
+
+        Structure is:
+            order (int) -&gt; list of dict
+                flux -&gt; numpy.ndarray (ns, nw)
+                    Rectified 2D spectral flux image.
+                error -&gt; numpy.ndarray (ns, nw)
+                    Rectified 2D spectral error image.
+                wave -&gt; numpy.ndarray (nw,)
+                    Wavelength coordinates.
+                spectral_flux -&gt; numpy.ndarray (nw,)
+                    1D spectral flux.
+                spectral_error -&gt; numpy.ndarray (nw,)
+                    1D spectral error.
+                wave_shift -&gt; float
+                    Manual shift to apply in the wavelength dimension
+                    (pixels). If present and not None, will override
+                    the `auto_shift` parameter.
+    atran : numpy.ndarray or list of numpy.ndarray
+        A (2, nt) array; first element is the wavelength coordinate, second
+        is the fractional transmission.  If a list of arrays is provided,
+        the optimum one will be selected.
+    response : dict, optional
+        The instrumental response for the order.  If not provided,
+        only the ATRAN correction will be applied.
+
+        Structure is:
+            order (int) -&gt; dict
+                wave -&gt; numpy.ndarray (nr,)
+                    Wavelength coordinates.  Need not match the spectral
+                    flux coordinates.
+                response -&gt; numpy.ndarray (nr,)
+                    Instrument response, in raw units/Jy.
+                error -&gt; numpy.ndarray (nr,)
+                    Error on the response.
+    auto_shift : bool, optional
+        If set, the spectrum cross-correlated with the
+        response * transmission, and the calculated wavelength
+        shift will be applied to the flux and error images and spectra.
+    shift_limit : float, optional
+        Maximum wavelength shift to be applied by the `auto_shift`,
+        in pixels.
+    shift_subsample : int, optional
+        Subsampling for wavelength shifts.  Set to 1 to get whole pixel
+        shifts only.
+    model_order : int, optional
+        Polynomial order for continuum model, used in optimizing wavelength
+        shifts and ATRAN optimization.
+
+    Returns
+    -------
+    spectra : dict
+        Calibrated spectra.
+
+        Structure is:
+            order (int) -&gt; list of dict
+                flux -&gt; numpy.ndarray (ns, nw)
+                    Calibrated rectified 2D spectral flux image.
+                error -&gt; numpy.ndarray (ns, nw)
+                    Calibrated rectified 2D spectral error image.
+                wave -&gt; numpy.ndarray (nw,)
+                    Wavelength coordinates.
+                spectral_flux -&gt; numpy.ndarray (nw,)
+                    Calibrated 1D spectral flux.
+                spectral_error -&gt; numpy.ndarray (nw,)
+                    Calibrated 1D spectral error.
+                wave_shift -&gt; float
+                    Wavelength shift applied.
+                atran_index -&gt; int
+                    Index of the ATRAN data set selected.
+                transmission -&gt; numpy.ndarray (nw,)
+                    Transmission correction applied to flux.
+                response -&gt; numpy.ndarray (nw,)
+                    Response correction applied to flux.
+                response_error -&gt; numpy.ndarray (nw,)
+                    Error on the response.
+    &quot;&quot;&quot;
+
+    # use all orders defined in spectra
+    orders = np.unique(list(spectra.keys())).astype(int)
+
+    # if more than one atran provided, choose the best one
+    if not isinstance(atran, list):
+        if isinstance(atran, np.ndarray) and atran.ndim &lt; 3:
+            atran = [atran]
+    if len(atran) &gt; 1:
+        optimize = True
+    else:
+        optimize = False
+
+    # lower limit for wavelength shifts, in pixels --
+    # below this, it&#39;s not worth the interpolation
+    eps = 0.1
+
+    # Loop through each order
+    result = {}
+    for orderi, order in enumerate(orders):
+        result[order] = []
+
+        for speci, spectrum in enumerate(spectra[order]):
+            out_spectrum = {}
+
+            # bail if there&#39;s no good data
+            if np.all(np.isnan(spectrum[&#39;spectral_flux&#39;])):
+                log.error(f&#39;No good flux in order {order}, spectrum {speci}&#39;)
+                return
+
+            wave = spectrum[&#39;wave&#39;]
+            dw = np.mean(wave[1:] - wave[0:-1])
+            out_spectrum[&#39;wave&#39;] = wave.copy()
+
+            # check for manual wave shift
+            if &#39;wave_shift&#39; in spectrum and spectrum[&#39;wave_shift&#39;] is not None:
+                check_auto = False
+                wave_shift = spectrum[&#39;wave_shift&#39;]
+            else:
+                check_auto = auto_shift
+                wave_shift = 0.0
+
+            # interpolate response onto the wavelength range
+            if response is not None:
+                rwave = response[order][&#39;wave&#39;]
+                rdata = response[order][&#39;response&#39;]
+                rerr = response[order][&#39;error&#39;]
+                rmatch = np.interp(wave, rwave, rdata,
+                                   left=np.nan, right=np.nan)
+                ematch = np.interp(wave, rwave, rerr,
+                                   left=np.nan, right=np.nan)
+            else:
+                rmatch = np.ones_like(wave)
+                ematch = np.zeros_like(wave)
+
+            # for all atran files, interpolate onto the
+            # spectral wavelength range
+            all_tran = []
+            all_corr = []
+            all_shift = []
+            fit_chisq = []
+            fit_rchisq = []
+            for i, (awave, adata) in enumerate(atran):
+                # interpolate atran onto input wavelengths
+                amatch = np.interp(wave, awave, adata,
+                                   left=np.nan, right=np.nan)
+
+                # divide spectrum by transmission and response
+                flux = spectrum[&#39;spectral_flux&#39;].copy()
+                correction = amatch * rmatch
+                corr_data = flux / correction
+                good = ~np.isnan(corr_data)
+                all_tran.append(amatch)
+
+                # auto shift if desired
+                shiftval = wave_shift
+                if check_auto:
+                    shiftval = get_wave_shift(
+                        flux, correction, shift_limit, model_order,
+                        subsample=shift_subsample)
+                    if np.isnan(shiftval):
+                        log.warning(&#39;Could not calculate wave shift; &#39;
+                                    &#39;setting to 0.&#39;)
+                        shiftval = 0.0
+                    log.debug(&#39;Calculated wave shift: {}&#39;.format(shiftval))
+
+                all_shift.append(shiftval)
+                if np.abs(shiftval) &gt; eps:
+                    if not check_auto or np.abs(shiftval) &lt; shift_limit:
+                        # interpolate spectrum from shifted wavelength onto
+                        # standard ATRAN wavelength
+                        flux = np.interp(wave - shiftval * dw, wave, flux,
+                                         left=np.nan, right=np.nan)
+                        corr_data = flux / correction
+                        good = ~np.isnan(corr_data)
+
+                all_corr.append(corr_data)
+
+                # if optimizing, fit a low order polynomial to the corrected
+                # spectrum, and calculate residuals and chi-squared error
+                if optimize:
+                    robust = 6.0
+                    poly = Polyfit(wave[good], corr_data[good], model_order,
+                                   robust=robust)
+                    fit_chisq.append(poly.stats.chi2)
+                    fit_rchisq.append(poly.stats.rchi2)
+
+                    &quot;&quot;&quot;
+                    # plotting code for debugging
+                    print(f&#39;ATRAN spectrum {i} rchi2: {poly.stats.rchi2}&#39;)
+                    from matplotlib import pyplot as plt
+                    plt.plot(wave[good], corr_data[good],
+                             label=&#39;corrected flux&#39;)
+                    plt.plot(wave, poly(wave), label=&#39;poly fit&#39;)
+                    plt.legend()
+                    plt.show()
+                    #&quot;&quot;&quot;
+
+            # find the best atran correction by minimizing residuals
+            if optimize and len(fit_chisq) &gt; 0:
+                atran_index = np.argmin(fit_rchisq)
+                out_spectrum[&#39;fit_chisq&#39;] = fit_chisq
+                out_spectrum[&#39;fit_rchisq&#39;] = fit_rchisq
+                out_spectrum[&#39;all_corrected&#39;] = all_corr
+            else:
+                # or else just take the first one
+                atran_index = 0
+            best_tran = all_tran[atran_index]
+            best_shift = all_shift[atran_index]
+
+            # shift images and spectra if needed
+            dnames = [&#39;spectral_flux&#39;, &#39;spectral_error&#39;,
+                      &#39;flux&#39;, &#39;error&#39;]
+            if check_auto and np.abs(best_shift) &gt; shift_limit:
+                log.warning(&#39;Calculated shift of {:.2f} pixels is too large. &#39;
+                            &#39;Not applying auto &#39;
+                            &#39;shift.&#39;.format(best_shift))
+                best_shift = 0.
+            elif 0 &lt; np.abs(best_shift) &lt; eps:
+                log.debug(&#39;Wave shift of {:.2f} pixels is very small. &#39;
+                          &#39;Setting to zero.&#39;.format(best_shift))
+                best_shift = 0.
+            elif np.abs(best_shift) &gt; eps:
+                for name in dnames:
+                    data = spectrum[name]
+                    if data.ndim &gt; 1:
+                        offsets = [0., best_shift]
+                    else:
+                        offsets = [best_shift]
+                    out_spectrum[name] = shift(data, offsets)
+
+            # copy over data if not already there
+            for name in dnames:
+                if name not in out_spectrum:
+                    out_spectrum[name] = spectrum[name].copy()
+
+            # divide spectral flux and image by transmission
+            # (no error to propagate)
+            out_spectrum[&#39;spectral_flux&#39;] /= best_tran
+            out_spectrum[&#39;spectral_error&#39;] /= best_tran
+
+            # for the image: divide each row by the correction factor
+            out_spectrum[&#39;flux&#39;] /= best_tran[None, :]
+            out_spectrum[&#39;error&#39;] /= best_tran[None, :]
+
+            # divide by response as well, propagating statistical errors
+            out_spectrum[&#39;spectral_flux&#39;] /= rmatch
+            out_spectrum[&#39;flux&#39;] /= rmatch[None, :]
+
+            sflx = out_spectrum[&#39;spectral_flux&#39;]
+            serr = out_spectrum[&#39;spectral_error&#39;]
+
+            out_spectrum[&#39;spectral_error&#39;] = \
+                np.sqrt(serr**2 + ematch**2 * sflx**2) / rmatch
+
+            sflx = out_spectrum[&#39;flux&#39;]
+            serr = out_spectrum[&#39;error&#39;]
+            out_spectrum[&#39;error&#39;] = \
+                np.sqrt(serr**2
+                        + ematch[None, :]**2 * sflx**2) / rmatch[None, :]
+
+            # append the transmission and response for reference
+            out_spectrum[&#39;wave_shift&#39;] = best_shift
+            out_spectrum[&#39;atran_index&#39;] = atran_index
+            out_spectrum[&#39;transmission&#39;] = best_tran
+            out_spectrum[&#39;response&#39;] = rmatch
+            out_spectrum[&#39;response_error&#39;] = ematch
+
+            result[order].append(out_spectrum)
+
+    return result</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

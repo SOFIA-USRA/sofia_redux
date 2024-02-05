@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.simulation.source_models.simulated_source &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.simulation.source_models.simulated_source</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC, abstractmethod
+from copy import deepcopy
+
+from sofia_redux.scan.utilities.class_provider \
+    import get_simulated_source_class
+from sofia_redux.scan.coordinate_systems.horizontal_coordinates import \
+    HorizontalCoordinates
+
+__all__ = [&#39;SimulatedSource&#39;]
+
+
+<div class="viewcode-block" id="SimulatedSource">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.simulation.source_models.simulated_source.SimulatedSource.html#sofia_redux.scan.simulation.source_models.simulated_source.SimulatedSource">[docs]</a>
+class SimulatedSource(ABC):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize a simulated source.
+
+        This is an abstract class base for simulating source data given input
+        positions.  Currently equatorial offsets and horizontal coordinates
+        may be converted to timestream data.
+        &quot;&quot;&quot;
+        self.name = &#39;base&#39;
+
+<div class="viewcode-block" id="SimulatedSource.__call__">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.simulation.source_models.simulated_source.SimulatedSource.html#sofia_redux.scan.simulation.source_models.simulated_source.SimulatedSource.__call__">[docs]</a>
+    def __call__(self, coordinates):
+        &quot;&quot;&quot;
+        Generate a source model for the applied offsets.
+
+        Parameters
+        ----------
+        coordinates : Coordinate2D
+
+        Returns
+        -------
+        generated_model : numpy.ndarray
+        &quot;&quot;&quot;
+        if isinstance(coordinates, HorizontalCoordinates):
+            return self.apply_to_horizontal(coordinates)
+        else:
+            return self.apply_to_offsets(coordinates)</div>
+
+
+<div class="viewcode-block" id="SimulatedSource.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.simulation.source_models.simulated_source.SimulatedSource.html#sofia_redux.scan.simulation.source_models.simulated_source.SimulatedSource.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the simulated source.
+
+        Returns
+        -------
+        SimulatedSource
+        &quot;&quot;&quot;
+        return deepcopy(self)</div>
+
+
+<div class="viewcode-block" id="SimulatedSource.get_source_model">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.simulation.source_models.simulated_source.SimulatedSource.html#sofia_redux.scan.simulation.source_models.simulated_source.SimulatedSource.get_source_model">[docs]</a>
+    @staticmethod
+    def get_source_model(name, **kwargs):
+        &quot;&quot;&quot;
+        Return an initialize source model of the given name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the synthetic source model.
+        kwargs : dict, optional
+            Optional keyword arguments during source initialization.
+
+        Returns
+        -------
+        source_model : SimulatedSource
+        &quot;&quot;&quot;
+        source_class = get_simulated_source_class(name)
+        return source_class(**kwargs)</div>
+
+
+<div class="viewcode-block" id="SimulatedSource.apply_to_offsets">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.simulation.source_models.simulated_source.SimulatedSource.html#sofia_redux.scan.simulation.source_models.simulated_source.SimulatedSource.apply_to_offsets">[docs]</a>
+    @abstractmethod
+    def apply_to_offsets(self, offsets):  # pragma: no cover
+        &quot;&quot;&quot;
+        Apply the model to a set of offset coordinates.
+
+        Parameters
+        ----------
+        offsets : Coordinate2D
+
+        Returns
+        -------
+        generated_model : numpy.ndarray
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SimulatedSource.apply_to_horizontal">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.simulation.source_models.simulated_source.SimulatedSource.html#sofia_redux.scan.simulation.source_models.simulated_source.SimulatedSource.apply_to_horizontal">[docs]</a>
+    @abstractmethod
+    def apply_to_horizontal(self, offsets):  # pragma: no cover
+        &quot;&quot;&quot;
+        Apply the model to a set of offset coordinates.
+
+        Parameters
+        ----------
+        offsets : HorizontalCoordinates
+
+        Returns
+        -------
+        generated_model : numpy.ndarray
+        &quot;&quot;&quot;
+        pass</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

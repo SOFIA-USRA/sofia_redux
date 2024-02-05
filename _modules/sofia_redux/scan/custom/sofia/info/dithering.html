@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.info.dithering &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.info.dithering</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units
+import numpy as np
+
+from sofia_redux.scan.info.base import InfoBase
+from sofia_redux.scan.utilities.utils import to_header_float
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.utilities.utils import insert_info_in_header
+
+__all__ = [&#39;SofiaDitheringInfo&#39;]
+
+
+<div class="viewcode-block" id="SofiaDitheringInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.dithering.SofiaDitheringInfo.html#sofia_redux.scan.custom.sofia.info.dithering.SofiaDitheringInfo">[docs]</a>
+class SofiaDitheringInfo(InfoBase):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize the SOFIA dithering information.
+
+        Contains information on the SOFIA dither parameters.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.dithering = None
+        self.coordinate_system = None
+        self.pattern_shape = None
+        self.offset = Coordinate2D(np.full(2, np.nan), unit=&#39;arcsec&#39;)
+        self.positions = -1
+        self.index = -1
+
+    @property
+    def log_id(self):
+        &quot;&quot;&quot;
+        Return the string log ID for the info.
+
+        The log ID is used to extract certain information from table data.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;dither&#39;
+
+<div class="viewcode-block" id="SofiaDitheringInfo.apply_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.dithering.SofiaDitheringInfo.html#sofia_redux.scan.custom.sofia.info.dithering.SofiaDitheringInfo.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Update dithering information with FITS header information.
+
+        Updates the chopping information by taking the following keywords from
+        the FITS header::
+
+          DITHER - Whether dithering is enabled for the scan (bool)
+          DTHCRSYS - The MCCS chopping coordinate system (str)
+          DTHPATT - The approximate pattern for dithering (str)
+          DTHXOFF - The x-offset for dithering (arcseconds)
+          DTHYOFF - The y-offset for dithering (arcseconds)
+          DTHNPOS - The number of dithering positions (int)
+          DTHINDEX - The dither position index (int)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        options = self.options
+        if options is None:
+            return
+
+        self.dithering = options.get_bool(&quot;DITHER&quot;)
+        self.coordinate_system = options.get_string(&quot;DTHCRSYS&quot;)
+        self.pattern_shape = options.get_string(&quot;DTHPATT&quot;)
+        self.offset.x = options.get_float(&#39;DTHXOFF&#39;)
+        self.offset.y = options.get_float(&#39;DTHYOFF&#39;)
+        self.positions = options.get_int(&quot;DTHNPOS&quot;)
+        self.index = options.get_int(&quot;DTHINDEX&quot;)</div>
+
+
+<div class="viewcode-block" id="SofiaDitheringInfo.edit_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.dithering.SofiaDitheringInfo.html#sofia_redux.scan.custom.sofia.info.dithering.SofiaDitheringInfo.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.offset is None:
+            offset = Coordinate2D(np.full(2, np.nan) * units.Unit(&#39;arcsec&#39;))
+        else:
+            offset = self.offset
+
+        info = [
+            (&#39;COMMENT&#39;, &quot;&lt;------ SOFIA Dithering Data ------&gt;&quot;),
+            (&#39;DTHCRSYS&#39;, self.coordinate_system, &#39;Dither coordinate system.&#39;),
+            (&#39;DTHXOFF&#39;, to_header_float(offset.x, &#39;arcsec&#39;),
+             &#39;(arcsec) Dither X offset.&#39;),
+            (&#39;DTHYOFF&#39;, to_header_float(offset.y, &#39;arcsec&#39;),
+             &#39;(arcsec) Dither Y offset.&#39;),
+            (&#39;DTHPATT&#39;, self.pattern_shape,
+             &#39;Approximate shape of dither pattern.&#39;),
+            (&#39;DTHNPOS&#39;, self.positions, &#39;Number of dither positions.&#39;),
+            (&#39;DTHINDEX&#39;, self.index, &#39;Dither position index.&#39;)
+        ]
+        insert_info_in_header(header, info, delete_special=True)</div>
+
+
+<div class="viewcode-block" id="SofiaDitheringInfo.get_table_entry">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.dithering.SofiaDitheringInfo.html#sofia_redux.scan.custom.sofia.info.dithering.SofiaDitheringInfo.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Given a name, return the parameter stored in the information object.
+
+        Note that names do not exactly match to attribute names.
+
+        Parameters
+        ----------
+        name : str
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        if name == &#39;dx&#39;:
+            return self.offset.x.to(&#39;arcsec&#39;)
+        elif name == &#39;dy&#39;:
+            return self.offset.y.to(&#39;arcsec&#39;)
+        elif name == &#39;index&#39;:
+            return self.index
+        elif name == &#39;pattern&#39;:
+            return self.pattern_shape
+        elif name == &#39;npos&#39;:
+            return self.positions
+        elif name == &#39;sys&#39;:
+            return self.coordinate_system
+        else:
+            return super().get_table_entry(name)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

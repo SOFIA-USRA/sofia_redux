@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.exes.get_badpix &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.exes.get_badpix</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import os
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.toolkit.utilities.fits import getdata, goodfile
+from sofia_redux.instruments.exes import data as data_module
+from sofia_redux.instruments.exes import utils
+
+__all__ = [&#39;get_badpix&#39;]
+
+
+<div class="viewcode-block" id="get_badpix">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.get_badpix.get_badpix.html#sofia_redux.instruments.exes.get_badpix.get_badpix">[docs]</a>
+def get_badpix(header, clip_reference=False, apply_detsec=False):
+    &quot;&quot;&quot;
+    Get a bad pixel mask from a reference file.
+
+    The file name for the input mask is specified in header[&#39;BPM&#39;].
+
+    Input bad pixel masks are expected to be single-extension FITS files,
+    containing a 1024 x 1032 image in which a value of 1 indicates a good
+    pixel, 0 indicates a bad pixel, and 2 indicates the 8 columns of
+    reference pixels.  These reference pixels will be clipped from the output
+    to make a 1024 x 1024 mask, if `clip_reference` is set.
+
+    The output mask has Boolean type with True=good pixel and False=bad.
+    The output size may be clipped to a detector section indicated in
+    the input header, if `apply_detsec` is True.
+
+    Parameters
+    ----------
+    header : fits.Header
+        FITS header, optionally containing BPM and DETSEC keywords.
+    clip_reference : bool, optional
+        If True, 8 reference columns are clipped from the output mask.
+    apply_detsec : bool, optional
+        If set, the output mask is clipped to match any detector section
+        provided in header[&#39;DETSEC&#39;].
+
+    Returns
+    -------
+    mask : numpy.ndarray of bool
+        The bad pixel mask, with True=good, False=bad.
+    &quot;&quot;&quot;
+    bpm = header.get(&#39;BPM&#39;, &#39;UNKNOWN&#39;)
+    if bpm == &#39;UNKNOWN&#39;:
+        return
+
+    mask = None
+    if goodfile(bpm):
+        mask = getdata(bpm).astype(&#39;int&#39;)
+    else:
+        datapath = os.path.dirname(data_module.__file__)
+        bpm = os.path.join(datapath, &#39;bpm&#39;, bpm)
+        if goodfile(bpm):
+            mask = getdata(bpm).astype(&#39;int&#39;)
+    if mask is None:
+        return
+
+    log.info(f&#39;Using bad pixel mask {bpm}&#39;)
+    header[&#39;BPM&#39;] = bpm
+
+    if clip_reference:
+        # trim out reference pixels
+        refidx = mask == 2
+        if refidx.any():
+            xrange = np.where(~refidx)[1]
+            mask = mask[:, xrange.min():xrange.max() + 1]
+        mask = np.asarray(mask, bool)
+
+    if apply_detsec:
+        xstart, xstop, ystart, ystop = utils.get_detsec(header)
+        mask = mask[ystart:ystop, xstart:xstop]
+
+    return mask</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.gui.qad.qad_headview &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.gui.qad.qad_headview</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;FITS header viewing widget.&quot;&quot;&quot;
+
+import os
+from sofia_redux.pipeline.gui.textview import TextView
+
+__all__ = [&#39;HeaderViewer&#39;]
+
+
+<div class="viewcode-block" id="HeaderViewer">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_headview.HeaderViewer.html#sofia_redux.pipeline.gui.qad.qad_headview.HeaderViewer">[docs]</a>
+class HeaderViewer(TextView):
+    &quot;&quot;&quot;View, find, and filter text from FITS headers.&quot;&quot;&quot;
+    def __init__(self, parent=None):
+        &quot;&quot;&quot;
+        Initialize the header viewer widget.
+
+        Parameters
+        ----------
+        parent : `QWidget`
+            Parent widget.
+        &quot;&quot;&quot;
+        super().__init__(parent)
+
+        self.tableButton.setEnabled(True)
+        self.tableButton.clicked.connect(self.table)
+
+<div class="viewcode-block" id="HeaderViewer.load">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_headview.HeaderViewer.html#sofia_redux.pipeline.gui.qad.qad_headview.HeaderViewer.load">[docs]</a>
+    def load(self, header):
+        &quot;&quot;&quot;
+        Load FITS headers into TextEdit widget.
+
+        Parameters
+        ----------
+        header : dict
+            Keys are file paths; values are lists of FITS header objects
+            (`astropy.io.fits.Header`) from each relevant FITS extension.
+        &quot;&quot;&quot;
+        # header is a dictionary of FITS header objects, keyed
+        # by the file path
+        self.text = header
+
+        # format to html
+        self.html = self.format()
+
+        # set in text window
+        self.textEdit.setHtml(self.html)
+        self.textEdit.repaint()</div>
+
+
+<div class="viewcode-block" id="HeaderViewer.format">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_headview.HeaderViewer.html#sofia_redux.pipeline.gui.qad.qad_headview.HeaderViewer.format">[docs]</a>
+    def format(self):
+        &quot;&quot;&quot;Format header text into HTML for display.&quot;&quot;&quot;
+        # some useful strings
+        anchor = &#39;&lt;a name=&quot;anchor&quot;&gt;&lt;/a&gt;&#39;
+        br = &#39;&lt;br&gt;&#39;
+        jstr = anchor + br + anchor + &#39;-&#39; * 80 + br
+
+        # format headers as strings
+        header_strs = []
+        sortkeys = sorted(self.text.keys())
+        for fpath in sortkeys:
+            hlist = self.text[fpath]
+            if type(hlist) is not list:
+                hlist = [hlist]
+            for i, hdr in enumerate(hlist):
+                if &#39;EXTNAME&#39; in hdr:
+                    extname = &quot;Extension: {}&quot;.format(hdr[&#39;EXTNAME&#39;])
+                else:
+                    extname = &quot;Extension: {}&quot;.format(i)
+
+                # convert the whole header to a string
+                hdr = hdr.tostring(sep=br)
+
+                # add the filename to separate different headers
+                # add the anchor tag to keep the separation when filtering
+                extname = anchor + br + anchor + extname + \
+                    anchor + br + anchor + &#39;-&#39; * len(extname)
+                if i == 0:
+                    start = jstr + anchor + os.path.basename(fpath) + jstr
+                else:
+                    start = &#39;&#39;
+                hdr = start + extname + br + hdr
+
+                header_strs.append(hdr)
+
+        hdstr = (br + br).join(header_strs)
+        hdstr = &#39;&lt;pre&gt;&#39; + anchor + hdstr + br + &#39;&lt;/pre&gt;&#39; + anchor
+
+        return hdstr</div>
+
+
+<div class="viewcode-block" id="HeaderViewer.table">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_headview.HeaderViewer.html#sofia_redux.pipeline.gui.qad.qad_headview.HeaderViewer.table">[docs]</a>
+    def table(self):
+        &quot;&quot;&quot;
+        Format selected parameters into a table.
+
+        Uses comma-separated filter values as keys to display
+        from each header.
+
+        Requires `pandas` to display.
+        &quot;&quot;&quot;
+        # read text to filter
+        # may be comma-separated keys (no substrings)
+        find_text = self.findText.text().strip()
+
+        if find_text == &#39;&#39;:
+            # clear previous filter / table
+            self.textEdit.setHtml(self.html)
+        else:
+            # check for pandas
+            try:
+                import pandas as pd
+            except ImportError:
+                msg = &#39;(install pandas for table display)&#39;
+                self.textEdit.setPlainText(msg)
+                return
+
+            # split field on commas for multiple keys
+            sep = [&#39;File name&#39;]
+            sep.extend(find_text.upper().split(&#39;,&#39;))
+
+            # find keys in headers
+            data = {}
+            sortkeys = sorted(self.text.keys())
+            for key in sep:
+                data[key] = []
+                for fpath in sortkeys:
+                    hlist = self.text[fpath]
+                    if type(hlist) is not list:
+                        hlist = [hlist]
+                    for i, hdr in enumerate(hlist):
+                        if key == &#39;File name&#39;:
+                            basename = os.path.splitext(
+                                os.path.basename(fpath))[0]
+                            if &#39;EXTNAME&#39; in hdr:
+                                extname = &quot; [{}]&quot;.format(hdr[&#39;EXTNAME&#39;])
+                            else:
+                                extname = &quot; [{}]&quot;.format(i)
+                            data[key].append(basename + extname)
+                        elif key in hdr:
+                            data[key].append(hdr[key])
+                        else:
+                            data[key].append(None)
+
+            # pandas dataframe for table display
+            df = pd.DataFrame(data, columns=sep)
+            htmltable = df.to_html(max_rows=None, max_cols=None, border=1)
+            htmltable = htmltable.replace(&#39;&lt;table&#39;,
+                                          &#39;&lt;table cellpadding=&quot;10&quot;&#39;, 1)
+            self.textEdit.setHtml(htmltable)
+
+        # repaint required for some versions of Qt/OS
+        self.textEdit.repaint()</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

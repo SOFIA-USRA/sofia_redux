@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.utilities.class_provider &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.utilities.class_provider</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import importlib
+import inspect
+import re
+
+from sofia_redux.scan import custom
+from sofia_redux.scan.channels import mode as mode_module
+from sofia_redux.scan.coordinate_systems import grid as grid_module
+from sofia_redux.scan.coordinate_systems import projection as projection_module
+from sofia_redux.scan.simulation \
+    import source_models as simulated_source_module
+
+custom_module_path = custom.__name__
+
+__all__ = [&#39;fix_instrument_name&#39;, &#39;get_instrument_module_path&#39;,
+           &#39;to_class_name&#39;, &#39;to_module_name&#39;,
+           &#39;get_instrument_path_and_class_name&#39;, &#39;get_class_for&#39;,
+           &#39;channel_class_for&#39;,
+           &#39;channel_data_class_for&#39;,
+           &#39;channel_group_class_for&#39;,
+           &#39;frames_class_for&#39;,
+           &#39;frames_instance_for&#39;,
+           &#39;info_class_for&#39;, &#39;get_integration_class&#39;,
+           &#39;get_scan_class&#39;, &#39;default_modality_mode&#39;, &#39;get_grid_class&#39;,
+           &#39;get_projection_class&#39;, &#39;get_simulated_source_class&#39;]
+
+
+<div class="viewcode-block" id="fix_instrument_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.fix_instrument_name.html#sofia_redux.scan.utilities.class_provider.fix_instrument_name">[docs]</a>
+def fix_instrument_name(name):
+    &quot;&quot;&quot;
+    Return a valid name for the given instrument.
+
+    Parameters
+    ----------
+    name : str
+        The name of the instrument.
+
+    Returns
+    -------
+    name : str
+    &quot;&quot;&quot;
+    if not isinstance(name, str):
+        return &#39;&#39;
+    name = name.lower().strip()
+    if name == &#39;hawc+&#39;:
+        return &#39;hawc_plus&#39;
+    elif name == &#39;fifi-ls&#39; or name == &#39;fifils&#39;:
+        return &#39;fifi_ls&#39;
+    return name</div>
+
+
+
+<div class="viewcode-block" id="get_instrument_module_path">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.get_instrument_module_path.html#sofia_redux.scan.utilities.class_provider.get_instrument_module_path">[docs]</a>
+def get_instrument_module_path(instrument):
+    &quot;&quot;&quot;
+    Return the module path to custom SOFSCAN instrument
+
+    Parameters
+    ----------
+    instrument : str
+        The name of the instrument.
+
+    Returns
+    -------
+    module_path : str
+        The dot-separated module path for subsequent import via
+        :func:`importlib.import_module`.
+    &quot;&quot;&quot;
+    return f&#39;{custom_module_path}.{fix_instrument_name(instrument)}&#39;</div>
+
+
+
+<div class="viewcode-block" id="to_class_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.to_class_name.html#sofia_redux.scan.utilities.class_provider.to_class_name">[docs]</a>
+def to_class_name(name):
+    &quot;&quot;&quot;
+    Return the associated class type name for a given string.
+
+    Capitalizes the first letter of the instrument, upper-cases any character
+    following an underscore, and finally remove all underscores.  For example,
+    converts &#39;hawc_plus` to `HawcPlus`.
+
+    Parameters
+    ----------
+    name : str
+        The name to convert.
+
+    Returns
+    -------
+    class_name : str
+    &quot;&quot;&quot;
+    if name is None:
+        return &#39;&#39;
+    name = str(name)
+    if len(name) == 0:
+        return name
+    if len(name) == 1:
+        return name.upper()
+    return &#39;&#39;.join([s[0].upper() + s[1:] for s in name.split(&#39;_&#39;)])</div>
+
+
+
+<div class="viewcode-block" id="to_module_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.to_module_name.html#sofia_redux.scan.utilities.class_provider.to_module_name">[docs]</a>
+def to_module_name(class_name):
+    &quot;&quot;&quot;
+    Convert a class name to the base module it may be found in.
+
+    Inserts an underscore before any uppercase character or digit
+    (excluding the first) and converts the string to lower case.
+
+    Examples
+    --------
+    &gt;&gt;&gt; print(to_module_name(&#39;TestClass1&#39;))
+    test_class_1
+
+    Parameters
+    ----------
+    class_name : str
+
+    Returns
+    -------
+    module_name : str
+    &quot;&quot;&quot;
+    if class_name is None:
+        return &#39;&#39;
+    class_name = str(class_name)
+    if len(class_name) == 0:
+        return class_name
+    result = class_name[0]
+    for letter in class_name[1:]:
+        if letter.isupper() or letter.isdigit():
+            result += f&#39;_{letter}&#39;
+        else:
+            result += letter
+    return result.lower()</div>
+
+
+
+<div class="viewcode-block" id="get_instrument_path_and_class_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.get_instrument_path_and_class_name.html#sofia_redux.scan.utilities.class_provider.get_instrument_path_and_class_name">[docs]</a>
+def get_instrument_path_and_class_name(instrument):
+    &quot;&quot;&quot;
+    Get the module path and class name prefix for a given instrument name.
+
+    Parameters
+    ----------
+    instrument : str
+       The name of the instrument.
+
+    Returns
+    -------
+    instrument_module_path, class_prefix : str, str
+        The instrument module path such as &#39;sofia_redux.scan.custom.hawc_plus&#39;
+        and the class name prefix for the instrument such as &#39;HawcPlus&#39;.
+    &quot;&quot;&quot;
+    instrument = fix_instrument_name(instrument)
+    module_path = get_instrument_module_path(instrument)
+    instrument_class_name = to_class_name(instrument)
+    return module_path, instrument_class_name</div>
+
+
+
+<div class="viewcode-block" id="get_class_for">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.get_class_for.html#sofia_redux.scan.utilities.class_provider.get_class_for">[docs]</a>
+def get_class_for(instrument, module_path_name, other_module=None):
+    &quot;&quot;&quot;
+    Return an instrument specific class for a given module.
+
+    The SOFSCAN custom classes for any instrument should be placed in the
+    package in the following format:
+
+    scan.custom.&lt;instrument&gt;.&lt;...&gt;
+
+    For example, a custom channel data class for the HAWC_PLUS instrument
+    should be placed at:
+
+    scan.custom.hawc_plus.channels.channel_data.channel_data
+
+    and contain a class called ChannelData.  Class names must always match the
+    `module_path_name` final path, begin with an upper case character, and
+    mark new words with an upper-case character.  For example, the class
+    AbcDefGhi should be in the abc_def_ghi module.
+
+    Examples
+    --------
+    &gt;&gt;&gt; print(get_class_for(&#39;sofia&#39;, &#39;frames&#39;))
+    &lt;class &#39;sofia_redux.scan.custom.sofia.frames.frames.SofiaFrames&#39;&gt;
+
+    Parameters
+    ----------
+    instrument : str
+        The name of the instrument.
+    module_path_name : str
+        The dot-separated module path for the required class excluding the
+        custom instrument path.  For example, &#39;channels.channel_data&#39;.
+    other_module : str, optional
+        Usually, the class will be retrieved from a module matching the last
+        path level in `module_path_name`.  For example, ChannelData will
+        usually be retrieved from
+        &lt;instrument_path&gt;.channels.channel_data.channel_data.
+        Set this to an empty string (&#39;&#39;) to retrieve from
+        &lt;instrument_path&gt;.channels.channel_data or &lt;other&gt; to retrieve from
+        &lt;instrument_path&gt;.channels.channel_data.&lt;other&gt;.
+
+    Returns
+    -------
+    class
+    &quot;&quot;&quot;
+    base_path, class_prefix = get_instrument_path_and_class_name(instrument)
+    class_type = module_path_name.split(&#39;.&#39;)[-1]
+    class_suffix = to_class_name(class_type)
+    class_name = f&#39;{class_prefix}{class_suffix}&#39;
+    module_path = f&#39;{base_path}.{module_path_name}&#39;
+    if other_module is None:
+        full_path = f&#39;{module_path}.{class_type}&#39;
+    elif other_module == &#39;&#39;:
+        full_path = module_path
+    else:
+        full_path = f&#39;{module_path}.{other_module}&#39;
+
+    # Allow errors
+    module = importlib.import_module(full_path)
+    retrieved_class = getattr(module, class_name)
+    return retrieved_class</div>
+
+
+
+<div class="viewcode-block" id="channel_class_for">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.channel_class_for.html#sofia_redux.scan.utilities.class_provider.channel_class_for">[docs]</a>
+def channel_class_for(instrument):
+    &quot;&quot;&quot;
+    Returns a Channels instance for a given instrument.
+
+    Parameters
+    ----------
+    instrument : str
+        The name of the instrument.
+
+    Returns
+    -------
+    Channels
+    &quot;&quot;&quot;
+    return get_class_for(instrument, &#39;channels&#39;)</div>
+
+
+
+<div class="viewcode-block" id="channel_data_class_for">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.channel_data_class_for.html#sofia_redux.scan.utilities.class_provider.channel_data_class_for">[docs]</a>
+def channel_data_class_for(instrument):
+    &quot;&quot;&quot;
+    Returns a ChannelData instance for a given instrument.
+
+    Parameters
+    ----------
+    instrument : str
+        The name of the instrument.
+
+    Returns
+    -------
+    channel_data_class : class (ChannelData)
+    &quot;&quot;&quot;
+    return get_class_for(instrument, &#39;channels.channel_data&#39;)</div>
+
+
+
+<div class="viewcode-block" id="channel_group_class_for">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.channel_group_class_for.html#sofia_redux.scan.utilities.class_provider.channel_group_class_for">[docs]</a>
+def channel_group_class_for(instrument):
+    &quot;&quot;&quot;
+    Returns the appropriate ChannelGroup class for a given instrument.
+
+    Parameters
+    ----------
+    instrument : str
+        The name of the instrument.
+
+    Returns
+    -------
+    class (ChannelGroup)
+    &quot;&quot;&quot;
+    return get_class_for(instrument, &#39;channels.channel_group&#39;)</div>
+
+
+
+<div class="viewcode-block" id="frames_class_for">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.frames_class_for.html#sofia_redux.scan.utilities.class_provider.frames_class_for">[docs]</a>
+def frames_class_for(instrument):
+    &quot;&quot;&quot;
+    Returns the appropriate ChannelGroup class for a given instrument.
+
+    Parameters
+    ----------
+    instrument : str
+        The name of the instrument.
+
+    Returns
+    -------
+    class (ChannelGroup)
+    &quot;&quot;&quot;
+    return get_class_for(instrument, &#39;frames&#39;)</div>
+
+
+
+<div class="viewcode-block" id="frames_instance_for">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.frames_instance_for.html#sofia_redux.scan.utilities.class_provider.frames_instance_for">[docs]</a>
+def frames_instance_for(instrument):
+    &quot;&quot;&quot;
+    Return a Frames instance for a given instrument.
+
+    Parameters
+    ----------
+    instrument : str
+        The name of the instrument.
+
+    Returns
+    -------
+    Frames
+    &quot;&quot;&quot;
+    return frames_class_for(instrument)()</div>
+
+
+
+<div class="viewcode-block" id="info_class_for">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.info_class_for.html#sofia_redux.scan.utilities.class_provider.info_class_for">[docs]</a>
+def info_class_for(instrument):
+    &quot;&quot;&quot;
+    Return an Info instance given an instrument name.
+
+    Parameters
+    ----------
+    instrument : str
+        The name of the instrument
+
+    Returns
+    -------
+    Info
+    &quot;&quot;&quot;
+    return get_class_for(instrument, &#39;info&#39;)</div>
+
+
+
+<div class="viewcode-block" id="get_integration_class">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.get_integration_class.html#sofia_redux.scan.utilities.class_provider.get_integration_class">[docs]</a>
+def get_integration_class(instrument):
+    &quot;&quot;&quot;
+    Return an Integration instance given an instrument name.
+
+    Parameters
+    ----------
+    instrument : str
+        The name of the instrument.
+
+    Returns
+    -------
+    Integration : class
+    &quot;&quot;&quot;
+    return get_class_for(instrument, &#39;integration&#39;)</div>
+
+
+
+<div class="viewcode-block" id="get_scan_class">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.get_scan_class.html#sofia_redux.scan.utilities.class_provider.get_scan_class">[docs]</a>
+def get_scan_class(instrument):
+    &quot;&quot;&quot;
+    Return the appropriate scan class for an instrument name.
+
+    Parameters
+    ----------
+    instrument : str
+        The instrument name.
+
+    Returns
+    -------
+    Scan : class
+    &quot;&quot;&quot;
+    return get_class_for(instrument, &#39;scan&#39;)</div>
+
+
+
+<div class="viewcode-block" id="default_modality_mode">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.default_modality_mode.html#sofia_redux.scan.utilities.class_provider.default_modality_mode">[docs]</a>
+def default_modality_mode(modality):
+    &quot;&quot;&quot;
+    Return a default mode class based on modality class.
+
+    For example, A CoupledModality should return CoupledMode.  If
+    no analogous mode is found, a default base Mode will be returned.
+
+    Parameters
+    ----------
+    modality : Modality
+
+    Returns
+    -------
+    class
+        The correct default mode class for the given modality.
+    &quot;&quot;&quot;
+    if inspect.isclass(modality):
+        modality_class = modality
+    else:
+        modality_class = modality.__class__
+
+    mode_module_path = mode_module.__name__
+    modality_name = modality_class.__name__.split(&#39;.&#39;)[-1]
+    mode_name = modality_name.replace(&#39;Modality&#39;, &#39;Mode&#39;)
+    mode_sub_path = re.sub(r&#39;(?&lt;!^)(?=[A-Z])&#39;, &#39;_&#39;, mode_name).lower()
+    mode_path = f&#39;{mode_module_path}.{mode_sub_path}&#39;
+    try:
+        module = importlib.import_module(mode_path)
+        mode_class = getattr(module, mode_name)
+    except ModuleNotFoundError:  # Return a basic mode.
+        mode_path = f&#39;{mode_module_path}.mode&#39;
+        module = importlib.import_module(mode_path)
+        mode_class = getattr(module, &#39;Mode&#39;)
+
+    return mode_class</div>
+
+
+
+<div class="viewcode-block" id="get_grid_class">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.get_grid_class.html#sofia_redux.scan.utilities.class_provider.get_grid_class">[docs]</a>
+def get_grid_class(name):
+    &quot;&quot;&quot;
+    Returns a Grid class of the given name
+
+    Parameters
+    ----------
+    name : str
+        The name of the grid.
+
+    Returns
+    -------
+    Grid : class
+    &quot;&quot;&quot;
+    if name in [None, &#39;&#39;]:
+        return None
+
+    grid_path = grid_module.__name__
+    module_path = f&#39;{grid_path}.{name}&#39;
+    class_name = &#39;&#39;.join(
+        [s[0].upper() + s[1:] for s in name.split(&#39;_&#39;)])
+    if re.match(r&#39;\dd&#39;, class_name[-2:]):
+        class_name = class_name[:-1] + class_name[-1].upper()
+    elif class_name.endswith(&#39;2d1&#39;):
+        class_name = class_name[:-3] + &#39;2D1&#39;
+
+    module = importlib.import_module(module_path)  # Allow errors
+    grid_class = getattr(module, class_name)
+    return grid_class</div>
+
+
+
+<div class="viewcode-block" id="get_projection_class">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.get_projection_class.html#sofia_redux.scan.utilities.class_provider.get_projection_class">[docs]</a>
+def get_projection_class(name):
+    &quot;&quot;&quot;
+    Returns a Projection class of the given name
+
+    Parameters
+    ----------
+    name : str
+        The name of the grid omitting the &quot;projection&quot; suffix.
+
+    Returns
+    -------
+    Projection : class
+    &quot;&quot;&quot;
+    if name in [None, &#39;&#39;]:
+        return None
+
+    projection_path = projection_module.__name__
+    module_path = f&#39;{projection_path}.{name}_projection&#39;
+    class_name = &#39;&#39;.join(
+        [s[0].upper() + s[1:] for s in name.split(&#39;_&#39;)]) + &#39;Projection&#39;
+    module = importlib.import_module(module_path)  # Allow errors
+    projection_class = getattr(module, class_name)
+    return projection_class</div>
+
+
+
+<div class="viewcode-block" id="get_simulated_source_class">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.class_provider.get_simulated_source_class.html#sofia_redux.scan.utilities.class_provider.get_simulated_source_class">[docs]</a>
+def get_simulated_source_class(name):
+    &quot;&quot;&quot;
+    Return a simulated source of the given name.
+
+    Parameters
+    ----------
+    name : str
+        The name of the simulated source model.
+
+    Returns
+    -------
+    SimulatedSource
+    &quot;&quot;&quot;
+    if name in [None, &#39;&#39;]:
+        return None
+
+    path = simulated_source_module.__name__
+    module_path = f&#39;{path}.{name}&#39;
+    class_name = to_class_name(name)
+    module = importlib.import_module(module_path)
+    source_class = getattr(module, class_name)
+    return source_class</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.configuration.aliases &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.configuration.aliases</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import configobj
+import re
+from copy import deepcopy
+
+from sofia_redux.scan.configuration.options import Options
+from sofia_redux.toolkit.utilities.multiprocessing import in_windows_os
+
+__all__ = [&#39;Aliases&#39;]
+
+
+<div class="viewcode-block" id="Aliases">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.aliases.Aliases.html#sofia_redux.scan.configuration.aliases.Aliases">[docs]</a>
+class Aliases(Options):
+
+    substitute_pattern = r&#39;(?&lt;={\?).*?(?=})&#39;
+
+    def __init__(self, allow_error=False, verbose=True):
+        &quot;&quot;&quot;
+        Initialize the configuration aliases.
+
+        Aliases in the configuration are shorthand names for certain
+        configuration keys such as &#39;sky&#39; for &#39;correlated.sky&#39; which may then
+        be used to access values in the configuration appropriately.  For
+        example, using the above alias example, sky.gain would always point to
+        correlated.sky.gain for any configuration operations.
+
+        Configuration values may also be aliased to other existing
+        configuration values using the {?&lt;key&gt;} format.  For example, if in the
+        configuration foo={?bar}, then the value for bar would be retrieved
+        when requesting foo.
+
+        Parameters
+        ----------
+        allow_error : bool, optional
+            If `True`, allow poorly formatted options to be skipped rather than
+            raising an error.
+        verbose : bool, optional
+            If `True`, issues a warning when a poorly option is encountered.
+        &quot;&quot;&quot;
+        super().__init__(allow_error=allow_error, verbose=verbose)
+
+<div class="viewcode-block" id="Aliases.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.aliases.Aliases.html#sofia_redux.scan.configuration.aliases.Aliases.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the aliases.
+
+        Returns
+        -------
+        Aliases
+        &quot;&quot;&quot;
+        return deepcopy(self)</div>
+
+
+<div class="viewcode-block" id="Aliases.unalias_dot_string">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.aliases.Aliases.html#sofia_redux.scan.configuration.aliases.Aliases.unalias_dot_string">[docs]</a>
+    def unalias_dot_string(self, key):
+        &quot;&quot;&quot;
+        Unalias all configuration paths in a given key.
+
+        An alias is a name in the configuration used to represent another
+        configuration keyword.  For example, if correlated.sky was aliased to
+        sky, then alias.unalias_dot_string(&#39;sky.mode&#39;) would return
+        &#39;correlated.sky.mode&#39;.
+
+        Parameters
+        ----------
+        key : str
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if not isinstance(key, str):
+            self.handle_error(f&quot;Unalias_dot_string: require string input. &quot;
+                              f&quot;Received: {type(key)}&quot;)
+            return
+
+        if self.size == 0:
+            return key
+        branches = key.split(&#39;.&#39;)
+        if branches[0] not in self.options:
+            return key
+        branches[0] = self.options[branches[0]]
+        key = &#39;.&#39;.join(branches)
+        return self.unalias_dot_string(key)  # Recursive</div>
+
+
+<div class="viewcode-block" id="Aliases.unalias_branch">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.aliases.Aliases.html#sofia_redux.scan.configuration.aliases.Aliases.unalias_branch">[docs]</a>
+    def unalias_branch(self, options):
+        &quot;&quot;&quot;
+        Unalias a single options branch of the configuration.
+
+        Returns a potentially multi-levelled dictionary for a given single
+        levelled dictionary if the key is currently aliased.  For example,
+        if &#39;sky&#39; was aliased to &#39;correlated.sky&#39;, then passing
+        {&#39;sky&#39;: {&#39;gainrange&#39;: &#39;0.3:3&#39;}} into unalias_branch would return
+        {&#39;correlated&#39;: {&#39;sky&#39;: {&#39;gainrange&#39;: &#39;0.3:3&#39;}}}.
+
+        Parameters
+        ----------
+        options : ConfigObj or dict
+            The options branch to unalias.  Must be of length 1 (only contain
+            a single key).
+
+        Returns
+        -------
+        unaliased_options : dict
+        &quot;&quot;&quot;
+        if not isinstance(options, dict):
+            self.handle_error(f&quot;Unalias_options: require dict input. &quot;
+                              f&quot;Received: {type(options)}&quot;)
+            return
+
+        items = list(options.items())
+        if len(items) != 1:
+            self.handle_error(&quot;Multiple branches passed to unalias_branch.&quot;)
+            return
+
+        key, value = items[0]
+        branch_path = self.unalias_dot_string(key).split(&#39;.&#39;)
+        if branch_path[0] == key:  # No alias found
+            return options
+        result = dict()
+        current = result
+        for branch in branch_path[:-1]:
+            current[branch] = dict()
+            current = current[branch]
+        current[branch_path[-1]] = value
+        return result</div>
+
+
+<div class="viewcode-block" id="Aliases.unalias_value">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.aliases.Aliases.html#sofia_redux.scan.configuration.aliases.Aliases.unalias_value">[docs]</a>
+    @classmethod
+    def unalias_value(cls, configuration, value):
+        &quot;&quot;&quot;
+        Unalias a value from the configuration.
+
+        Aliased values in the configuration may be defined in the configuration
+        by using {?key} in place of the value where key represents another
+        configuration value.  For example, if the configuration contains the
+        option my_value = abc, passing {?my_value} into unalias_value would
+        return abc.
+
+        Parameters
+        ----------
+        configuration : Configuration
+            The configuration to examine when unaliasing the given value.
+        value : str or object
+            Only string values will be unaliased.  Anything else will be
+            returned in the output.
+
+        Returns
+        -------
+        unaliased_value : str
+        &quot;&quot;&quot;
+        if not isinstance(value, str):
+            return value
+        if &#39;{?&#39; not in value:
+            return value
+
+        substitutions = set(re.findall(cls.substitute_pattern, value))
+        if len(substitutions) == 0:
+            return value
+
+        for key in substitutions:
+            s = configuration.get(key)
+            if s is None:
+                continue
+            # workaround for Windows paths
+            if in_windows_os() and &#39;\\&#39; in s:  # pragma: no cover
+                s = re.escape(s)
+            replace = r&#39;{\?&#39; + key + &#39;}&#39;
+            value = re.sub(replace, s, value)
+
+        return value</div>
+
+
+<div class="viewcode-block" id="Aliases.unalias_branch_values">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.aliases.Aliases.html#sofia_redux.scan.configuration.aliases.Aliases.unalias_branch_values">[docs]</a>
+    @classmethod
+    def unalias_branch_values(cls, configuration, branch, copy=True):
+        &quot;&quot;&quot;
+        Unalias all values in an options branch.
+
+        Parameters
+        ----------
+        configuration : Configuration
+            The configuration used to unalias values.
+        branch : dict or ConfigObj or str
+            Either a configuration options branch to unalias, or a single
+            string value to unalias.
+        copy : bool, optional
+            If `True`, return a copy of the branch.  Otherwise, the given
+            branch will be updated in place.
+
+        Returns
+        -------
+        new_branch : dict or ConfigObj or str
+            The updated branch.
+        &quot;&quot;&quot;
+        if copy:
+            branch = deepcopy(branch)
+        if not isinstance(branch, dict):
+            return cls.unalias_value(configuration, branch)
+        for key, value in branch.items():
+            if isinstance(branch, dict):
+                branch[key] = cls.unalias_branch_values(
+                    configuration, value, copy=False)
+        return branch</div>
+
+
+<div class="viewcode-block" id="Aliases.update">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.aliases.Aliases.html#sofia_redux.scan.configuration.aliases.Aliases.update">[docs]</a>
+    def update(self, configuration_options):
+        &quot;&quot;&quot;
+        Update the stored aliases with those from another configuration.
+
+        Parameters
+        ----------
+        configuration_options : dict or ConfigObj
+            The configuration options to read and parse.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if &#39;aliases&#39; not in configuration_options:
+            return
+        super().update(configuration_options[&#39;aliases&#39;])</div>
+
+
+<div class="viewcode-block" id="Aliases.resolve_configuration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.aliases.Aliases.html#sofia_redux.scan.configuration.aliases.Aliases.resolve_configuration">[docs]</a>
+    def resolve_configuration(self, configuration):
+        &quot;&quot;&quot;
+        Resolve all configuration branch names.
+
+        All branches within the Configuration options are checked such that any
+        aliased branch names will be replaced by the correct unaliased branch
+        paths/names.  This requires iteration due to the possibility of
+        certain one alias referencing a branch that has not yet been unaliased,
+        but will be.
+
+        Parameters
+        ----------
+        configuration : Configuration
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        changed = True
+        while changed:
+            unaliased_options = configobj.ConfigObj()
+            for key, value in configuration.options.items():
+                alias = self(key)
+                if alias != key:
+                    unaliased_options[alias] = value
+                    try:
+                        del configuration.options[key]
+                    except KeyError:  # pragma: no cover
+                        pass
+
+            changed = len(unaliased_options) &gt; 0
+            if changed:
+                configuration.apply_configuration_options(unaliased_options)</div>
+
+
+<div class="viewcode-block" id="Aliases.__call__">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.aliases.Aliases.html#sofia_redux.scan.configuration.aliases.Aliases.__call__">[docs]</a>
+    def __call__(self, thing):
+        &quot;&quot;&quot;
+        Unalias whatever value is passed into the alias.
+
+        Parameters
+        ----------
+        thing : str or dict or ConfigObj
+            The object to unalias.
+
+        Returns
+        -------
+        dict or str or ConfigObj
+        &quot;&quot;&quot;
+        if isinstance(thing, str):
+            return self.unalias_dot_string(thing)
+        elif isinstance(thing, dict):
+            return self.unalias_branch(thing)
+        else:
+            self.handle_error(f&quot;Must supply {str} or {dict} type object.&quot;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

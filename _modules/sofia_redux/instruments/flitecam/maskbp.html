@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.flitecam.maskbp &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.flitecam.maskbp</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+from astropy.stats import sigma_clipped_stats
+import bottleneck as bn
+import numpy as np
+from scipy.ndimage import filters
+
+__all__ = [&#39;fixpix&#39;, &#39;maskbp&#39;]
+
+
+def _test_stamp(stamp, test_median, test_sigma, sign=1):
+    _, _, sig = sigma_clipped_stats(stamp, sigma=5)
+    pixval = stamp[2, 2]
+
+    # mask hot pixel
+    stamp[2, 2] = np.nan
+
+    # median nearest 8 pixels
+    med8 = bn.nanmedian(stamp[1:4, 1:4])
+    stamp[1:4, 1:4] = np.nan
+
+    # median next 16 pixels out
+    med16 = bn.nanmedian(stamp)
+
+    # decide from the noise if we are on a feature
+    # or gaussian background
+    # todo - see if magic numbers can be sourced
+    if sig &gt; test_sigma:
+        sig = max(test_sigma, np.sqrt(5 + .21 * np.abs(med8)))
+
+    # heuristic for blocking pixel
+    if sign &gt; 0:
+        if ((med8 + 2 * med16) / 3 - test_median) &gt; (2 * sig):
+            if pixval &gt; (2 * med8 - test_median + 3 * sig):
+                # pixel is bad
+                return True, med8
+        elif (pixval - (med8 + 2 * med16) / 3) &gt; (5 * sig):
+            # pixel is bad
+            return True, med8
+    else:
+        if ((med8 + 2 * med16) / 3 - test_median) &lt; (-2 * sig):
+            if pixval &lt; (2 * med8 - test_median - 3 * sig):
+                # pixel is bad
+                return True, med8
+        elif (pixval - (med8 + 2 * med16) / 3) &lt; (-5 * sig):
+            # pixel is bad
+            return True, med8
+
+    # pixel is good
+    return False, pixval
+
+
+<div class="viewcode-block" id="fixpix">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.flitecam.maskbp.fixpix.html#sofia_redux.instruments.flitecam.maskbp.fixpix">[docs]</a>
+def fixpix(data, max_iter=5):
+    &quot;&quot;&quot;
+    Identify hot and cold pixels in a data array.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        Image array.
+    max_iter : int, optional
+        Number of iterations to perform.
+
+    Returns
+    -------
+    mask : numpy.ndarray of int16
+        Mask array with bad pixels marked (1 = bad, 0 = good).
+    &quot;&quot;&quot;
+    mask = np.zeros(data.shape, dtype=np.int16)
+
+    # median of image
+    medimg = np.nanmedian(data)
+    log.debug(f&#39;Median value: {medimg:.2f}&#39;)
+
+    # local noise in image with 5x5 box filter
+    sigma = filters.generic_filter(data, bn.nanstd, size=5,
+                                   mode=&#39;constant&#39;, cval=np.nan)
+
+    # stats for noise value
+    medsig, _, sigsig = sigma_clipped_stats(sigma, sigma=5)
+    test_limit = medsig + 2 * sigsig
+    log.debug(f&#39;Median noise: {medsig:.2f} +/- {sigsig:.2f}&#39;)
+
+    # iteratively find hot and cold pixels
+    niter = 0
+    new_badpix = True
+    nhot = 0
+    ncold = 0
+    corrected_image = data.copy()
+    padded = np.pad(corrected_image, 2, mode=&#39;reflect&#39;)
+    while niter &lt; max_iter and new_badpix:
+        new_badpix = False
+
+        # 5x5 box filter: max is hot pix, min is cold pix
+        hot = filters.maximum_filter(corrected_image, size=5, mode=&#39;mirror&#39;)
+        cold = filters.minimum_filter(corrected_image, size=5, mode=&#39;mirror&#39;)
+
+        # check surrounding area for each hot pixel to determine
+        # if it&#39;s source-like or bad pixel-like
+        idx = np.where(corrected_image == hot)
+        for y, x in zip(idx[0], idx[1]):
+            stamp = padded[y:y + 5, x:x + 5].copy()
+            mark_bad, replace = _test_stamp(stamp, medimg, test_limit)
+            if mark_bad:
+                log.debug(f&#39;Replace hot x,y={x},{y} value &#39;
+                          f&#39;{corrected_image[y,x]} with {replace}&#39;)
+                corrected_image[y, x] = replace
+                mask[y, x] = 1
+                nhot += 1
+                new_badpix = True
+
+        # same for cold pixel
+        idx = np.where(corrected_image == cold)
+        for y, x in zip(idx[0], idx[1]):
+            stamp = padded[y:y + 5, x:x + 5].copy()
+            mark_bad, replace = _test_stamp(stamp, medimg, test_limit,
+                                            sign=-1)
+            if mark_bad:
+                log.debug(f&#39;Replace cold x,y={x},{y} value &#39;
+                          f&#39;{corrected_image[y,x]} with {replace}&#39;)
+                corrected_image[y, x] = replace
+                mask[y, x] = 1
+                ncold += 1
+                new_badpix = True
+
+        niter += 1
+        log.debug(f&#39;Iteration {niter}: total {nhot} hot, {ncold} cold&#39;)
+
+    log.info(f&#39;Found {nhot} hot pixels and {ncold} cold pixels&#39;)
+    return mask</div>
+
+
+
+<div class="viewcode-block" id="maskbp">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.flitecam.maskbp.maskbp.html#sofia_redux.instruments.flitecam.maskbp.maskbp">[docs]</a>
+def maskbp(hdul, cval=None, max_iter=5):
+    &quot;&quot;&quot;
+    Mask hot and cold bad pixels.
+
+    Parameters
+    ----------
+    hdul : fits.HDUList
+        Input data.  Should have FLUX, ERROR, and BADMASK extensions.
+    cval : float, optional
+        Constant value to replace bad pixels with.  If not
+        provided, bad pixels will not be replaced.
+    max_iter : int, optional
+        Number of iterations of bad pixel finding to perform.
+
+    Returns
+    -------
+    fits.HDUList
+        Masked data. BADMASK extension is updated with the new
+        bad pixels.  FLUX and ERROR extensions may be updated to
+        replace the bad pixels, if `cval` is not None.
+    &quot;&quot;&quot;
+    data = hdul[&#39;FLUX&#39;].data
+    error = hdul[&#39;ERROR&#39;].data
+    mask = hdul[&#39;BADMASK&#39;].data
+
+    # mark outlier pixels
+    mask |= fixpix(data, max_iter=max_iter)
+
+    # mask input data if desired
+    if cval is not None:
+        data[mask == 1] = cval
+        error[mask == 1] = cval
+
+    return hdul</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

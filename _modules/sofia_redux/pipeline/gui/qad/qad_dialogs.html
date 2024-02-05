@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.gui.qad.qad_dialogs &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.gui.qad.qad_dialogs</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Dialogs for the QAD standalone GUI.&quot;&quot;&quot;
+
+try:
+    from PyQt5 import QtWidgets, QtCore
+    from sofia_redux.pipeline.gui.qad.ui import ui_qad_disp_settings
+    from sofia_redux.pipeline.gui.qad.ui import ui_qad_phot_settings
+    from sofia_redux.pipeline.gui.qad.ui import ui_qad_plot_settings
+except ImportError:
+    HAS_PYQT5 = False
+    QtCore = None
+
+    # duck type parents to allow class definition
+    class QtWidgets:
+        class QDialog:
+            pass
+
+    class ui_qad_disp_settings:
+        class Ui_DisplayDialog:
+            pass
+
+    class ui_qad_phot_settings:
+        class Ui_PhotometryDialog:
+            pass
+
+    class ui_qad_plot_settings:
+        class Ui_PlotSettingsDialog:
+            pass
+
+else:
+    HAS_PYQT5 = True
+
+__all__ = [&#39;DispSettingsDialog&#39;, &#39;PhotSettingsDialog&#39;,
+           &#39;PlotSettingsDialog&#39;]
+
+
+<div class="viewcode-block" id="DispSettingsDialog">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_dialogs.DispSettingsDialog.html#sofia_redux.pipeline.gui.qad.qad_dialogs.DispSettingsDialog">[docs]</a>
+class DispSettingsDialog(QtWidgets.QDialog,
+                         ui_qad_disp_settings.Ui_DisplayDialog):
+    &quot;&quot;&quot;Retrieve user preferences for display parameters.&quot;&quot;&quot;
+    def __init__(self, parent=None, current=None, default=None):
+        &quot;&quot;&quot;
+        Build the settings dialog.
+
+        Parameters
+        ----------
+        parent : QWidget, optional
+            Parent widget
+        current : dict, optional
+            Current display parameter dictionary
+            (`QADImView.disp_parameters`).
+        default : dict, optional
+            Default display parameter dictionary
+            (`QADImView.default_parameters`).
+        &quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for QAD.&#39;)
+
+        # parent initialization
+        QtWidgets.QDialog.__init__(self, parent)
+
+        # set up UI from Designer generated file
+        self.setupUi(self)
+
+        # connect signals to slots
+        self.buttonBox.button(
+            QtWidgets.QDialogButtonBox.Reset).clicked.connect(self.reset)
+        self.buttonBox.button(
+            QtWidgets.QDialogButtonBox.RestoreDefaults).clicked.connect(
+                self.restore)
+
+        # set values from current, if available
+        try:
+            self.current = current.copy()
+        except AttributeError:
+            self.current = current
+        if self.current is not None:
+            self.setValue(self.current)
+        try:
+            self.default = default.copy()
+        except AttributeError:
+            self.default = default
+
+<div class="viewcode-block" id="DispSettingsDialog.getValue">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_dialogs.DispSettingsDialog.html#sofia_redux.pipeline.gui.qad.qad_dialogs.DispSettingsDialog.getValue">[docs]</a>
+    def getValue(self):
+        &quot;&quot;&quot;Get current display settings from widgets.&quot;&quot;&quot;
+        if self.current is not None:
+            parameters = self.current.copy()
+        else:
+            parameters = {}
+
+        parameters[&#39;extension&#39;] = str(self.extensionBox.currentText()).lower()
+        parameters[&#39;lock_image&#39;] = str(self.lockImageBox.currentText()).lower()
+        parameters[&#39;lock_slice&#39;] = str(self.lockSliceBox.currentText()).lower()
+        parameters[&#39;scale&#39;] = str(self.scaleBox.currentText()).lower()
+        parameters[&#39;cmap&#39;] = str(self.colorMapBox.text()).lower()
+        parameters[&#39;zoom_fit&#39;] = self.zoomBox.isChecked()
+        parameters[&#39;tile&#39;] = self.tileBox.isChecked()
+        parameters[&#39;eye_viewer&#39;] = not self.disableEyeBox.isChecked()
+        parameters[&#39;overplots&#39;] = not self.disableOverplotsBox.isChecked()
+        parameters[&#39;ds9_viewer_qad&#39;] = not self.disableDS9Box.isChecked()
+        parameters[&#39;ds9_viewer&#39;] = parameters[&#39;ds9_viewer_qad&#39;]
+
+        try:
+            lim = str(self.snRangeBox.text()).split(&#39;,&#39;)
+            parameters[&#39;s2n_range&#39;] = [float(lim[0]), float(lim[1])]
+        except (ValueError, TypeError, AttributeError, IndexError):
+            parameters[&#39;s2n_range&#39;] = None
+
+        return parameters</div>
+
+
+<div class="viewcode-block" id="DispSettingsDialog.reset">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_dialogs.DispSettingsDialog.html#sofia_redux.pipeline.gui.qad.qad_dialogs.DispSettingsDialog.reset">[docs]</a>
+    def reset(self):
+        &quot;&quot;&quot;Reset values to initial settings.&quot;&quot;&quot;
+        if self.current is not None:
+            self.setValue(self.current)
+            self.repaint()</div>
+
+
+<div class="viewcode-block" id="DispSettingsDialog.restore">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_dialogs.DispSettingsDialog.html#sofia_redux.pipeline.gui.qad.qad_dialogs.DispSettingsDialog.restore">[docs]</a>
+    def restore(self):
+        &quot;&quot;&quot;Restore values from default settings.&quot;&quot;&quot;
+        if self.default is not None:
+            self.setValue(self.default)
+            self.repaint()</div>
+
+
+<div class="viewcode-block" id="DispSettingsDialog.setValue">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_dialogs.DispSettingsDialog.html#sofia_redux.pipeline.gui.qad.qad_dialogs.DispSettingsDialog.setValue">[docs]</a>
+    def setValue(self, fromdict):
+        &quot;&quot;&quot;
+        Set widget values for display settings.
+
+        Parameters
+        ----------
+        fromdict : dict
+            Display parameter dictionary (`QADImView.disp_parameters`).
+        &quot;&quot;&quot;
+        # extension combo box
+        if &#39;extension&#39; in fromdict:
+            ext = fromdict[&#39;extension&#39;].lower()
+            idx = self.extensionBox.findText(ext, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.extensionBox.setCurrentIndex(idx)
+            else:
+                # set text in last entry (extnum)
+                idx = 3
+                self.extensionBox.setCurrentIndex(idx)
+                self.extensionBox.setItemText(idx, ext.upper())
+
+        # lock type combo boxes
+        if &#39;lock_image&#39; in fromdict:
+            lock = fromdict[&#39;lock_image&#39;].lower()
+            idx = self.lockImageBox.findText(lock, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.lockImageBox.setCurrentIndex(idx)
+        if &#39;lock_slice&#39; in fromdict:
+            lock = fromdict[&#39;lock_slice&#39;].lower()
+            idx = self.lockSliceBox.findText(lock, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.lockSliceBox.setCurrentIndex(idx)
+
+        # scale combo box
+        if &#39;scale&#39; in fromdict:
+            scale = fromdict[&#39;scale&#39;].lower()
+            idx = self.scaleBox.findText(scale, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.scaleBox.setCurrentIndex(idx)
+
+        # colormap text
+        try:
+            self.colorMapBox.setText(str(fromdict[&#39;cmap&#39;]))
+        except KeyError:
+            pass
+
+        # zoom to fit check box
+        try:
+            self.zoomBox.setChecked(fromdict[&#39;zoom_fit&#39;])
+        except KeyError:
+            pass
+
+        # tile check box
+        try:
+            self.tileBox.setChecked(fromdict[&#39;tile&#39;])
+        except KeyError:
+            pass
+
+        # s2n range text
+        try:
+            str_lim = [str(f) for f in fromdict[&#39;s2n_range&#39;]]
+            self.snRangeBox.setText(&#39;,&#39;.join(str_lim))
+        except (KeyError, ValueError, TypeError, AttributeError, IndexError):
+            self.snRangeBox.setText(&#39;&#39;)
+
+        # DS9, Eye, and overplots disable check boxes
+        try:
+            self.disableDS9Box.setChecked(not fromdict[&#39;ds9_viewer_qad&#39;])
+        except KeyError:
+            pass
+        try:
+            self.disableEyeBox.setChecked(not fromdict[&#39;eye_viewer&#39;])
+        except KeyError:
+            pass
+        try:
+            self.disableOverplotsBox.setChecked(not fromdict[&#39;overplots&#39;])
+        except KeyError:
+            pass</div>
+</div>
+
+
+
+<div class="viewcode-block" id="PhotSettingsDialog">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_dialogs.PhotSettingsDialog.html#sofia_redux.pipeline.gui.qad.qad_dialogs.PhotSettingsDialog">[docs]</a>
+class PhotSettingsDialog(QtWidgets.QDialog,
+                         ui_qad_phot_settings.Ui_PhotometryDialog):
+    &quot;&quot;&quot;Retrieve user preferences for photometry parameters.&quot;&quot;&quot;
+    def __init__(self, parent=None, current=None, default=None):
+        &quot;&quot;&quot;
+        Build the settings dialog.
+
+        Parameters
+        ----------
+        parent : QWidget, optional
+            Parent widget
+        current : dict, optional
+            Current photometry parameter dictionary
+            (`QADImView.phot_parameters`).
+        default : dict, optional
+            Default photometry parameter dictionary
+            (`QADImView.default_parameters`).
+        &quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for QAD.&#39;)
+
+        # parent initialization
+        QtWidgets.QDialog.__init__(self, parent)
+
+        # set up UI from Designer generated file
+        self.setupUi(self)
+
+        # connect signals to slots
+        self.buttonBox.button(
+            QtWidgets.QDialogButtonBox.Reset).clicked.connect(self.reset)
+        self.buttonBox.button(
+            QtWidgets.QDialogButtonBox.RestoreDefaults).clicked.connect(
+                self.restore)
+
+        # set values from current, if available
+        try:
+            self.current = current.copy()
+        except AttributeError:
+            self.current = current
+        if self.current is not None:
+            self.setValue(self.current)
+        try:
+            self.default = default.copy()
+        except AttributeError:
+            self.default = default
+
+<div class="viewcode-block" id="PhotSettingsDialog.getValue">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_dialogs.PhotSettingsDialog.html#sofia_redux.pipeline.gui.qad.qad_dialogs.PhotSettingsDialog.getValue">[docs]</a>
+    def getValue(self):
+        &quot;&quot;&quot;Get current photometry settings from widgets.&quot;&quot;&quot;
+        if self.current is not None:
+            parameters = self.current.copy()
+        else:
+            parameters = {}
+
+        parameters[&#39;model&#39;] = str(self.modelTypeBox.currentText()).lower()
+        parameters[&#39;fwhm_units&#39;] = str(self.fwhmUnitsBox.currentText()).lower()
+        parameters[&#39;aperture_units&#39;] = str(
+            self.apradUnitsBox.currentText()).lower()
+        parameters[&#39;window_units&#39;] = str(
+            self.windowUnitsBox.currentText()).lower()
+        try:
+            parameters[&#39;window&#39;] = float(self.windowSizeBox.text())
+        except ValueError:
+            pass
+        try:
+            parameters[&#39;fwhm&#39;] = float(self.fwhmBox.text())
+        except ValueError:
+            pass
+        try:
+            parameters[&#39;psf_radius&#39;] = float(self.apradBox.text())
+        except ValueError:
+            parameters[&#39;psf_radius&#39;] = &#39;auto&#39;
+        bgi = self.bgrinBox.text()
+        if str(bgi).lower() == &#39;none&#39;:
+            parameters[&#39;bg_inner&#39;] = None
+        else:
+            try:
+                parameters[&#39;bg_inner&#39;] = float(bgi)
+            except ValueError:
+                parameters[&#39;bg_inner&#39;] = &#39;auto&#39;
+        bgw = self.bgwidBox.text()
+        if str(bgw).lower() == &#39;none&#39;:
+            parameters[&#39;bg_width&#39;] = None
+        else:
+            try:
+                parameters[&#39;bg_width&#39;] = float(bgw)
+            except ValueError:
+                parameters[&#39;bg_width&#39;] = &#39;auto&#39;
+
+        parameters[&#39;show_plots&#39;] = self.radialPlotBox.isChecked()
+
+        return parameters</div>
+
+
+<div class="viewcode-block" id="PhotSettingsDialog.reset">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_dialogs.PhotSettingsDialog.html#sofia_redux.pipeline.gui.qad.qad_dialogs.PhotSettingsDialog.reset">[docs]</a>
+    def reset(self):
+        &quot;&quot;&quot;Reset values to initial settings.&quot;&quot;&quot;
+        if self.current is not None:
+            self.setValue(self.current)
+            self.repaint()</div>
+
+
+<div class="viewcode-block" id="PhotSettingsDialog.restore">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_dialogs.PhotSettingsDialog.html#sofia_redux.pipeline.gui.qad.qad_dialogs.PhotSettingsDialog.restore">[docs]</a>
+    def restore(self):
+        &quot;&quot;&quot;Restore values from default settings.&quot;&quot;&quot;
+        if self.default is not None:
+            self.setValue(self.default)
+            self.repaint()</div>
+
+
+<div class="viewcode-block" id="PhotSettingsDialog.setValue">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_dialogs.PhotSettingsDialog.html#sofia_redux.pipeline.gui.qad.qad_dialogs.PhotSettingsDialog.setValue">[docs]</a>
+    def setValue(self, fromdict):
+        &quot;&quot;&quot;
+        Set widget values for photometry settings.
+
+        Parameters
+        ----------
+        fromdict : dict
+            Photometry parameter dictionary (`QADImView.phot_parameters`).
+        &quot;&quot;&quot;
+        # model list
+        if &#39;model&#39; in fromdict:
+            mname = fromdict[&#39;model&#39;].lower()
+            idx = self.modelTypeBox.findText(mname, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.modelTypeBox.setCurrentIndex(idx)
+
+        # window text
+        try:
+            self.windowSizeBox.setText(str(fromdict[&#39;window&#39;]))
+        except KeyError:
+            pass
+
+        # window units list
+        if &#39;window_units&#39; in fromdict:
+            units = fromdict[&#39;window_units&#39;].lower()
+            idx = self.windowUnitsBox.findText(units,
+                                               QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.windowUnitsBox.setCurrentIndex(idx)
+
+        # fwhm text
+        try:
+            self.fwhmBox.setText(str(fromdict[&#39;fwhm&#39;]))
+        except KeyError:
+            pass
+
+        # fwhm units list
+        if &#39;fwhm_units&#39; in fromdict:
+            units = fromdict[&#39;fwhm_units&#39;].lower()
+            idx = self.fwhmUnitsBox.findText(units, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.fwhmUnitsBox.setCurrentIndex(idx)
+
+        # aperture (PSF) radius text
+        try:
+            self.apradBox.setText(str(fromdict[&#39;psf_radius&#39;]))
+        except KeyError:
+            pass
+
+        # aperture units list
+        if &#39;aperture_units&#39; in fromdict:
+            units = fromdict[&#39;aperture_units&#39;].lower()
+            idx = self.apradUnitsBox.findText(units,
+                                              QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.apradUnitsBox.setCurrentIndex(idx)
+
+        # bg inner text
+        try:
+            self.bgrinBox.setText(str(fromdict[&#39;bg_inner&#39;]))
+        except KeyError:
+            pass
+
+        # bg width text
+        try:
+            self.bgwidBox.setText(str(fromdict[&#39;bg_width&#39;]))
+        except KeyError:
+            pass
+
+        # show plots check box
+        try:
+            self.radialPlotBox.setChecked(fromdict[&#39;show_plots&#39;])
+        except KeyError:
+            pass</div>
+</div>
+
+
+
+<div class="viewcode-block" id="PlotSettingsDialog">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_dialogs.PlotSettingsDialog.html#sofia_redux.pipeline.gui.qad.qad_dialogs.PlotSettingsDialog">[docs]</a>
+class PlotSettingsDialog(QtWidgets.QDialog,
+                         ui_qad_plot_settings.Ui_PlotSettingsDialog):
+    &quot;&quot;&quot;Retrieve user preferences for plot parameters.&quot;&quot;&quot;
+    def __init__(self, parent=None, current=None, default=None):
+        &quot;&quot;&quot;
+        Build the settings dialog.
+
+        Parameters
+        ----------
+        parent : QWidget, optional
+            Parent widget
+        current : dict, optional
+            Current plot parameter dictionary
+            (`QADImView.plot_parameters`).
+        default : dict, optional
+            Default plot parameter dictionary
+            (`QADImView.default_parameters`).
+        &quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for QAD.&#39;)
+
+        # parent initialization
+        QtWidgets.QDialog.__init__(self, parent)
+
+        # set up UI from Designer generated file
+        self.setupUi(self)
+
+        # connect signals to slots
+        self.buttonBox.button(
+            QtWidgets.QDialogButtonBox.Reset).clicked.connect(self.reset)
+        self.buttonBox.button(
+            QtWidgets.QDialogButtonBox.RestoreDefaults).clicked.connect(
+                self.restore)
+
+        # set values from current, if available
+        try:
+            self.current = current.copy()
+        except AttributeError:
+            self.current = current
+        if self.current is not None:
+            self.setValue(self.current)
+        try:
+            self.default = default.copy()
+        except AttributeError:
+            self.default = default
+
+<div class="viewcode-block" id="PlotSettingsDialog.getValue">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_dialogs.PlotSettingsDialog.html#sofia_redux.pipeline.gui.qad.qad_dialogs.PlotSettingsDialog.getValue">[docs]</a>
+    def getValue(self):
+        &quot;&quot;&quot;Get current plot settings from widgets.&quot;&quot;&quot;
+        if self.current is not None:
+            parameters = self.current.copy()
+        else:
+            parameters = {}
+
+        try:
+            parameters[&#39;window&#39;] = float(self.windowSizeBox.text())
+        except ValueError:
+            parameters[&#39;window&#39;] = None
+        parameters[&#39;window_units&#39;] = str(
+            self.windowUnitsBox.currentText()).lower()
+
+        parameters[&#39;color&#39;] = str(self.colorBox.text()).lower()
+        parameters[&#39;share_axes&#39;] = str(self.shareAxesBox.currentText()).lower()
+        parameters[&#39;separate_plots&#39;] = self.separatePlotsBox.isChecked()
+
+        try:
+            parameters[&#39;bin&#39;] = int(self.histBinBox.text())
+        except ValueError:
+            bin_val = str(self.histBinBox.text()).lower()
+            if bin_val in [&#39;auto&#39;, &#39;fd&#39;, &#39;doane&#39;, &#39;scott&#39;, &#39;stone&#39;,
+                           &#39;rice&#39;, &#39;sturges&#39;, &#39;sqrt&#39;]:
+                parameters[&#39;bin&#39;] = bin_val
+            else:
+                parameters[&#39;bin&#39;] = &#39;fd&#39;
+
+        try:
+            lim = str(self.histLimitsBox.text()).split(&#39;,&#39;)
+            parameters[&#39;hist_limits&#39;] = [float(lim[0]), float(lim[1])]
+        except (ValueError, TypeError, AttributeError, IndexError):
+            parameters[&#39;hist_limits&#39;] = None
+
+        parameters[&#39;summary_stat&#39;] = str(
+            self.summaryStatBox.currentText()).lower()
+
+        try:
+            parameters[&#39;p2p_reference&#39;] = int(self.p2pReferenceBox.text())
+        except ValueError:
+            parameters[&#39;p2p_reference&#39;] = 1
+
+        return parameters</div>
+
+
+<div class="viewcode-block" id="PlotSettingsDialog.reset">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_dialogs.PlotSettingsDialog.html#sofia_redux.pipeline.gui.qad.qad_dialogs.PlotSettingsDialog.reset">[docs]</a>
+    def reset(self):
+        &quot;&quot;&quot;Reset values to initial settings.&quot;&quot;&quot;
+        if self.current is not None:
+            self.setValue(self.current)
+            self.repaint()</div>
+
+
+<div class="viewcode-block" id="PlotSettingsDialog.restore">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_dialogs.PlotSettingsDialog.html#sofia_redux.pipeline.gui.qad.qad_dialogs.PlotSettingsDialog.restore">[docs]</a>
+    def restore(self):
+        &quot;&quot;&quot;Restore values from default settings.&quot;&quot;&quot;
+        if self.default is not None:
+            self.setValue(self.default)
+            self.repaint()</div>
+
+
+<div class="viewcode-block" id="PlotSettingsDialog.setValue">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_dialogs.PlotSettingsDialog.html#sofia_redux.pipeline.gui.qad.qad_dialogs.PlotSettingsDialog.setValue">[docs]</a>
+    def setValue(self, fromdict):
+        &quot;&quot;&quot;
+        Set widget values for plot settings.
+
+        Parameters
+        ----------
+        fromdict : dict
+            Plot parameter dictionary (`QADImView.plot_parameters`).
+        &quot;&quot;&quot;
+        # window text
+        try:
+            self.windowSizeBox.setText(str(fromdict[&#39;window&#39;]))
+        except KeyError:
+            pass
+
+        # window units list
+        if &#39;window_units&#39; in fromdict:
+            units = fromdict[&#39;window_units&#39;].lower()
+            idx = self.windowUnitsBox.findText(units,
+                                               QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.windowUnitsBox.setCurrentIndex(idx)
+
+        # color cycle text
+        try:
+            self.colorBox.setText(str(fromdict[&#39;color&#39;]))
+        except KeyError:
+            pass
+
+        # share axes list
+        if &#39;share_axes&#39; in fromdict:
+            ax = fromdict[&#39;share_axes&#39;].lower()
+            idx = self.shareAxesBox.findText(ax, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.shareAxesBox.setCurrentIndex(idx)
+
+        # separate plots check box
+        try:
+            self.separatePlotsBox.setChecked(fromdict[&#39;separate_plots&#39;])
+        except KeyError:
+            pass
+
+        # histogram binning text
+        try:
+            self.histBinBox.setText(str(fromdict[&#39;bin&#39;]))
+        except KeyError:
+            pass
+
+        # histogram limits text
+        try:
+            str_lim = [str(f) for f in fromdict[&#39;hist_limits&#39;]]
+            self.histLimitsBox.setText(&#39;,&#39;.join(str_lim))
+        except (KeyError, ValueError, TypeError, AttributeError, IndexError):
+            self.histLimitsBox.setText(&#39;&#39;)
+
+        # summary stat list
+        if &#39;summary_stat&#39; in fromdict:
+            ax = fromdict[&#39;summary_stat&#39;].lower()
+            idx = self.summaryStatBox.findText(ax, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.summaryStatBox.setCurrentIndex(idx)
+
+        # P2P reference frame text
+        try:
+            self.p2pReferenceBox.setText(str(fromdict[&#39;p2p_reference&#39;]))
+        except KeyError:
+            pass</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

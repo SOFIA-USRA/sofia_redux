@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.atmosdisp &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.atmosdisp</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+from sofia_redux.spectroscopy.nlambda import nlambda
+import warnings
+
+__all__ = [&#39;atmosdisp&#39;]
+
+
+<div class="viewcode-block" id="atmosdisp">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.atmosdisp.atmosdisp.html#sofia_redux.spectroscopy.atmosdisp.atmosdisp">[docs]</a>
+def atmosdisp(wavelength, refwave, za, pressure, temperature,
+              water=0.0, altitude=0):
+    &quot;&quot;&quot;
+    Compute the atmospheric dispersion relative to wave0
+
+    Computes the difference between the dispersion at two
+    wavelengths.  The dispersion for each wavelength is derived
+    from Section 4.3 of Green&#39;s &quot;Spherical Astronomy&quot; (1985).
+
+    Parameters
+    ----------
+    wavelength : float or numpy.ndarray of float (N,)
+        Wavelength in microns
+    refwave : float or numpy.ndarray of float (N,)
+        Reference wavelength in microns
+    za : float or numpy.ndarray of float (N,)
+        Zenith angle of object
+    pressure : float or numpy.ndarray of float (N,)
+        Atmospheric pressure in mm of Hg
+    temperature : float or numpy.ndarray of float (N,)
+        Atmospheric temperature in degrees C
+    water : float or numpy.ndarray of float (N,), optional
+        Water vapour pressure in mm of Hg
+    altitude : float or numpy.ndarray of float (N,), optional
+        Observatory altitude in km
+
+    Returns
+    -------
+    dispersion : float or numpy.ndarray of float (N,)
+        The atmospheric dispersion in arcseconds
+    &quot;&quot;&quot;
+    mean_earth_radius = 6371.03  # km
+    hconst = 0.02926554  # R/(mu*g) in km/deg K, R = gas const=8.3143e7
+    tempk = temperature + 273.15  # K
+
+    with warnings.catch_warnings():
+        warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+        hratio = (hconst * tempk) / (mean_earth_radius + altitude)
+
+        # Compute index of refraction
+        ind = nlambda(wavelength, pressure, temperature, water)
+        rind = nlambda(refwave, pressure, temperature, water)
+
+        # Compute dispersion
+        a = (1.0 - hratio) * (ind - rind)
+        b = 0.5 * (ind ** 2 - rind ** 2) - (1 + hratio) * (ind - rind)
+        tan_za = np.tan(np.radians(za))
+        dispersion = 206265 * tan_za * (a + b * tan_za ** 2)
+
+    return dispersion</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

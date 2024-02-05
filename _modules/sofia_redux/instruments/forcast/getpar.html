@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.getpar &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.getpar</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+from astropy.io import fits
+
+import sofia_redux.instruments.forcast.configuration as dripconfig
+
+configuration = None
+
+__all__ = [&#39;getpar&#39;]
+
+
+<div class="viewcode-block" id="getpar">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.getpar.getpar.html#sofia_redux.instruments.forcast.getpar.getpar">[docs]</a>
+def getpar(header, parname, writename=None, dtype=None,
+           comment=None, update_header=True, default=None,
+           dripconf=True, warn=False):
+    &quot;&quot;&quot;
+    Get a header or configuration parameter
+
+    Looks up a parameter from the DRIP configuration or the provided
+    header.  Values in the configuration file take precedence over
+    values in the header.  This function converts all parameters to
+    string values before returning them.  If a parameter cannot be
+    found in either the configuration file or the header, then
+    None will be returned.
+
+    Any string values enclosed within single quotes will have those
+    outer quotes removed.
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+        Input header
+    parname : str
+        Parameter name
+    writename : str
+        If set, the parameter to be returned will be added or
+        modified in the header
+    update_header : bool
+        Will update the header if True
+    comment : str
+        Comment to write to the header along with the parameter
+    dtype : type
+        Attempt to convert the value to a float or int type.
+        Failure will return zero of either type.
+    default
+        Value to return if not found.  Note that an attempt will
+        be made to convert default to type `dtype` if `dtype` is
+        supplied.
+    dripconf : bool, optional
+        Indicates whether configuration values can overwrite header
+        keyword values.
+    warn : bool, optional
+        Sends a message to logger at warning level if the default
+        value is used.
+
+    Returns
+    -------
+    String or None if from the configuration.  Otherwise it could
+    be anything, or set it yourself via dtype.
+    &quot;&quot;&quot;
+
+    def bad_exit():
+        dout = default
+        if dtype is not None:
+            try:
+                dout = dtype(default)
+            except (ValueError, TypeError):
+                dout = default
+        if warn:
+            log.warning(&quot;%s not found - default is %s&quot; % (parname, dout))
+        return dout
+
+    if not isinstance(parname, str):
+        log.error(&#39;invalid parname: %s (%s)&#39; % (parname, type(parname)))
+        return bad_exit()
+    if header is None:
+        header = fits.header.Header()
+    if not isinstance(header, fits.header.Header):
+        log.error(&#39;invalid header type (%s)&#39; % type(header))
+        return bad_exit()
+
+    if not dripconf:
+        config_val = {}
+    else:
+        if dripconfig.configuration is None:
+            dripconfig.load()
+        global configuration
+        configuration = dripconfig.configuration
+        config_val = configuration
+
+    key = parname.strip().upper()
+    for ckey in config_val.keys():
+        if ckey.strip().upper() == key:
+            value = config_val[ckey]
+            from_header = False
+            break
+    else:
+        value = header.get(key[:8])
+        from_header = True
+
+    # DETCHAN weirdness fixed here
+    if key == &#39;DETCHAN&#39;:
+        if str(value).strip().upper() in [&#39;1&#39;, &#39;LW&#39;]:
+            new_value = &#39;LW&#39;
+        else:
+            new_value = &#39;SW&#39;
+        if new_value != value:
+            value = new_value
+            from_header = False
+
+    if value is None:
+        return bad_exit()
+    elif isinstance(value, list):
+        value = &#39;[%s]&#39; % &#39;,&#39;.join([str(v) for v in value])
+
+    # convert to dtype before updating header
+    if dtype is not None:
+        try:
+            value = dtype(value)
+        except (ValueError, TypeError):
+            log.warning(&#39;Could not convert value to %s&#39; % dtype)
+            value = None
+
+    header_update = update_header
+    header_update &amp;= (comment is not None) | (not from_header)
+
+    if header_update and value is not None:
+        setname = writename if isinstance(writename, str) else key
+        setname = setname.strip().upper()[:8]
+        if setname not in header:
+            if &#39;HISTORY&#39; in header:
+                header.insert(&#39;HISTORY&#39;, (setname, value, comment))
+            else:
+                header[setname] = value, comment
+        else:
+            if comment is None:
+                update_comment = header.comments[setname]
+            else:
+                update_comment = comment
+            header[setname] = value, update_comment
+
+    return value</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

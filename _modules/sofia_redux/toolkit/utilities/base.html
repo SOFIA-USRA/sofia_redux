@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.toolkit.utilities.base &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.toolkit.utilities.base</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from argparse import Namespace
+import warnings
+
+import bottleneck as bn
+import numpy as np
+from scipy.stats import chi2
+
+from sofia_redux.toolkit.utilities.func import stack, remove_sample_nans
+from sofia_redux.toolkit.stats.stats import find_outliers
+
+
+__all__ = [&#39;Model&#39;]
+
+
+<div class="viewcode-block" id="Model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.base.Model.html#sofia_redux.toolkit.utilities.base.Model">[docs]</a>
+class Model(object):
+    &quot;&quot;&quot;
+    Base model Class for fitting N-dimensional data
+
+    Attributes
+    ----------
+    stats : argparse.Namespace
+        Contains the following statistics:
+            samples : numpy.ndarray (ndim, nsamples)
+                The samples used to fit the polynomial.  samples[:-1]
+                contain the independent variables for each dimension
+                and samples[-1] contains the dependent variables.
+                Note that all NaNs will have been stripped from the
+                original input samples.
+            ndata : int
+                The number of samples used to fit the polynomial
+            fit : numpy.array (nsamples,)
+                The fitted polynomial over the original sample points
+            residuals : numpy.ndarray (nsamples,)
+                The residual of fit(data) - data
+            sigma : numpy.ndarray (ncoeffs,)
+                The error of each polynomial coefficient (will only
+                be calculated if a covariance matrix exists)
+            dof : int
+                Degrees of Freedom of the fit
+            rms : float
+                Root Mean Square deviation of the fit
+            chi2 : float
+                Chi-Squared
+            rchi2 : float
+                Reduced Chi-Squared
+            q : float
+                Goodness of fit, or survival function.  The probability (0-&gt;1)
+                that one of the `samples` is greater than `chi2` away from the
+                `fit`.
+    &quot;&quot;&quot;
+    def __init__(self, *args, error=1, mask=None, covar=True, stats=True,
+                 robust=0, eps=0.01, maxiter=100, ignorenans=True,
+                 fit_kwargs=None, eval_kwargs=None):
+
+        self._samples = None
+        self._error = None
+        self._interpolated_error = None
+        self._usermask = None
+        self._model_args = None
+        self._model_kwargs = None
+        self._initial_shape = None
+        self._ignorenans = ignorenans
+        self.termination = None
+        self._parse_args(error, mask, *args)
+        self._parse_model_args()
+
+        self._ndim, self._nsamples = self._samples.shape
+        self._ndim -= 1  # only include independent variables
+        self._nparam = None
+        self._fit_kwargs = fit_kwargs
+        self._eval_kwargs = eval_kwargs
+
+        self.success = False
+        self.covar = covar
+        self.covariance = None
+        self.mask = self._usermask
+        self.robust = robust
+        self.stats = None
+        self.dostats = stats or self.robust &gt; 0
+        self.maxiter = maxiter
+        self.eps = eps
+
+        self.initial_fit()
+        self._iteration = 1
+        self._state = &quot;initial fit&quot;
+
+        if self.robust &gt; 0:  # pragma: no cover
+            if self.covar and self.covariance is not None:
+                covariance1 = self.covariance.copy()
+            else:
+                covariance1 = None
+            self._iterate()
+            if self._iteration == 1 and covar and self.success:
+                self.covariance = covariance1
+            else:
+                self.refit_mask(self.mask, covar=True)
+
+    @property
+    def state(self):
+        return self._state
+
+    @property
+    def error(self):
+        &quot;&quot;&quot;Don&#39;t create the error unless asked for or already present
+
+        This is for the errors of the samples only
+        &quot;&quot;&quot;
+        if self._interpolated_error is None:
+            if hasattr(self._error, &#39;__len__&#39;):
+                self._interpolated_error = self._error
+            else:
+                self._interpolated_error = np.full(
+                    self.mask.shape, float(self._error))
+        return self.reshape(self._interpolated_error)
+
+<div class="viewcode-block" id="Model.reshape">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.base.Model.html#sofia_redux.toolkit.utilities.base.Model.reshape">[docs]</a>
+    def reshape(self, flattened_array, copy=True):
+        array = flattened_array.reshape(self._initial_shape)
+        return array.copy() if copy else array</div>
+
+
+    def __repr__(self):
+        return &quot;%s (%i features, %s parameters)&quot; % (
+            self.__class__.__name__, self._ndim, self._nparam)
+
+    def __str__(self):
+        s = &quot;Name: %s\n&quot; % self.__class__.__name__
+        s += self._stats_string()
+        s += self._parameters_string()
+        return s
+
+    def _parameters_string(self):
+        &quot;&quot;&quot;Place holder for model parameters&quot;&quot;&quot;
+        return &#39;&#39;
+
+    def _stats_string(self):
+        s = &#39;&#39;
+        if self.stats is not None:
+            n_in = self.mask.size
+            n_nan = self._samples.shape[1] - n_in
+            n_outliers = np.sum(~self.mask) - n_nan
+            s += &quot;\n         Statistics&quot;
+            s += &quot;\n--------------------------------&quot;
+            s += &quot;\nNumber of original points : %i&quot; % n_in
+            s += &quot;\n           Number of NaNs : %i&quot; % n_nan
+            s += &quot;\n       Number of outliers : %i&quot; % n_outliers
+            s += &quot;\n     Number of points fit : %i&quot; % self.mask.sum()
+            s += &quot;\n       Degrees of freedom : %i&quot; % self.stats.dof
+            s += &quot;\n              Chi-Squared : %f&quot; % self.stats.chi2
+            s += &quot;\n      Reduced Chi-Squared : %f&quot; % self.stats.rchi2
+            s += &quot;\n      Goodness-of-fit (Q) : %f&quot; % self.stats.q
+            s += &quot;\n     RMS deviation of fit : %f&quot; % self.stats.rms
+            if self.robust &gt; 0:
+                s += &#39;\n  Outlier sigma threshold : %s&#39; % self.robust
+                s += &#39;\n  eps (delta_sigma/sigma) : %s&#39; % self.eps
+                s += &#39;\n               Iterations : %s&#39; % self._iteration
+                s += &#39;\n    Iteration termination : %s&#39; % self.termination
+            s += &#39;\n&#39;
+        return s
+
+<div class="viewcode-block" id="Model.print_stats">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.base.Model.html#sofia_redux.toolkit.utilities.base.Model.print_stats">[docs]</a>
+    def print_stats(self):
+        &quot;&quot;&quot;
+        Print statistical information on the fit to stdout.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        print(self._stats_string())</div>
+
+
+<div class="viewcode-block" id="Model.print_params">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.base.Model.html#sofia_redux.toolkit.utilities.base.Model.print_params">[docs]</a>
+    def print_params(self):
+        &quot;&quot;&quot;
+        Print parameters to stdout.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        print(self._parameters_string())</div>
+
+
+<div class="viewcode-block" id="Model.__call__">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.base.Model.html#sofia_redux.toolkit.utilities.base.Model.__call__">[docs]</a>
+    def __call__(self, *independent_values, dovar=False):  # pragma: no cover
+        &quot;&quot;&quot;
+        Evaluate the model
+
+        Parameters
+        ----------
+        samples : n-tuple of array_like (shape)
+            n-features of independent variables.
+        dovar : bool, optional
+            If True return the variance of the fit in addition to the
+            fit.
+
+        Returns
+        -------
+        fit, [variance] : numpy.ndarray (shape), [numpy.ndarray (shape)]
+            The output fit and optionally, the variance.
+        &quot;&quot;&quot;
+        if len(independent_values) != self._ndim:
+            raise ValueError(
+                &quot;Require %i features of independent values&quot; % self._ndim)
+        v = stack(*independent_values)
+        r = self.evaluate(v, dovar=dovar)
+        fit, var = (r[0], r[1]) if dovar else (r, None)
+        isarr = hasattr(independent_values[0], &#39;__len__&#39;)
+        havevar = var is not None
+        test = np.asarray(independent_values[0])
+        if test.ndim &gt; 1:
+            shape = test.shape
+            fit = fit.reshape(shape)
+            if havevar:
+                var = var.reshape(shape)
+        elif not isarr:
+            fit = fit[0]
+            if havevar:
+                var = var[0]
+
+        return (fit, var) if dovar else fit</div>
+
+
+    @staticmethod
+    def _create_coordinates(*args):
+        nargs = len(args)
+        if nargs &lt; 2:
+            raise ValueError(
+                &quot;Require at least 2 arguments (f(x), model_args)&quot;)
+        if nargs &gt;= 3:  # have coorindates as args[0]
+            return args
+        shape = np.asarray(args[-2]).shape
+        c = np.meshgrid(*(np.arange(s, dtype=float) for s in shape),
+                        indexing=&#39;ij&#39;)
+        return tuple(c) + args
+
+    def _parse_args(self, error, mask, *args):
+        args = self._create_coordinates(*args)
+        nargs = len(args)
+        self._ndim = nargs - 2
+        self._initial_shape = np.asarray(args[-2]).shape
+        self._samples = stack(*args[:-1])
+        self._model_args = args[-1]
+        nsamples = self._samples.shape[1]
+
+        if hasattr(error, &#39;__len__&#39;):
+            error = np.asarray(error).astype(float).ravel()
+            if error.size != nsamples:
+                raise ValueError(&quot;Error size does not match number of samples&quot;)
+        else:
+            try:
+                error = float(error)
+            except (ValueError, TypeError):
+                error = 1.0
+        self._error = error
+
+        if self._ignorenans:
+            nanmask = remove_sample_nans(self._samples, error, mask=True)
+        else:
+            nanmask = np.full(self._samples[-1].shape, True)
+        if hasattr(mask, &#39;__len__&#39;):
+            usermask = np.asarray(mask).astype(bool).ravel()
+            if mask.size != nsamples:
+                raise ValueError(&quot;Mask size does not match number of samples&quot;)
+            usermask &amp;= nanmask
+        else:
+            usermask = nanmask  # no copy
+        self._usermask = usermask
+
+    def _fit_statistics(self):  # pragma: no cover
+        if not self.dostats:
+            return
+        self.stats = Namespace()
+        stats = self.stats
+        n0 = self.mask.size
+        mask = self.mask &amp; self._usermask
+        stats.n = n = mask.sum()
+        if n &gt; 1:
+            with warnings.catch_warnings():
+                warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+                stats.dof = stats.n - self._nparam
+                stats.fit = self.evaluate(self._samples[:-1], dovar=False)
+                stats.residuals = self._samples[-1] - stats.fit
+                r = stats.residuals.compress(mask)
+                if self.covariance is not None:
+                    stats.sigma = np.sqrt(np.diag(self.covariance))
+                else:
+                    stats.sigma = None
+                stats.rms = bn.nanstd(r) * np.sqrt(n / (n - 1))
+                stats.chi2 = bn.nansum((r / self.error.ravel()[mask]) ** 2)
+                if stats.dof != 0:
+                    stats.rchi2 = stats.chi2 / stats.dof
+                else:
+                    stats.rchi2 = np.inf
+                stats.q = 1 - chi2.sf(stats.chi2, stats.dof)
+        else:
+            stats.fit = np.full(n0, np.nan)
+            stats.residuals = np.full(n0, np.nan)
+            stats.dof = 0
+            stats.rms = stats.chi2 = stats.rchi2 = stats.q = np.nan
+
+    def _iterate(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Iterates to refine the polynomial fit
+
+        1. Identify outliers in the residuals of data - fit
+        2. Re-fit the polynomial excluding all outliers
+        3. Goto 1.
+
+        The iteration is terminated after a set number of iterations or
+        the relative delta between successive residual RMS values is less
+        than a set value.
+
+        Notes
+        -----
+        The covariance calculation is skipped which results in a speed
+        increase in most cases.  However, if the covariance is required,
+        and only 1 iteration occurs, this results in a slight speed
+        decrease.
+        &quot;&quot;&quot;
+        self._iteration = 1
+        if self.robust &lt;= 0:
+            return
+        self.termination = &quot;initial&quot;
+        last_rms = self.stats.rms
+        relative_delta = np.inf
+        min_valid_points = max([2, self._nparam])
+
+        for _ in range(self._iteration, self.maxiter):
+
+            if last_rms &lt;= np.finfo(float).eps:  # pragma: no cover
+                self.termination = (&quot;solution found to within %s precision&quot;
+                                    % float)
+                break
+            elif relative_delta &lt; self.eps:  # pragma: no cover
+                self.termination = &quot;delta_rms/rms = %f&quot; % relative_delta
+                break
+
+            last_rms = self.stats.rms
+            mask = find_outliers(self.stats.residuals, threshold=self.robust)
+            if mask.sum() &lt; min_valid_points:
+                self.termination = &quot;insufficient samples remain&quot;
+                self.mask.fill(False)
+                self.success = False
+                break
+            elif np.allclose(self.mask, mask):
+                self.termination = &quot;delta_rms = 0&quot;
+                break
+
+            self.refit_mask(mask, covar=False)
+
+            self._iteration += 1
+            if not self.success:  # pragma: no cover
+                self.termination = &quot;fit failed&quot;
+                break
+            delta = abs(self.stats.rms - last_rms)
+            with warnings.catch_warnings():
+                warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+                relative_delta = delta / last_rms
+        else:  # pragma: no cover
+            self.termination = &quot;reached maximum iterations&quot;
+
+    def _parse_model_args(self):  # pragma: no cover
+        &quot;&quot;&quot;Place holder to perform operation on model arguments&quot;&quot;&quot;
+        pass
+
+<div class="viewcode-block" id="Model.initial_fit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.base.Model.html#sofia_redux.toolkit.utilities.base.Model.initial_fit">[docs]</a>
+    def initial_fit(self):  # pragma: no cover
+        &quot;&quot;&quot;Place holder&quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="Model.refit_mask">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.base.Model.html#sofia_redux.toolkit.utilities.base.Model.refit_mask">[docs]</a>
+    def refit_mask(self, mask, covar=False):  # pragma: no cover
+        &quot;&quot;&quot;Place holder&quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="Model.evaluate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.utilities.base.Model.html#sofia_redux.toolkit.utilities.base.Model.evaluate">[docs]</a>
+    def evaluate(self, samples, dovar=False):  # pragma: no cover
+        &quot;&quot;&quot;Place holder&quot;&quot;&quot;
+        if True is not False:
+            raise ValueError(&quot;Create this method&quot;)
+        elif self.stats or samples or dovar:
+            return []</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

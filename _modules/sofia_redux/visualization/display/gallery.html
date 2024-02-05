@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.visualization.display.gallery &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.visualization.display.gallery</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+import itertools
+from typing import (List, Dict, Optional, Tuple,
+                    Union, TypeVar)
+import numpy as np
+import matplotlib.artist as ma
+from matplotlib.lines import Line2D
+from matplotlib.collections import PathCollection, PatchCollection
+from matplotlib.backend_bases import RendererBase
+
+from sofia_redux.visualization import log
+from sofia_redux.visualization.display import pane, drawing
+from sofia_redux.visualization.display.pane import Pane
+
+__all__ = [&#39;Gallery&#39;]
+
+AT = TypeVar(&#39;AT&#39;, Line2D, PathCollection, PatchCollection, ma.Artist)
+PT = TypeVar(&#39;PT&#39;, pane.Pane, pane.OneDimPane, pane.TwoDimPane)
+DT = TypeVar(&#39;DT&#39;, bound=drawing.Drawing)
+
+
+<div class="viewcode-block" id="Gallery">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery">[docs]</a>
+class Gallery(object):
+    &quot;&quot;&quot;
+    Track display gallery for viewer plots.
+
+    Artists held by this class are associated with matplotlib
+    axes, instantiated and controlled by the
+    `sofia_redux.visualization.pane` interface.  This class implements
+    updates and modifications to the existing artists.  It does not
+    create them, or explicitly track their associated axes.
+
+    Attributes
+    ----------
+    arts : dict
+        Keys are artist types, with allowed values &#39;line&#39;, &#39;cursor&#39;,
+        &#39;error_range&#39;, &#39;crosshair&#39;, &#39;guide&#39;, &#39;patch&#39;, and &#39;fit&#39;.
+        Values are lists of dicts, containing the artist information
+        (e.g. &#39;model_id&#39;, &#39;artist&#39;, &#39;state&#39;).
+    &quot;&quot;&quot;
+
+    def __init__(self):
+        self.arts = {&#39;line&#39;: list(),
+                     &#39;line_alt&#39;: list(),
+                     &#39;cursor&#39;: list(),
+                     &#39;cursor_alt&#39;: list(),
+                     &#39;error_range&#39;: list(),
+                     &#39;crosshair&#39;: list(),
+                     &#39;guide&#39;: list(),
+                     &#39;patch&#39;: list(),
+                     &#39;fit&#39;: list(),
+                     &#39;text&#39;: list(),
+                     &#39;ref_line&#39;: list(),
+                     &#39;ref_label&#39;: list()}
+
+    def __str__(self):
+        s = f&#39;Gallery at {hex(id(self))}:\n&#39;
+        for key, value in self.arts.items():
+            s += f&#39;{key.capitalize()}: {len(value)}\n&#39;
+        return s
+
+<div class="viewcode-block" id="Gallery.add_patches">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.add_patches">[docs]</a>
+    def add_patches(self, patches: Dict) -&gt; None:
+        &quot;&quot;&quot;
+        Add patch artists for tracking.
+
+        Parameters
+        ----------
+        patches : dict
+            Patches to add.  Must have keys &#39;kind&#39;, &#39;artist&#39;, &#39;visible&#39;.
+        &quot;&quot;&quot;
+        for pane_label, patch in patches.items():
+            kind = patch[&#39;kind&#39;]
+            artist = patch[&#39;artist&#39;]
+            artist.set_visible(patch[&#39;visible&#39;])
+            name = f&#39;{kind}_{pane_label}&#39;
+            draw = drawing.Drawing(artist=artist, kind=kind,
+                                   high_model=name)
+            self.arts[&#39;patch&#39;].append(draw)</div>
+
+
+<div class="viewcode-block" id="Gallery.set_pane_highlight_flag">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.set_pane_highlight_flag">[docs]</a>
+    def set_pane_highlight_flag(self, pane_numbers: Union[List[int], int],
+                                state: bool) -&gt; None:
+        &quot;&quot;&quot;
+        Set visibility for border pane patches.
+
+        Border pane patches must have been previously added to tracking
+        with the `add_patches` method.
+
+        Parameters
+        ----------
+        pane_number : int
+            Pane index associated with the border to update.
+        state : bool
+            Visibility state to set.  If True, the patch will be visible;
+            if False, it will be hidden.
+        &quot;&quot;&quot;
+        if not isinstance(pane_numbers, list):
+            pane_numbers = [pane_numbers]
+        for patch in self.arts[&#39;patch&#39;]:
+            if patch.high_model.startswith(&#39;border_pane_&#39;):
+                number = int(patch.high_model.split(&#39;_&#39;)[-1])
+                if number in pane_numbers:
+                    patch.visible = state
+                else:
+                    patch.visible = not state</div>
+
+
+<div class="viewcode-block" id="Gallery.add_crosshairs">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.add_crosshairs">[docs]</a>
+    def add_crosshairs(self, crosshairs: List[DT]) -&gt; None:
+        &quot;&quot;&quot;
+        Add crosshair artists for tracking.
+
+        Parameters
+        ----------
+        crosshairs : dict
+            Must contain keys &#39;kind&#39;, &#39;artist&#39;, &#39;visible&#39;,
+            &#39;direction&#39;.
+        &quot;&quot;&quot;
+        for crosshair in crosshairs:
+            if crosshair.get_kind() == &#39;crosshair&#39;:
+                if crosshair not in self.arts[&#39;crosshair&#39;]:
+                    self.arts[&#39;crosshair&#39;].append(crosshair)
+                else:
+                    log.debug(&#39;Crosshair already present&#39;)</div>
+
+
+<div class="viewcode-block" id="Gallery.update_crosshair">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.update_crosshair">[docs]</a>
+    def update_crosshair(self, pane_number: int,
+                         data_point: Optional[Tuple] = None,
+                         direction: Optional[str] = &#39;hv&#39;) -&gt; None:
+        &quot;&quot;&quot;
+        Update crosshair position and visibility.
+
+        Any specified directions (&#39;h&#39; or &#39;v&#39;, for horizontal
+        and vertical) are updated and made visible.  Any unspecified
+        are hidden.
+
+        Parameters
+        ----------
+        pane_number : int
+            Pane index associated with the crosshair.
+        data_point : tuple of float
+            (x, y) location to update the cursor to.
+        direction : [&#39;h&#39;, &#39;v&#39;, &#39;hv&#39;], optional
+            Direction of crosshair to update.
+        &quot;&quot;&quot;
+        for crosshair in self.arts[&#39;crosshair&#39;]:
+            model_name = f&#39;crosshair_pane_{pane_number}&#39;
+            if crosshair.match_high_model(model_name):
+                d = crosshair.get_mid_model()[0]
+                if d in direction:
+                    if data_point is not None:
+                        if d == &#39;v&#39;:
+                            crosshair.set_data(data_point[0], &#39;x&#39;)
+                        else:
+                            crosshair.set_data(data_point[1], &#39;y&#39;)
+                    crosshair.set_visible(True)
+                else:
+                    crosshair.set_visible(False)
+            else:
+                # this is hit when zooming in another pane
+                crosshair.set_visible(False)</div>
+
+
+<div class="viewcode-block" id="Gallery.hide_crosshair">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.hide_crosshair">[docs]</a>
+    def hide_crosshair(self) -&gt; None:
+        &quot;&quot;&quot;Hide all crosshair artists.&quot;&quot;&quot;
+        for crosshair in self.arts[&#39;crosshair&#39;]:
+            crosshair.set_visible(False)</div>
+
+
+<div class="viewcode-block" id="Gallery.update_line_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.update_line_data">[docs]</a>
+    def update_line_data(self, pane_: Pane, updates: List[DT],
+                         axes: Optional[str] = &#39;primary&#39;) -&gt; None:
+        &quot;&quot;&quot;
+        Update data associated with line artists in a single pane.
+
+        Parameters
+        ----------
+        pane_ : Pane
+            Pane object holding the lines to update.
+        updates : list of dict
+            Updates to apply.  The dicts must contain &#39;model_id&#39;,
+            &#39;order&#39;, and &#39;field&#39;. Keys are from &#39;new_x_data&#39;,
+            &#39;new_y_data&#39;, and &#39;new_y_alt_data&#39;.
+        axes: &#39;primary&#39;, &#39;alt&#39;, &#39;both&#39;, &#39;all&#39;
+
+        &quot;&quot;&quot;
+        pri_lines = self.artists_in_pane(pane_, &#39;line&#39;)
+        alt_lines = self.artists_in_pane(pane_, &#39;line_alt&#39;)
+        for draw in updates:
+            lines = list()
+            update = draw.get_updates()
+            if (axes in [&#39;both&#39;, &#39;all&#39;, &#39;alt&#39;]
+                    or &#39;new_x_data&#39; in update.keys()
+                    or &#39;new_y_alt_data&#39; in update.keys()):
+                lines.extend(alt_lines)
+            if (axes in [&#39;both&#39;, &#39;all&#39;, &#39;primary&#39;]
+                    or &#39;new_x_data&#39; in update.keys()
+                    or &#39;new_y_data&#39; in update.keys()):
+                lines.extend(pri_lines)
+            for line in lines:
+                if line.matches(draw):
+                    line.set_data(update=draw)</div>
+
+
+<div class="viewcode-block" id="Gallery.update_line_fields">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.update_line_fields">[docs]</a>
+    def update_line_fields(self, pane_: PT, updates: List[DT]) -&gt; None:
+        &quot;&quot;&quot;
+        Update data and labels for a new plot field in a single pane.
+
+        Parameters
+        ----------
+        pane_ : Pane
+            Pane object holding the line artists to update.
+        updates : list of dict
+            Updates to apply.  The dicts must contain &#39;model_id&#39;,
+            &#39;order&#39;, and &#39;new_field&#39; keys, as well as either
+            &#39;new_x_data&#39; or &#39;new_y_data&#39; (but not both).
+        &quot;&quot;&quot;
+        lines = self.artists_in_pane(pane_=pane_, kinds=&#39;line&#39;)
+        for line in lines:
+            for update in updates:
+                if line.matches(update):
+                    line.update_line_fields(update)
+
+                    current_label = line.get_artist().get_label()
+                    old_field = current_label.split()[-1]
+                    new_field = update.get_updates()[&#39;new_field&#39;]
+                    new_label = current_label.replace(old_field, new_field)
+                    line.get_artist().set_label(new_label)
+                    try:
+                        line.get_artist().set_xdata(
+                            update.get_updates()[&#39;new_x_data&#39;])
+                    except KeyError:
+                        line.get_artist().set_ydata(
+                            update.get_updates()[&#39;new_y_data&#39;])
+                    line.set_state(&#39;new&#39;)</div>
+
+
+<div class="viewcode-block" id="Gallery.update_line_type">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.update_line_type">[docs]</a>
+    def update_line_type(self, pane_: PT, updates: List[DT]) -&gt; None:
+        &quot;&quot;&quot;
+        Update plot line type.
+
+        Line2D artists are updated in place; PathCollection artists
+        are replaced with an equivalent new artist.
+
+        Parameters
+        ----------
+        pane_ : Pane
+            Pane object holding the line artist to update.
+        updates : list of dict
+            Updates to apply.  The dicts must contain &#39;model_id&#39;,
+            &#39;order&#39;, and &#39;type&#39; keys.  The &#39;type&#39; should
+            be one of &#39;step&#39;, &#39;line&#39;, or &#39;scatter&#39;.  The dict may
+            also contain a &#39;marker&#39; key.
+        &quot;&quot;&quot;
+        lines = self.artists_in_pane(pane_=pane_, kinds=&#39;line&#39;)
+        for line in lines:
+            for update in updates:
+                if line.matches(update) and line.match_axes(update.axes):
+                    details = update.get_updates()
+                    marker = details.get(&#39;marker&#39;)
+                    if isinstance(line.get_artist(), Line2D):
+                        props = {&#39;drawstyle&#39;: &#39;default&#39;,
+                                 &#39;linestyle&#39;: line.get_linestyle(),
+                                 &#39;marker&#39;: marker}
+                        if details[&#39;type&#39;] == &#39;step&#39;:
+                            props[&#39;drawstyle&#39;] = &#39;steps-mid&#39;
+                            if str(props[&#39;linestyle&#39;]) in [&#39;&#39;, &#39;None&#39;]:
+                                props[&#39;linestyle&#39;] = &#39;solid&#39;
+                        elif details[&#39;type&#39;] == &#39;line&#39;:
+                            if str(props[&#39;linestyle&#39;]) in [&#39;&#39;, &#39;None&#39;]:
+                                props[&#39;linestyle&#39;] = &#39;solid&#39;
+                        elif details[&#39;type&#39;] == &#39;scatter&#39;:
+                            props[&#39;linestyle&#39;] = &#39;&#39;
+                        line.get_artist().update(props)
+
+                    elif isinstance(line.get_artist(),
+                                    PathCollection):  # pragma: no cover
+                        line.convert_to_line(drawstyle=details[&#39;type&#39;],
+                                             marker=marker)</div>
+
+
+<div class="viewcode-block" id="Gallery.update_artist_options">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.update_artist_options">[docs]</a>
+    def update_artist_options(self, pane_: Union[PT, int],
+                              kinds: Optional[Union[List[str], str]] = None,
+                              options: Optional[List[DT]] = None
+                              ) -&gt; bool:
+        &quot;&quot;&quot;
+        Update artist display options.
+
+        Currently supported options for each artist type are:
+           - &#39;line&#39; artist: &#39;color&#39;, &#39;visibility&#39;, &#39;marker&#39;
+           - &#39;error_range&#39; artist: &#39;color&#39;, &#39;visibility&#39;
+           - &#39;fit&#39; artist: &#39;color&#39;, &#39;visibility&#39;
+           - &#39;patch&#39; artist: &#39;color&#39;
+           - &#39;cursor&#39; artist: &#39;color&#39;
+
+        Parameters
+        ----------
+        pane_ : Pane
+            Pane object holding the artists to update.
+        kinds : str, list
+            Kinds of artists to update. If all artists are to be
+            updated, set to &#39;all&#39;.
+        options : list of dict
+            Options to apply.  The dicts must contain &#39;model_id&#39; and
+            &#39;order&#39; keys.  Other keys allowed are &#39;color&#39;,
+            &#39;visibility&#39;, and &#39;marker&#39;.
+        &quot;&quot;&quot;
+        if kinds is None:
+            if options is not None:
+                if not isinstance(options, list):
+                    options = [options]
+                kinds = [o.get_kind() for o in options]
+                if all([not bool(k) for k in kinds]):
+                    kinds = [&#39;all&#39;]
+            else:
+                kinds = [&#39;all&#39;]
+        elif not isinstance(kinds, list):
+            kinds = [kinds]
+
+        kinds = list(set(kinds))
+        results = list()
+
+        for kind in kinds:
+            if kind in [&#39;line&#39;, &#39;line_alt&#39;, &#39;all&#39;]:
+                out = self._update_line_artist_options(pane_, options)
+                results.append(out)
+
+            if kind in [&#39;error&#39;, &#39;error_range&#39;, &#39;all&#39;]:
+                out = self._update_error_artist_options(pane_, options)
+                results.append(out)
+            if kind in [&#39;border&#39;, &#39;all&#39;]:
+                out = self._update_border_artist_options(pane_, options)
+                results.append(out)
+            if kind in [&#39;cursor&#39;, &#39;cursor_alt&#39;, &#39;all&#39;]:
+                out = self._update_cursor_artist_options(pane_, options)
+                results.append(out)
+            if kind in [&#39;fit&#39;, &#39;fit_line&#39;, &#39;fit_center&#39;, &#39;all&#39;]:
+                out = self._update_fit_artist_options(pane_, options)
+                results.append(out)
+            if kind in [&#39;ref_line&#39;, &#39;ref_label&#39;, &#39;all&#39;]:
+                out = self._update_reference_artist_options(pane_, options)
+                results.append(out)
+        return any(results)</div>
+
+
+    def _update_line_artist_options(self, pane_: PT,
+                                    options: List[DT]) -&gt; bool:
+        &quot;&quot;&quot;
+        Update options for Line objects.
+
+        Parameters
+        ----------
+        pane_ : Pane
+            Pane associated with artist.
+        options : list
+            List of dictionaries describing the updates to make.
+
+        Returns
+        -------
+        results : bool
+            True if any of the updates are successful, False if
+            they all fail.
+
+        &quot;&quot;&quot;
+        # plot lines: markers, colors, visibility
+        pri_lines = self.artists_in_pane(pane_=pane_, kinds=&#39;line&#39;)
+        alt_lines = self.artists_in_pane(pane_=pane_, kinds=&#39;line_alt&#39;)
+        results = list()
+        for line in pri_lines + alt_lines:
+            for option in options:
+                if option.get_data_id():  # pragma: no cover
+                    # Data ID is only populated for reference lines
+                    # which should not be affected by these updates
+                    continue
+                if line.matches(option) and line.match_axes(option.axes):
+                    results.append(line.update_options(option, kind=&#39;line&#39;))
+                    break
+        return any(results)
+
+    def _update_error_artist_options(self, pane_: PT,
+                                     options: List[DT]) -&gt; bool:
+        &quot;&quot;&quot;
+        Update options for Line objects.
+
+        Parameters
+        ----------
+        pane_ : Pane
+            Pane associated with artist.
+        options : list
+            List of dictionaries describing the updates to make.
+
+        Returns
+        -------
+        results : bool
+            True if any of the updates are successful, False if
+            they all fail.
+
+        &quot;&quot;&quot;
+
+        # error shading: color and error visibility
+        lines = self.artists_in_pane(pane_=pane_, kinds=&#39;error_range&#39;)
+        results = list()
+        for line in lines:
+            for option in options:
+                if option.get_data_id():  # pragma: no cover
+                    continue
+                if line.matches(option):
+                    results.append(line.update_options(option,
+                                                       kind=&#39;error_range&#39;))
+                    break
+        return any(results)
+
+    def _update_border_artist_options(self, pane_: PT,
+                                      options: List[DT]) -&gt; bool:
+        &quot;&quot;&quot;
+        Update options for Line objects.
+
+        Parameters
+        ----------
+        pane_ : Pane
+            Pane associated with artist
+        options : list
+            List of dictionaries describing the updates to make
+
+        Returns
+        -------
+        results : bool
+            True if any of the updates are successful, False if
+            they all fail.
+
+        &quot;&quot;&quot;
+        # borders: color only
+        patches = self.artists_in_pane(pane_=pane_, kinds=&#39;patch&#39;)
+        results = list()
+        for patch in patches:
+            for option in options:
+                if option.get_data_id():  # pragma: no cover
+                    continue
+                if option.match_high_model(&#39;border&#39;):
+                    results.append(patch.update_options(option,
+                                                        kind=&#39;patch&#39;))
+                    break
+        return any(results)
+
+    def _update_cursor_artist_options(self, pane_: PT,
+                                      options: List[DT]) -&gt; bool:
+        &quot;&quot;&quot;
+        Update options for cursor objects.
+
+        Parameters
+        ----------
+        pane_ : Pane
+            Pane associated with artist
+        options : list
+            List of dictionaries describing the updates to make
+
+        Returns
+        -------
+        results : bool
+            True if any of the updates are successful, False if
+            they all fail.
+
+        &quot;&quot;&quot;
+        points = self.artists_in_pane(pane_=pane_, kinds=&#39;cursor&#39;)
+        points_alt = self.artists_in_pane(pane_=pane_, kinds=&#39;cursor_alt&#39;)
+        results = list()
+        for point in points + points_alt:
+            for option in options:
+                if option.get_data_id():  # pragma: no cover
+                    continue
+                if point.matches(option):
+                    results.append(point.update_options(option, kind=&#39;cursor&#39;))
+                    break
+        return any(results)
+
+    def _update_fit_artist_options(self, pane_: PT,
+                                   options: List[DT]) -&gt; bool:
+        &quot;&quot;&quot;
+        Update options for curve fit artists.
+
+        Parameters
+        ----------
+        pane_ : Pane
+            Pane associated with artist
+        options : list
+            List of dictionaries describing the updates to make
+
+        Returns
+        -------
+        results : bool
+            True if any of the updates are successful, False if
+            they all fail.
+
+        &quot;&quot;&quot;
+        lines = self.artists_in_pane(pane_=pane_, kinds=&#39;fit&#39;)
+        results = list()
+        for line in lines:
+            for option in options:
+                if (not option.get_data_id()
+                        or not line.get_data_id()):  # pragma: no cover
+                    continue
+                if line.matches(option):
+                    results.append(line.update_options(option, kind=&#39;fit&#39;))
+                    break
+        return any(results)
+
+    def _update_reference_artist_options(self, pane_: PT,
+                                         options: List[DT]) -&gt; bool:
+        lines = self.artists_in_pane(pane_=pane_, kinds=&#39;ref_lines&#39;)
+        labels = self.artists_in_pane(pane_=pane_, kinds=&#39;ref_labels&#39;)
+        results = list()
+        for draw in lines + labels:
+            for option in options:
+                if option.get_data_id():  # pragma: no cover
+                    continue
+                if option.matches(draw):
+                    results.append(draw.update_options(option, kind=&#39;ref&#39;))
+                    break
+        return any(results)
+
+    def _replace_artist(self, kind: str, model: str, order: int,
+                        new_artist: AT) -&gt; None:
+        &quot;&quot;&quot;
+        Replace an existing artist with a new one.
+
+        Parameters
+        ----------
+        kind : str
+            The artist kind.
+        model : str
+            The model ID associated with the artist.
+        order : int
+            The order associated with the artist.
+        new_artist : matplotlib.artist.Artist
+            The new artist.
+        &quot;&quot;&quot;
+        for artist in self.arts[kind]:
+            if artist[&#39;model_id&#39;] == model and artist[&#39;order&#39;] == order:
+                artist[&#39;artist&#39;] = new_artist
+                break
+
+<div class="viewcode-block" id="Gallery.update_error_ranges">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.update_error_ranges">[docs]</a>
+    def update_error_ranges(self, pane_: Pane, updates: List[DT]) -&gt; None:
+        &quot;&quot;&quot;
+        Update data associated with error range artists.
+
+        Typically called with the `update_line_data` method, which
+        updates data associated with a line plot.  However,
+        error range artists are always replaced with new artists,
+        rather than updated in place.
+
+        Parameters
+        ----------
+        pane_ : Pane
+            Pane object holding the line artists to update.
+        updates : list of dict
+            Updates to apply.  The dicts must contain &#39;model_id&#39;,
+            &#39;order&#39;, and &#39;new_artist&#39; keys.
+        &quot;&quot;&quot;
+        lines = self.artists_in_pane(pane_=pane_, kinds=&#39;error_range&#39;)
+        for line in lines:
+            for draw in updates:
+                if line.matches(draw):
+                    label = line.get_artist().get_label()
+                    new_artist = draw.get_updates()[&#39;artist&#39;]
+                    new_artist.set_label(label)
+                    line.set_artist(new_artist)</div>
+
+
+<div class="viewcode-block" id="Gallery.update_reference_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.update_reference_data">[docs]</a>
+    def update_reference_data(self, pane_: Pane, updates: List[DT]) -&gt; None:
+        &quot;&quot;&quot;
+        Update reference data lines.
+
+        Parameters
+        ----------
+        pane_ : Pane
+            Pane object holding the reference lines to update.
+        updates : list of dict
+            Updates to apply
+        &quot;&quot;&quot;
+        # Remove original ref lines as the number of lines might
+        # have changed and the labels almost definitely have
+        self._clear_artists(kind=[&#39;ref_line&#39;, &#39;ref_label&#39;],
+                            panes=[pane_])
+        self.add_drawings(updates)</div>
+
+
+<div class="viewcode-block" id="Gallery.catch_label_overlaps">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.catch_label_overlaps">[docs]</a>
+    def catch_label_overlaps(self, renderer: RendererBase) -&gt; List:
+        &quot;&quot;&quot;
+        Fix overlapping reference line labels.
+
+        Parameters
+        ----------
+        renderer : RendererBase
+            Canvas renderer containing the reference lines.
+
+        Returns
+        -------
+        updated : list of str
+            Updated label values.
+        &quot;&quot;&quot;
+        to_remove = set()
+        updated = list()
+        labels = self.arts[&#39;ref_label&#39;]
+        labels.sort(key=lambda x: float(x.data_id))
+        label_idx = list(range(len(labels)))
+        for id1, id2 in itertools.combinations(label_idx, 2):
+            if id1 in to_remove:
+                continue
+            label1 = labels[id1]
+            label2 = labels[id2]
+
+            if not label1.match_pane(label2.pane):
+                continue
+
+            artist1 = label1.artist
+            artist2 = label2.artist
+
+            if not (artist1.get_visible()
+                    and artist2.get_visible()):  # pragma: no cover
+                continue
+
+            b1 = artist1.get_tightbbox(renderer)
+            b2 = artist2.get_tightbbox(renderer)
+            overlap = b1.overlaps(b2)
+
+            if overlap:
+                text1 = artist1.get_text()
+                if len(text1) &lt; 30:
+                    artist1.set_text(f&#39;{artist1.get_text()},&#39;
+                                     f&#39;{artist2.get_text()}&#39;)
+                elif not text1.endswith(&#39;...&#39;):
+                    # truncate over-long labels
+                    artist1.set_text(f&#39;{artist1.get_text()},&#39;
+                                     f&#39;...&#39;)
+
+                to_remove.add(id2)
+                updated.append(label1)
+            else:  # pragma: no cover
+                pass
+
+        for index in sorted(to_remove, reverse=True):
+            draw = self.arts[&#39;ref_label&#39;].pop(index)
+            draw.remove()
+        return updated</div>
+
+
+<div class="viewcode-block" id="Gallery.reset_artists">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.reset_artists">[docs]</a>
+    def reset_artists(self, selection: str,
+                      panes: Optional[List] = None) -&gt; None:
+        &quot;&quot;&quot;
+        Reset and remove all artists for a given selection.
+
+        Parameters
+        ----------
+        selection : str
+            Type of artist to reset. Acceptable values are &#39;lines&#39;
+            which resets the data lines, &#39;cursor&#39; which resets the
+            marker for the cursor location, &#39;collections&#39; which
+            resets scatter plots, &#39;v_guides&#39;, &#39;h_guides&#39;, &#39;f_guides&#39;,
+            &#39;a_guides&#39; which resets vertical, horizontal, fit,
+            and all guides, respectively. The &#39;all&#39; flag clears everything.
+        panes : list, optional
+            The pane to clear the selected artist from. If not provided,
+            the selected artists will be cleared from all panes.
+        &quot;&quot;&quot;
+        log.debug(f&#39;Resetting {selection} artists&#39;)
+        if selection == &#39;all&#39;:
+            for kind, arts in self.arts.items():
+                self._clear_artists(kind=kind, panes=panes)
+        elif selection == &#39;alt&#39;:
+            for kind in [&#39;line_alt&#39;, &#39;cursor_alt&#39;]:
+                self._clear_artists(kind=kind, panes=panes)
+        elif selection in [&#39;line&#39;, &#39;line_alt&#39;, &#39;cursor&#39;, &#39;cursor_alt&#39;,
+                           &#39;collections&#39;, &#39;crosshair&#39;, &#39;patch&#39;, &#39;fit&#39;]:
+            self._clear_artists(kind=selection, panes=panes)
+        elif selection in [&#39;ref_line&#39;, &#39;ref_label&#39;, &#39;reference&#39;]:
+            self._clear_artists(kind=[&#39;ref_line&#39;, &#39;ref_label&#39;], panes=panes)
+        elif &#39;guide&#39; in selection:
+            self._clear_guides(flag=selection[0], panes=panes)
+        else:
+            log.debug(f&#39;Invalid artist selection {selection}. &#39;
+                      f&#39;No reset performed&#39;)</div>
+
+
+    def _clear_guides(self, flag: str, panes: List[PT]) -&gt; None:
+        &quot;&quot;&quot;
+        Remove guide artists.
+
+        Parameters
+        ----------
+        flag : [&#39;v&#39;, &#39;h&#39;, &#39;f&#39;, &#39;a&#39;]
+            Denotes what kind of guide to clear
+        panes : list
+            List of panes to clear from.
+        &quot;&quot;&quot;
+        others = list()
+        to_clear = list()
+        if panes is None:
+            to_clear = self.arts[&#39;guide&#39;]
+        else:
+            if not np.iterable(panes):
+                panes = [panes]
+            for pane_ in panes:
+                to_clear.extend(self.artists_in_pane(pane_, kinds=&#39;guide&#39;))
+        for draw in to_clear:
+            if draw.get_mid_model().startswith(flag) or flag == &#39;a&#39;:
+                draw.get_artist().remove()
+            else:
+                others.append(draw)
+        self.arts[&#39;guide&#39;] = others
+
+    def _clear_artists(self, kind: Union[List[str], str],
+                       panes: List) -&gt; None:
+        &quot;&quot;&quot;
+        Clear artists.
+
+        Parameters
+        ----------
+        kind : str
+            Denotes the kind of artist to clear.
+        panes : list
+            List of panes to clear artist from.
+        &quot;&quot;&quot;
+        if panes is None:
+            to_clear = self.artists_in_pane(panes, kinds=kind)
+        else:
+            to_clear = list()
+            for pane_ in panes:
+                to_clear.extend(self.artists_in_pane(pane_, kinds=kind))
+        if not isinstance(kind, list):
+            kind = [kind]
+        for k in kind:
+            new_draws = list()
+            for draw in self.arts[k]:
+                if draw not in to_clear:
+                    new_draws.append(draw)
+                else:
+                    try:
+                        draw.get_artist().remove()
+                    except ValueError:
+                        continue
+            self.arts[k] = new_draws
+
+<div class="viewcode-block" id="Gallery.add_drawings">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.add_drawings">[docs]</a>
+    def add_drawings(self, drawings: List[DT]) -&gt; int:
+        &quot;&quot;&quot;
+        Add drawings to the gallery.
+
+        Parameters
+        ----------
+        drawings : list of Drawing
+            Drawings to add.
+
+        Returns
+        -------
+        int
+            The number of drawings successfully added.
+        &quot;&quot;&quot;
+        results = list()
+        if drawings is None:
+            return 0
+        for d in drawings:
+            results.append(self.add_drawing(d))
+        return sum(results)</div>
+
+
+<div class="viewcode-block" id="Gallery.add_drawing">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.add_drawing">[docs]</a>
+    def add_drawing(self, drawing_: DT) -&gt; bool:
+        &quot;&quot;&quot;
+        Add a single drawing to the gallery.
+
+        Parameters
+        ----------
+        drawing_ : Drawing
+            The drawing to add.
+
+        Returns
+        -------
+        success : bool
+            True if drawing was successfully added; False otherwise.
+        &quot;&quot;&quot;
+        if not isinstance(drawing_, drawing.Drawing):
+            raise TypeError(f&#39;Drawing {drawing_} is not of a valid type&#39;)
+        success = False
+        artist = drawing_.get_artist()
+        if artist is not None:
+            drawing_.set_animated(True)
+            kind = drawing_.get_kind()
+            if &#39;fit&#39; in kind:
+                kind = &#39;fit&#39;
+            try:
+                self.arts[kind].append(drawing_)
+            except KeyError:
+                self.arts[kind] = [drawing_]
+            success = True
+        return success</div>
+
+
+<div class="viewcode-block" id="Gallery.artists_in_pane">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.artists_in_pane">[docs]</a>
+    def artists_in_pane(self, pane_: Pane,
+                        kinds: Optional[Union[List[str], str]] = None
+                        ) -&gt; List[DT]:
+        &quot;&quot;&quot;
+        Find artists in a given pane.
+
+        Parameters
+        ----------
+        pane_ : Pane
+            Pane to query.
+        kinds : str, optional
+            Type of artist to search for, such as line. If not
+            provided, return artists of all kind.
+
+        Returns
+        -------
+        targets : list
+            List of artists in the pane
+        &quot;&quot;&quot;
+        targets = list()
+        if not isinstance(kinds, list):
+            kinds = [kinds]
+        for kind in kinds:
+            try:
+                arts = self.arts[kind]
+            except KeyError:
+                arts = list()
+                for k, v in self.arts.items():
+                    arts.extend(v)
+            if pane_ is None:
+                targets.extend(arts)
+            else:
+                for art in arts:
+                    if art.in_pane(pane_, alt=pane_.show_overplot):
+                        targets.append(art)
+
+        return targets</div>
+
+
+<div class="viewcode-block" id="Gallery.gather_artists">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.gather_artists">[docs]</a>
+    def gather_artists(self, mode: Optional[str] = &#39;all&#39;,
+                       preserve: Optional[bool] = False,
+                       return_drawing: Optional[bool] = False) -&gt; List[DT]:
+        &quot;&quot;&quot;
+        Gather all artists of a specified mode.
+
+        Parameters
+        ----------
+        mode : str, optional
+            Mode of artists to grab. If not provided, grab all
+            artists.
+        preserve : bool, optional
+            If set, do not update the state of the artist.
+            Otherwise, mark all stats as `fresh`.
+
+        Returns
+        -------
+        gathered : list
+            List of all requested artists.
+        &quot;&quot;&quot;
+        gathered = list()
+        for kind, artists in self.arts.items():
+            for drawing_ in artists:
+                if self._drawing_fits_mode(drawing_, mode):
+                    if return_drawing:
+                        gathered.append(drawing_)
+                    else:
+                        gathered.append(drawing_.get_artist())
+                if not preserve:
+                    drawing_.set_state(&#39;fresh&#39;)
+        return gathered</div>
+
+
+<div class="viewcode-block" id="Gallery.artists_at_event">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.artists_at_event">[docs]</a>
+    def artists_at_event(self, event) -&gt; List:  # pragma: no cover
+        &quot;&quot;&quot;
+        Gather the artists located at an event.
+
+        Parameters
+        ----------
+        event :
+            Event in question.
+
+        Returns
+        -------
+        selected : list
+            All artists that occur at the event.
+        &quot;&quot;&quot;
+        selected = list()
+        artists = self.gather_artists(mode=&#39;all&#39;, preserve=True)
+        for artist in artists:
+            if artist.contains(event):
+                selected.append(artist)
+        return selected</div>
+
+
+<div class="viewcode-block" id="Gallery.print_artists">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.print_artists">[docs]</a>
+    def print_artists(self) -&gt; None:
+        &quot;&quot;&quot;Print all artists to screen.&quot;&quot;&quot;
+        artists = self.gather_artists(mode=&#39;all&#39;)
+        for artist in artists:
+            print(artist)</div>
+
+
+    @staticmethod
+    def _drawing_fits_mode(drawing_: DT, mode: str) -&gt; bool:
+        &quot;&quot;&quot;
+        Check if an artist fits the mode.
+
+        Parameters
+        ----------
+        artist : dict
+            Artist properties dictionary.
+        mode : str
+            Mode being queries. Options are &#39;new&#39;, &#39;all&#39;, or
+            &#39;viable&#39;. &#39;Viable&#39; does not include stale artists.
+
+        Returns
+        -------
+        result : bool
+            True if the artist and mode are compatible, False otherwise.
+        &quot;&quot;&quot;
+        if mode == &#39;new&#39; and drawing_.get_state() == &#39;new&#39;:
+            return True
+        elif mode == &#39;all&#39;:
+            return True
+        elif mode == &#39;viable&#39; and drawing_.get_state() in [&#39;new&#39;, &#39;fresh&#39;]:
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def _flatten(mixed: List[Union[int, Tuple]]) -&gt; List:
+        &quot;&quot;&quot;
+        Flatten a list of tuples into a single list.
+
+        Parameters
+        ----------
+        mixed : list
+            Ints or tuples to flatten.
+
+        Returns
+        -------
+        list
+            The flattened list.
+        &quot;&quot;&quot;
+        f = [(m,) if not isinstance(m, tuple) else m
+             for m in mixed]
+        return list(sum(f, ()))
+
+<div class="viewcode-block" id="Gallery.age_artists">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.age_artists">[docs]</a>
+    def age_artists(self, mode: Optional[str] = &#39;all&#39;) -&gt; None:
+        &quot;&quot;&quot;
+        Mark artists as stale.
+
+        Parameters
+        ----------
+        mode : str, optional
+            The mode to age.
+        &quot;&quot;&quot;
+        artists = self.gather_artists(mode=mode, preserve=True,
+                                      return_drawing=True)
+        for drawing_ in artists:
+            drawing_.set_state(&#39;stale&#39;)</div>
+
+
+<div class="viewcode-block" id="Gallery.update_marker">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.update_marker">[docs]</a>
+    def update_marker(self, data_point: Dict[str, List[Dict]]) -&gt; None:
+        &quot;&quot;&quot;
+        Update markers to new data points.
+
+        Parameters
+        ----------
+        data_point : dict
+            New artist dict.
+        &quot;&quot;&quot;
+        cursor_arts = self.arts[&#39;cursor&#39;] + self.arts[&#39;cursor_alt&#39;]
+        for model_id, data in data_point.items():
+            if not data:
+                continue
+            for datum in data:
+                if datum.get(&#39;alt&#39;, False):
+                    axes = &#39;alt&#39;
+                    fields = {&#39;x&#39;: datum[&#39;x_field&#39;],
+                              &#39;y_alt&#39;: datum[&#39;y_field&#39;]}
+                else:
+                    axes = &#39;primary&#39;
+                    fields = {&#39;x&#39;: datum[&#39;x_field&#39;],
+                              &#39;y&#39;: datum[&#39;y_field&#39;]}
+
+                for marker in cursor_arts:
+                    mid_model = f&quot;{datum[&#39;order&#39;]}.{datum[&#39;aperture&#39;]}&quot;
+                    checks = [marker.match_id(model_id),
+                              marker.match_mid_model(mid_model),
+                              marker.match_fields(fields),
+                              marker.match_axes(axes)]
+                    if all(checks):
+                        if datum[&#39;visible&#39;]:
+                            # marker.set_data(axis=&#39;all&#39;, data=[datum[&#39;bin_x&#39;],
+                            #                                   datum[&#39;bin_y&#39;]])
+                            marker.set_data(update={&#39;x_data&#39;: datum[&#39;bin_x&#39;]})
+                            marker.set_data(update={&#39;y_data&#39;: datum[&#39;bin_y&#39;]})
+                            # marker.set_data(data=[datum[&#39;bin_x&#39;],
+                            #                                   datum[&#39;bin_y&#39;]])
+                            marker.set_visible(True)
+                        else:
+                            # just hide if data is out of range
+                            marker.set_visible(False)
+                        marker.set_state(&#39;new&#39;)</div>
+
+
+<div class="viewcode-block" id="Gallery.hide_cursor_markers">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.gallery.Gallery.html#sofia_redux.visualization.display.gallery.Gallery.hide_cursor_markers">[docs]</a>
+    def hide_cursor_markers(self) -&gt; None:
+        &quot;&quot;&quot;Hide all cursor markers.&quot;&quot;&quot;
+        cursor_arts = self.arts[&#39;cursor&#39;] + self.arts[&#39;cursor_alt&#39;]
+        for marker in cursor_arts:
+            marker.visible = False</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

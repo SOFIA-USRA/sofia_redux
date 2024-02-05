@@ -1,0 +1,2213 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.hawc_plus.simulation.simulation &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.hawc_plus.simulation.simulation</h1><div class="highlight"><pre>
+<span></span>from abc import ABC
+from astropy import units
+from astropy.coordinates import Angle
+from astropy.io import fits
+from astropy.time import Time
+import getpass
+import numpy as np
+import warnings
+
+from sofia_redux.scan.custom.hawc_plus.info.info import HawcPlusInfo
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
+    EquatorialCoordinates
+from sofia_redux.scan.coordinate_systems.geodetic_coordinates import (
+    GeodeticCoordinates)
+from sofia_redux.scan.configuration.dates import DateRange
+from sofia_redux.scan.custom.sofia.simulation.aircraft import \
+    AircraftSimulation
+from sofia_redux.scan.simulation.scan_patterns.daisy import \
+    daisy_pattern_equatorial
+from sofia_redux.scan.simulation.scan_patterns.lissajous import \
+    lissajous_pattern_equatorial
+from sofia_redux.scan.simulation.source_models.simulated_source import (
+    SimulatedSource)
+from sofia_redux.scan.utilities.utils import (
+    get_int_list, round_values, safe_sidereal_time, get_hms_time,
+    get_dms_angle)
+from sofia_redux.scan.coordinate_systems.epoch.epoch import J2000
+from sofia_redux.scan.integration import integration_numba_functions as int_nf
+from sofia_redux.scan.coordinate_systems.projection.spherical_projection \
+    import SphericalProjection
+from sofia_redux.scan.coordinate_systems.projector.astro_projector import \
+    AstroProjector
+
+
+__all__ = [&#39;HawcPlusSimulation&#39;]
+
+
+<div class="viewcode-block" id="HawcPlusSimulation">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation">[docs]</a>
+class HawcPlusSimulation(ABC):
+
+    # FITS header keys specific to this simulation or used to override defaults
+    sim_keys = {&#39;CHPNOISE&#39;, &#39;SCNCONST&#39;, &#39;SCNDRAD&#39;, &#39;SCNDPER&#39;, &#39;SCNDNOSC&#39;,
+                &#39;SRCTYPE&#39;, &#39;SRCSIZE&#39;, &#39;SRCAMP&#39;, &#39;SRCS2N&#39;,
+                &#39;JUMPCHAN&#39;, &#39;JUMPFRMS&#39;, &#39;JUMPSIZE&#39;,
+                &#39;SPECTEL1&#39;, &#39;OBSRA&#39;, &#39;OBSDEC&#39;, &#39;DATE-OBS&#39;, &#39;LON_STA&#39;,
+                &#39;LAT_STA&#39;}
+
+    # Column definitions for the FITS binary HAWC+ table
+    data_column_definitions = {
+        &#39;FrameCounter&#39;: (&#39;frames&#39;, &#39;1K&#39;),
+        &#39;Timestamp&#39;: (&#39;seconds&#39;, &#39;1D&#39;),
+        &#39;FluxJumps&#39;: (&#39;jumps&#39;, &#39;#I&#39;),
+        &#39;SQ1Feedback&#39;: (None, &#39;#J&#39;),
+        &#39;hwpCounts&#39;: (&#39;counts&#39;, &#39;1J&#39;),
+        &#39;Flag&#39;: (&#39;flag&#39;, &#39;1J&#39;),
+        &#39;AZ&#39;: (&#39;degrees&#39;, &#39;1D&#39;),
+        &#39;EL&#39;: (&#39;degrees&#39;, &#39;1D&#39;),
+        &#39;RA&#39;: (&#39;hours&#39;, &#39;1D&#39;),
+        &#39;DEC&#39;: (&#39;degrees&#39;, &#39;1D&#39;),
+        &#39;LST&#39;: (&#39;hours&#39;, &#39;1D&#39;),
+        &#39;SIBS_VPA&#39;: (&#39;degrees&#39;, &#39;1D&#39;),
+        &#39;TABS_VPA&#39;: (&#39;degrees&#39;, &#39;1D&#39;),
+        &#39;Chop_VPA&#39;: (&#39;degrees&#39;, &#39;1D&#39;),
+        &#39;LON&#39;: (&#39;degrees&#39;, &#39;1D&#39;),
+        &#39;LAT&#39;: (&#39;degrees&#39;, &#39;1D&#39;),
+        &#39;NonSiderealRA&#39;: (&#39;hours&#39;, &#39;1D&#39;),
+        &#39;NonSiderealDec&#39;: (&#39;degrees&#39;, &#39;1D&#39;),
+        &#39;sofiaChopR&#39;: (&#39;volts&#39;, &#39;1E&#39;),
+        &#39;sofiaChopS&#39;: (&#39;volts&#39;, &#39;1E&#39;),
+        &#39;PWV&#39;: (&#39;um&#39;, &#39;1D&#39;),
+        &#39;LOS&#39;: (&#39;degrees&#39;, &#39;1D&#39;),
+        &#39;ROLL&#39;: (&#39;degrees&#39;, &#39;1D&#39;)
+    }
+
+    default_values = {
+        &#39;HEADSTAT&#39;: &#39;SIMULATED&#39;,
+        &#39;FILTER&#39;: &#39;-1,-1,-1,-1&#39;,
+        &#39;MCEMAP&#39;: &#39;0,2,1,-1&#39;,
+        &#39;DATASRC&#39;: &#39;astro&#39;,
+        &#39;OBSTYPE&#39;: &#39;object&#39;,
+        &#39;KWDICT&#39;: &#39;UNKNOWN&#39;,
+        &#39;AOR_ID&#39;: &#39;99_9999_9&#39;,
+        &#39;PROCSTAT&#39;: &#39;Level_0&#39;,
+        &#39;DATAQUAL&#39;: &#39;Nominal&#39;,
+        &#39;PLANID&#39;: &#39;99_9999&#39;,
+        &#39;DEPLOY&#39;: &#39;UNKNOWN&#39;,
+        &#39;FLIGHTLG&#39;: 9,
+        &#39;ORIGIN&#39;: &#39;SOFSCAN simulation&#39;,
+        &#39;OBSERVER&#39;: getpass.getuser(),
+        &#39;CREATOR&#39;: &#39;SOFSCAN simulation&#39;,
+        &#39;OPERATOR&#39;: getpass.getuser(),
+        &#39;TELESCOP&#39;: &#39;SOFIA 2.5m&#39;,
+        &#39;TELCONF&#39;: &#39;NASMYTH&#39;,
+        &#39;TELEQUI&#39;: &#39;j2000&#39;,
+        &#39;TSC-STAT&#39;: &#39;STAB_INERTIAL_ONGOING&#39;,
+        &#39;FBC-STAT&#39;: &#39;FBC_ON&#39;,
+        &#39;OBSRA&#39;: -9999.0,
+        &#39;OBSDEC&#39;: -9999.0,
+        &#39;EQUINOX&#39;: 2000.0,
+        &#39;TRACMODE&#39;: &#39;offset+inertial&#39;,
+        &#39;TRACERR&#39;: False,
+        &#39;INSTRUME&#39;: &#39;HAWC_PLUS&#39;,
+        &#39;DATATYPE&#39;: &#39;OTHER&#39;,
+        &#39;INSTCFG&#39;: &#39;TOTAL_INTENSITY&#39;,
+        &#39;INSTMODE&#39;: &#39;OTFMAP&#39;,
+        &#39;DETECTOR&#39;: &#39;HAWC&#39;,
+        &#39;DETSIZE&#39;: &#39;64,40&#39;,
+        &#39;PIXSCAL&#39;: -9999.0,
+        &#39;SIBS_X&#39;: 15.5,
+        &#39;SIBS_Y&#39;: 19.5,
+        &#39;XFPI&#39;: 433.861908,
+        &#39;YFPI&#39;: 447.023258,
+        &#39;COLLROTR&#39;: 0.0,
+        &#39;COLLROTS&#39;: 0.0,
+        &#39;FILEGPID&#39;: 1,
+        &#39;CDELT1&#39;: -9999.0,
+        &#39;CDELT2&#39;: -9999.0,
+        &#39;SMPLFREQ&#39;: 203.2520325203252,
+        &#39;CMTFILE&#39;: &#39;UNKNOWN&#39;,
+        &#39;CALMODE&#39;: &#39;UNKNOWN&#39;,
+        &#39;INTCALV&#39;: -9999.0,
+        &#39;DIAG_HZ&#39;: -9999.0,
+        &#39;RPTFILT&#39;: &#39;UNKNOWN&#39;,
+        &#39;RPTPUPIL&#39;: &#39;UNKNOWN&#39;,
+        &#39;HAWC_VER&#39;: &#39;UNKNOWN&#39;,
+        &#39;TRKAOI&#39;: &#39;UNKNOWN&#39;,
+    }
+
+    default_comments = {
+        &#39;FILTER&#39;: &#39;rowstart,rowend,colstart,colend&#39;,
+        &#39;MCEMAP&#39;: &#39;MCEs mapped to r0,r1,t0,t1 arrays&#39;,
+        &#39;DATASRC&#39;: &#39;Data source&#39;,
+        &#39;OBSTYPE&#39;: &#39;Observation type&#39;,
+        &#39;SRCTYPE&#39;: &#39;Source type&#39;,
+        &#39;SRCSIZE&#39;: &#39;The FWHM of the simulated source&#39;,
+        &#39;KWDICT&#39;: &#39;SOFIA keyword dictionary version&#39;,
+        &#39;OBS_ID&#39;: &#39;SOFIA Observation identification&#39;,
+        &#39;OBJECT&#39;: &#39;Object name&#39;,
+        &#39;AOR_ID&#39;: &#39;Astronomical Observation Request ID&#39;,
+        &#39;PROCSTAT&#39;: &#39;Processing status&#39;,
+        &#39;HEADSTAT&#39;: &#39;Header status&#39;,
+        &#39;DATAQUAL&#39;: &#39;Data quality&#39;,
+        &#39;PLANID&#39;: &#39;Observing plan ID&#39;,
+        &#39;DEPLOY&#39;: &#39;Site deployment&#39;,
+        &#39;MISSN-ID&#39;: &#39;Mission ID&#39;,
+        &#39;FLIGHTLG&#39;: &#39;Flight leg&#39;,
+        &#39;ORIGIN&#39;: &#39;Origin of FITS file&#39;,
+        &#39;OBSERVER&#39;: &#39;Observer(s)&#39;,
+        &#39;CREATOR&#39;: &#39;File creation task&#39;,
+        &#39;OPERATOR&#39;: &#39;Telescope operator&#39;,
+        &#39;FILENAME&#39;: &#39;Name of host file&#39;,
+        &#39;DATE&#39;: &#39;Date of file creation&#39;,
+        &#39;DATE-OBS&#39;: &#39;UTC date of exposure start&#39;,
+        &#39;UTCSTART&#39;: &#39;UTC of exposure start&#39;,
+        &#39;UTCEND&#39;: &#39;UTC of exposure end&#39;,
+        &#39;WVZ_STA&#39;: &#39;Water vapor, integrated to zenith, observation start [um]&#39;,
+        &#39;WVZ_END&#39;: &#39;Water vapor, integrated to zenith, observation start [um]&#39;,
+        &#39;TEMP_OUT&#39;: &#39;Static air temperature outside aircraft [C]&#39;,
+        &#39;TEMPPRI1&#39;: &#39;Temperature of primary mirror [C]&#39;,
+        &#39;TEMPPRI2&#39;: &#39;Temperature of primary mirror [C]&#39;,
+        &#39;TEMPPRI3&#39;: &#39;Temperature of primary mirror [C]&#39;,
+        &#39;TEMPSEC1&#39;: &#39;Temperature of secondary [C]&#39;,
+        &#39;ALTI_STA&#39;: &#39;Aircraft pressure altitude, start of observation [feet]&#39;,
+        &#39;ALTI_END&#39;: &#39;Aircraft pressure altitude, end of observation [feet]&#39;,
+        &#39;AIRSPEED&#39;: &#39;True aircraft airspeed [knots]&#39;,
+        &#39;GRDSPEED&#39;: &#39;Aircraft ground speed [knots]&#39;,
+        &#39;LAT_STA&#39;: &#39;Aircraft latitude, start of observation [deg]&#39;,
+        &#39;LAT_END&#39;: &#39;Aircraft latitude, end of observation [deg]&#39;,
+        &#39;LON_STA&#39;: &#39;Aircraft longitude, start of observation [deg]&#39;,
+        &#39;LON_END&#39;: &#39;Aircraft longitude, end of observation [deg]&#39;,
+        &#39;HEADING&#39;: &#39;Aircraft true heading [deg]&#39;,
+        &#39;TRACKANG&#39;: &#39;Aircraft track angle [deg]&#39;,
+        &#39;TELESCOP&#39;: &#39;Telescope name&#39;,
+        &#39;TELCONF&#39;: &#39;Telescope configuration&#39;,
+        &#39;TELRA&#39;: &#39;SI Boresight RA (ICRS J2000) [hours]&#39;,
+        &#39;TELDEC&#39;: &#39;SI Boresight DEC (ICRS J2000) [deg]&#39;,
+        &#39;TELVPA&#39;: &#39;SI Boresight VPA (ICRS J2000) [deg]&#39;,
+        &#39;TELEQUI&#39;: &#39;Equinox of ERF coords(RA/Dec/VPA)&#39;,
+        &#39;LASTREW&#39;: &#39;Time of last rewind (UTC)&#39;,
+        &#39;FOCUS_ST&#39;: &#39;Telescope focus - SMA FCM t position, obs. start [um]&#39;,
+        &#39;FOCUS_EN&#39;: &#39;Telescope focus - SMA FCM t position, obs. end [um]&#39;,
+        &#39;TELEL&#39;:
+            &#39;Telescope elevation at obs. start - as returned by MCCS [deg]&#39;,
+        &#39;TELXEL&#39;: (&#39;Telescope cross elevation at obs. start - as returned by &#39;
+                   &#39;MCCS [deg]&#39;),
+        &#39;TELLOS&#39;: &#39;Telescope LOS at obs. start - as returned by MCCS [deg]&#39;,
+        &#39;TSC-STAT&#39;: &#39;TASCU Status at observation end&#39;,
+        &#39;FBC-STAT&#39;: &#39;FBC Status at observation end&#39;,
+        &#39;OBSRA&#39;: &#39;Requested RA [hours]&#39;,
+        &#39;OBSDEC&#39;: &#39;Requested DEC [deg]&#39;,
+        &#39;EQUINOX&#39;: &#39;Coordinate equinox for OBSRA and OBSDEC [yr]&#39;,
+        &#39;ZA_START&#39;: &#39;Telescope zenith angle, observation start [deg]&#39;,
+        &#39;ZA_END&#39;: &#39;Telescope zenith angle, observation end [deg]&#39;,
+        &#39;TRACMODE&#39;: &#39;SOFIA tracking mode&#39;,
+        &#39;TRACERR&#39;: &#39;Tracking error flag&#39;,
+        &#39;CHOPPING&#39;: &#39;Chopping flag&#39;,
+        &#39;NODDING&#39;: &#39;Nodding flag&#39;,
+        &#39;DITHER&#39;: &#39;Dithering flag&#39;,
+        &#39;MAPPING&#39;: &#39;Mapping flag&#39;,
+        &#39;SCANNING&#39;: &#39;Scanning flag&#39;,
+        &#39;INSTRUME&#39;: &#39;Instrument&#39;,
+        &#39;DATATYPE&#39;: &#39;Data type&#39;,
+        &#39;INSTCFG&#39;: &#39;Instrument configuration (int., polar.)&#39;,
+        &#39;INSTMODE&#39;: &#39;Instrument observing mode (c2n, otfmap)&#39;,
+        &#39;MCCSMODE&#39;: &#39;MCCS SI Mode - hawc_plus.si_config.current_mode&#39;,
+        &#39;EXPTIME&#39;: &#39;On-source exposure time [s]&#39;,
+        &#39;SPECTEL1&#39;: &#39;HAWC filter setting: HAW_A, HAW_B, etc&#39;,
+        &#39;SPECTEL2&#39;: &#39;HAWC pupil setting: HAW_HWP_A, etc&#39;,
+        &#39;WAVECENT&#39;: &#39;Central wavelength of observation [um]&#39;,
+        &#39;DETECTOR&#39;: &#39;Detector name&#39;,
+        &#39;DETSIZE&#39;: &#39;Detector size&#39;,
+        &#39;PIXSCAL&#39;: &#39;Pixel scale [arcsec]&#39;,
+        &#39;SIBS_X&#39;: &#39;SI pixel location of boresight (X)&#39;,
+        &#39;SIBS_Y&#39;: &#39;SI pixel location of boresight (Y)&#39;,
+        &#39;CHPFREQ&#39;: &#39;Chop frequency [Hz]&#39;,
+        &#39;CHPPROF&#39;: &#39;Chopping profile: 2 or 3 point&#39;,
+        &#39;CHPSYM&#39;: &#39;Chopping symmetry: symmetric or asymmetric&#39;,
+        &#39;CHPAMP1&#39;: &#39;Chop amplitude 1 [arcsec]&#39;,
+        &#39;CHPAMP2&#39;: &#39;Chop amplitude 2 [arcsec]&#39;,
+        &#39;CHPCRSYS&#39;: &#39;MCCS coord sys for sky tip, tilt, and angle&#39;,
+        &#39;CHPANGLE&#39;: &#39;Calc angle in the sky_coord_sys ref frame [arcsec]&#39;,
+        &#39;CHPTIP&#39;: &#39;Calc tip in the sky_coord_sys ref frame [arcsec]&#39;,
+        &#39;CHPTILT&#39;: &#39;Calc tilt in the sky_coord_sys ref frame [arcsec]&#39;,
+        &#39;CHPPHASE&#39;: &#39;Chop phase [ms]&#39;,
+        &#39;CHPSRC&#39;: &#39;Chop sync src [external,internal]&#39;,
+        &#39;NODTIME&#39;: &#39;Nod time [s]&#39;,
+        &#39;NODN&#39;: &#39;Nod cycles&#39;,
+        &#39;NODSETL&#39;: &#39;Nod settle time [s]&#39;,
+        &#39;NODAMP&#39;: &#39;Nod amplitude on sky [arcsec]&#39;,
+        &#39;NODBEAM&#39;: &#39;Current nod beam position&#39;,
+        &#39;NODPATT&#39;: &#39;Nodding pattern, one cycle&#39;,
+        &#39;NODSTYLE&#39;: &#39;Chop/nod style&#39;,
+        &#39;NODCRSYS&#39;: &#39;Coordinate system for Nod angle&#39;,
+        &#39;NODANGLE&#39;: &#39;Nod angle [deg]&#39;,
+        &#39;DTHCRSYS&#39;: &#39;Coordinate system for dithering&#39;,
+        &#39;DTHXOFF&#39;: &#39;Dither offset in X for this file&#39;,
+        &#39;DTHYOFF&#39;: &#39;Dither offset in Y for this file&#39;,
+        &#39;DTHPATT&#39;: &#39;Dither pattern&#39;,
+        &#39;DTHNPOS&#39;: &#39;Number of dither positions&#39;,
+        &#39;DTHINDEX&#39;: &#39;Dither position index&#39;,
+        &#39;DTHUNIT&#39;: &#39;Dither units - pixel or arcsec&#39;,
+        &#39;DTHSCALE&#39;: &#39;Dither scale [float]&#39;,
+        &#39;SCNCRSYS&#39;: &#39;Scan coordinate system&#39;,
+        &#39;SCNRATE&#39;: &#39;Scan rate [arcsec/s]&#39;,
+        &#39;SCNITERS&#39;: &#39;Scan iterations&#39;,
+        &#39;SCNANGLS&#39;: &#39;Scan angle start (first iteration) [deg]&#39;,
+        &#39;SCNANGLC&#39;: &#39;Current scan angle [deg]&#39;,
+        &#39;SCNANGLF&#39;: &#39;Scan angle finish (last iteration) [deg]&#39;,
+        &#39;SCNTWAIT&#39;: &#39;Scan tracking measurement window [sec]&#39;,
+        &#39;SCNTRKON&#39;: &#39;Track continuously while scanning [0,1]&#39;,
+        &#39;SCNAMPEL&#39;: &#39;Lissajous scan amplitude in elevation [arcsec]&#39;,
+        &#39;SCNAMPXL&#39;: &#39;Lissajous scan amplitude in cross-elevation [arcsec]&#39;,
+        &#39;SCNDUR&#39;: &#39;Lissajous requested scan duration [sec]&#39;,
+        &#39;SCNFQRAT&#39;: &#39;Lissajous pattern frequency ratio&#39;,
+        &#39;SCNPHASE&#39;: &#39;Lissajous pattern relative phase offset [deg]&#39;,
+        &#39;SCNTOFF&#39;: &#39;Lissajous pattern relative time offset [sec]&#39;,
+        &#39;SCNNSUBS&#39;: &#39;Raster number of subscans&#39;,
+        &#39;SCNLEN&#39;: &#39;Raster length of single scan line [pix or arcsec]&#39;,
+        &#39;SCNSTEP&#39;:
+            &#39;Raster size of step from one linear scan to the next [pix or&#39;,
+        &#39;SCNSTEPS&#39;: &#39;Raster number of linear scan lines&#39;,
+        &#39;SCNCROSS&#39;: &#39;Raster scan includes paired cross-scan?&#39;,
+        &#39;XFPI&#39;: &#39;FPI column for the Position or AOI chop image - coord.pos&#39;,
+        &#39;YFPI&#39;: &#39;FPI row for the Position or AOI chop image - coord.pos.si&#39;,
+        &#39;COLLROTR&#39;:
+            &#39;Collimation position r - ta_scs.fcm_status.fcm_des_coll_rot_r&#39;,
+        &#39;COLLROTS&#39;:
+            &#39;Collimation position s - ta_scs.fcm_status.fcm_des_coll_rot_s&#39;,
+        &#39;BSITE&#39;: &#39;boresight name - hawc_plus.si_config.current_mode&#39;,
+        &#39;OBSMODE&#39;: &#39;Observation mode [Scan, ChopScan, DitherChopNod]&#39;,
+        &#39;SCNPATT&#39;: &#39;Scan pattern [Raster, Lissajous, Daisy]&#39;,
+        &#39;FILEGPID&#39;: &#39;File group ID&#39;,
+        &#39;OBJRA&#39;: &#39;coord.pos.target RA [hours]&#39;,
+        &#39;OBJDEC&#39;: &#39;coord.pos.target DEC [deg]&#39;,
+        &#39;CDELT1&#39;: &#39;Plate scale for the n-th axis at ref pnt [deg/pix]&#39;,
+        &#39;CDELT2&#39;: &#39;Plate scale for the n-th axis at ref pnt [deg/pix]&#39;,
+        &#39;NHWP&#39;: &#39;Number of HWP angles&#39;,
+        &#39;SMPLFREQ&#39;: &#39;Sampling frequency [Hz]&#39;,
+        &#39;HWPSTART&#39;: &#39;HWP initial angle [deg]&#39;,
+        &#39;HWPSPEED&#39;: &#39;HWP speed&#39;,
+        &#39;HWPSTEP&#39;: &#39;HWP step [deg]&#39;,
+        &#39;HWPSEQ&#39;: &#39;HWP list of angles [degs]&#39;,
+        &#39;CHPONFPA&#39;: &#39;Is chop on-chip or off-chip.&#39;,
+        &#39;CMTFILE&#39;: &#39;MCCS Comment Filename&#39;,
+        &#39;CALMODE&#39;: &#39;Diagnostic procedure mode&#39;,
+        &#39;INTCALV&#39;: &#39;INT-CAL voltage&#39;,
+        &#39;DIAG_HZ&#39;: &#39;Diagnostic procedure chop rate (if used) [hz]&#39;,
+        &#39;RPTFILT&#39;: &#39;Reported filter position from OMS&#39;,
+        &#39;RPTPUPIL&#39;: &#39;Reported pupil position from OMS&#39;,
+        &#39;HWPON&#39;: &#39;ON HWP threshold [volts]&#39;,
+        &#39;HWPOFF&#39;: &#39;OFF HWP threshold [volts]&#39;,
+        &#39;HWPHOME&#39;: &#39;HOME HWP threshold [volts]&#39;,
+        &#39;HAWC_VER&#39;: &#39;HAWC+ CDH Software Version&#39;,
+        &#39;TOTTIME&#39;: &#39;Total archiving time [sec]&#39;,
+        &#39;TRKAOI&#39;: &#39;Tracking AOI&#39;,
+        &#39;FCSCOEFA&#39;: &#39;focus_coef_a&#39;,
+        &#39;FCSCOEFB&#39;: &#39;focus_coef_b&#39;,
+        &#39;FCSCOEFC&#39;: &#39;focus_coef_c&#39;,
+        &#39;FCSCOEFK&#39;: &#39;focus_coef_k&#39;,
+        &#39;FCSCOEFQ&#39;: &#39;focus_coef_q&#39;,
+        &#39;FCSDELTA&#39;: &#39;focus_delta&#39;,
+        &#39;FCSTCALC&#39;: &#39;focus_fcm_t_calc&#39;,
+        &#39;FCST1NM&#39;: &#39;focus_param_t1&#39;,
+        &#39;FCST2NM&#39;: &#39;focus_param_t2&#39;,
+        &#39;FCST3NM&#39;: &#39;focus_param_t3&#39;,
+        &#39;FCSXNM&#39;: &#39;focus_param_x&#39;,
+        &#39;FCST1&#39;: &#39;focus_param_value_t1&#39;,
+        &#39;FCST2&#39;: &#39;focus_param_value_t2&#39;,
+        &#39;FCST3&#39;: &#39;focus_param_value_t3&#39;,
+        &#39;FCSX&#39;: &#39;focus_param_value_x&#39;,
+        &#39;FCSTOFF&#39;: &#39;focus_total_offset&#39;,
+        &#39;SDELSTEN&#39;: &#39;Skydip elevation at start and end [deg]&#39;,
+        &#39;SDELMID&#39;: &#39;Skydip elevation at middle [deg]&#39;,
+        &#39;SDWTSTRT&#39;: &#39;Skydip wait at start [sec]&#39;,
+        &#39;SDWTMID&#39;: &#39;Skydip wait at middle [sec]&#39;,
+        &#39;SDWTEND&#39;: &#39;Skydip wait at end [sec]&#39;,
+        &#39;DBRA0&#39;: &#39;Drift 0 begin RA [hours]&#39;,
+        &#39;DBDEC0&#39;: &#39;Drift 0 begin Dec [deg]&#39;,
+        &#39;DBTIME0&#39;: &#39;Drift 0 begin time [seconds]&#39;,
+        &#39;DARA0&#39;: &#39;Drift 0 after RA [hours]&#39;,
+        &#39;DADEC0&#39;: &#39;Drift 0 after Dec [deg]&#39;,
+        &#39;DATIME0&#39;: &#39;Drift 0 after time [seconds]&#39;,
+        &#39;XPADDING&#39;: &#39;for header size changes&#39;,
+        &#39;MAPCRSYS&#39;: &#39;Mapping coordinate system&#39;,
+        &#39;MAPNXPOS&#39;: &#39;Number of map positions in X&#39;,
+        &#39;MAPNYPOS&#39;: &#39;Number of map positions in Y&#39;,
+        &#39;MAPINTX&#39;: &#39;Map step interval in X [arcmin]&#39;,
+        &#39;MAPINTY&#39;: &#39;Map step interval in Y [arcmin]&#39;,
+        &#39;SCNCONST&#39;: &#39;Scanned at constant speed&#39;,
+        &#39;SCNDRAD&#39;: &#39;Daisy scan radius [arcsec]&#39;,
+        &#39;SCNDPER&#39;: &#39;Daisy scan radial period [seconds]&#39;,
+        &#39;SCNDNOSC&#39;: &#39;Daisy scan number of oscillations&#39;,
+    }
+
+    def __init__(self, info):
+        &quot;&quot;&quot;
+        Initialize a HAWC+ simulation.
+
+        Parameters
+        ----------
+        info : HawcPlusInfo
+        &quot;&quot;&quot;
+        if not isinstance(info, HawcPlusInfo):
+            raise ValueError(
+                f&quot;Simulation must be initialized with {HawcPlusInfo}&quot;)
+        self.info = info
+        self.hdul = None
+        self.user = getpass.getuser()
+        self.aircraft = AircraftSimulation()
+        self.source_equatorial = None
+        self.start_utc = None
+        self.end_utc = None
+        self.start_site = None
+        self.primary_header = fits.Header()
+        self.channels = info.get_channels_instance()
+        self.channels.set_parent(self)
+        self.scan = None
+        self.integration = None
+        self.column_values = None
+        self.equatorial = None
+        self.apparent_equatorial = None
+        self.horizontal = None
+        self.equatorial_corrected = None  # without chopper
+        self.horizontal_corrected = None  # without chopper
+        self.horizontal_offset_corrected = None  # without chopper
+        self.apparent_equatorial_corrected = None  # without chopper
+        self.horizontal_offset = None
+        self.lst = None
+        self.mjd = None
+        self.site = None
+        self.sin_pa = None
+        self.cos_pa = None
+        self.chopper_position = None
+        self.source_model = None
+        self.source_data = None
+        self.source_max = None
+        self.data_hdu = None
+        self.projection = None
+        self.projector = None
+        self.model_offsets = None
+
+<div class="viewcode-block" id="HawcPlusSimulation.default_value">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.default_value">[docs]</a>
+    @classmethod
+    def default_value(cls, key):
+        &quot;&quot;&quot;
+        Return the default value for a given key.
+
+        Parameters
+        ----------
+        key : str
+           The key for which to retrieve a default value.  If &#39;all&#39;, then all
+           default values will be returned.
+
+        Returns
+        -------
+        value : int or float or str or bool or dict
+        &quot;&quot;&quot;
+
+        if key == &#39;all&#39;:
+            return cls.default_values.copy()
+        return cls.default_values.get(key.strip().upper())</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.default_comment">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.default_comment">[docs]</a>
+    @classmethod
+    def default_comment(cls, key):
+        &quot;&quot;&quot;
+        Return the default comment for a given key.
+
+        Parameters
+        ----------
+        key : str
+
+        Returns
+        -------
+        comment : str
+        &quot;&quot;&quot;
+        if key == &#39;all&#39;:
+            return cls.default_comments.copy()
+        return cls.default_comments.get(key.strip().upper(), &#39;&#39;)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_header_value">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_header_value">[docs]</a>
+    def update_header_value(self, header, key, value):
+        &quot;&quot;&quot;
+        Update the header with a new value.
+
+        Parameters
+        ----------
+        header : fits.Header
+        key : str
+        value : str or int or float or bool
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if key not in header:
+            header[key] = value, self.default_comment(key)
+        else:
+            comment = header.comments[key]
+            if comment == &#39;&#39;:
+                comment = self.default_comment(key)
+            header[key] = value, comment</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.write_simulated_hdul">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.write_simulated_hdul">[docs]</a>
+    def write_simulated_hdul(self, filename,
+                             ra=&#39;17h45m39.60213s&#39;,
+                             dec=&#39;-29d00m22.0000s&#39;,
+                             site_longitude=&#39;-122.0644d&#39;,
+                             site_latitude=&#39;37.4089d&#39;,
+                             date_obs=&#39;2021-12-06T18:48:25.876&#39;,
+                             overwrite=True,
+                             header_options=None):
+        &quot;&quot;&quot;
+        Write a simulated HDU list to file.
+
+        Parameters
+        ----------
+        filename : str
+            The file path to the output file for which to write the simulated
+            HDU list.
+        ra : str or units.Quantity, optional
+            The right-ascension of the simulated source.  The default is the
+            Galactic center.
+        dec : str or units.Quantity, optional
+            The declination of the simulated source.  The default is the
+            Galactic center.
+        site_longitude : str or units.Quantity, optional
+            The site longitude of the simulated observation.  The default is
+            NASA Ames.
+        site_latitude : str or units.Quantity, optional
+            The site latitude of the simulated observation.  The default is
+            NASA Ames.
+        date_obs : str or Time, optional
+            The date of the simulated observation.  String values should be
+            provided in ISOT format in UTC scale.
+        overwrite : bool, optional
+            If `True`, allow `filename` to be overwritten if it already exists.
+        header_options : fits.Header or dict, optional
+            Optional settings to add to the primary header.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if header_options is None:
+            header_options = dict()
+        hdul = self.create_simulated_hdul(ra=ra, dec=dec,
+                                          site_longitude=site_longitude,
+                                          site_latitude=site_latitude,
+                                          date_obs=date_obs,
+                                          header_options=header_options)
+        hdul.writeto(filename, overwrite=overwrite)
+        hdul.close()</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.create_simulated_hdul">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.create_simulated_hdul">[docs]</a>
+    def create_simulated_hdul(self,
+                              ra=&#39;17h45m39.60213s&#39;,
+                              dec=&#39;-29d00m22.0000s&#39;,
+                              site_longitude=&#39;-122.0644d&#39;,
+                              site_latitude=&#39;37.4089d&#39;,
+                              date_obs=&#39;2021-12-06T18:48:25.876&#39;,
+                              header_options=None):
+        &quot;&quot;&quot;
+        Create an HDU list containing simulated data.
+
+        The simulated HDU list contains the following data:
+
+          - hdul[0] = PrimaryHDU
+              data : (0,) float32
+              header : The primary header
+          - hdul[1] = ImageHDU
+              data : (1,) int32
+              header : The MCE configuration.  Not used in the reduction.
+          - hdul[2] = BinTableHDU
+              data : A FITS table containing the data used in the reduction.
+              header : Description of the data in the FITS table.
+
+        Parameters
+        ----------
+        ra : str or units.Quantity, optional
+            The right-ascension of the simulated source.  The default is the
+            Galactic center.
+        dec : str or units.Quantity, optional
+            The declination of the simulated source.  The default is the
+            Galactic center.
+        site_longitude : str or units.Quantity, optional
+            The site longitude of the simulated observation.  The default is
+            NASA Ames.
+        site_latitude : str or units.Quantity, optional
+            The site latitude of the simulated observation.  The default is
+            NASA Ames.
+        date_obs : str or Time, optional
+            The date of the simulated observation.  String values should be
+            provided in ISOT format in UTC scale.
+        header_options : fits.Header or dict, optional
+            Optional settings to add to the primary header.
+
+        Returns
+        -------
+        hdul : fits.HDUList
+            A simulated FITS HDU list.
+        &quot;&quot;&quot;
+        self.create_basic_hdul(ra=ra, dec=dec, site_longitude=site_longitude,
+                               site_latitude=site_latitude, date_obs=date_obs,
+                               header_options=header_options)
+
+        self.update_hdul_with_data()
+        self.update_primary_header_with_data_hdu()
+        return self.hdul</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.create_basic_hdul">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.create_basic_hdul">[docs]</a>
+    def create_basic_hdul(self,
+                          ra=&#39;17h45m39.60213s&#39;,
+                          dec=&#39;-29d00m22.0000s&#39;,
+                          site_longitude=&#39;-122.0644d&#39;,
+                          site_latitude=&#39;37.4089d&#39;,
+                          date_obs=&#39;2021-12-06T18:48:25.876&#39;,
+                          header_options=None):
+        &quot;&quot;&quot;
+        Create a basic HDU list containing the basic primary header info.
+
+        Creates the HDUs containing the necessary information which may be
+        used to create a final data HDU.
+
+        Parameters
+        ----------
+        ra : str or units.Quantity, optional
+            The right-ascension of the simulated source.  The default is the
+            Galactic center.
+        dec : str or units.Quantity, optional
+            The declination of the simulated source.  The default is the
+            Galactic center.
+        site_longitude : str or units.Quantity, optional
+            The site longitude of the simulated observation.  The default is
+            NASA Ames.
+        site_latitude : str or units.Quantity, optional
+            The site latitude of the simulated observation.  The default is
+            NASA Ames.
+        date_obs : str or Time, optional
+            The date of the simulated observation.  String values should be
+            provided in ISOT format in UTC scale.
+        header_options : fits.Header or dict, optional
+            Optional settings to add to the primary header.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.hdul = fits.HDUList()
+        primary_header = self.create_primary_header(
+            ra=ra, dec=dec,
+            site_latitude=site_latitude, site_longitude=site_longitude,
+            date_obs=date_obs, header_options=header_options)
+
+        primary_hdu = fits.PrimaryHDU(
+            header=primary_header, data=np.empty(0, dtype=np.float32))
+        self.primary_header = primary_hdu.header
+        self.hdul.append(primary_hdu)
+
+        config_hdu = self.create_configuration_hdu()
+        self.hdul.append(config_hdu)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.create_primary_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.create_primary_header">[docs]</a>
+    def create_primary_header(self,
+                              ra=&#39;17h45m39.60213s&#39;,
+                              dec=&#39;-29d00m22.0000s&#39;,
+                              site_longitude=&#39;-122.0644d&#39;,
+                              site_latitude=&#39;37.4089d&#39;,
+                              date_obs=&#39;2021-12-06T18:48:25.876&#39;,
+                              header_options=None):
+        &quot;&quot;&quot;
+        Create a simulated observation primary header.
+
+        Parameters
+        ----------
+        ra : str or units.Quantity, optional
+            The right-ascension of the observed source.
+        dec : str or units.Quantity, optional
+            The declination of the observed source.
+        site_longitude : str or units.Quantity, optional
+            The site longitude at the start of the observation.
+        site_latitude : str or units.Quantity, optional
+            The site latitude at the start of the observation.
+        date_obs : str, optional
+            The date-time of the observation in ISOT format, UTC scale at the
+            start of the observation.
+        header_options : fits.Header or dict, optional
+            Optional header keywords for inclusion in the primary header.
+
+        Returns
+        -------
+        header : fits.Header
+        &quot;&quot;&quot;
+        self.primary_header = self.default_primary_header(header_options)
+        self.update_header_band(self.primary_header)
+        self.set_source(ra=ra, dec=dec, header_options=header_options)
+        self.update_header_chopping(self.primary_header)
+        self.update_header_nodding(self.primary_header)
+        self.update_header_dithering(self.primary_header)
+        self.update_header_mapping(self.primary_header)
+        self.update_header_scanning(self.primary_header)
+        self.update_header_hwp(self.primary_header)
+        self.update_header_focus(self.primary_header)
+        self.update_header_skydip(self.primary_header)
+        self.set_times(date_obs, header_options=header_options)
+        self.set_start_site(site_longitude, site_latitude,
+                            header_options=header_options)
+        self.initialize_aircraft()
+        self.update_header_weather(self.primary_header)
+        self.update_header_origin(self.primary_header)
+        self.create_source_model()
+
+        return self.primary_header</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.create_configuration_hdu">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.create_configuration_hdu">[docs]</a>
+    def create_configuration_hdu(self):
+        &quot;&quot;&quot;
+        Create the configuration HDU for the simulated data.
+
+        Defines all bias lines as 5000 for subarrays 0-&gt;2.
+
+        Returns
+        -------
+        fits.ImageHDU
+        &quot;&quot;&quot;
+        bias_lines = self.info.detector_array.MCE_BIAS_LINES
+        n_sub = self.info.detector_array.subarrays
+
+        header = fits.Header()
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, fits.verify.VerifyWarning)
+            for sub in range(n_sub - 1):  # Skip last subarray
+                bias = &#39;,&#39;.join([&#39;1&#39;] * bias_lines)
+                key = f&quot;MCE{sub}_TES_BIAS&quot;
+                header[key] = bias
+
+        config_hdu = fits.ImageHDU(data=np.zeros(1, dtype=np.int32),
+                                   header=header, name=&#39;Configuration&#39;)
+        return config_hdu</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_hdul_with_data">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_hdul_with_data">[docs]</a>
+    def update_hdul_with_data(self):
+        &quot;&quot;&quot;
+        Create the data HDU.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.scan = self.channels.get_scan_instance()
+        self.scan.info.parse_header(self.hdul[0].header)
+        self.scan.channels.read_data(self.hdul)
+        self.scan.channels.validate_scan(self)
+        self.scan.hdul = self.hdul
+        self.integration = self.scan.get_integration_instance()
+        self.update_non_astronomical_columns()
+        n_records = self.column_values[&#39;FrameCounter&#39;].size
+        self.integration.frames.initialize(self.integration, n_records)
+        self.update_vpa_columns()
+        self.update_chopper()
+        self.update_astronomical_columns()
+        self.integration.frames.apply_hdu(self.get_data_hdu())
+        self.create_simulated_data()
+        self.create_simulated_jumps()
+        self.data_hdu = self.get_data_hdu()
+        self.hdul.append(self.data_hdu)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_primary_header_with_data_hdu">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_primary_header_with_data_hdu">[docs]</a>
+    def update_primary_header_with_data_hdu(self):
+        &quot;&quot;&quot;
+        Fill in the missing values in the primary header using data values.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        h = self.primary_header
+        if &#39;TELVPA&#39; not in h:
+            vpa = self.column_values[&#39;TABS_VPA&#39;][0]
+            self.update_header_value(h, &#39;TELVPA&#39;, vpa)
+
+        if &#39;TELEL&#39; not in h or &#39;TELXEL&#39; not in h:
+            source_horizontal = self.source_equatorial.to_horizontal(
+                self.site, self.lst)
+            offset = self.horizontal.get_native_offset_from(source_horizontal)
+            if &#39;TELEL&#39; not in h:
+                el = source_horizontal.el[0].to(&#39;degree&#39;).value
+                self.update_header_value(h, &#39;TELEL&#39;, el)
+            if &#39;TELXEL&#39; not in h:
+                xel = offset[0].x.to(&#39;degree&#39;).value
+                self.update_header_value(h, &#39;TELXEL&#39;, xel)
+
+        if &#39;TELLOS&#39; not in h:
+            self.update_header_value(h, &#39;TELLOS&#39;, 0.0)
+
+        za = self.integration.frames.horizontal.za.to(&#39;degree&#39;).value
+        if &#39;ZA_START&#39; not in h:
+            self.update_header_value(h, &#39;ZA_START&#39;, za[0])
+        if &#39;ZA_END&#39; not in h:
+            self.update_header_value(h, &#39;ZA_END&#39;, za[-1])
+        self.hdul[0].header = h</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.default_primary_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.default_primary_header">[docs]</a>
+    def default_primary_header(self, header_options):
+        &quot;&quot;&quot;
+        Create a default primary header.
+
+        Parameters
+        ----------
+        header_options : fits.Header or dict or None
+            The initial header with which to update and apply any defaults.
+
+        Returns
+        -------
+        fits.Header
+        &quot;&quot;&quot;
+        h = fits.Header()
+        for key, value in self.default_value(&#39;all&#39;).items():
+            self.update_header_value(h, key, value)
+
+        if isinstance(header_options, fits.Header):
+            h.update(header_options)
+        elif isinstance(header_options, dict):
+            for key, value in header_options.items():
+                if key not in h or isinstance(value, tuple):
+                    h[key] = value
+                else:
+                    self.update_header_value(h, key, value)
+        return h</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_header_band">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_header_band">[docs]</a>
+    def update_header_band(self, header):
+        &quot;&quot;&quot;
+        Update a given header with HAWC band information.
+
+        Parameters
+        ----------
+        header : fits.Header
+            The header to update.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        centers = {&#39;A&#39;: 53.0, &#39;B&#39;: 63.0, &#39;C&#39;: 89.0, &#39;D&#39;: 154.0, &#39;E&#39;: 214.0}
+
+        spec = header.get(&#39;SPECTEL1&#39;, &#39;HAW_A&#39;).split(&#39;_&#39;)
+        if len(spec) &lt;= 1:
+            band = &#39;A&#39;
+            del header[&#39;SPECTEL1&#39;]
+        else:
+            band = spec[-1].strip().upper()
+
+        key = &#39;MCCSMODE&#39;
+        if key not in header:
+            self.update_header_value(
+                header, key, f&#39;band_{band.lower()}_foctest&#39;)
+
+        key = &#39;SPECTEL1&#39;
+        if key not in header:
+            self.update_header_value(header, key, f&#39;HAW_{band}&#39;)
+
+        key = &#39;SPECTEL2&#39;
+        if key not in header:
+            self.update_header_value(header, key, &#39;HAW_HWP_Open&#39;)
+
+        key = &#39;WAVECENT&#39;
+        if key not in header:
+            self.update_header_value(header, key, centers.get(band, -9999.0))
+
+        key = &#39;BSITE&#39;
+        if key not in header:
+            self.update_header_value(
+                header, key, f&#39;band_{band.lower()}_foctest&#39;)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_header_origin">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_header_origin">[docs]</a>
+    def update_header_origin(self, header):
+        &quot;&quot;&quot;
+        Update the origin-like parameters in the header.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        date = header.get(&#39;DATE-OBS&#39;, self.start_utc.isot).split(&#39;T&#39;)[0]
+        prefix = f&#39;{date}_HA_F999&#39;
+
+        if &#39;PLANID&#39; not in header:
+            header[&#39;PLANID&#39;] = self.default_value(&#39;PLANID&#39;)
+        if &#39;SPECTEL1&#39; not in header:
+            header[&#39;SPECTEL1&#39;] = &#39;HAW_A&#39;
+
+        plan = &#39;&#39;.join(header[&#39;PLANID&#39;].split(&#39;_&#39;))
+
+        if &#39;OBS_ID&#39; not in header:
+            self.update_header_value(header, &#39;OBS_ID&#39;, f&#39;{prefix}-sim-999&#39;)
+        if &#39;MISSN-ID&#39; not in header:
+            self.update_header_value(header, &#39;MISSN-ID&#39;, prefix)
+        if &#39;FILENAME&#39; not in header:
+            band = header[&#39;SPECTEL1&#39;].split(&#39;_&#39;)[-1]
+            self.update_header_value(
+                header, &#39;FILENAME&#39;,
+                f&#39;{prefix}_999_SIM_{plan}_HAW{band}_RAW.fits&#39;)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_header_chopping">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_header_chopping">[docs]</a>
+    def update_header_chopping(self, header):
+        &quot;&quot;&quot;
+        Update the chopping configuration in the header.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        defaults = {
+            &#39;CHOPPING&#39;: False,
+            &#39;CHPFREQ&#39;: 10.2,
+            &#39;CHPPROF&#39;: &#39;2-POINT&#39;,
+            &#39;CHPSYM&#39;: &#39;no_chop&#39;,
+            &#39;CHPAMP1&#39;: 0.0,
+            &#39;CHPAMP2&#39;: 0.0,
+            &#39;CHPCRSYS&#39;: &#39;tarf&#39;,
+            &#39;CHPANGLE&#39;: 0.0,
+            &#39;CHPTIP&#39;: 0.0,
+            &#39;CHPTILT&#39;: 0.0,
+            &#39;CHPSRC&#39;: &#39;external&#39;,
+            &#39;CHPONFPA&#39;: False
+        }
+        for key, value in defaults.items():
+            if key not in header:
+                self.update_header_value(header, key, value)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_header_nodding">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_header_nodding">[docs]</a>
+    def update_header_nodding(self, header):
+        &quot;&quot;&quot;
+        Update the nodding configuration in the header.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        defaults = {
+            &#39;NODDING&#39;: False,
+            &#39;NODTIME&#39;: -9999.0,
+            &#39;NODN&#39;: 1,
+            &#39;NODSETL&#39;: -9999.0,
+            &#39;NODAMP&#39;: 150.0,
+            &#39;NODBEAM&#39;: &#39;a&#39;,
+            &#39;NODPATT&#39;: &#39;ABBA&#39;,
+            &#39;NODSTYLE&#39;: &#39;NMC&#39;,
+            &#39;NODCRSYS&#39;: &#39;erf&#39;,
+            &#39;NODANGLE&#39;: -90.0}
+        for key, value in defaults.items():
+            if key not in header:
+                self.update_header_value(header, key, value)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_header_dithering">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_header_dithering">[docs]</a>
+    def update_header_dithering(self, header):
+        &quot;&quot;&quot;
+        Update the dithering configuration in the header.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        defaults = {
+            &#39;DITHER&#39;: False,
+            &#39;DTHCRSYS&#39;: &#39;UNKNOWN&#39;,
+            &#39;DTHXOFF&#39;: -9999.0,
+            &#39;DTHYOFF&#39;: -9999.0,
+            &#39;DTHPATT&#39;: &#39;NONE&#39;,
+            &#39;DTHNPOS&#39;: -9999,
+            &#39;DTHINDEX&#39;: -9999,
+            &#39;DTHUNIT&#39;: &#39;UNKNOWN&#39;,
+            &#39;DTHSCALE&#39;: -9999.0}
+
+        for key, value in defaults.items():
+            if key not in header:
+                self.update_header_value(header, key, value)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_header_mapping">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_header_mapping">[docs]</a>
+    def update_header_mapping(self, header):
+        &quot;&quot;&quot;
+        Update the mapping configuration in the header.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        defaults = {
+            &#39;MAPPING&#39;: False,
+            &#39;MAPCRSYS&#39;: &#39;UNKNOWN&#39;,
+            &#39;MAPNXPOS&#39;: -9999,
+            &#39;MAPNYPOS&#39;: -9999,
+            &#39;MAPINTX&#39;: -9999.0,
+            &#39;MAPINTY&#39;: -9999.0}
+
+        for key, value in defaults.items():
+            if key not in header:
+                self.update_header_value(header, key, value)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_header_hwp">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_header_hwp">[docs]</a>
+    def update_header_hwp(self, header):
+        &quot;&quot;&quot;
+        Update the half-wave-plate configuration in the header.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        defaults = {
+            &#39;NHWP&#39;: 1,
+            &#39;HWPSTART&#39;: -9999.0,
+            &#39;HWPSPEED&#39;: -9999,
+            &#39;HWPSTEP&#39;: -9999.0,
+            &#39;HWPSEQ&#39;: &#39;UNKNOWN&#39;,
+            &#39;HWPON&#39;: 10.0,
+            &#39;HWPOFF&#39;: 9.0,
+            &#39;HWPHOME&#39;: 8.0}
+
+        for key, value in defaults.items():
+            if key not in header:
+                self.update_header_value(header, key, value)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_header_focus">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_header_focus">[docs]</a>
+    def update_header_focus(self, header):
+        &quot;&quot;&quot;
+        Update the focus configuration in the header.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        defaults = {
+            &#39;FOCUS_ST&#39;: 800.0,
+            &#39;FOCUS_EN&#39;: 800.0,
+            &#39;FCSCOEFA&#39;: -13.8,
+            &#39;FCSCOEFB&#39;: 0.0,
+            &#39;FCSCOEFC&#39;: 0.0,
+            &#39;FCSCOEFK&#39;: -4.23,
+            &#39;FCSCOEFQ&#39;: 0.0,
+            &#39;FCSDELTA&#39;: 381.569916,
+            &#39;FCSTCALC&#39;: 800.0,
+            &#39;FCST1NM&#39;: &#39;ta_mcp.mcp_hk_pms.tmm_temp_1&#39;,
+            &#39;FCST2NM&#39;: &#39;&#39;,
+            &#39;FCST3NM&#39;: &#39;&#39;,
+            &#39;FCSXNM&#39;: &#39;&#39;,
+            &#39;FCST1&#39;: -27.649994,
+            &#39;FCST2&#39;: -9999.0,
+            &#39;FCST3&#39;: -9999.0,
+            &#39;FCSX&#39;: -9999.0,
+            &#39;FCSTOFF&#39;: 25.0
+        }
+
+        for key, value in defaults.items():
+            if key not in header:
+                self.update_header_value(header, key, value)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_header_skydip">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_header_skydip">[docs]</a>
+    def update_header_skydip(self, header):
+        &quot;&quot;&quot;
+        Update the skydip configuration in the header.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        defaults = {
+            &#39;SDELSTEN&#39;: -9999.0,
+            &#39;SDELMID&#39;: -9999.0,
+            &#39;SDWTSTRT&#39;: -9999.0,
+            &#39;SDWTMID&#39;: -9999.0,
+            &#39;SDWTEND&#39;: -9999.0}
+
+        for key, value in defaults.items():
+            if key not in header:
+                self.update_header_value(header, key, value)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_header_scanning">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_header_scanning">[docs]</a>
+    def update_header_scanning(self, header):
+        &quot;&quot;&quot;
+        Update the skydip configuration in the header.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if &#39;EXPTIME&#39; in header:
+            scan_length = header[&#39;EXPTIME&#39;]
+        elif &#39;TOTTIME&#39; in header:
+            scan_length = header[&#39;TOTTIME&#39;]
+        else:
+            scan_length = 30.0
+
+        for (key, default) in [
+                (&#39;EXPTIME&#39;, scan_length), (&#39;TOTTIME&#39;, scan_length),
+                (&#39;SCANNING&#39;, True), (&#39;OBSMODE&#39;, &#39;Scan&#39;), (&#39;SCNPATT&#39;, &#39;Daisy&#39;),
+                (&#39;SCNCRSYS&#39;, &#39;TARF&#39;), (&#39;SCNITERS&#39;, 1), (&#39;SCNANGLS&#39;, 0.0),
+                (&#39;SCNANGLC&#39;, 0.0), (&#39;SCNANGLF&#39;, 0.0), (&#39;SCNTWAIT&#39;, 0.0),
+                (&#39;SCNTRKON&#39;, 0), (&#39;SCNRATE&#39;, 100.0), (&#39;SCNCONST&#39;, False)]:
+            if key not in header:
+                self.update_header_value(header, key, default)
+
+        scan_pattern = header.get(&#39;SCNPATT&#39;).lower().strip()
+        if scan_pattern not in [&#39;daisy&#39;, &#39;lissajous&#39;]:
+            raise ValueError(f&quot;{header[&#39;SCNPATT&#39;]} scanning pattern is not &quot;
+                             f&quot;currently supported.&quot;)
+
+        self.update_header_lissajous(header)
+        self.update_header_daisy(header)
+        self.update_header_raster(header)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_header_lissajous">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_header_lissajous">[docs]</a>
+    def update_header_lissajous(self, header):
+        &quot;&quot;&quot;
+        Update the Lissajous scanning parameters in the header.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if header[&#39;SCNPATT&#39;].strip().lower() != &#39;lissajous&#39;:
+            for key in [&#39;SCNAMPEL&#39;, &#39;SCNAMPXL&#39;, &#39;SCNFQRAT&#39;, &#39;SCNPHASE&#39;,
+                        &#39;SCNTOFF&#39;]:
+                self.update_header_value(header, key, -9999.0)
+            return
+
+        source_size = header[&#39;SRCSIZE&#39;]
+        extended = header[&#39;SRCTYPE&#39;].lower().strip() == &#39;extended&#39;
+        x = y = None
+        if &#39;SCNAMPXL&#39; in header:
+            x = float(header[&#39;SCNAMPXL&#39;])
+        if &#39;SCNAMPEL&#39; in header:
+            y = float(header[&#39;SCNAMPEL&#39;])
+        if x is None and y is not None:
+            x = y
+        elif y is None and x is not None:
+            y = x
+        elif x is not None and y is not None:
+            pass
+        else:
+            width = source_size * 5
+            if extended:
+                width /= 2
+            x = y = width
+
+        constant_speed = header.get(&#39;SCNCONST&#39;, False)
+        self.update_header_value(header, &#39;SCNCONST&#39;, constant_speed)
+        self.update_header_value(header, &#39;SCNAMPXL&#39;, x)
+        self.update_header_value(header, &#39;SCNAMPEL&#39;, y)
+        if &#39;SCNFQRAT&#39; not in header:
+            self.update_header_value(header, &#39;SCNFQRAT&#39;, np.sqrt(2))
+        if &#39;SCNPHASE&#39; not in header:
+            self.update_header_value(header, &#39;SCNPHASE&#39;, 90.0)
+        if &#39;SCNTOFF&#39; not in header:
+            self.update_header_value(header, &#39;SCNTOFF&#39;, 0.0)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_header_daisy">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_header_daisy">[docs]</a>
+    def update_header_daisy(self, header):
+        &quot;&quot;&quot;
+        Update the daisy scanning parameters in the header.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if header[&#39;SCNPATT&#39;].strip().lower() != &#39;daisy&#39;:
+            for key in [&#39;SCNDRAD&#39;, &#39;SCNDPER&#39;, &#39;SCNDNOSC&#39;]:
+                self.update_header_value(header, key, -9999.0)
+            return
+
+        if &#39;SCNDRAD&#39; not in header:
+            source_size = header[&#39;SRCSIZE&#39;]
+            extended = header[&#39;SRCTYPE&#39;].lower().strip() == &#39;extended&#39;
+            if extended:
+                radius = source_size * 2.5
+            else:
+                radius = source_size * 5
+            self.update_header_value(header, &#39;SCNDRAD&#39;, radius)
+
+        scan_length = header[&#39;EXPTIME&#39;]
+
+        if &#39;SCNDPER&#39; not in header and &#39;SCNDNOSC&#39; not in header:
+            self.update_header_value(header, &#39;SCNDNOSC&#39;, 22.0)
+        if &#39;SCNDPER&#39; not in header:
+            n_oscillations = header[&#39;SCNDNOSC&#39;]
+            radial_period = scan_length / n_oscillations
+        elif &#39;SCNDNOSC&#39; not in header:
+            radial_period = header[&#39;SCNDPER&#39;]
+            n_oscillations = scan_length / radial_period
+        else:
+            radial_period = header[&#39;SCNDPER&#39;]
+            n_oscillations = header[&#39;SCNDNOSC&#39;]
+
+        constant_speed = header.get(&#39;SCNCONST&#39;, False)
+        self.update_header_value(header, &#39;SCNCONST&#39;, constant_speed)
+        self.update_header_value(header, &#39;SCNDNOSC&#39;, n_oscillations)
+        self.update_header_value(header, &#39;SCNDPER&#39;, radial_period)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_header_raster">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_header_raster">[docs]</a>
+    def update_header_raster(self, header):
+        &quot;&quot;&quot;
+        Update the raster scanning parameters in the header.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for (key, value) in [(&#39;SCNNSUBS&#39;, -9999), (&#39;SCNLEN&#39;, -9999.0),
+                             (&#39;SCNSTEP&#39;, -9999.0), (&#39;SCNSTEPS&#39;, -9999.0),
+                             (&#39;SCNCROSS&#39;, False)]:
+            self.update_header_value(header, key, value)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.set_source">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.set_source">[docs]</a>
+    def set_source(self, ra, dec, header_options=None):
+        &quot;&quot;&quot;
+        Set the source RA and Dec coordinates.
+
+        Parameters
+        ----------
+        ra : str or units.Quantity
+        dec : str or units.Quantity
+        header_options : dict or fits.Header, optional
+            Optional header options.  The OBSRA and OBSDEC keys will override
+            ra and dec if present.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if header_options is not None:
+            if &#39;OBSRA&#39; in header_options:
+                ra = header_options[&#39;OBSRA&#39;]
+                if not isinstance(ra, units.Quantity):
+                    ra = ra * units.Unit(&#39;hourangle&#39;)
+            if &#39;OBSDEC&#39; in header_options:
+                dec = header_options[&#39;OBSDEC&#39;]
+                if not isinstance(dec, units.Quantity):
+                    dec = dec * units.Unit(&#39;degree&#39;)
+
+        if isinstance(ra, str):
+            ra = get_hms_time(ra, angle=True)
+            dec = get_dms_angle(dec)
+            center = EquatorialCoordinates([ra, dec])
+        else:
+            center = EquatorialCoordinates([ra, dec])
+        self.source_equatorial = center
+        ra_value = center.ra.to(&#39;hourangle&#39;).value
+        dec_value = center.dec.to(&#39;degree&#39;).value
+        self.update_header_value(self.primary_header, &#39;TELRA&#39;, ra_value)
+        self.update_header_value(self.primary_header, &#39;OBJRA&#39;, ra_value)
+        self.update_header_value(self.primary_header, &#39;TELDEC&#39;, dec_value)
+        self.update_header_value(self.primary_header, &#39;OBJDEC&#39;, dec_value)
+        if &#39;OBJECT&#39; not in self.primary_header:
+            self.update_header_value(self.primary_header, &#39;OBJECT&#39;,
+                                     &#39;simulated_source&#39;)
+
+        if &#39;SRCTYPE&#39; not in self.primary_header:
+            self.update_header_value(self.primary_header, &#39;SRCTYPE&#39;,
+                                     &#39;point_source&#39;)
+        source_type = self.primary_header[&#39;SRCTYPE&#39;].strip().lower()
+
+        if &#39;SRCSIZE&#39; not in self.primary_header:
+            arcsec_fwhms = {
+                &#39;A&#39;: 4.85, &#39;B&#39;: 10.5, &#39;C&#39;: 7.8, &#39;D&#39;: 13.6, &#39;E&#39;: 18.2}
+            band = self.primary_header[&#39;SPECTEL1&#39;].split(&#39;_&#39;)[-1]
+            fwhm = arcsec_fwhms.get(band)
+            if source_type == &#39;extended&#39;:
+                fwhm *= 3
+            self.update_header_value(self.primary_header, &#39;SRCSIZE&#39;, fwhm)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.set_times">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.set_times">[docs]</a>
+    def set_times(self, timestamp, header_options=None):
+        &quot;&quot;&quot;
+        Set the times for the observation.
+
+        Parameters
+        ----------
+        timestamp : str or int or float or Time
+            The object to convert.   If a string is used, it should be in ISOT
+            format in UTC scale.  Integers and floats will be parsed as MJD
+            times in the UTC scale.
+        header_options : dict or fits.Header, optional
+            An optional set of keyword values that will override `timestamp`
+            with the &#39;DATE-OBS&#39; key value if present.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if header_options is not None and &#39;DATE-OBS&#39; in header_options:
+            timestamp = header_options[&#39;DATE-OBS&#39;]
+
+        self.start_utc = DateRange.to_time(timestamp)
+        self.info.astrometry.set_mjd(self.start_utc.mjd)
+        self.info.astrometry.calculate_precessions(J2000)
+
+        date_obs = self.start_utc.isot
+        self.update_header_value(self.primary_header, &#39;DATE-OBS&#39;, date_obs)
+        self.update_header_value(self.primary_header, &#39;DATE&#39;, date_obs)
+        self.update_header_value(self.primary_header, &#39;UTCSTART&#39;,
+                                 date_obs.split(&#39;T&#39;)[-1])
+        scan_length = self.primary_header[&#39;EXPTIME&#39;] * units.Unit(&#39;second&#39;)
+        self.end_utc = self.start_utc + scan_length
+        self.update_header_value(self.primary_header, &#39;UTCEND&#39;,
+                                 self.end_utc.isot.split(&#39;T&#39;)[-1])
+
+        if &#39;LASTREW&#39; not in self.primary_header:
+            last_rew = self.start_utc - (1 * units.Unit(&#39;minute&#39;))
+            self.update_header_value(self.primary_header, &#39;LASTREW&#39;,
+                                     last_rew.isot)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.set_start_site">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.set_start_site">[docs]</a>
+    def set_start_site(self, longitude, latitude,
+                       header_options=None):
+        &quot;&quot;&quot;
+        Set the site longitude and latitude at the start of the observation.
+
+        Parameters
+        ----------
+        longitude : str or units.Quantity
+        latitude : str or units.Quantity
+        header_options : dict or fits.Header, optional
+            If provided, the LON_STA and LAT_STA will override `longitude` and
+            `latitude` if present.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if header_options is not None:
+            if &#39;LAT_STA&#39; in header_options:
+                latitude = header_options[&#39;LAT_STA&#39;]
+                if not isinstance(latitude, units.Quantity):
+                    latitude = latitude * units.Unit(&#39;degree&#39;)
+            if &#39;LON_STA&#39; in header_options:
+                longitude = header_options[&#39;LON_STA&#39;]
+                if not isinstance(longitude, units.Quantity):
+                    longitude = longitude * units.Unit(&#39;degree&#39;)
+
+        if isinstance(latitude, str):
+            latitude = Angle(latitude)
+            longitude = Angle(longitude)
+
+        site = GeodeticCoordinates([longitude, latitude], unit=&#39;degree&#39;)
+        self.update_header_value(self.primary_header, &#39;LON_STA&#39;,
+                                 site.longitude.value)
+        self.update_header_value(self.primary_header, &#39;LAT_STA&#39;,
+                                 site.latitude.value)
+        self.start_site = site</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.initialize_aircraft">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.initialize_aircraft">[docs]</a>
+    def initialize_aircraft(self):
+        &quot;&quot;&quot;
+        Set the aircraft parameters.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.aircraft.initialize_from_header(self.primary_header)
+        self.update_header_value(self.primary_header, &#39;ALTI_STA&#39;,
+                                 self.aircraft.start_altitude.value)
+        self.update_header_value(self.primary_header, &#39;ALTI_END&#39;,
+                                 self.aircraft.end_altitude.value)
+        self.update_header_value(self.primary_header, &#39;AIRSPEED&#39;,
+                                 self.aircraft.airspeed.value)
+        self.update_header_value(self.primary_header, &#39;GRDSPEED&#39;,
+                                 self.aircraft.ground_speed.value)
+        self.update_header_value(self.primary_header, &#39;LON_END&#39;,
+                                 self.aircraft.end_location.longitude.value)
+        self.update_header_value(self.primary_header, &#39;LAT_END&#39;,
+                                 self.aircraft.end_location.latitude.value)
+        self.update_header_value(self.primary_header, &#39;HEADING&#39;,
+                                 self.aircraft.heading.value)
+        self.update_header_value(self.primary_header, &#39;TRACKANG&#39;,
+                                 self.aircraft.heading.value)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_header_weather">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_header_weather">[docs]</a>
+    def update_header_weather(self, header):
+        &quot;&quot;&quot;
+        Update the weather parameters in the header.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        t = -47.0
+        if &#39;TEMP_OUT&#39; not in header:
+            self.update_header_value(header, &#39;TEMP_OUT&#39;, t)
+        if &#39;TEMPPRI1&#39; not in header:
+            self.update_header_value(header, &#39;TEMPPRI1&#39;, t + 34)
+        if &#39;TEMPPRI2&#39; not in header:
+            self.update_header_value(header, &#39;TEMPPRI2&#39;, t + 32)
+        if &#39;TEMPPRI3&#39; not in header:
+            self.update_header_value(header, &#39;TEMPPRI3&#39;, t + 33)
+        if &#39;TEMPSEC1&#39; not in header:
+            self.update_header_value(header, &#39;TEMPSEC1&#39;, t + 30)
+
+        if &#39;WVZ_STA&#39; not in header or &#39;WVZ_END&#39; not in header:
+            pwv41k = self.info.configuration.get_float(
+                &#39;pwv41k&#39;, default=29.0)
+            b = 1.0 / self.info.configuration.get_float(&#39;pwvscale&#39;,
+                                                        default=5.0)
+
+            for k in [&#39;STA&#39;, &#39;END&#39;]:
+                key = f&#39;WVZ_{k}&#39;
+                if key not in header:
+                    height = header[f&#39;ALTI_{k}&#39;] / 1000
+                    self.update_header_value(
+                        header, key, pwv41k * np.exp(-b * (height - 41.0)))</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_non_astronomical_columns">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_non_astronomical_columns">[docs]</a>
+    def update_non_astronomical_columns(self):
+        &quot;&quot;&quot;
+        Create column values for the FITS data HDU that are not astronomical.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        header = self.primary_header
+        dt = self.scan.info.sampling_interval
+        scan_length = header[&#39;EXPTIME&#39;] * units.Unit(&#39;second&#39;)
+        n_records = int((scan_length / dt).decompose().value)
+
+        column_values = {
+            &#39;FrameCounter&#39;: np.arange(n_records),
+        }
+        self.column_values = column_values
+
+        # Timestamp is (n_frames,) in unix time
+        start_utc = self.start_utc.unix
+        utc = start_utc + (np.arange(n_records) * dt).decompose().value
+        column_values[&#39;Timestamp&#39;] = utc
+        column_values[&#39;hwpCounts&#39;] = self.get_hwp_column(utc)
+        column_values[&#39;Flag&#39;] = np.zeros(n_records, dtype=np.int32)
+        column_values[&#39;PWV&#39;] = self.get_pwv_column(utc)
+        column_values[&#39;LOS&#39;] = self.get_los_column(utc)
+        column_values[&#39;ROLL&#39;] = self.get_roll_column(utc)
+        location = self.get_location_columns(utc)
+        column_values[&#39;LON&#39;] = location[0]
+        column_values[&#39;LAT&#39;] = location[1]
+
+        t = Time(utc, format=&#39;unix&#39;)
+        lst = safe_sidereal_time(
+            t, &#39;mean&#39;, longitude=location[0] * units.Unit(&#39;degree&#39;))
+        self.mjd = t.mjd
+        self.lst = lst
+
+        column_values[&#39;LST&#39;] = lst.value
+        nonsidereal = self.get_nonsidereal_columns(utc)
+        column_values[&#39;NonSiderealRA&#39;] = nonsidereal[0]
+        column_values[&#39;NonSiderealDec&#39;] = nonsidereal[1]</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.get_hwp_column">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.get_hwp_column">[docs]</a>
+    @staticmethod
+    def get_hwp_column(utc):
+        &quot;&quot;&quot;
+        Return the hwpCounts values for the FITS data HDU.
+
+        This needs to be updated if hwp is important.
+
+        Parameters
+        ----------
+        utc : numpy.ndarray (float)
+            The UTC (unix) times for which to provide HWP values.
+
+        Returns
+        -------
+        numpy.ndarray (int)
+        &quot;&quot;&quot;
+        hwp_counts = np.zeros(utc.size, dtype=np.int32)
+        return hwp_counts</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.get_pwv_column">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.get_pwv_column">[docs]</a>
+    def get_pwv_column(self, utc):
+        &quot;&quot;&quot;
+        Return the PWV values for the FITS data HDU.
+
+        Linearly interpolates altitude between the first and last value.
+
+        Parameters
+        ----------
+        utc : numpy.ndarray (float)
+            The UTC (unix) times for which to provide PWV values.
+
+        Returns
+        -------
+        pwv : numpy.ndarray (float)
+        &quot;&quot;&quot;
+        start = self.aircraft.start_altitude.value
+        end = self.aircraft.end_altitude.value
+        altitude = np.interp(utc, [utc[0], utc[-1]], [start, end]) / 1000
+        pwv41k = self.info.configuration.get_float(
+            &#39;pwv41k&#39;, default=29.0)
+        b = 1.0 / self.info.configuration.get_float(&#39;pwvscale&#39;, default=5.0)
+        pwv = pwv41k * np.exp(-b * (altitude - 41.0))
+        return pwv</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.get_los_column">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.get_los_column">[docs]</a>
+    @staticmethod
+    def get_los_column(utc):
+        &quot;&quot;&quot;
+        Return the LOS values for the FITS data HDU.
+
+        Linearly interpolates altitude between the first and last value.
+
+        Parameters
+        ----------
+        utc : numpy.ndarray (float)
+            The UTC (unix) times for which to provide LOS values.
+
+        Returns
+        -------
+        los : numpy.ndarray (float)
+        &quot;&quot;&quot;
+        return np.zeros(utc.size, dtype=float)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.get_roll_column">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.get_roll_column">[docs]</a>
+    @staticmethod
+    def get_roll_column(utc):
+        &quot;&quot;&quot;
+        Return the ROLL values for the FITS data HDU.
+
+        Linearly interpolates altitude between the first and last value.
+
+        Parameters
+        ----------
+        utc : numpy.ndarray (float)
+            The UTC (unix) times for which to provide ROLL values.
+
+        Returns
+        -------
+        roll : numpy.ndarray (float)
+        &quot;&quot;&quot;
+        return np.zeros(utc.size, dtype=float)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.get_location_columns">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.get_location_columns">[docs]</a>
+    def get_location_columns(self, utc):
+        &quot;&quot;&quot;
+        Return the LON/LAT values for the FITS data HDU.
+
+        Linearly interpolates altitude between the first and last value.
+
+        Parameters
+        ----------
+        utc : numpy.ndarray (float)
+            The UTC (unix) times for which to provide location values.
+
+        Returns
+        -------
+        location : numpy.ndarray (float)
+            The location of SOFIA of shape (2, n_records) with LON in
+            location[0] and LAT in location[1].
+        &quot;&quot;&quot;
+        location = np.zeros((2, utc.size), dtype=float)
+        start_lon = self.aircraft.start_location.longitude.to(&#39;degree&#39;).value
+        end_lon = self.aircraft.end_location.longitude.to(&#39;degree&#39;).value
+        location[0] = np.interp(utc, [utc[0], utc[-1]], [start_lon, end_lon])
+        start_lat = self.aircraft.start_location.latitude.to(&#39;degree&#39;).value
+        end_lat = self.aircraft.end_location.latitude.to(&#39;degree&#39;).value
+        location[1] = np.interp(utc, [utc[0], utc[-1]], [start_lat, end_lat])
+        return location</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.get_nonsidereal_columns">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.get_nonsidereal_columns">[docs]</a>
+    def get_nonsidereal_columns(self, utc):
+        &quot;&quot;&quot;
+        Return the Nonsidereal RA/DEC values for the FITS data HDU.
+
+        If a true nonsidereal object is to be simulated, this should
+        be updated.
+
+        Parameters
+        ----------
+        utc : numpy.ndarray (float)
+            The UTC (unix) times for which to provide location values.
+
+        Returns
+        -------
+        nonsidereal : numpy.ndarray (float)
+            The nonsidereal coordinates of the object of shape (2, n_records)
+            with RA (hours) in nonsidereal[0] and DEC (degree) in
+            nonsidereal[1].
+        &quot;&quot;&quot;
+        nonsidereal = np.zeros((2, utc.size), dtype=float)
+        ra = self.source_equatorial.ra.to(&#39;hourangle&#39;).value
+        dec = self.source_equatorial.dec.to(&#39;degree&#39;).value
+        nonsidereal[0] = ra
+        nonsidereal[1] = dec
+        return nonsidereal</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_vpa_columns">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_vpa_columns">[docs]</a>
+    def update_vpa_columns(self):
+        &quot;&quot;&quot;
+        Update the VPA columns for the FITS data HDU.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        n_frames = self.integration.size
+        if &#39;TELVPA&#39; in self.primary_header:
+            self.column_values[&#39;TABS_VPA&#39;] = np.full(
+                n_frames, self.primary_header[&#39;TELVPA&#39;])
+        else:
+            self.column_values[&#39;TABS_VPA&#39;] = np.zeros(n_frames, dtype=float)
+
+        pa = self.column_values[&#39;TABS_VPA&#39;] * units.Unit(&#39;degree&#39;)
+        self.sin_pa = np.sin(pa).value
+        self.cos_pa = np.cos(pa).value
+        self.column_values[&#39;SIBS_VPA&#39;] = self.column_values[&#39;TABS_VPA&#39;].copy()
+
+        chop_angle = self.primary_header[&#39;CHPANGLE&#39;]
+        chop_angles = chop_angle + self.column_values[&#39;TABS_VPA&#39;]
+        chop_angles = Angle(chop_angles, &#39;degree&#39;).wrap_at(
+            360 * units.Unit(&#39;degree&#39;)).to(&#39;degree&#39;).value
+        self.column_values[&#39;Chop_VPA&#39;] = chop_angles</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_chopper">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_chopper">[docs]</a>
+    def update_chopper(self):
+        &quot;&quot;&quot;
+        Add chopper signals to the astronomical positions.
+
+        Currently, only CHPAMP1 is used to determine amplitude and 2-point
+        chopping is simulated.  CHPNOISE in the header is used to apply
+        random simulated chopper offsets up to a maximum of CHPNOISE
+        arcseconds.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        n_frames = self.column_values[&#39;FrameCounter&#39;].size
+        chop_r = np.zeros(n_frames, dtype=&#39;&gt;f4&#39;)
+        chop_s = chop_r.copy()
+
+        self.column_values[&#39;sofiaChopR&#39;] = chop_r
+        self.column_values[&#39;sofiaChopS&#39;] = chop_s
+
+        self.chopper_position = Coordinate2D(
+            np.zeros((2, n_frames)), unit=&#39;arcsec&#39;)
+
+        if (not self.primary_header[&#39;CHOPPING&#39;]
+                and &#39;CHPNOISE&#39; not in self.primary_header):
+            return
+
+        # Add noise to chopper position?
+        if &#39;CHPNOISE&#39; in self.primary_header:
+            # Add normal randomness
+            noise = np.random.normal(loc=0, scale=1, size=(2, n_frames))
+            noise -= np.mean(noise, axis=1)[:, None]
+            noise /= np.max(np.abs(noise), axis=1)[:, None]
+            scale = self.primary_header[&#39;CHPNOISE&#39;] * units.Unit(&#39;arcsec&#39;)
+            noise = noise * scale
+            self.chopper_position.add_x(noise[0])
+            self.chopper_position.add_y(noise[1])
+
+        dt = self.scan.info.sampling_interval.decompose().value  # Seconds
+        volts_to_angle = self.scan.info.chopping.volts_to_angle
+        inverted = self.scan.configuration.get_bool(&#39;chopper.invert&#39;)
+        rotation = (self.column_values[&#39;Chop_VPA&#39;]
+                    - self.column_values[&#39;TABS_VPA&#39;]) * units.Unit(&#39;degree&#39;)
+
+        amplitude = self.primary_header[&#39;CHPAMP1&#39;] * units.Unit(&#39;arcsec&#39;)
+        if amplitude &gt; 0:  # TODO: it&#39;s obviously not sinusoidal
+            chop_frequency = self.primary_header[&#39;CHPFREQ&#39;]  # Hz
+            t = np.arange(n_frames) * dt
+            signal = np.sin(t * chop_frequency * np.pi) * amplitude
+            self.chopper_position.add_x(signal)
+
+        self.chopper_position.rotate(-rotation)
+        if inverted:
+            self.chopper_position.invert()
+
+        voltages = self.chopper_position.coordinates / -volts_to_angle
+        chop_s[...] = voltages[0].value
+        chop_r[...] = voltages[1].value</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.update_astronomical_columns">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.update_astronomical_columns">[docs]</a>
+    def update_astronomical_columns(self):
+        &quot;&quot;&quot;
+        Update the astronomical columns for the FITS data HDU.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        scan_pattern = self.primary_header[&#39;SCNPATT&#39;].strip().lower()
+        if scan_pattern == &#39;daisy&#39;:
+            equatorial = self.get_daisy_equatorial()
+        elif scan_pattern == &#39;lissajous&#39;:
+            equatorial = self.get_lissajous_equatorial()
+        else:
+            raise ValueError(f&quot;Scan pattern {scan_pattern} not implemented.&quot;)
+
+        n_frames = self.integration.size
+        if equatorial.size &gt; n_frames:
+            equatorial = equatorial[:n_frames]
+        elif equatorial.size &lt; n_frames:
+            coordinates = np.full((2, n_frames), np.nan)
+            coordinates[:, :equatorial.size] = equatorial.coordinates.value
+            last = equatorial[-1].coordinates.value
+            coordinates[:, equatorial.size:] = last[:, None]
+            equatorial = EquatorialCoordinates(
+                coordinates, unit=equatorial.unit)
+
+        lst = self.column_values[&#39;LST&#39;] * units.Unit(&#39;hour&#39;)
+        lon = self.column_values[&#39;LON&#39;] * units.Unit(&#39;degree&#39;)
+        lat = self.column_values[&#39;LAT&#39;] * units.Unit(&#39;degree&#39;)
+        site = GeodeticCoordinates([lon, lat])
+
+        horizontal_offset = equatorial.get_native_offset_from(
+            self.source_equatorial)
+        x = horizontal_offset.x.copy()
+        y = horizontal_offset.y.copy()
+        horizontal_offset.set_x((self.cos_pa * x) + (self.sin_pa * y))
+        horizontal_offset.set_y((self.cos_pa * y) - (self.sin_pa * x))
+
+        apparent_equatorial = equatorial.copy()
+        self.info.astrometry.to_apparent.precess(apparent_equatorial)
+        horizontal = apparent_equatorial.to_horizontal(site, lst)
+
+        self.horizontal_corrected = horizontal.copy()
+        self.equatorial_corrected = equatorial.copy()
+        self.horizontal_offset_corrected = horizontal_offset.copy()
+        self.apparent_equatorial_corrected = apparent_equatorial.copy()
+
+        # Must apply chopper shift
+
+        n = self.integration.configuration.get_int(&#39;chopper.shift&#39;, default=0)
+        if n != 0:
+            self.chopper_position.shift(n, fill_value=0.0)
+
+        # Apply the chopper position
+        horizontal_offset.subtract(self.chopper_position)
+        horizontal.subtract_offset(self.chopper_position)
+
+        equatorial_offset = self.chopper_position.copy()
+        x = equatorial_offset.x.copy()
+        y = equatorial_offset.y.copy()
+        equatorial_offset.set_x((self.cos_pa * x) - (self.sin_pa * y))
+        equatorial_offset.set_y((self.sin_pa * x) + (self.cos_pa * y))
+        equatorial.subtract_native_offset(equatorial_offset)
+
+        apparent_equatorial = equatorial.copy()
+        self.info.astrometry.to_apparent.precess(apparent_equatorial)
+        self.apparent_equatorial = apparent_equatorial
+
+        # Must redo horizontal
+        horizontal = apparent_equatorial.to_horizontal(site, lst)
+
+        self.site = site
+        self.horizontal = horizontal
+        self.equatorial = equatorial
+        self.horizontal_offset = horizontal_offset
+
+        self.column_values[&#39;RA&#39;] = equatorial.ra.to(&#39;hourangle&#39;).value
+        self.column_values[&#39;DEC&#39;] = equatorial.dec.to(&#39;degree&#39;).value
+        self.column_values[&#39;AZ&#39;] = horizontal.az.to(&#39;degree&#39;).value
+        self.column_values[&#39;EL&#39;] = horizontal.el.to(&#39;degree&#39;).value</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.get_daisy_equatorial">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.get_daisy_equatorial">[docs]</a>
+    def get_daisy_equatorial(self):
+        &quot;&quot;&quot;
+        Return the equatorial offsets for a daisy scan pattern.
+
+        Returns
+        -------
+        equatorial_offsets : EquatorialCoordinates
+        &quot;&quot;&quot;
+        n_oscillations = self.primary_header[&#39;SCNDNOSC&#39;]
+        radius = self.primary_header[&#39;SCNDRAD&#39;] * units.Unit(&#39;arcsec&#39;)
+        radial_period = self.primary_header[&#39;SCNDPER&#39;] * units.Unit(&#39;second&#39;)
+        constant_speed = self.primary_header[&#39;SCNCONST&#39;]
+        return daisy_pattern_equatorial(self.source_equatorial,
+                                        self.scan.info.sampling_interval,
+                                        n_oscillations=n_oscillations,
+                                        radius=radius,
+                                        radial_period=radial_period,
+                                        constant_speed=constant_speed)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.get_lissajous_equatorial">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.get_lissajous_equatorial">[docs]</a>
+    def get_lissajous_equatorial(self):
+        &quot;&quot;&quot;
+        Return the equatorial offsets for a Lissajous scan pattern.
+
+        Returns
+        -------
+        equatorial_offsets : EquatorialCoordinates
+        &quot;&quot;&quot;
+        h = self.primary_header
+        width = h[&#39;SCNAMPXL&#39;] * units.Unit(&#39;arcsec&#39;)
+        height = h[&#39;SCNAMPEL&#39;] * units.Unit(&#39;arcsec&#39;)
+        ratio = h[&#39;SCNFQRAT&#39;]
+        delta = h[&#39;SCNPHASE&#39;] * units.Unit(&#39;degree&#39;)
+
+        scan_time = h[&#39;EXPTIME&#39;] * units.Unit(&#39;second&#39;)
+        scan_rate = h[&#39;SCNRATE&#39;] * units.Unit(&#39;arcsec/second&#39;)
+        n_oscillations = h.get(&#39;SCNNOSC&#39;, 20)
+
+        oscillation_period = scan_time / n_oscillations
+        scan_time = n_oscillations * oscillation_period
+
+        # Calculate the distance travelled for a single oscillation.
+        r = np.hypot(width / 2, height / 2) * 2 * np.pi
+        oscillation_period = r / scan_rate
+        n_oscillations = (scan_time / oscillation_period).decompose().value
+
+        constant_speed = self.primary_header[&#39;SCNCONST&#39;]
+        equatorial = lissajous_pattern_equatorial(
+            self.source_equatorial,
+            self.scan.info.sampling_interval,
+            width=width, height=height, delta=delta, ratio=ratio,
+            n_oscillations=n_oscillations,
+            oscillation_period=oscillation_period,
+            constant_speed=constant_speed)
+
+        return equatorial</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.get_data_hdu">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.get_data_hdu">[docs]</a>
+    def get_data_hdu(self):
+        &quot;&quot;&quot;
+        Return a FITS BinTable containing current data.
+
+        Returns
+        -------
+        fits.BinTableHDU
+        &quot;&quot;&quot;
+        fits_cols = self.info.detector_array.FITS_COLS
+        fits_rows = self.info.detector_array.FITS_ROWS
+
+        n = self.integration.size
+        data_shape = (n, fits_rows, fits_cols)
+
+        min_points = fits_cols * fits_rows
+        if n &lt; min_points:
+            n_array = n * fits_rows
+        else:
+            n_array = n
+
+        dim = f&#39;({fits_cols}, {fits_rows})&#39;
+        cols = []
+
+        for name, coldef in self.data_column_definitions.items():
+            if name in [&#39;SQ1Feedback&#39;, &#39;FluxJumps&#39;]:
+                continue
+            value = self.column_values.get(name)
+            if value is None:
+                continue
+            unit, fmt = coldef
+            column = fits.Column(name=name, unit=unit, format=fmt, array=value)
+            cols.append(column)
+
+        key = &#39;SQ1Feedback&#39;
+        values = self.column_values.get(
+            key, np.ones(data_shape, dtype=&#39;int32&#39;))
+        cols.append(fits.Column(
+            name=key, format=f&#39;{n_array}J&#39;, dim=dim, array=values))
+
+        key = &#39;FluxJumps&#39;
+        values = self.column_values.get(key, np.zeros(data_shape, dtype=&#39;&gt;i2&#39;))
+        cols.append(fits.Column(
+            name=key, format=f&#39;{n_array}I&#39;, dim=dim, array=values))
+
+        hdu = fits.BinTableHDU.from_columns(fits.ColDefs(cols))
+        hdu.header[&#39;EXTNAME&#39;] = &#39;Timestream&#39;
+        return hdu</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.create_source_model">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.create_source_model">[docs]</a>
+    def create_source_model(self):
+        &quot;&quot;&quot;
+        Create the simulated source model.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        source_type = self.primary_header.get(&#39;SRCTYPE&#39;, &#39;point_source&#39;)
+        source_type = source_type.strip().lower()
+        if source_type in [&#39;point_source&#39;, &#39;extended&#39;]:
+            model_name = &#39;single_gaussian&#39;
+            fwhm = self.primary_header.get(&#39;SRCSIZE&#39;) * units.Unit(&#39;arcsec&#39;)
+            self.source_model = SimulatedSource.get_source_model(
+                model_name, fwhm=fwhm)
+        else:
+            raise ValueError(
+                f&quot;{source_type} simulated source is not implemented.&quot;)</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.create_simulated_data">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.create_simulated_data">[docs]</a>
+    def create_simulated_data(self):
+        &quot;&quot;&quot;
+        Populate the SQ1Feedback column values for the data HDU.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        integration = self.integration
+        frames = integration.frames
+        channels = integration.channels
+        configuration = integration.configuration
+
+        frames.equatorial = self.equatorial.copy()
+        frames.horizontal = self.horizontal.copy()
+        frames.horizontal_offset = self.horizontal_offset.copy()
+        frames.chopper_position = self.chopper_position.copy()
+        frames.validate()
+
+        self.projection = SphericalProjection.for_name(
+            configuration.get_string(&#39;projection&#39;, default=&#39;gnomonic&#39;))
+        self.projection.set_reference(self.source_equatorial)
+        self.projector = AstroProjector(self.projection)
+        offsets = frames.project(channels.data.position, self.projector)
+        offsets.change_unit(&#39;arcsec&#39;)
+        self.model_offsets = offsets
+
+        # Source peak is 1.
+        source_data = self.source_model(offsets)
+        if isinstance(source_data, units.Quantity):
+            source_data = source_data.value
+
+        # Multiply values by this
+        instrument_gain = 1 / integration.get_default_scaling_factor()
+
+        abs_gain = np.abs(instrument_gain)
+
+        t = self.primary_header[&#39;EXPTIME&#39;]
+        g2v = channels.data.gain ** 2
+        v = channels.data.variance
+        nzi = v != 0
+        g2v[nzi] /= v[nzi]
+        g2v[~nzi] = np.nan
+        nan = np.full(g2v.size, True)
+        mapping = channels.get_mapping_pixels()
+        nan[mapping.indices] = False
+        g2v[nan] = np.nan
+        nefd = np.sqrt(mapping.size * t * np.nansum(g2v)) / abs_gain
+        scale = nefd * self.primary_header.get(&#39;SRCAMP&#39;, 1.0)
+        self.source_max = scale
+        source_data *= scale
+
+        source_valid = np.isfinite(source_data)
+
+        subarray_norm = channels.subarray_gain_renorm[channels.data.sub]
+        source_data *= subarray_norm[None]
+
+        if &#39;SRCS2N&#39; in self.primary_header:
+            s2n = float(self.primary_header[&#39;SRCS2N&#39;])
+            noise = np.random.normal(loc=0, scale=self.source_max / s2n,
+                                     size=source_data.shape)
+            source_data += noise
+
+        channels.load_temporary_hardware_gains()
+        inv_gains = channels.data.temp.copy()
+        nzi = inv_gains != 0
+        inv_gains[nzi] = 1 / inv_gains[nzi]
+        int_nf.detector_stage(frame_data=source_data,
+                              frame_valid=np.full(frames.size, True),
+                              channel_indices=np.arange(inv_gains.size),
+                              channel_hardware_gain=inv_gains)
+
+        # Add a DC offset
+        offset = np.nanmin(source_data) - 1.0
+        source_data -= offset
+        source_data[~source_valid] = 0.0
+
+        self.source_data = source_data
+
+        fits_cols = self.info.detector_array.FITS_COLS
+        fits_rows = self.info.detector_array.FITS_ROWS
+        n = integration.size
+        data_shape = (n, fits_rows, fits_cols)
+        data = np.zeros(data_shape, dtype=&#39;&gt;i4&#39;)
+        data[:, channels.data.fits_row, channels.data.fits_col] = source_data
+        self.column_values[&#39;SQ1Feedback&#39;] = data</div>
+
+
+<div class="viewcode-block" id="HawcPlusSimulation.create_simulated_jumps">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.html#sofia_redux.scan.custom.hawc_plus.simulation.simulation.HawcPlusSimulation.create_simulated_jumps">[docs]</a>
+    def create_simulated_jumps(self):
+        &quot;&quot;&quot;
+        Add jumps to the data HDU columns.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        fits_cols = self.info.detector_array.FITS_COLS
+        fits_rows = self.info.detector_array.FITS_ROWS
+        n = self.integration.size
+        shape = (n, fits_rows, fits_cols)
+        jump_array = np.zeros(shape, dtype=&#39;&gt;i2&#39;)
+        self.column_values[&#39;FluxJumps&#39;] = jump_array
+
+        if &#39;JUMPCHAN&#39; not in self.primary_header:
+            return
+
+        channels = self.integration.channels
+        jump_channels = self.primary_header[&#39;JUMPCHAN&#39;]
+        if jump_channels.lower() == &#39;all&#39;:
+            channel_indices = np.arange(channels.size)
+        else:
+            fixed_indices = get_int_list(self.primary_header[&#39;JUMPCHAN&#39;])
+            channel_indices = channels.data.find_fixed_indices(fixed_indices)
+
+        if channel_indices.size == 0:
+            return
+
+        if &#39;JUMPFRMS&#39; not in self.primary_header:
+            frame_indices = np.asarray([n // 2])  # One in the middle
+        else:
+            frame_indices = np.array(
+                get_int_list(self.primary_header[&#39;JUMPFRMS&#39;]))
+
+        jumps = np.zeros((n, channels.size), dtype=int)
+        start_jumps = jumps[0]
+        start_jumps[channel_indices] = np.arange(channel_indices.size) + 1
+        jumps[...] = start_jumps[None, :]
+
+        jump_size = self.primary_header.get(&#39;JUMPSIZE&#39;, 1)
+        jump_correction = jump_size * channels.data.jump[channel_indices]
+        data = self.column_values[&#39;SQ1Feedback&#39;]
+        jump_correction = round_values(jump_correction).astype(data.dtype)
+
+        fits_col, fits_row = channels.data.fits_col, channels.data.fits_row
+        col_i = fits_col[channel_indices]
+        row_i = fits_row[channel_indices]
+
+        for jump_frame in frame_indices:
+            jumps[jump_frame:, channel_indices] += jump_size
+            data[jump_frame:, row_i, col_i] += jump_correction
+
+        jump_array[:, row_i, col_i] = jumps[:, channel_indices]</div>
+</div>
+
+
+# Keys not provided yet...
+# DBRA0   = &#39;1h16m21.670s&#39;       / Drift 0 begin RA [hours]
+# DBDEC0  = &#39;7d24m24.043s&#39;       / Drift 0 begin Dec [deg]
+# DBTIME0 =      1.48169779436E9 / Drift 0 begin time [seconds]
+# DARA0   = &#39;1h16m21.669s&#39;       / Drift 0 after RA [hours]
+# DADEC0  = &#39;7d24m23.757s&#39;       / Drift 0 after Dec [deg]
+# DATIME0 =      1.48169779711E9 / Drift 0 after time [seconds]
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

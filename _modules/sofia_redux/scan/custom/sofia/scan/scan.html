@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.scan.scan &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.scan.scan</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import abstractmethod
+from astropy import units
+from astropy.io import fits
+import numpy as np
+import re
+
+from sofia_redux.scan.scan.scan import Scan
+from sofia_redux.scan.coordinate_systems.offset_2d import Offset2D
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.utilities.utils import to_header_float
+
+__all__ = [&#39;SofiaScan&#39;]
+
+
+<div class="viewcode-block" id="SofiaScan">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan">[docs]</a>
+class SofiaScan(Scan):
+
+    DEFAULT_FITS_DATE = &quot;1970-01-01T00:00:00.0&quot;
+
+    def __init__(self, channels, reduction=None):
+        &quot;&quot;&quot;
+        Initialize a SOFIA scan.
+
+        The SOFIA scan is an abstract class general to all SOFIA instruments.
+
+        Parameters
+        ----------
+        channels : sofia_redux.scan.custom.sofia.channels.camera.SofiaCamera
+            The instrument channels for the scan.
+        reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
+            The reduction to which this scan belongs.
+        &quot;&quot;&quot;
+        self.hdul = None
+        self.header_extension = 0
+        self.header = None
+        self.history = None
+        super().__init__(channels, reduction=reduction)
+
+<div class="viewcode-block" id="SofiaScan.copy">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the scan.
+
+        Returns
+        -------
+        SofiaScan
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+    @property
+    def referenced_attributes(self):
+        &quot;&quot;&quot;
+        Return the names of attributes that are referenced during a copy.
+
+        Returns
+        -------
+        attribute_names : set (str)
+        &quot;&quot;&quot;
+        attributes = super().referenced_attributes
+        attributes.add(&#39;hdul&#39;)
+        attributes.add(&#39;header&#39;)
+        return attributes
+
+    @property
+    def info(self):
+        &quot;&quot;&quot;
+        Return the information object for the scan.
+
+        The information object contains the reduction configuration and various
+        parameters pertaining the this scan.
+
+        Returns
+        -------
+        SofiaInfo
+        &quot;&quot;&quot;
+        return super().info
+
+    @property
+    def astrometry(self):
+        &quot;&quot;&quot;
+        Return the scan astrometry information.
+
+        Returns
+        -------
+        info : SofiaAstrometryInfo
+        &quot;&quot;&quot;
+        return super().astrometry
+
+<div class="viewcode-block" id="SofiaScan.get_lowest_quality">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.get_lowest_quality">[docs]</a>
+    @staticmethod
+    def get_lowest_quality(scans):
+        &quot;&quot;&quot;
+        Return the lowest quality processing stats from a set of scans.
+
+        Parameters
+        ----------
+        scans : list (SofiaScan)
+            A list of scans.
+
+        Returns
+        -------
+        QualityFlags.QualityFlagTypes
+            The lowest quality flag type.
+        &quot;&quot;&quot;
+        lowest_quality = np.inf
+        lowest_scan = None
+        for scan in scans:
+            if isinstance(scan, SofiaScan):
+                if scan.info.processing.quality_level.value &lt; lowest_quality:
+                    lowest_quality = scan.info.processing.quality_level.value
+                    lowest_scan = scan
+
+        if lowest_scan is not None:
+            return lowest_scan.info.processing.flagspace.convert_flag(
+                lowest_quality)
+        else:
+            return None</div>
+
+
+<div class="viewcode-block" id="SofiaScan.get_total_exposure_time">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.get_total_exposure_time">[docs]</a>
+    @staticmethod
+    def get_total_exposure_time(scans):
+        &quot;&quot;&quot;
+        Return the total exposure time in a set of scans.
+
+        Parameters
+        ----------
+        scans : list (SofiaScan)
+            A list of scans.
+
+        Returns
+        -------
+        exposure_time : units.Quantity
+            The total exposure time from all scans in seconds.
+        &quot;&quot;&quot;
+        exposure_time = 0.0 * units.Unit(&#39;s&#39;)
+        if scans is None:
+            return exposure_time
+        for scan in scans:
+            if isinstance(scan, SofiaScan):
+                exposure_time += scan.info.instrument.exposure_time
+        return exposure_time</div>
+
+
+<div class="viewcode-block" id="SofiaScan.has_tracking_error">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.has_tracking_error">[docs]</a>
+    @staticmethod
+    def has_tracking_error(scans):
+        &quot;&quot;&quot;
+        Report whether any scan in a set contains a telescope tracking error.
+
+        Parameters
+        ----------
+        scans : list (SofiaScan)
+            A list of scans.
+
+        Returns
+        -------
+        tracking_error : bool
+            `True` if any scan contains a telescope tracking error.  `False`
+            otherwise.
+        &quot;&quot;&quot;
+        if scans is None:
+            return False
+        for scan in scans:
+            if isinstance(scan, SofiaScan):
+                if scan.info.telescope.has_tracking_error:
+                    return True
+        else:
+            return False</div>
+
+
+<div class="viewcode-block" id="SofiaScan.get_earliest_scan">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.get_earliest_scan">[docs]</a>
+    @staticmethod
+    def get_earliest_scan(scans):
+        &quot;&quot;&quot;
+        Return the earliest scan in a list of scans determined by MJD.
+
+        Parameters
+        ----------
+        scans : list (Scan)
+
+        Returns
+        -------
+        Scan
+        &quot;&quot;&quot;
+        return SofiaScan.time_order_scans(scans)[0]</div>
+
+
+<div class="viewcode-block" id="SofiaScan.get_latest_scan">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.get_latest_scan">[docs]</a>
+    @staticmethod
+    def get_latest_scan(scans):
+        &quot;&quot;&quot;
+        Return the latest scan in a list of scans determined by MJD.
+
+        Parameters
+        ----------
+        scans : list (Scan)
+
+        Returns
+        -------
+        Scan
+        &quot;&quot;&quot;
+        return SofiaScan.time_order_scans(scans)[-1]</div>
+
+
+<div class="viewcode-block" id="SofiaScan.read">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.read">[docs]</a>
+    def read(self, filename, read_fully=True):
+        &quot;&quot;&quot;
+        Read a filename to populate the scan.
+
+        The read should validate the channels before instantiating integrations
+        for reading.
+
+        Parameters
+        ----------
+        filename : str
+            The name of the file to read.
+        read_fully : bool, optional
+            If `True`, perform a full read (default)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if isinstance(filename, fits.HDUList):
+            self.hdul = filename
+        else:
+            self.hdul = fits.open(filename)
+        self.read_hdul(self.hdul, read_fully=read_fully)
+        self.close_fits()</div>
+
+
+<div class="viewcode-block" id="SofiaScan.close_fits">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.close_fits">[docs]</a>
+    def close_fits(self):
+        &quot;&quot;&quot;
+        Close the scan FITS file.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.hdul is None:
+            return
+        self.hdul.close()
+        self.hdul = None</div>
+
+
+<div class="viewcode-block" id="SofiaScan.read_hdul">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.read_hdul">[docs]</a>
+    def read_hdul(self, hdul, read_fully=True):
+        &quot;&quot;&quot;
+        Read an open FITS HDUL.
+
+        Parameters
+        ----------
+        hdul : fits.HDUList
+            The FITS HDU list to read.
+        read_fully : bool, optional
+            If `True` (default), fully read the file.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.info.parse_header(hdul[0].header.copy())
+        self.channels.read_data(hdul)
+        self.channels.validate_scan(self)
+        self.integrations = []
+        self.add_integrations_from_hdul(self.hdul)
+        if self.size == 0:
+            return
+        self.info.sampling_interval = self[0].info.sampling_interval.copy()
+        self.info.integration_time = self[0].info.integration_time.copy()</div>
+
+
+<div class="viewcode-block" id="SofiaScan.is_aor_valid">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.is_aor_valid">[docs]</a>
+    def is_aor_valid(self):
+        &quot;&quot;&quot;
+        Checks whether the observation AOR ID is valid.
+
+        Returns
+        -------
+        valid : bool
+        &quot;&quot;&quot;
+        return self.info.observation.is_aor_valid()</div>
+
+
+<div class="viewcode-block" id="SofiaScan.is_coordinate_valid">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.is_coordinate_valid">[docs]</a>
+    def is_coordinate_valid(self, coordinate):
+        &quot;&quot;&quot;
+        Checks whether coordinates are valid.
+
+        Parameters
+        ----------
+        coordinate : Coordinate2D
+
+        Returns
+        -------
+        valid : bool
+        &quot;&quot;&quot;
+        return self.astrometry.coordinate_valid(coordinate)</div>
+
+
+<div class="viewcode-block" id="SofiaScan.is_requested_valid">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.is_requested_valid">[docs]</a>
+    def is_requested_valid(self, header):
+        &quot;&quot;&quot;
+        Check if the requested coordinates are valid.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        valid : bool
+        &quot;&quot;&quot;
+        return self.astrometry.is_requested_valid(header)</div>
+
+
+<div class="viewcode-block" id="SofiaScan.guess_reference_coordinates">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.guess_reference_coordinates">[docs]</a>
+    def guess_reference_coordinates(self, header=None):
+        &quot;&quot;&quot;
+        Guess the reference coordinates of the scan from the header.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.Header, optional
+            The header from which to guess the coordinates.  If not supplied,
+            is read from the stored configuration.
+
+        Returns
+        -------
+        coordinates : EquatorialCoordinates
+        &quot;&quot;&quot;
+        return self.astrometry.guess_reference_coordinates(
+            telescope=self.info.telescope, header=header)</div>
+
+
+<div class="viewcode-block" id="SofiaScan.edit_scan_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.edit_scan_header">[docs]</a>
+    def edit_scan_header(self, header):
+        &quot;&quot;&quot;
+        Edit scan FITS header information.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The header to edit.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        line = &quot; ----------------------------------------------------&quot;
+        super().edit_scan_header(header)
+        header[&#39;COMMENT&#39;] = line
+        header[&#39;COMMENT&#39;] = &quot; Section for preserved SOFIA header data&quot;
+        header[&#39;COMMENT&#39;] = line
+
+        if self.astrometry.file_date is not None:
+            header[&#39;DATE&#39;] = (self.astrometry.file_date,
+                              &#39;Scan file creation date.&#39;)
+        if self.info.origin.checksum is not None:
+            header[&#39;DATASUM&#39;] = (self.info.origin.checksum,
+                                 &#39;Data file checksum.&#39;)
+        if self.info.origin.checksum_version is not None:
+            header[&#39;CHECKVER&#39;] = (self.info.origin.checksum_version,
+                                  &#39;Checksum method version.&#39;)
+
+        self.info.edit_header(header)
+
+        header[&#39;COMMENT&#39;] = line
+        header[&#39;COMMENT&#39;] = &quot; Section for scan-specific processing history&quot;
+        header[&#39;COMMENT&#39;] = line
+
+        self.info.add_history(header, scans=None)</div>
+
+
+<div class="viewcode-block" id="SofiaScan.validate">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.validate">[docs]</a>
+    def validate(self):
+        &quot;&quot;&quot;
+        Validate the scan after a read.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.configuration.get_bool(&#39;lab&#39;):
+            self.astrometry.validate_astrometry(self)
+        super().validate()</div>
+
+
+<div class="viewcode-block" id="SofiaScan.get_telescope_vpa">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.get_telescope_vpa">[docs]</a>
+    def get_telescope_vpa(self):
+        &quot;&quot;&quot;
+        Return the telescope VPA.
+
+        The value represents the midpoint of the first and last frames of the
+        first and last integrations respectively.
+
+        Returns
+        -------
+        angle : astropy.units.Quantity
+        &quot;&quot;&quot;
+        return self.frame_midpoint_value(&#39;telescope_vpa&#39;)</div>
+
+
+<div class="viewcode-block" id="SofiaScan.get_instrument_vpa">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.get_instrument_vpa">[docs]</a>
+    def get_instrument_vpa(self):
+        &quot;&quot;&quot;
+        Return the instrument VPA.
+
+        The value represents the midpoint of the first and last frames of the
+        first and last integrations respectively.
+
+        Returns
+        -------
+        angle : astropy.units.Quantity
+        &quot;&quot;&quot;
+        return self.frame_midpoint_value(&#39;instrument_vpa&#39;)</div>
+
+
+<div class="viewcode-block" id="SofiaScan.get_id">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.get_id">[docs]</a>
+    def get_id(self):
+        &quot;&quot;&quot;
+        Return the scan ID.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        obs_id = self.info.observation.obs_id
+        if obs_id is None:
+            return f&#39;{self.info.astrometry.date}.UNKNOWN&#39;
+        elif obs_id.lower().startswith(&#39;unknown&#39;):
+            return f&#39;{self.info.astrometry.date}.{obs_id[7:]}&#39;
+        else:
+            return obs_id</div>
+
+
+<div class="viewcode-block" id="SofiaScan.get_pointing_data">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.get_pointing_data">[docs]</a>
+    def get_pointing_data(self):
+        &quot;&quot;&quot;
+        Return pointing data information.
+
+        Returns
+        -------
+        data : dict
+        &quot;&quot;&quot;
+        data = super().get_pointing_data()
+        relative = self.get_native_pointing(self.pointing)
+        si_offset = self.get_si_pixel_offset(relative)
+        data[&#39;dSIBSX&#39;] = si_offset.x
+        data[&#39;dSIBSY&#39;] = si_offset.y
+        return data</div>
+
+
+<div class="viewcode-block" id="SofiaScan.get_flight_number">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.get_flight_number">[docs]</a>
+    def get_flight_number(self):
+        &quot;&quot;&quot;
+        Return the flight number for the scan.
+
+        Returns
+        -------
+        flight : int
+            Returns the flight number or -1 if not found.
+        &quot;&quot;&quot;
+        mission_id = self.info.mission.mission_id
+        if mission_id is None:
+            return -1
+        flight = re.search(r&#39;_F(\d+)&#39;, mission_id)
+        if flight is None:
+            return -1
+        return int(flight.groups()[0])</div>
+
+
+<div class="viewcode-block" id="SofiaScan.get_scan_number">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.get_scan_number">[docs]</a>
+    def get_scan_number(self):
+        &quot;&quot;&quot;
+        Return the scan number.
+
+        Returns
+        -------
+        scan_number : int
+            The scan number if found and -1 otherwise.
+        &quot;&quot;&quot;
+        if not isinstance(self.info.observation.obs_id, str):
+            return -1
+        scan_number = re.search(r&#39;-(\d+)&#39;, self.info.observation.obs_id)
+        if scan_number is None:
+            return -1
+        return int(scan_number.groups()[-1])</div>
+
+
+<div class="viewcode-block" id="SofiaScan.get_table_entry">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Return a parameter value for the given name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the parameter to retrieve.
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        if name == &#39;obstype&#39;:
+            return self.info.observation.obs_type
+        elif name == &#39;flight&#39;:
+            return self.get_flight_number()
+        elif name == &#39;scanno&#39;:
+            return self.get_scan_number()
+        elif name == &#39;date&#39;:
+            return self.astrometry.date
+
+        for group_name, group in self.info.available_info.items():
+            if group is None:  # pragma: no cover
+                continue
+            prefix = group.log_prefix
+            if name.startswith(group.log_prefix):
+                return group.get_table_entry(name[len(prefix):])
+
+        return super().get_table_entry(name)</div>
+
+
+<div class="viewcode-block" id="SofiaScan.get_nominal_pointing_offset">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.get_nominal_pointing_offset">[docs]</a>
+    def get_nominal_pointing_offset(self, native_pointing):
+        &quot;&quot;&quot;
+        Get the nominal point offset for a native pointing coordinate.
+
+        The nominal pointing offset ignores the reference coordinate of the
+        supplied `native_coordinate` and adds the offset values to the pointing
+        offset stored in the configuration.
+
+        Parameters
+        ----------
+        native_pointing : Offset2D
+            The native pointing offset.  The reference position is ignored.
+
+        Returns
+        -------
+        nominal_pointing_offset: Coordinate2D
+        &quot;&quot;&quot;
+        offset = Coordinate2D(native_pointing)
+        if self.configuration.is_configured(&#39;pointing&#39;):
+            pointing_offset = Coordinate2D(
+                self.configuration.get_float_list(&#39;pointing&#39;), unit=&#39;arcsec&#39;)
+            offset.add(pointing_offset)
+        return offset</div>
+
+
+<div class="viewcode-block" id="SofiaScan.get_si_arcseconds_offset">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.get_si_arcseconds_offset">[docs]</a>
+    def get_si_arcseconds_offset(self, native_pointing):
+        &quot;&quot;&quot;
+        Get the offsets of the science instrument in arcseconds.
+
+        Parameters
+        ----------
+        native_pointing : Offset2D
+            The native pointing offset.  The reference position is ignored.
+
+        Returns
+        -------
+        Coordinate2D
+        &quot;&quot;&quot;
+        arc_offset = self.get_nominal_pointing_offset(native_pointing)
+        arc_offset.change_unit(&#39;arcsec&#39;)
+        return arc_offset</div>
+
+
+<div class="viewcode-block" id="SofiaScan.get_si_pixel_offset">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.get_si_pixel_offset">[docs]</a>
+    def get_si_pixel_offset(self, native_pointing):
+        &quot;&quot;&quot;
+        Get the pixel offset of the science instrument.
+
+        Parameters
+        ----------
+        native_pointing : Offset2D
+            The native pointing offset.  The reference position is ignored.
+
+        Returns
+        -------
+        Coordinate2D
+        &quot;&quot;&quot;
+        si_offset = self.get_nominal_pointing_offset(native_pointing)
+        angle = self.get_telescope_vpa() - self.get_instrument_vpa()
+
+        Coordinate2D.rotate_offsets(si_offset, angle)
+        Coordinate2D.rotate_offsets(si_offset, -self.channels.rotation)
+        pixel_size = self.channels.get_si_pixel_size()
+
+        pixel_coordinates = si_offset.coordinates / pixel_size.coordinates
+        pixel_coordinates = pixel_coordinates.decompose().value
+        reference = np.zeros(2, dtype=float)
+        return Offset2D(reference, coordinates=pixel_coordinates)</div>
+
+
+<div class="viewcode-block" id="SofiaScan.get_pointing_string_from_increment">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.get_pointing_string_from_increment">[docs]</a>
+    def get_pointing_string_from_increment(self, native_pointing):
+        &quot;&quot;&quot;
+        Return a string representing the scan pointing.
+
+        Parameters
+        ----------
+        native_pointing : Offset2D
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        si_offset = self.get_si_pixel_offset(native_pointing)
+        result = super().get_pointing_string_from_increment(native_pointing)
+        result += (f&quot;\n\n  SIBS offset --&gt; &quot;
+                   f&quot;{si_offset.x:.4f}, {si_offset.y:.4f} pixels&quot;)
+        return result</div>
+
+
+<div class="viewcode-block" id="SofiaScan.edit_pointing_header_info">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.edit_pointing_header_info">[docs]</a>
+    def edit_pointing_header_info(self, header):
+        &quot;&quot;&quot;
+        Edit pointing information in a header.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The FITS header to edit.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().edit_pointing_header_info(header)
+        native_pointing = self.get_native_pointing_increment(self.pointing)
+        si_offset = self.get_si_pixel_offset(native_pointing)
+        dx, dy = si_offset.x, si_offset.y
+        if isinstance(dx, units.Quantity):  # pragma: no cover
+            dx, dy = dx.decompose().value, dy.decompose().value
+
+        offset = self.get_si_arcseconds_offset(native_pointing)
+        xel, el = offset.x, offset.y
+        header[&#39;SIBS_DX&#39;] = dx, &#39;(pixels) SIBS pointing increment in X.&#39;
+        header[&#39;SIBS_DY&#39;] = dy, &#39;(pixels) SIBS pointing increment in Y.&#39;
+        header[&#39;SIBS_DXE&#39;] = (
+            to_header_float(xel, &#39;arcsec&#39;),
+            &quot;(arcsec) SIBS cross-elevation offset&quot;)
+        header[&#39;SIBS_DE&#39;] = (
+            to_header_float(el, &#39;arcsec&#39;),
+            &quot;(arcsec) SIBS elevation offset&quot;)</div>
+
+
+<div class="viewcode-block" id="SofiaScan.add_integrations_from_hdul">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.html#sofia_redux.scan.custom.sofia.scan.scan.SofiaScan.add_integrations_from_hdul">[docs]</a>
+    @abstractmethod
+    def add_integrations_from_hdul(self, hdul):  # pragma: no cover
+        &quot;&quot;&quot;
+        Add integrations to this scan from a HDU list.
+
+        Parameters
+        ----------
+        hdul : fits.HDUList
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

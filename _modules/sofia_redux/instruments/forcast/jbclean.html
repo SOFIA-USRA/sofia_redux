@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.jbclean &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.jbclean</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from warnings import catch_warnings, simplefilter
+
+from astropy import log
+from astropy.io.fits.header import Header
+import numpy as np
+from scipy import fftpack
+from scipy.ndimage import median_filter
+
+from sofia_redux.toolkit.utilities.fits import add_history_wrap
+
+from sofia_redux.instruments.forcast.getpar import getpar
+
+addhist = add_history_wrap(&#39;JBClean&#39;)
+
+__all__ = [&#39;jbfft&#39;, &#39;jbmedian&#39;, &#39;jbclean&#39;]
+
+
+def _nanmedian(*args, **kwargs):
+    &quot;&quot;&quot;Wrap nanmedian to ignore errors.&quot;&quot;&quot;
+    with catch_warnings():
+        simplefilter(&#39;ignore&#39;)
+        return np.nanmedian(*args, **kwargs)
+
+
+<div class="viewcode-block" id="jbfft">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.jbclean.jbfft.html#sofia_redux.instruments.forcast.jbclean.jbfft">[docs]</a>
+def jbfft(data, bar_spacing=16):
+    &quot;&quot;&quot;
+    Remove jailbars with FFT
+
+    Interpolate over NaNs in the direction of the jailbars
+    (y-direction).  Filters in the x-direction using FFT to
+    remove jailbars.  NaNs are replaced following jailbar
+    removal.  Other functions such as maskinterp should be
+    used to replace NaNs after jailbar removal.
+
+    Notes
+    -----
+    Filtering in the frequency domain inserts an amplitude
+    error in the output of the order (jailbar amplitude / 16).
+    Not noticable if jailbars are not significant, but still
+    noticable.  Someone with more FFT knowledge than me should
+    try and fix this.  Thankfully &#39;MEDIAN&#39; is the default jailbar
+    removal method.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        (nrow, ncol)
+    bar_spacing : int, optional
+        known jailbar spacing between columns
+
+    Returns
+    -------
+    numpy.ndarray
+        Clean data array (nrow, ncol)
+    &quot;&quot;&quot;
+    if not isinstance(data, np.ndarray):
+        log.error(&quot;data is not %s&quot; % np.ndarray)
+        return data
+    mask = np.isnan(data)
+    if mask.all():
+        log.warning(&quot;data are all NaN&quot;)
+        return data
+    masked = data.copy()
+    if mask.any():
+        # interpolate over NaNs along bar direction
+        y = np.arange(data.shape[0])
+        for x in range(data.shape[1]):
+            d, m = masked[:, x], mask[:, x]
+            if m.all():
+                continue
+            masked[:, x] = np.interp(y, y[~m], d[~m])
+        # If any NaNs are left, just default to median
+        masked[np.isnan(masked)] = _nanmedian(masked)
+
+    # Create mask in Fourier space
+    nbars = data.shape[1] // bar_spacing
+    jailbar_mask = np.full(data.shape, complex(1.0))
+    for idx in range(nbars - 1):
+        jailbar_mask[:, (idx + 1) * bar_spacing] = 0
+
+    fft_data = fftpack.fft(masked)
+    fft_filtered = fft_data * jailbar_mask
+    filtered = np.abs(fftpack.ifft(fft_filtered))
+
+    # put NaNs back in
+    filtered[mask] = np.nan
+    return filtered</div>
+
+
+
+<div class="viewcode-block" id="jbmedian">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.jbclean.jbmedian.html#sofia_redux.instruments.forcast.jbclean.jbmedian">[docs]</a>
+def jbmedian(data, width=4, bar_spacing=16, mode=&#39;wrap&#39;):
+    &quot;&quot;&quot;
+    Remove jailbars using the median of correlated columns
+
+    Replace the jailbar pattern with the median of correlated columns
+    (every 16).  Large scale variations are removed by subtracting
+    an image smoothed with a 16-pixel box.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        (nrow, ncol) input data array
+    bar_spacing : int, optional
+        known jailbar spacing between columns
+    width : int, optional
+        median filtering will be applied along rows using a kernel
+        width of `bar_spacing + width`.  An additional pixel will be
+        added to make the kernel odd sized if necessary.
+    mode : str, optional
+        Specifies the edge handling mode for median filter.
+
+    Returns
+    -------
+    numpy.ndarray
+        (nrow, ncol) cleaned data array
+    &quot;&quot;&quot;
+    if not isinstance(data, np.ndarray):
+        log.error(&quot;data is not %s&quot; % np.ndarray)
+        return data
+    if np.isnan(data).all():
+        log.warning(&quot;data are all NaN&quot;)
+        return data
+
+    kw = bar_spacing + width
+    kw += (kw % 2) == 0
+    if kw &lt;= 1:
+        raise ValueError(&#39;Width is too small&#39;)
+    filtered = median_filter(data, size=(1, kw), mode=mode)
+    jailbar = data - filtered
+
+    nbars = data.shape[1] // bar_spacing
+    indices = np.arange(nbars) * bar_spacing
+    for row in jailbar:
+        for offset in range(bar_spacing):
+            row[indices + offset] = _nanmedian(row[indices + offset])
+
+    # only happens if data.shape % bar_spacing != 0 (shouldn&#39;t happen)
+    # it&#39;s here for completeness
+    missed = data.shape[0] - (nbars * bar_spacing)
+    if missed &gt; 0:
+        for row in jailbar:
+            for offset in range(missed):
+                idx = offset + 1
+                row[-idx] = _nanmedian(row[indices + bar_spacing - idx])
+
+    return data - jailbar</div>
+
+
+
+<div class="viewcode-block" id="jbclean">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.jbclean.jbclean.html#sofia_redux.instruments.forcast.jbclean.jbclean">[docs]</a>
+def jbclean(data, header=None, variance=None, bar_spacing=16, width=4,
+            mode=&#39;wrap&#39;):
+    &quot;&quot;&quot;
+    Removes &quot;jailbar&quot; artifacts from images
+
+    Filter the input data with a 16x16 box and remove the filtered
+    image from the input image.  Then, the jail bar is most of the
+    features found in the subtracted image.  We use this image to
+    calculate the jail bar using median.  This function checks the
+    configuration file (dripconf.txt) for a preferred method.  If
+    JBCLEAN is set to fft, it does a Fourier transform of the image,
+    to mask the 16-pixel periodic jailbar pattern.  This median
+    method appears to work better than the fft method in most cases
+    and is recommended.  If JBCLEAN is set to n, no jailbar correction
+    is performed.  Note that if JBCLEAN=fft, this function is called
+    by sofia_redux.instruments.forcast.clean on raw frames;
+    if JBCLEAN=median, this function is called by
+    sofia_redux.instruments.forcast.stack, on the chop/nod subtracted frames.
+
+    Note: for now, it is assumed that the jailbar has no error, so the
+    variance, if passed, is not modified.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        Input data array (nrow, ncol)
+    header : astropy.io.fits.header.Header, optional
+        Input header; will be updated with HISTORY message
+    variance : numpy.ndarray, optional
+        Variance array (nrow, ncol) to update in parallel with
+        the data array
+    bar_spacing : int, optional
+        known jailbar spacing between columns
+    width : int, optional
+        Only applies if JBCLEAN=median.  See `jbmedian` for details
+    mode : str, optional
+        Specifies the edge handling mode for median filter. Only applies
+        if JBCLEAN=median.
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        Jailbar-cleaned array (nimage, nrow, ncol) or (nrow, ncol)
+        Propagated variance (nimage, nrow, ncol) or (nrow, ncol)
+    &quot;&quot;&quot;
+    if not isinstance(header, Header):
+        header = Header()
+        addhist(header, &#39;Invalid header&#39;)
+
+    var = variance.copy() if isinstance(variance, np.ndarray) else None
+    if not isinstance(data, np.ndarray) or len(data.shape) != 2:
+        addhist(header, &#39;Did not clean jailbar (Invalid data)&#39;)
+        log.error(&quot;must provide a valid 2D %s&quot; % np.ndarray)
+        return
+
+    dovar = isinstance(var, np.ndarray) and var.shape == data.shape
+    var = None if not dovar else var
+    if variance is not None and not dovar:
+        addhist(header, &#39;Not propagating variance (Invalid variance)&#39;)
+        log.warning(&quot;Variance must match data: %s&quot; % type(variance))
+        return
+
+    jbcleaned = data.copy()
+    jbmethod = getpar(header, &#39;JBCLEAN&#39;, default=None, dtype=str,
+                      comment=&quot;Jail bar cleaning algorithm&quot;)
+    jbmethod = jbmethod.upper().strip()
+    if jbmethod == &#39;FFT&#39;:
+        jbcleaned = jbfft(jbcleaned, bar_spacing=bar_spacing)
+    elif jbmethod == &#39;MEDIAN&#39;:
+        jbcleaned = jbmedian(jbcleaned, bar_spacing=bar_spacing, width=width,
+                             mode=mode)
+    else:
+        addhist(header, &#39;Jailbars not cleaned (invalid method)&#39;)
+        log.error(&quot;jailbar method %s unrecognized&quot; % jbmethod)
+        return
+
+    return jbcleaned, var</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

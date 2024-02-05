@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.visualization.models.low_model &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.visualization.models.low_model</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from typing import Dict, Union, Sequence, TypeVar
+from copy import deepcopy
+import astropy.io.fits as pf
+import astropy.units as u
+import numpy as np
+
+from sofia_redux.visualization import log
+from sofia_redux.visualization.utils import unit_conversion as uc
+from sofia_redux.visualization.utils.eye_error import EyeError
+
+__all__ = [&#39;LowModel&#39;, &#39;Image&#39;, &#39;Spectrum&#39;]
+
+Data = TypeVar(&#39;Data&#39;, np.ndarray, Sequence)
+
+
+<div class="viewcode-block" id="LowModel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.low_model.LowModel.html#sofia_redux.visualization.models.low_model.LowModel">[docs]</a>
+class LowModel(object):
+    &quot;&quot;&quot;
+    Describe a low-level data object.
+
+    A low-level data object holds a single data array
+    and the information describing it, such as the
+    kind of data it holds and the units.
+
+    Parameters
+    ----------
+    hdu : astropy.io.fits.ImageHDU
+        The FITS HDU to load.
+    filename : str
+        Filename associated with the FITS HDU.
+    kwargs : dict, optional
+        Optional keywords to set `name`, `data`, and `kind`
+        properties.
+
+    Attributes
+    ----------
+    header : astropy.io.fits.Header
+        FITS header.
+    filename : str
+        Filename associated with the FITS HDU.
+    unit : str
+        Unit associated with the data.
+    unit_key : str
+        Associated keyword to parse corresponding units.
+        For example, &#39;XUNITS&#39; for x-axis units.
+    name : str
+        Name of FITS extension. For example, wavepos, slitpos,
+        spectral_flux, or spectral_error.
+    data : np.ndarray
+        Data from the FITS HDU.
+    kind : str
+        Determines the variable kind (e.g. &#39;wavelength&#39;), to determine
+        its units.
+    available_units : dict
+        Recognized units that can be converted from or to.
+    kind_names : Dict
+        Dictionary of variable kinds depending on if its Image or a spectrum.
+    default_ndims : int
+        Default data dimensions.
+    id : str
+        Full name including the filename and extension name.
+    enabled : bool
+        Indicates if the data set is enabled or not.
+    &quot;&quot;&quot;
+
+    def __init__(self, hdu: pf.ImageHDU, filename: str, **kwargs) -&gt; None:
+        self.header = hdu.header.copy()  # Should this be here or not?
+        self.filename = filename
+        self.unit = None
+        self.unit_key = &#39;&#39;
+        self.name = kwargs.get(&#39;name&#39;, hdu.name.lower())
+        self.data = kwargs.get(&#39;data&#39;, hdu.data)
+        self.kind = kwargs.get(&#39;kind&#39;, &#39;&#39;)
+        self.available_units = self._define_units()
+        self.kind_names = dict()
+
+        self.default_ndims = 0
+        self.id = None
+        self.enabled = True
+
+    def __copy__(self):  # pragma: no cover
+        cls = self.__class__
+        new = cls.__new__(cls)
+        new.__dict__.update(self.__dict__)
+        return new
+
+    def __deepcopy__(self, memodict):
+        cls = self.__class__
+        new = cls.__new__(cls)
+        memodict[id(self)] = new
+        for k, v in self.__dict__.items():
+            setattr(new, k, deepcopy(v, memodict))
+        return new
+
+    @staticmethod
+    def _define_units() -&gt; Dict[str, Dict[str, Union[str, u.Quantity]]]:
+        &quot;&quot;&quot;Define common units and their astropy equivalent.&quot;&quot;&quot;
+        wavelength_units = {&#39;um&#39;: u.um, &#39;nm&#39;: u.nm,
+                            u&#39;\u212B&#39;: u.angstrom,
+                            &#39;cm-1&#39;: u.kayser,
+                            &#39;pixel&#39;: u.pix
+                            }
+        flux_units = {&#39;Jy&#39;: u.Jy,
+                      &#39;W / m2&#39;: u.W / u.m ** 2,
+                      &#39;W / (m2 Hz)&#39;: u.W / (u.m ** 2 * u.Hz),
+                      &#39;W / (m2 um)&#39;: u.W / (u.m ** 2 * u.um),
+                      &#39;erg / (s cm2 Angstrom)&#39;:
+                          u.erg / (u.s * u.cm ** 2 * u.AA),
+                      &#39;erg / (s cm2 Hz)&#39;: u.erg / (u.s * u.cm ** 2 * u.Hz)
+                      }
+        scale_units = {&#39;&#39;: &#39;&#39;}
+        unitless = {&#39;&#39;: u.dimensionless_unscaled}
+        position_units = {&#39;arcsec&#39;: u.arcsec,
+                          &#39;degree&#39;: u.deg,
+                          &#39;arcmin&#39;: u.arcmin,
+                          &#39;pixel&#39;: u.pix
+                          }
+        time_units = {&#39;sec&#39;: u.s,
+                      &#39;pixel&#39;: u.pix}
+        response_units = {&#39;Me / (Jy s)&#39;: u.Mct / (u.Jy * u.s)}
+
+        available_units = {&#39;scale&#39;: scale_units,
+                           &#39;unitless&#39;: unitless,
+                           &#39;position&#39;: position_units,
+                           &#39;flux&#39;: flux_units,
+                           &#39;wavelength&#39;: wavelength_units,
+                           &#39;time&#39;: time_units,
+                           &#39;response&#39;: response_units}
+        return available_units
+
+<div class="viewcode-block" id="LowModel.get_unit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.low_model.LowModel.html#sofia_redux.visualization.models.low_model.LowModel.get_unit">[docs]</a>
+    def get_unit(self) -&gt; str:
+        &quot;&quot;&quot;Get the current data unit.&quot;&quot;&quot;
+        return self.unit_key</div>
+
+
+    def __eq__(self, other: &#39;LowModel&#39;) -&gt; bool:
+        &quot;&quot;&quot;Models are equal if they share a filename.&quot;&quot;&quot;
+        return self.filename == other.filename
+
+    def _parse_units(self, **kwargs) -&gt; None:
+        &quot;&quot;&quot;
+        Determine the initial units of the data.
+
+        Attempt to pull the unit from the header, based
+        on the BUNIT, X/YUNIT, X/YUNITS in decreasing
+        priority. If a unit is provided in `kwargs` it will
+        override all header values.
+
+        Parameters
+        ----------
+        kwargs : dict, optional
+            If `unit` keyword is present, it will be used as
+            the unit directly.
+        &quot;&quot;&quot;
+        if self.kind == &#39;wavelength&#39;:
+            header_keys = [&#39;BUNIT&#39;, &#39;XUNIT&#39;, &#39;XUNITS&#39;]
+        else:
+            header_keys = [&#39;BUNIT&#39;, &#39;YUNIT&#39;, &#39;YUNITS&#39;]
+        header_unit = &#39;&#39;
+        for key in header_keys:
+            try:
+                header_unit = self.header[key]
+            except KeyError:
+                continue
+            else:
+                break
+        unit = kwargs.get(&#39;unit&#39;, header_unit)
+        if unit is None:
+            unit = &#39;&#39;
+
+        self.unit = uc.parse_unit(unit)
+        self.unit_key = str(self.unit)
+
+        # special handling for initial pixel units:
+        # it is recorded as &#39;pixel&#39; everywhere else
+        if self.unit_key == &#39;pix&#39;:
+            self.unit_key = &#39;pixel&#39;
+
+        self._verify_unit_parse()
+
+    def _verify_unit_parse(self) -&gt; None:
+        &quot;&quot;&quot;
+        Verify the unit was successfully parsed.
+
+        Raises
+        -------
+        RuntimeError
+            If the resulting unit or unit_key is not
+            contained in the available units.
+        &quot;&quot;&quot;
+        if not isinstance(self.unit, u.UnitBase):
+
+            message = (f&#39;Failure to parse unit for {self.filename}, &#39;
+                       f&#39;{self.name}: {self.kind}, {self.unit} &#39;
+                       f&#39;({type(self.unit)}&#39;)
+            log.error(message)
+            raise RuntimeError(message)
+
+        # non-standard unit found: allow it, but disable conversion
+        if self.unit not in self.available_units[self.kind].values():
+            log.debug(f&#39;Non-standard unit found: {self.unit_key}. &#39;
+                      f&#39;Disabling conversion.&#39;)
+            self.available_units[self.kind] = {self.unit_key: self.unit}
+
+    def _parse_kind(self) -&gt; None:
+        &quot;&quot;&quot;
+        Parse the kind of data from the extension name.
+
+        Raises
+        -------
+        RuntimeError
+            If a valid kind is not found.
+        &quot;&quot;&quot;
+        name = self.name.split(&#39;_order&#39;)[0]
+        for kind, names in self.kind_names.items():
+            if name in names:
+                self.kind = kind
+        if not self.kind:
+            raise RuntimeError(f&#39;Failed to parse kind for {self.filename} &#39;
+                               f&#39;{self.name}&#39;)
+
+<div class="viewcode-block" id="LowModel.convert">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.low_model.LowModel.html#sofia_redux.visualization.models.low_model.LowModel.convert">[docs]</a>
+    def convert(self, target_unit: str, wavelength: Data,
+                wavelength_unit: str) -&gt; None:
+        &quot;&quot;&quot;
+        Convert units.
+
+        Parameters
+        ----------
+        target_unit : str
+            Unit to convert to.
+        wavelength : array-like
+            Wavelength data array associated with current data.
+        wavelength_unit : str
+            Wavelength units.
+
+        Raises
+        ------
+        ValueError
+            If conversion cannot be completed.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="LowModel.retrieve">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.low_model.LowModel.html#sofia_redux.visualization.models.low_model.LowModel.retrieve">[docs]</a>
+    def retrieve(self) -&gt; np.ndarray:
+        &quot;&quot;&quot;
+        Retrieve data array from the model.
+
+        Returns
+        -------
+        data: np.ndarray
+            Data from FITS file in a numpy array.
+        &quot;&quot;&quot;
+        return self.data</div>
+
+
+<div class="viewcode-block" id="LowModel.set_visibility">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.low_model.LowModel.html#sofia_redux.visualization.models.low_model.LowModel.set_visibility">[docs]</a>
+    def set_visibility(self, enabled: bool) -&gt; None:
+        &quot;&quot;&quot;
+        Set visibility for the model.
+
+        Parameters
+        ----------
+        enabled : bool
+            If True, the model is enabled. If False, it is disabled.
+        &quot;&quot;&quot;
+        self.enabled = enabled</div>
+</div>
+
+
+
+<div class="viewcode-block" id="Image">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.low_model.Image.html#sofia_redux.visualization.models.low_model.Image">[docs]</a>
+class Image(LowModel):
+    &quot;&quot;&quot;
+    Low-level data model for an image.
+
+    Attributes
+    ----------
+    default_ndims : int
+        Default data dimensions.
+    kind : str
+        The kind of data contained, eg. transmission, flux, error.
+    kind_names : dict
+        Extension names corresponding to particular data kinds.
+    &quot;&quot;&quot;
+
+    def __init__(self, *args, **kwargs) -&gt; None:
+
+        super().__init__(*args, **kwargs)
+
+        self.default_ndims = 2
+        self.kind = &#39;&#39;
+
+        self.kind_names = {&#39;scale&#39;: [&#39;transmission&#39;, &#39;aperture_mask&#39;],
+                           &#39;response&#39;: [&#39;response&#39;, &#39;response_error&#39;],
+                           &#39;position&#39;: [&#39;aperture_trace&#39;],
+                           &#39;unitless&#39;: [&#39;badmask&#39;, &#39;spatial_map&#39;, &#39;flat&#39;,
+                                        &#39;flat_error&#39;, &#39;flat_illumination&#39;,
+                                        &#39;order_mask&#39;, &#39;mask&#39;],
+                           &#39;flux&#39;: [&#39;flux&#39;, &#39;error&#39;, &#39;spatcal&#39;,
+                                    &#39;spectral_flux&#39;, &#39;spectral_error&#39;],
+                           &#39;time&#39;: [&#39;exposure&#39;]}
+        self._parse_kind()
+
+<div class="viewcode-block" id="Image.data_mean">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.low_model.Image.html#sofia_redux.visualization.models.low_model.Image.data_mean">[docs]</a>
+    def data_mean(self) -&gt; float:
+        &quot;&quot;&quot;
+        Calculate the mean of the contained data.
+
+        Returns
+        -------
+        mean: float
+            Mean of the loaded array.
+        &quot;&quot;&quot;
+        try:
+            mean = np.nanmean(self.data)
+        except (ValueError, AttributeError, TypeError):
+            mean = np.nan
+        return mean</div>
+
+
+<div class="viewcode-block" id="Image.convert">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.low_model.Image.html#sofia_redux.visualization.models.low_model.Image.convert">[docs]</a>
+    def convert(self, target_unit: str, wavelength: Data,
+                wavelength_unit: str) -&gt; None:
+        &quot;&quot;&quot;
+        Convert units.
+
+        Parameters
+        ----------
+        target_unit : str
+            Unit to convert to.
+        wavelength : array-like
+            Wavelength data array associated with current data.
+        wavelength_unit : str
+            Wavelength units.
+
+        Raises
+        ------
+        ValueError
+            If conversion cannot be completed.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+</div>
+
+
+
+<div class="viewcode-block" id="Spectrum">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.low_model.Spectrum.html#sofia_redux.visualization.models.low_model.Spectrum">[docs]</a>
+class Spectrum(LowModel):
+    &quot;&quot;&quot;
+    Class for holding simple 1D spectra.
+
+    Attributes
+    ----------
+    default_ndims : int
+        Default data dimensions.
+    id : str
+        Filename associated with the FITS file.
+    data : np.ndarray
+        Data from the FITS HDU.
+    kind_names : dict
+        Extension names associated with particular data kinds.
+    &quot;&quot;&quot;
+
+    def __init__(self, *args, **kwargs) -&gt; None:
+        super().__init__(*args, **kwargs)
+
+        self.default_ndims = 1
+        self.id = f&#39;{self.filename}/{self.name}&#39;
+        self.data = np.squeeze(self.data)
+        if self.data.ndim != 1:
+            raise EyeError(f&#39;Spectrum for {self.id} has {self.data.ndim} &#39;
+                           f&#39;dimensions and can only have 1.&#39;)
+
+        self.kind_names = {&#39;scale&#39;: [&#39;transmission&#39;],
+                           &#39;response&#39;: [&#39;response&#39;, &#39;response_error&#39;],
+                           &#39;unitless&#39;: [&#39;spatial_profile&#39;, &#39;aperture_mask&#39;,
+                                        &#39;spatial_map&#39;, &#39;badmask&#39;],
+                           &#39;flux&#39;: [&#39;spectral_flux&#39;, &#39;spectral_error&#39;,
+                                    &#39;flux&#39;, &#39;error&#39;],
+                           &#39;wavelength&#39;: [&#39;wavepos&#39;, &#39;slitpos&#39;],
+                           &#39;position&#39;: [&#39;slitpos&#39;],
+                           &#39;unrecog&#39;: [&#39;miscellaneous&#39;]}
+        self._parse_kind()
+
+        self._parse_units(**kwargs)
+
+<div class="viewcode-block" id="Spectrum.convert">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.low_model.Spectrum.html#sofia_redux.visualization.models.low_model.Spectrum.convert">[docs]</a>
+    def convert(self, target_unit: str, wavelength: Data,
+                wavelength_unit: str) -&gt; None:
+        &quot;&quot;&quot;
+        Convert units.
+
+        Parameters
+        ----------
+        target_unit : str
+            Unit to convert to.
+        wavelength : array-like
+            Wavelength data array associated with current data.
+        wavelength_unit : str
+            Wavelength units.
+
+        Raises
+        ------
+        ValueError
+            If conversion cannot be completed.
+        &quot;&quot;&quot;
+        if self.kind == &#39;flux&#39;:
+            self.data = uc.convert_flux(
+                in_flux=self.data, start_unit=self.unit_key,
+                end_unit=target_unit, wavelength=wavelength,
+                wave_unit=wavelength_unit)
+        elif self.kind in [&#39;wavelength&#39;, &#39;position&#39;]:
+            # this will work for any simple conversions handled
+            # by astropy
+            if target_unit == &#39;pixel&#39;:
+                self.data = np.arange(len(self.data)).astype(float)
+            else:
+                self.data = uc.convert_wave(
+                    wavelength=self.data, start_unit=self.unit_key,
+                    end_unit=target_unit)
+        elif self.kind in [&#39;scale&#39;, &#39;unitless&#39;]:
+            # no conversions to do for these types
+            return
+        elif self.kind in [&#39;response&#39;]:
+            if target_unit == &#39;pixel&#39;:
+                self.data = np.arange(len(self.data)).astype(float)
+            else:
+                self.data = uc.convert_flux(
+                    in_flux=self.data, start_unit=self.unit_key,
+                    end_unit=target_unit, wavelength=wavelength,
+                    wave_unit=wavelength_unit)
+        else:
+            msg = f&#39;Unknown conversion kind: {self.kind}&#39;
+            log.error(msg)
+            raise ValueError(msg)
+
+        self.unit_key = target_unit
+        try:
+            self.unit = u.Unit(target_unit)
+            self._verify_unit_parse()
+        except (ValueError, RuntimeError):
+            # allow unrecognized units to propagate anyway
+            self.unit = target_unit</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

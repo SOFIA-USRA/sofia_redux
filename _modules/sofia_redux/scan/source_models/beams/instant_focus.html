@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.source_models.beams.instant_focus &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.source_models.beams.instant_focus</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC
+from astropy import units
+from copy import deepcopy
+import numpy as np
+
+__all__ = [&#39;InstantFocus&#39;]
+
+
+<div class="viewcode-block" id="InstantFocus">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.instant_focus.InstantFocus.html#sofia_redux.scan.source_models.beams.instant_focus.InstantFocus">[docs]</a>
+class InstantFocus(ABC):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize an InstantFocus object.
+
+        The instant focus is designed to store focus measurements for later
+        access.  Focus measurements may be derived from the configuration,
+        asymmetry, and elliptical elongation parameters.
+        &quot;&quot;&quot;
+        self.x = None
+        self.x_weight = None
+        self.y = None
+        self.y_weight = None
+        self.z = None
+        self.z_weight = None
+
+<div class="viewcode-block" id="InstantFocus.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.instant_focus.InstantFocus.html#sofia_redux.scan.source_models.beams.instant_focus.InstantFocus.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the focus.
+
+        Returns
+        -------
+        InstantFocus
+        &quot;&quot;&quot;
+        return deepcopy(self)</div>
+
+
+<div class="viewcode-block" id="InstantFocus.copy_from">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.instant_focus.InstantFocus.html#sofia_redux.scan.source_models.beams.instant_focus.InstantFocus.copy_from">[docs]</a>
+    def copy_from(self, focus):
+        &quot;&quot;&quot;
+        Copy the focus from another focus object.
+
+        Parameters
+        ----------
+        focus : InstantFocus
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.x = focus.x
+        self.y = focus.y
+        self.z = focus.z
+        self.x_weight = focus.x_weight
+        self.y_weight = focus.y_weight
+        self.z_weight = focus.z_weight</div>
+
+
+    @property
+    def is_valid(self):
+        &quot;&quot;&quot;
+        Return whether the focus is valid.
+
+        For the focus to be valid, it must contain at least one value in the
+        x, y, or z attribute (not `None`).
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        if self.x is not None or self.y is not None or self.z is not None:
+            return True
+        return False
+
+    @property
+    def is_complete(self):
+        &quot;&quot;&quot;
+        Return whether all focus parameters are available.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        if self.x is None or self.y is None or self.z is None:
+            return False
+        return True
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the focus.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if not self.is_valid:
+            return &quot;No focus results&quot;
+        info = []
+        for param in [&#39;x&#39;, &#39;y&#39;, &#39;z&#39;]:
+            v, w = getattr(self, param), getattr(self, f&#39;{param}_weight&#39;)
+            if v is None:
+                continue
+            unit = None
+            if isinstance(v, units.Quantity):
+                unit = v.unit
+                v = v.value
+            if isinstance(w, units.Quantity):
+                w = w.value
+            if w is None or np.isnan(w) or w == 0:
+                rms = None
+            else:
+                rms = 1 / np.sqrt(w)
+            s = f&#39;{param}={v:.6f}&#39;
+            if rms is not None:
+                s += f&#39;+-{rms:.6f}&#39;
+            if unit is not None:
+                s += f&#39; {unit}&#39;
+            info.append(s)
+        return f&#39;Focus results: {&quot; &quot;.join(info)}&#39;
+
+    def __repr__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the focus instance.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return f&#39;{object.__repr__(self)} {self}&#39;
+
+    def __eq__(self, other):
+        &quot;&quot;&quot;
+        Check if this InstantFocus is equal to another.
+
+        Parameters
+        ----------
+        other : InstantFocus
+
+        Returns
+        -------
+        equal : bool
+        &quot;&quot;&quot;
+        if self is other:
+            return True
+        if self.__class__ != other.__class__:
+            return False
+        if self.x != other.x or self.x_weight != other.x_weight:
+            return False
+        if self.y != other.y or self.y_weight != other.y_weight:
+            return False
+        if self.z != other.z or self.z_weight != other.z_weight:
+            return False
+        return True
+
+<div class="viewcode-block" id="InstantFocus.derive_from">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.instant_focus.InstantFocus.html#sofia_redux.scan.source_models.beams.instant_focus.InstantFocus.derive_from">[docs]</a>
+    def derive_from(self, configuration, asymmetry=None, elongation=None,
+                    elongation_weight=None):
+        &quot;&quot;&quot;
+        Derive the focus from the asymmetry and elongation measurements.
+
+        The focus results are derived from the (x, y) asymmetry measurement,
+        and from the elongation in the z-direction.
+
+        Parameters
+        ----------
+        configuration : Configuration
+            The SOFSCAN configuration options.
+        asymmetry : Asymmetry2D, optional
+            The source asymmetry.
+        elongation : float, optional
+            The source elongation.
+        elongation_weight : float, optional
+            The source elongation weight.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.x = self.y = self.z = None
+        self.x_weight = self.y_weight = self.z_weight = None
+
+        mm = units.Unit(&#39;mm&#39;)
+        s2n = configuration.get_float(&#39;focus.significance&#39;, default=2.0)
+
+        if elongation is not None:
+            elongation -= configuration.get_float(
+                &#39;focus.elong0&#39;, default=0.0) * 0.01
+
+        for direction in [&#39;x&#39;, &#39;y&#39;, &#39;z&#39;]:
+            coeff = configuration.get_float(f&#39;focus.{direction}coeff&#39;,
+                                            default=np.nan)
+            if np.isnan(coeff) or coeff == 0:
+                continue  # pragma: no cover
+
+            if direction == &#39;z&#39;:
+                v = elongation
+                w = elongation_weight
+            elif asymmetry is None:
+                continue
+            else:
+                v = getattr(asymmetry, direction)
+                w = getattr(asymmetry, f&#39;{direction}_weight&#39;)
+
+            if v is None or w is None:
+                continue  # pragma: no cover
+
+            significance = np.abs(v) * np.sqrt(w)
+            if significance &lt;= s2n:
+                continue
+
+            scale = -mm / coeff
+            v *= scale
+            w /= scale * scale
+
+            scatter = configuration.get_float(f&#39;focus.{direction}scatter&#39;,
+                                              default=np.nan) * mm
+            if not np.isnan(scatter):
+                variance = (1.0 / w) + (scatter ** 2)
+                w = 1.0 / variance
+
+            setattr(self, direction, v)
+            setattr(self, f&#39;{direction}_weight&#39;, w)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

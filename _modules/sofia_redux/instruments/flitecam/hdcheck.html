@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.flitecam.hdcheck &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.flitecam.hdcheck</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import os
+
+from astropy import log
+from astropy.io import fits
+import configobj
+
+__all__ = [&#39;validate_header&#39;, &#39;hdcheck&#39;]
+
+
+<div class="viewcode-block" id="validate_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.flitecam.hdcheck.validate_header.html#sofia_redux.instruments.flitecam.hdcheck.validate_header">[docs]</a>
+def validate_header(header, keywords):
+    &quot;&quot;&quot;
+    Validate all keywords in a header against the keywords requirement.
+
+    Parameters
+    ----------
+    header : astropy.io.fits.Header
+    keywords : configobj.ConfigObj
+    dripconf : bool
+        If True, will check the configuration file for the required
+        parameter before checking headers (using getpar)
+
+    Returns
+    -------
+    bool
+        True if all keywords in the header were validated, False otherwise
+    &quot;&quot;&quot;
+    # Check a few important mode keywords
+    nodding = header.get(&#39;NODDING&#39;, False)
+    dithering = header.get(&#39;DITHER&#39;, False)
+
+    # Add any that are True to the requirement set
+    req_set = [&#39;*&#39;]
+    if nodding:
+        req_set.append(&#39;nodding&#39;)
+    if dithering:
+        req_set.append(&#39;dithering&#39;)
+
+    # Flag to track overall validity
+    valid = True
+
+    # Loop through keywords, checking against requirements
+    reqdict = keywords.dict()
+    for key, req in reqdict.items():
+        # Retrieve requirements
+        try:
+            req_category = str(req[&#39;requirement&#39;]).strip()
+        except KeyError:
+            req_category = &#39;*&#39;
+        try:
+            req_dtype = str(req[&#39;dtype&#39;]).strip()
+        except KeyError:
+            req_dtype = &#39;str&#39;
+        try:
+            req_drange = req[&#39;drange&#39;]
+        except KeyError:
+            req_drange = None
+
+        # Get type class corresponding to string
+        if req_dtype == &#39;bool&#39;:
+            req_dtype_class = bool
+        elif req_dtype == &#39;int&#39;:
+            req_dtype_class = int
+        elif req_dtype == &#39;float&#39;:
+            req_dtype_class = float
+        else:
+            req_dtype_class = str
+
+        # Check if key is required for this data type
+        if req_category not in req_set:
+            continue
+
+        # Retrieve value from header and/or config file
+        val = header.get(key, None)
+        valtype = type(val)
+        stype = valtype.__name__
+
+        # Check if required key is present
+        if val is None:
+            valid = False
+            msg = f&#39;Required keyword {key} not found&#39;
+            log.warning(msg)
+            continue
+
+        # Check if key matches required type
+        if req_dtype in [&#39;str&#39;, &#39;bool&#39;, &#39;int&#39;]:
+            # Use exact type for str, bool, int
+            if stype != req_dtype:
+                valid = False
+                msg = f&#39;Required keyword {key} has wrong &#39; \
+                      f&#39;type {stype}; should be {req_dtype}&#39;
+                log.warning(msg)
+                continue
+        elif req_dtype == &#39;float&#39;:
+            # Allow any number type for float types
+            if stype not in [&#39;float&#39;, &#39;int&#39;]:
+                valid = False
+                msg = f&#39;Required keyword {key} has wrong &#39; \
+                      f&#39;type {stype}; should be {req_dtype}&#39;
+                log.warning(msg)
+                continue
+
+        # Check if value meets range requirements
+        if req_drange is not None:
+            # Check for enum first -- ignore any others if
+            # present. May be used for strings, bools, or numerical
+            # equality.
+            if &#39;enum&#39; in req_drange:
+                enum = req_drange[&#39;enum&#39;]
+
+                # Make into list if enum is a single value
+                if type(enum) is not list:
+                    enum = [enum]
+
+                # Cast to data type
+                if req_dtype == &#39;bool&#39;:
+                    enum = [True if str(e).strip().lower() == &#39;true&#39;
+                            else False for e in enum]
+                else:
+                    try:
+                        enum = [req_dtype_class(e) for e in enum]
+                    except ValueError as error:
+                        msg = f&#39;Error in header configuration file for &#39; \
+                              f&#39;key {key}&#39;
+                        log.error(msg)
+                        raise error
+
+                # Case-insensitive comparison for strings
+                if stype == &#39;str&#39;:
+                    enum = [str(e).strip().upper() for e in enum]
+                    if val.strip().upper() not in enum:
+                        valid = False
+                        msg = f&#39;Required keyword {key} has wrong &#39; \
+                              f&#39;value {val}; should be in {enum}&#39;
+                        log.warning(msg)
+                        continue
+                else:
+                    if val not in enum:
+                        valid = False
+                        msg = f&#39;Required keyword {key} has wrong &#39; \
+                              f&#39;value {val}; should be in {enum}&#39;
+                        log.warning(msg)
+                        continue
+
+            # Check for a minimum requirement
+            # (numerical value must be &gt;= minimum)
+            else:
+                if &#39;min&#39; in req_drange and stype in [&#39;int&#39;, &#39;float&#39;]:
+                    try:
+                        minval = req_dtype_class(req_drange[&#39;min&#39;])
+                    except ValueError as error:
+                        msg = f&#39;Error in header configuration file for &#39; \
+                              f&#39;key {key}&#39;
+                        log.error(msg)
+                        raise error
+                    if val &lt; minval:
+                        valid = False
+                        msg = f&#39;Required keyword {key} has wrong &#39; \
+                              f&#39;value {val}; should be &gt;= {minval}&#39;
+                        log.warning(msg)
+                        continue
+
+                # Check for a maximum requirement
+                # (numerical value must be &lt;= maximum)
+                if &#39;max&#39; in req_drange and stype in [&#39;int&#39;, &#39;float&#39;]:
+                    try:
+                        maxval = req_dtype_class(req_drange[&#39;max&#39;])
+                    except ValueError as error:
+                        msg = f&#39;Error in header configuration file for &#39; \
+                              f&#39;key {key}&#39;
+                        log.error(msg)
+                        raise error
+                    if val &gt; maxval:
+                        valid = False
+                        msg = f&#39;Required keyword {key} has wrong &#39; \
+                              f&#39;value {val}; should be &lt;= {maxval}&#39;
+                        log.warning(msg)
+                        continue
+    return valid</div>
+
+
+
+<div class="viewcode-block" id="hdcheck">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.flitecam.hdcheck.hdcheck.html#sofia_redux.instruments.flitecam.hdcheck.hdcheck">[docs]</a>
+def hdcheck(headers, kwfile):
+    &quot;&quot;&quot;
+    Checks file headers against validity criteria
+
+    Checks if the headers of the input files satisfy criteria described
+    in a separate file, kept in the calibration data directory.  This
+    file should be a configuration file in INI format, specifying the
+    keyword name, condition, data type, and any range requirements.
+
+    Parameters
+    ----------
+    headers : list of astropy.io.fits.Header
+        Headers to check.
+    kwfile : str
+        Keyword definition file to use.
+
+    Returns
+    -------
+    bool
+        True if headers of all files are correct; False otherwise
+    &quot;&quot;&quot;
+
+    if os.path.isfile(kwfile):
+        try:
+            reqconf = configobj.ConfigObj(kwfile)
+        except configobj.ConfigObjError as error:
+            msg = &#39;Error while loading header configuration file.&#39;
+            log.error(msg)
+            raise error
+    else:
+        msg = f&#39;{kwfile} is invalid file name for header configuration&#39;
+        log.error(msg)
+        raise IOError(msg)
+
+    allvalid = True
+    for header in headers:
+        if not isinstance(header, fits.Header):
+            log.error(&#39;Could not read FITS header&#39;)
+            allvalid = False
+            continue
+
+        header_ok = validate_header(header, reqconf)
+        allvalid &amp;= header_ok
+        if not header_ok:
+            log.error(f&quot;File has wrong header: &quot;
+                      f&quot;{header.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;)}&quot;)
+
+    return allvalid</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

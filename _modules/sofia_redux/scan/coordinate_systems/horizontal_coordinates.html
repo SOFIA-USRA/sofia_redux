@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.coordinate_systems.horizontal_coordinates &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.coordinate_systems.horizontal_coordinates</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy.coordinates import Angle
+import numpy as np
+import warnings
+
+from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
+    SphericalCoordinates
+from sofia_redux.scan.coordinate_systems.coordinate_system import \
+    CoordinateSystem
+
+__all__ = [&#39;HorizontalCoordinates&#39;]
+
+
+<div class="viewcode-block" id="HorizontalCoordinates">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.html#sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates">[docs]</a>
+class HorizontalCoordinates(SphericalCoordinates):
+
+    def __init__(self, coordinates=None, unit=&#39;degree&#39;, copy=True):
+        &quot;&quot;&quot;
+        Initialize horizontal coordinates.
+
+        The horizontal coordinate system uses the observer&#39;s local horizon
+        as the fundamental plane defining the altitude (latitude) and
+        longitude (azimuth) in spherical coordinates.  The altitude (or
+        elevation) is the angle between the object and the observer&#39;s local
+        horizon, usually measured between 0 and 90 degrees.  The azimuth is
+        the angle of the object around the horizon, measured from north to
+        east.
+
+        Parameters
+        ----------
+        coordinates : list or tuple or array-like or units.Quantity, optional
+            The coordinates used to populate the object during initialization.
+            The first (0) value or index should represent longitudinal
+            coordinates, and the second should represent latitude.
+        unit : units.Unit or str, optional
+            The angular unit for the spherical coordinates.  The default is
+            &#39;degree&#39;.
+        copy : bool, optional
+            Whether to explicitly perform a copy operation on the input
+            coordinates when storing them into these coordinates.  Note that it
+            is extremely unlikely for the original coordinates to be passed in
+            as a reference due to the significant checks performed on them.
+        &quot;&quot;&quot;
+        super().__init__(coordinates=coordinates, unit=unit, copy=copy)
+
+<div class="viewcode-block" id="HorizontalCoordinates.setup_coordinate_system">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.html#sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.setup_coordinate_system">[docs]</a>
+    def setup_coordinate_system(self):
+        &quot;&quot;&quot;
+        Setup the system for the coordinates.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.default_coordinate_system = CoordinateSystem(
+            name=&#39;Horizontal Coordinates&#39;)
+        self.default_local_coordinate_system = CoordinateSystem(
+            name=&#39;Horizontal Offsets&#39;)
+        az_axis = self.create_axis(&#39;Azimuth&#39;, &#39;AZ&#39;)
+        el_axis = self.create_axis(&#39;Elevation&#39;, &#39;EL&#39;)
+        az_offset_axis = self.create_offset_axis(&#39;Azimuth Offset&#39;, &#39;dAZ&#39;)
+        el_offset_axis = self.create_offset_axis(&#39;Elevation Offset&#39;, &#39;dEL&#39;)
+        self.default_coordinate_system.add_axis(az_axis)
+        self.default_coordinate_system.add_axis(el_axis)
+        self.default_local_coordinate_system.add_axis(az_offset_axis)
+        self.default_local_coordinate_system.add_axis(el_offset_axis)</div>
+
+
+<div class="viewcode-block" id="HorizontalCoordinates.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.html#sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the horizontal coordinates.
+
+        Returns
+        -------
+        HorizontalCoordinates
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+    @property
+    def fits_longitude_stem(self):
+        &quot;&quot;&quot;
+        Return the FITS header longitude stem string.
+
+        Returns
+        -------
+        stem : str
+        &quot;&quot;&quot;
+        return &#39;ALON&#39;
+
+    @property
+    def fits_latitude_stem(self):
+        &quot;&quot;&quot;
+        Return the FITS header latitude stem string.
+
+        Returns
+        -------
+        stem : str
+        &quot;&quot;&quot;
+        return &#39;ALAT&#39;
+
+    @property
+    def two_letter_code(self):
+        &quot;&quot;&quot;
+        Return the two-letter code representing the horizontal system.
+
+        Returns
+        -------
+        code : str
+        &quot;&quot;&quot;
+        return &#39;HO&#39;
+
+    @property
+    def az(self):
+        &quot;&quot;&quot;
+        Return the azimuth coordinates.
+
+        Returns
+        -------
+        azimuth : astropy.units.Quantity (float or numpy.ndarray)
+        &quot;&quot;&quot;
+        if self.coordinates is None:
+            return None
+        return self.native_longitude
+
+    @az.setter
+    def az(self, values):
+        &quot;&quot;&quot;
+        Set the azimuth coordinates.
+
+        Parameters
+        ----------
+        values : astropy.units.Quantity (float or numpy.ndarray)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_az(values)
+
+    @property
+    def el(self):
+        &quot;&quot;&quot;
+        Return the elevation coordinates.
+
+        Returns
+        -------
+        elevation : astropy.units.Quantity (float or numpy.ndarray)
+        &quot;&quot;&quot;
+        if self.coordinates is None:
+            return None
+        return self.native_latitude
+
+    @el.setter
+    def el(self, values):
+        &quot;&quot;&quot;
+        Set the elevation coordinates.
+
+        Parameters
+        ----------
+        values : astropy.units.Quantity (float or numpy.ndarray)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_el(values)
+
+    @property
+    def za(self):
+        &quot;&quot;&quot;
+        Return the Zenith Angle (ZA).
+
+        Returns
+        -------
+        astropy.units.Quantity (float or numpy.ndarray)
+        &quot;&quot;&quot;
+        if self.coordinates is None:
+            return None
+        return self.right_angle - self.native_latitude
+
+    @za.setter
+    def za(self, values):
+        &quot;&quot;&quot;
+        Set the Zenith Angle (ZA).
+
+        Parameters
+        ----------
+        values : astropy.units.Quantity (float or numpy.ndarray)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_za(values)
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Create a string representation of the equatorial coordinates.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if self.coordinates is None:
+            return &#39;Empty coordinates&#39;
+
+        if self.singular:
+            return (f&quot;Az={Angle(self.az).to_string(unit=&#39;degree&#39;)} &quot;
+                    f&quot;El={Angle(self.el).to_string(unit=&#39;degree&#39;)}&quot;)
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+                s = (f&quot;Az=&quot;
+                     f&quot;{Angle(np.nanmin(self.az)).to_string(unit=&#39;degree&#39;)}-&gt;&quot;
+                     f&quot;{Angle(np.nanmax(self.az)).to_string(unit=&#39;degree&#39;)} &quot;
+                     f&quot;El=&quot;
+                     f&quot;{Angle(np.nanmin(self.el)).to_string(unit=&#39;degree&#39;)}-&gt;&quot;
+                     f&quot;{Angle(np.nanmax(self.el)).to_string(unit=&#39;degree&#39;)}&quot;)
+                return s
+
+    def __getitem__(self, indices):
+        &quot;&quot;&quot;
+        Return a section of the coordinates
+
+        Parameters
+        ----------
+        indices : int or numpy.ndarray or slice
+
+        Returns
+        -------
+        HorizontalCoordinates
+        &quot;&quot;&quot;
+        return super().__getitem__(indices)
+
+<div class="viewcode-block" id="HorizontalCoordinates.convert_horizontal_to_equatorial">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.html#sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.convert_horizontal_to_equatorial">[docs]</a>
+    @classmethod
+    def convert_horizontal_to_equatorial(cls, horizontal, equatorial, site,
+                                         lst):
+        &quot;&quot;&quot;
+        Convert horizontal coordinates to an equatorial frame.
+
+        Parameters
+        ----------
+        horizontal : HorizontalCoordinates
+        equatorial : EquatorialCoordinates
+            The frame in which to hold the equatorial coordinates.
+        site : GeodeticCoordinates
+        lst : astropy.units.Quantity (float or numpy.ndarray)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        hx = horizontal.x
+        lst = cls.correct_factor_dimensions(lst, hx)
+        site_cos_lat = cls.correct_factor_dimensions(site.cos_lat, hx)
+        site_sin_lat = cls.correct_factor_dimensions(site.sin_lat, hx)
+        c = np.cos(hx) * horizontal.cos_lat
+
+        equatorial.set_native_latitude(
+            np.arcsin((horizontal.sin_lat * site_sin_lat)
+                      + (site_cos_lat * c)))
+
+        asin_h = -np.sin(hx) * horizontal.cos_lat
+        acos_h = (site_cos_lat * horizontal.sin_lat) - (site_sin_lat * c)
+        equatorial.set_longitude(lst - np.arctan2(asin_h, acos_h))</div>
+
+
+<div class="viewcode-block" id="HorizontalCoordinates.to_equatorial_offset">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.html#sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.to_equatorial_offset">[docs]</a>
+    @classmethod
+    def to_equatorial_offset(cls, offset, position_angle, in_place=True):
+        &quot;&quot;&quot;
+        Convert horizontal offsets to an equatorial offset.
+
+        The offsets are updated in-place.
+
+        Parameters
+        ----------
+        offset : Coordinate2D
+            The (x, y) horizontal offsets to rotate.
+        position_angle : astropy.units.Quantity (float or numpy.ndarray)
+            The position angle as a scalar or array of shape (n,).
+        in_place : bool, optional
+            If `True`, update `offset` in-place.  Otherwise, return a new
+            offset without modifying the original.
+
+        Returns
+        -------
+        equatorial_offset : Coordinate2D
+        &quot;&quot;&quot;
+        if not in_place:
+            offset = offset.copy()  # Create a local copy
+
+        cls.rotate_offsets(offset, position_angle)
+        offset.scale_x(-1)
+        return offset</div>
+
+
+<div class="viewcode-block" id="HorizontalCoordinates.set_az">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.html#sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.set_az">[docs]</a>
+    def set_az(self, azimuth):
+        &quot;&quot;&quot;
+        Set the azimuth coordinates.
+
+        Parameters
+        ----------
+        azimuth : astropy.units.Quantity (float or numpy.ndarray)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_native_longitude(azimuth)</div>
+
+
+<div class="viewcode-block" id="HorizontalCoordinates.set_el">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.html#sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.set_el">[docs]</a>
+    def set_el(self, elevation):
+        &quot;&quot;&quot;
+        Set the elevation coordinates.
+
+        Parameters
+        ----------
+        elevation : astropy.units.Quantity (float or numpy.ndarray)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_native_latitude(elevation)</div>
+
+
+<div class="viewcode-block" id="HorizontalCoordinates.set_za">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.html#sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.set_za">[docs]</a>
+    def set_za(self, zenith_angle):
+        &quot;&quot;&quot;
+        Set the zenith angle.
+
+        Parameters
+        ----------
+        zenith_angle : astropy.units.Quantity (float or numpy.ndarray)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_native_latitude(self.right_angle - zenith_angle)</div>
+
+
+<div class="viewcode-block" id="HorizontalCoordinates.get_parallactic_angle">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.html#sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.get_parallactic_angle">[docs]</a>
+    def get_parallactic_angle(self, site):
+        &quot;&quot;&quot;
+        Return the parallactic angle for a given site.
+
+        Parameters
+        ----------
+        site : GeodeticCoordinates
+
+        Returns
+        -------
+        pa : astropy.units.Quantity (float or numpy.ndarray)
+        &quot;&quot;&quot;
+        site_cos_lat = self.correct_factor_dimensions(site.cos_lat, self.x)
+        site_sin_lat = self.correct_factor_dimensions(site.sin_lat, self.x)
+
+        y = -site_cos_lat * np.sin(self.x)
+        x = (site_sin_lat * self.cos_lat) - (
+            site_cos_lat * self.sin_lat * np.cos(self.x))
+        return np.arctan2(y, x)</div>
+
+
+<div class="viewcode-block" id="HorizontalCoordinates.to_equatorial">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.html#sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.to_equatorial">[docs]</a>
+    def to_equatorial(self, site, lst, equatorial=None):
+        &quot;&quot;&quot;
+        Return these coordinates as equatorial coordinates.
+
+        Parameters
+        ----------
+        site : GeodeticCoordinates
+        lst : astropy.units.Quantity
+        equatorial : EquatorialCoordinates, optional
+
+        Returns
+        -------
+        EquatorialCoordinates
+        &quot;&quot;&quot;
+        if equatorial is None:
+            equatorial = self.get_instance(&#39;equatorial&#39;)
+        self.convert_horizontal_to_equatorial(self, equatorial, site, lst)
+        return equatorial</div>
+
+
+<div class="viewcode-block" id="HorizontalCoordinates.edit_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.html#sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.edit_header">[docs]</a>
+    def edit_header(self, header, key_stem, alt=&#39;&#39;):
+        &quot;&quot;&quot;
+        Edit the header with horizontal coordinate information.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The header to modify.
+        key_stem : str
+            The name of the header key to update.
+        alt : str, optional
+            The alternative coordinate system.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.singular:
+            return  # Can&#39;t do this for multiple coordinates
+        super().edit_header(header, key_stem, alt=alt)
+        header[f&#39;WCSNAME{alt}&#39;] = (self.coordinate_system.name,
+                                   &#39;coordinate system description&#39;)</div>
+
+
+<div class="viewcode-block" id="HorizontalCoordinates.plot">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.html#sofia_redux.scan.coordinate_systems.horizontal_coordinates.HorizontalCoordinates.plot">[docs]</a>
+    def plot(self, *args, **kwargs):  # pragma: no cover
+        &quot;&quot;&quot;
+        Plot the coordinates.
+
+        Parameters
+        ----------
+        args : values
+            Optional positional parameters to pass into pyplot.plot.
+        kwargs : dict, optional
+            Optional keyword arguments.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        import matplotlib.pyplot as plt
+        plt.ion()
+        c_args = self.az.ravel(), self.el.ravel()
+        if args is not None:
+            c_args += args
+
+        plt.plot(*c_args, **kwargs)
+        plt.xlabel(f&#39;{self.longitude_axis.label} ({self.unit})&#39;)
+        plt.ylabel(f&#39;{self.latitude_axis.label} ({self.unit})&#39;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.shift &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.shift</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.toolkit.utilities.fits import add_history_wrap
+from sofia_redux.toolkit.image import adjust
+
+from sofia_redux.instruments.forcast.getpar import getpar
+
+addhist = add_history_wrap(&#39;Shift&#39;)
+
+__all__ = [&#39;shift&#39;]
+
+
+def symmetric_ceil(val):
+    def f(x):
+        return int(np.ceil(x)) if x &gt;= 0 else int(np.floor(x))
+    if not hasattr(val, &#39;__len__&#39;):
+        return f(val)
+    else:
+        return [f(v) for v in val]
+
+
+<div class="viewcode-block" id="shift">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.shift.shift.html#sofia_redux.instruments.forcast.shift.shift">[docs]</a>
+def shift(data, offset, header=None, variance=None, order=None,
+          crpix=None, resize=False, no_shift=False, missing=np.nan,
+          **kwargs):
+    &quot;&quot;&quot;
+    Shift an image by the specified amount
+
+    Uses interpolation to do sub-pixel shifts if desired.  Missing
+    data should be represented with numpy.nans.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        The image array to shift (nrow, ncol)
+    offset : array_like
+        The (x, y) offset by which to shift the image.
+    header : astropy.io.fits.header.Header
+        Header update with CRPIX
+    variance :  numpy.ndarray, optional
+        Variance array (nrow, ncol) to update in parallel with the data
+        output data array
+    order : int, optional
+        Interpolation order.
+            0 - nearest-neighbor
+            1 - bilinear
+            &gt;=2 - spline of the same order
+    crpix : array_like, optional
+        If provided, will be updated to match image shift_image
+        [crpix1, crpix2]
+    resize : bool, optional
+        Increase the size of the data array to accommodate offset
+    no_shift : bool, optional
+        If True, do not shift.  Just return the original resized
+        arrays prior to any shift.
+    missing
+        missing data fill value
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        The shifted image (nrow, ncol)
+        The shifted variance (nrow, ncol) or None if not supplied
+
+    Notes
+    -----
+    Please see sofia_redux.toolkit.image.adjust.shift for full descriptions of
+    available kwargs.  The most useful parameters are listed below:
+
+        missing
+            value with which to replace missing values (NaNs)
+        mode : str
+            edge handling mode.  Default is &#39;constant&#39;
+
+    &quot;&quot;&quot;
+    if not isinstance(header, fits.header.Header):
+        header = fits.header.Header()
+    var = variance.copy() if isinstance(variance, np.ndarray) else None
+    if not isinstance(data, np.ndarray) or len(data.shape) != 2:
+        addhist(header, &#39;Shift failed (invalid data)&#39;)
+        log.error(&quot;invalid data&quot;)
+        return
+    shifted = data.copy()
+
+    if order is None:
+        order = getpar(header, &#39;SHIFTORD&#39;, dtype=int, default=1,
+                       comment=&#39;Interpolate order for coadd/merge&#39;)
+
+    if crpix is not None:
+        if not hasattr(crpix, &#39;__len__&#39;) or len(crpix) != 2:
+            log.error(&quot;invalid crpix - will not update&quot;)
+            crpix = np.flip((np.array(shifted.shape) + 1) / 2)
+    else:
+        crpix = np.flip((np.array(shifted.shape) + 1) / 2)
+
+    dovar = isinstance(var, np.ndarray) and var.shape == shifted.shape
+    var = None if not dovar else var
+    if variance is not None and not dovar:
+        addhist(header, &#39;Variance not propagated (invalid variance)&#39;)
+        log.warning(&quot;Variance not propagated (invalid variance)&quot;)
+
+    if not hasattr(offset, &#39;__len__&#39;) or len(offset) != 2:
+        log.error(&quot;invalid offset&quot;)
+        return
+
+    minxy = np.array([0, 0])  # additional offsets for resizing
+    if resize:
+        ixy = symmetric_ceil(offset)
+        resize_shape = (shifted.shape[0] + abs(ixy[1]),
+                        shifted.shape[1] + abs(ixy[0]))
+        if any(ixy):
+            addhist(header, &quot;Increasing (X,Y) array size to (%s,%s)&quot; %
+                    (resize_shape[1], resize_shape[0]))
+            header[&#39;NAXIS1&#39;] = resize_shape[1]
+            header[&#39;NAXIS2&#39;] = resize_shape[0]
+            newarray = np.full(resize_shape, missing, dtype=shifted.dtype)
+            # lower-left (x, y) corner
+            minxy = np.array([0 if x &gt; 0 else -x for x in ixy])
+            xl, xu = minxy[0], minxy[0] + shifted.shape[1]
+            yl, yu = minxy[1], minxy[1] + shifted.shape[0]
+            newarray[yl: yu, xl: xu] = shifted
+            shifted = newarray
+            if dovar:
+                newarray = np.full(resize_shape, missing, dtype=shifted.dtype)
+                newarray[yl: yu, xl: xu] = var
+                var = newarray
+
+    # Offset due to resizing
+    if &#39;CRPIX1&#39; in header:
+        header[&#39;CRPIX1&#39;] += minxy[0]
+    if &#39;CRPIX2&#39; in header:
+        header[&#39;CRPIX2&#39;] += minxy[1]
+    if &#39;SRCPOSX&#39; in header:
+        header[&#39;SRCPOSX&#39;] += minxy[0]
+    if &#39;SRCPOSY&#39; in header:
+        header[&#39;SRCPOSY&#39;] += minxy[1]
+    crpix[0] += minxy[0]
+    crpix[1] += minxy[1]
+    if no_shift:
+        return shifted, var
+
+    if any(offset):
+        shifted = adjust.shift(shifted, np.flip(offset), order=order,
+                               missing=missing, **kwargs)
+        if shifted is None:
+            log.error(&quot;shift failed (data)&quot;)
+            return
+        if dovar:
+            # always do nearest neighbor for error -- otherwise,
+            # we get weird edge effects when combining images
+            # and weighting by errors
+            var = adjust.shift(var, np.flip(offset), order=0,
+                               missing=missing, **kwargs)
+
+    # offset due to shifting
+    if &#39;CRPIX1&#39; in header:
+        header[&#39;CRPIX1&#39;] += offset[0]
+    if &#39;CRPIX2&#39; in header:
+        header[&#39;CRPIX2&#39;] += offset[1]
+    if &#39;SRCPOSX&#39; in header:
+        header[&#39;SRCPOSX&#39;] += offset[0]
+    if &#39;SRCPOSY&#39; in header:
+        header[&#39;SRCPOSY&#39;] += offset[1]
+    crpix[0] += offset[0]
+    crpix[1] += offset[1]
+
+    return shifted, var</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

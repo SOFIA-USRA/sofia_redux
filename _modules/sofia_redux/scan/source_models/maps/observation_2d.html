@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.source_models.maps.observation_2d &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.source_models.maps.observation_2d</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units
+import numpy as np
+
+from sofia_redux.scan.source_models.maps.map_2d import Map2D
+from sofia_redux.scan.source_models.maps.image_2d import Image2D
+from sofia_redux.scan.flags.flagged_array import FlaggedArray
+from sofia_redux.scan.utilities import numba_functions
+from sofia_redux.scan.source_models.maps.weight_map import WeightMap
+from sofia_redux.scan.source_models.maps.exposure_map import ExposureMap
+from sofia_redux.scan.source_models.maps.noise_map import NoiseMap
+from sofia_redux.scan.source_models.maps.significance_map \
+    import SignificanceMap
+
+__all__ = [&#39;Observation2D&#39;]
+
+
+<div class="viewcode-block" id="Observation2D">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D">[docs]</a>
+class Observation2D(Map2D):
+
+    def __init__(self, data=None, blanking_value=np.nan, dtype=float,
+                 shape=None, unit=None, weight_dtype=float,
+                 weight_blanking_value=None):
+        &quot;&quot;&quot;
+        Initialize an Observation2D object.
+
+        The 2-D observation is an extension of the :class:`Map2D` class that
+        includes weights and exposure times in addition to the observation data
+        values.
+
+        Parameters
+        ----------
+        data : numpy.ndarray, optional
+            Data to initialize the flagged array with.  If supplied, sets the
+            shape of the array.  Note that the data type will be set to that
+            defined by the `dtype` parameter.
+        blanking_value : int or float, optional
+            The blanking value defines invalid values in the data array.  This
+            is the equivalent of defining a NaN value.
+        dtype : type, optional
+            The data type of the data array.
+        shape : tuple (int), optional
+            The shape of the data array.  This will only be relevant if
+            `data` is not defined.
+        unit : str or units.Unit or units.Quantity, optional
+            The data unit.
+        weight_dtype : type, optional
+            Similar the `dtype`, except defines the data type for the
+            observation weights and exposure times.
+        weight_blanking_value : int or float, optional
+            The blanking value for the weight and exposure maps.  If `None`,
+            will be set to np.nan if `weight_dtype` is a float, and 0 if
+            `weight_dtype` is an integer.
+        &quot;&quot;&quot;
+        if weight_blanking_value is None:
+            if weight_dtype == float:
+                weight_blanking_value = np.nan
+            else:
+                weight_blanking_value = 0.0
+
+        self.weight = Image2D(dtype=weight_dtype,
+                              blanking_value=weight_blanking_value,)
+        self.exposure = Image2D(dtype=weight_dtype,
+                                blanking_value=weight_blanking_value)
+        self.noise_rescale = 1.0
+        self.is_zero_weight_valid = False
+        self.weight_dtype = weight_dtype
+        super().__init__(data=data, blanking_value=blanking_value, dtype=dtype,
+                         shape=shape, unit=unit)
+        shape = self.shape
+        if shape != ():
+            self.weight.shape = shape
+            self.exposure.shape = shape
+
+<div class="viewcode-block" id="Observation2D.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.copy">[docs]</a>
+    def copy(self, with_contents=True):
+        &quot;&quot;&quot;
+        Return a copy of the map.
+
+        Returns
+        -------
+        Observation2D
+        &quot;&quot;&quot;
+        return super().copy(with_contents=with_contents)</div>
+
+
+    def __eq__(self, other):
+        &quot;&quot;&quot;
+        Check if this Observation2D instance is equivalent to another.
+
+        Parameters
+        ----------
+        other : Observation2D
+
+        Returns
+        -------
+        equal : bool
+        &quot;&quot;&quot;
+        if not super().__eq__(other):
+            return False
+        if self.weight != other.weight:
+            return False
+        if self.exposure != other.exposure:
+            return False
+        if self.noise_rescale != other.noise_rescale:
+            return False
+        if self.is_zero_weight_valid is not other.is_zero_weight_valid:
+            return False
+        return True
+
+<div class="viewcode-block" id="Observation2D.copy_processing_from">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.copy_processing_from">[docs]</a>
+    def copy_processing_from(self, other):
+        &quot;&quot;&quot;
+        Copy the processing from another 2-D observation.
+
+        Parameters
+        ----------
+        other : Observation2D
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().copy_processing_from(other)
+        self.noise_rescale = other.noise_rescale</div>
+
+
+<div class="viewcode-block" id="Observation2D.reset_processing">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.reset_processing">[docs]</a>
+    def reset_processing(self):
+        &quot;&quot;&quot;
+        Reset the processing status.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().reset_processing()
+        self.noise_rescale = 1.0</div>
+
+
+    @property
+    def valid(self):
+        &quot;&quot;&quot;
+        Return a boolean mask array of valid data elements.
+
+        Valid elements are neither NaN, set to the blanking value, or
+        flagged as the validating_flags.
+
+        Returns
+        -------
+        numpy.ndarray (bool)
+           A boolean mask where `True` indicates a valid element.
+        &quot;&quot;&quot;
+        valid = self.is_valid()
+        if self.size == 0:
+            return valid
+        if self.weight is None or self.weight.data is None:
+            return valid
+        valid &amp;= np.isfinite(self.weight.data)
+        if self.is_zero_weight_valid:
+            valid &amp;= self.weight.data &gt;= 0
+        else:
+            valid &amp;= self.weight.data &gt; 0
+        return valid
+
+<div class="viewcode-block" id="Observation2D.clear">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.clear">[docs]</a>
+    def clear(self, indices=None):
+        &quot;&quot;&quot;
+        Clear flags and set data to zero.  Clear history.
+
+        Parameters
+        ----------
+        indices : tuple (numpy.ndarray (int)) or numpy.ndarray (bool), optional
+            The indices to discard.  Either supplied as a boolean mask of
+            shape (self.data.shape).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().clear(indices=indices)
+        if self.exposure is not None:
+            self.exposure.clear(indices=indices)
+        if self.weight is not None:
+            self.weight.clear(indices=indices)</div>
+
+
+<div class="viewcode-block" id="Observation2D.discard">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.discard">[docs]</a>
+    def discard(self, indices=None):
+        &quot;&quot;&quot;
+        Set the flags for discarded indices to DISCARD and data to zero.
+
+        Parameters
+        ----------
+        indices : tuple (numpy.ndarray (int)) or numpy.ndarray (bool), optional
+            The indices to discard.  Either supplied as a boolean mask of
+            shape (self.data.shape).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().discard(indices=indices)
+        if self.exposure is not None:
+            self.exposure.clear(indices)
+        if self.weight is not None:
+            self.weight.clear(indices)</div>
+
+
+<div class="viewcode-block" id="Observation2D.destroy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.destroy">[docs]</a>
+    def destroy(self):
+        &quot;&quot;&quot;
+        Destroy the image data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().destroy()
+        if self.weight is not None:
+            self.weight.destroy()
+        if self.exposure is not None:
+            self.exposure.destroy()</div>
+
+
+<div class="viewcode-block" id="Observation2D.set_data_shape">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.set_data_shape">[docs]</a>
+    def set_data_shape(self, shape):
+        &quot;&quot;&quot;
+        Set the shape of the data, weight, and exposure images.
+
+        Parameters
+        ----------
+        shape : tuple (int)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_data_shape(shape)
+        self.weight.set_data_shape(shape)
+        self.claim_image(self.weight)
+        self.exposure.set_data_shape(shape)
+        self.claim_image(self.exposure)</div>
+
+
+<div class="viewcode-block" id="Observation2D.to_weight_image">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.to_weight_image">[docs]</a>
+    def to_weight_image(self, data):
+        &quot;&quot;&quot;
+        Convert data to a weight image.
+
+        Parameters
+        ----------
+        data : FlaggedArray or FitsData or numpy.ndarray or None
+
+        Returns
+        -------
+        Image2D
+        &quot;&quot;&quot;
+        if data is None:
+            data = Image2D(x_size=self.shape[1],
+                           y_size=self.shape[0],
+                           blanking_value=self.weight.blanking_value,
+                           dtype=self.weight_dtype)
+        elif isinstance(data, np.ndarray):
+            data = Image2D(data=data,
+                           blanking_value=self.weight.blanking_value,
+                           dtype=self.weight_dtype)
+        return data</div>
+
+
+<div class="viewcode-block" id="Observation2D.get_weights">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.get_weights">[docs]</a>
+    def get_weights(self):
+        &quot;&quot;&quot;
+        Return the weights overlay.
+
+        Returns
+        -------
+        WeightMap
+        &quot;&quot;&quot;
+        return WeightMap(self)</div>
+
+
+<div class="viewcode-block" id="Observation2D.get_weight_image">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.get_weight_image">[docs]</a>
+    def get_weight_image(self):
+        &quot;&quot;&quot;
+        Return the weights image.
+
+        Returns
+        -------
+        Image2D
+        &quot;&quot;&quot;
+        return self.weight</div>
+
+
+<div class="viewcode-block" id="Observation2D.weight_values">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.weight_values">[docs]</a>
+    def weight_values(self):
+        &quot;&quot;&quot;
+        Return the array of weights.
+
+        Returns
+        -------
+        numpy.ndarray (float)
+        &quot;&quot;&quot;
+        return self.get_weights().data</div>
+
+
+<div class="viewcode-block" id="Observation2D.set_weight_image">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.set_weight_image">[docs]</a>
+    def set_weight_image(self, weight_image):
+        &quot;&quot;&quot;
+        Set the weight image.
+
+        Parameters
+        ----------
+        weight_image : Image2D or numpy.ndarray or None
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        weight_image = self.to_weight_image(weight_image)
+        self.weight = weight_image
+        self.claim_image(weight_image)</div>
+
+
+<div class="viewcode-block" id="Observation2D.get_exposures">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.get_exposures">[docs]</a>
+    def get_exposures(self):
+        &quot;&quot;&quot;
+        Return an exposure overlay.
+
+        Returns
+        -------
+        ExposureMap
+        &quot;&quot;&quot;
+        return ExposureMap(self)</div>
+
+
+<div class="viewcode-block" id="Observation2D.exposure_values">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.exposure_values">[docs]</a>
+    def exposure_values(self):
+        &quot;&quot;&quot;
+        Return the array of weights.
+
+        Returns
+        -------
+        numpy.ndarray (float)
+        &quot;&quot;&quot;
+        return self.get_exposures().data</div>
+
+
+<div class="viewcode-block" id="Observation2D.get_exposure_image">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.get_exposure_image">[docs]</a>
+    def get_exposure_image(self):
+        &quot;&quot;&quot;
+        Return the exposure image.
+
+        Returns
+        -------
+        Image2D
+        &quot;&quot;&quot;
+        return self.exposure</div>
+
+
+<div class="viewcode-block" id="Observation2D.set_exposure_image">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.set_exposure_image">[docs]</a>
+    def set_exposure_image(self, exposure_image):
+        &quot;&quot;&quot;
+        Set the weight image.
+
+        Parameters
+        ----------
+        exposure_image : Image2D or numpy.ndarray or None
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        exposure_image = self.to_weight_image(exposure_image)
+        self.exposure = exposure_image
+        self.claim_image(exposure_image)</div>
+
+
+<div class="viewcode-block" id="Observation2D.get_noise">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.get_noise">[docs]</a>
+    def get_noise(self):
+        &quot;&quot;&quot;
+        Return a noise overlay.
+
+        Returns
+        -------
+        NoiseMap
+        &quot;&quot;&quot;
+        return NoiseMap(self)</div>
+
+
+<div class="viewcode-block" id="Observation2D.noise_values">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.noise_values">[docs]</a>
+    def noise_values(self):
+        &quot;&quot;&quot;
+        Return the array of weights.
+
+        Returns
+        -------
+        numpy.ndarray (float)
+        &quot;&quot;&quot;
+        return self.get_noise().data</div>
+
+
+<div class="viewcode-block" id="Observation2D.set_noise">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.set_noise">[docs]</a>
+    def set_noise(self, noise_image):
+        &quot;&quot;&quot;
+        Set the noise image.
+
+        Parameters
+        ----------
+        noise_image : Image2D or Overlay or numpy.ndarray or None
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.get_noise().data = noise_image</div>
+
+
+<div class="viewcode-block" id="Observation2D.get_significance">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.get_significance">[docs]</a>
+    def get_significance(self):
+        &quot;&quot;&quot;
+        Return a significance overlay.
+
+        Returns
+        -------
+        SignificanceMap
+        &quot;&quot;&quot;
+        return SignificanceMap(self)</div>
+
+
+<div class="viewcode-block" id="Observation2D.significance_values">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.significance_values">[docs]</a>
+    def significance_values(self):
+        &quot;&quot;&quot;
+        Return the array of significance (S2N).
+
+        Returns
+        -------
+        numpy.ndarray (float)
+        &quot;&quot;&quot;
+        return self.get_significance().data</div>
+
+
+<div class="viewcode-block" id="Observation2D.set_significance">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.set_significance">[docs]</a>
+    def set_significance(self, significance_image):
+        &quot;&quot;&quot;
+        Set the significance image.
+
+        Parameters
+        ----------
+        significance_image : Image2D or Overlay or numpy.ndarray or None
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.get_significance().data = significance_image</div>
+
+
+<div class="viewcode-block" id="Observation2D.scale">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.scale">[docs]</a>
+    def scale(self, factor, indices=None):
+        &quot;&quot;&quot;
+        Scale the data values and weights by a given factor.
+
+        Parameters
+        ----------
+        factor : float
+        indices : numpy.ndarray (bool), optional
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().scale(factor, indices=indices)
+        self.get_weight_image().scale(1.0 / (factor ** 2), indices=indices)</div>
+
+
+<div class="viewcode-block" id="Observation2D.crop">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.crop">[docs]</a>
+    def crop(self, ranges):
+        &quot;&quot;&quot;
+        Crop the image data.
+
+        Parameters
+        ----------
+        ranges : numpy.ndarray (int,) or units.Quantity (numpy.ndarray)
+            The ranges to set crop the data to.  Should be of shape
+            (n_dimensions, 2) where ranges[0, 0] would give the minimum crop
+            limit for the first dimension and ranges[0, 1] would give the
+            maximum crop limit for the first dimension.  In this case, the
+            &#39;first&#39; dimension is in FITS format.  i.e., (x, y) for a 2-D image.
+            If a Quantity is supplied this should contain the min and max
+            grid values to clip to in each dimension.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if isinstance(ranges, units.Quantity):
+            ranges = self.convert_range_value_to_index(ranges)
+        else:
+            ranges = np.asarray(self.nearest_to_offset(ranges))
+
+        self.get_weight_image().crop(ranges)
+        self.get_exposure_image().crop(ranges)
+        super().crop(ranges)</div>
+
+
+<div class="viewcode-block" id="Observation2D.accumulate">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.accumulate">[docs]</a>
+    def accumulate(self, image, weight=1.0, gain=1.0, valid=None):
+        &quot;&quot;&quot;
+        Add an observation image.
+
+        This is meant to be performed when the observation data array contains
+        the product of the actual data with the weights.  This is later reset
+        to the standard data, weight format by performing
+        :func:`Observation2D.end_accumulation`.
+
+        Parameters
+        ----------
+        image : Observation2D
+            The observation to add.
+        weight : float, optional
+            A global weighting factor for the entire image.  Typically the
+            scan weight from which the image was derived.
+        gain : float, optional
+            A gain factor that will be applied to the image values.  It will
+            be applied to the weighting factors as g^2 during accumulation.
+        valid : numpy.ndarray (bool), optional
+            An array where `False` excludes a datum from accumulation.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        image_weight = image.get_weights().data * weight
+        times = image.get_exposures().data
+        if valid is None:
+            valid = image.valid
+
+        self.accumulate_at(image, gain, image_weight, times, indices=valid)</div>
+
+
+<div class="viewcode-block" id="Observation2D.accumulate_at">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.accumulate_at">[docs]</a>
+    def accumulate_at(self, image, gains, weights, times, indices=None):
+        &quot;&quot;&quot;
+        Accumulate at given indices.
+
+        The data are accumulated as: image * gains * weights
+        The weights are accumulated as: weights * gains^2
+        The exposures are accumulated as: times
+
+        Parameters
+        ----------
+        image : FlaggedArray or numpy.ndarray or float
+        gains : FlaggedArray or numpy.ndarray or float
+        weights : FlaggedArray or numpy.ndarray or float
+        times : FlaggedArray or numpy.ndarray or float
+        indices : numpy.ndarray (bool or int), optional
+            A boolean mask adds to those indices on self.data marked
+            as `True`. If so, image/weights/times etc should be the same
+            shape as self.data of scalar values.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if isinstance(image, FlaggedArray):
+            image = image.data
+        if isinstance(weights, FlaggedArray):
+            weights = weights.data
+        if isinstance(times, FlaggedArray):
+            times = times.data
+        if isinstance(gains, FlaggedArray):
+            gains = gains.data
+
+        wg = weights * gains
+        add_data = wg * image
+        add_weight = wg * gains
+        add_time = times
+
+        self.add(add_data, indices=indices)
+        self.get_weight_image().add(add_weight, indices=indices)
+        self.get_exposure_image().add(add_time, indices=indices)</div>
+
+
+<div class="viewcode-block" id="Observation2D.merge_accumulate">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.merge_accumulate">[docs]</a>
+    def merge_accumulate(self, image):
+        &quot;&quot;&quot;
+        Merge and accumulate an image onto this one.
+
+        Parameters
+        ----------
+        image : Observation2D
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().add(image)
+        self.merge_properties_from(image)
+        self.get_weight_image().add(image.get_weights())
+        self.get_exposure_image().add(image.get_exposures())</div>
+
+
+<div class="viewcode-block" id="Observation2D.end_accumulation">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.end_accumulation">[docs]</a>
+    def end_accumulation(self):
+        &quot;&quot;&quot;
+        End the accumulation process by dividing the data values by the weight.
+
+        Zero-valued weights are ignored.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        inverse_weight = self.weight.data.copy()
+        nzi = np.nonzero(inverse_weight)
+        inverse_weight[nzi] = 1.0 / inverse_weight[nzi]
+        super().scale(inverse_weight)</div>
+
+
+<div class="viewcode-block" id="Observation2D.get_chi2">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.get_chi2">[docs]</a>
+    def get_chi2(self, robust=True):
+        &quot;&quot;&quot;
+        Return the Chi-squared statistic.
+
+        Parameters
+        ----------
+        robust : bool, optional
+           If `True`, use the &#39;robust&#39; (median) method.
+
+        Returns
+        -------
+        float
+        &quot;&quot;&quot;
+        significance = self.significance_values()[self.valid]
+        if significance.size == 0:
+            return np.nan
+
+        variance = significance ** 2
+        if robust:
+            return numba_functions.smart_median(
+                variance, max_dependence=1)[0] / 0.454937
+        else:
+            return np.nanmean(variance)</div>
+
+
+<div class="viewcode-block" id="Observation2D.mean">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.mean">[docs]</a>
+    def mean(self, weights=None):
+        &quot;&quot;&quot;
+        Return the weighted mean.
+
+        Parameters
+        ----------
+        weights : numpy.ndarray (float), optional
+            An array of weights.
+
+        Returns
+        -------
+        mean, weight : float, float
+        &quot;&quot;&quot;
+        if weights is None and self.weight is not None:
+            weights = self.weight.data
+        return super().mean(weights=weights)</div>
+
+
+<div class="viewcode-block" id="Observation2D.median">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.median">[docs]</a>
+    def median(self, weights=None):
+        &quot;&quot;&quot;
+        Return the weighted median.
+
+        weights : numpy.ndarray (float), optional
+            An array of weights.
+
+        Returns
+        -------
+        median, weight : float, float
+        &quot;&quot;&quot;
+        if weights is None and self.weight is not None:
+            weights = self.weight.data
+        return super().median(weights=weights)</div>
+
+
+<div class="viewcode-block" id="Observation2D.reweight">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.reweight">[docs]</a>
+    def reweight(self, robust=True):
+        &quot;&quot;&quot;
+        Re-weight the observation
+
+        Parameters
+        ----------
+        robust : bool, optional
+            If `True`, use the &#39;robust&#39; (median) method to determine the
+            chi2 statistic.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        chi2 = self.get_chi2(robust=robust)
+        if chi2 == 0:
+            return
+
+        weight_correction = 1.0 / self.get_chi2(robust=robust)
+        self.get_weight_image().scale(weight_correction)
+        self.noise_rescale *= 1.0 / np.sqrt(weight_correction)</div>
+
+
+<div class="viewcode-block" id="Observation2D.unscale_weights">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.unscale_weights">[docs]</a>
+    def unscale_weights(self):
+        &quot;&quot;&quot;
+        Undo the weight rescaling.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.get_weight_image().scale(self.noise_rescale ** 2)
+        self.noise_rescale = 1.0</div>
+
+
+<div class="viewcode-block" id="Observation2D.mem_correct_observation">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.mem_correct_observation">[docs]</a>
+    def mem_correct_observation(self, model, lg_multiplier):
+        &quot;&quot;&quot;
+        Apply a maximum entropy correction given a model.
+
+        Parameters
+        ----------
+        model : numpy.ndarray or FlaggedArray or None
+            The model from which to base MEM correction.  Should be of shape
+            (self.shape).
+        lg_multiplier : float
+            The Lagrange multiplier (lambda) for the MEM correction.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        noise = self.get_noise().data
+        if isinstance(model, FlaggedArray):
+            model_data = model.data
+        else:
+            model_data = model
+        self.mem_correct(model_data, noise, lg_multiplier)</div>
+
+
+<div class="viewcode-block" id="Observation2D.smooth">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.smooth">[docs]</a>
+    def smooth(self, beam_map, reference_index=None, weights=None):
+        &quot;&quot;&quot;
+        Smooth the data with a given beam map kernel.
+
+        Parameters
+        ----------
+        beam_map : numpy.ndarray (float)
+        reference_index : numpy.ndarray (float), optional
+            The reference index (center) of the beam_map kernel.  By default
+            this will be set to (beam_map.shape - 1)[::-1] / 2.  Note that the
+            reference index should by supplied in (x, y) order for FITS.
+        weights : numpy.ndarray (float), optional
+            If not supplied, defaults to the observation weights.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if weights is None:
+            weights = self.weight.data
+
+        if reference_index is not None:
+            # Reverse this since reference index is passed in as (x, y) order
+            # but numpy expects (y, x) order.
+            reference_index = reference_index[::-1]
+
+        smoothed, smoothed_weight = self.get_smoothed(
+            beam_map, reference_index=reference_index, weights=weights)
+
+        smoothed_exposure, _ = self.get_exposure_image().get_smoothed(
+            beam_map, reference_index=reference_index, weights=weights)
+
+        self.set_image(smoothed)
+        self.set_weight_image(smoothed_weight)
+        self.set_exposure_image(smoothed_exposure)
+        self.add_smoothing(
+            self.default_beam().get_equivalent(beam_map, self.grid.resolution))</div>
+
+
+<div class="viewcode-block" id="Observation2D.fast_smooth">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.fast_smooth">[docs]</a>
+    def fast_smooth(self, beam_map, steps, reference_index=None, weights=None):
+        &quot;&quot;&quot;
+        Smooth the data with a given beam map kernel using fast method.
+
+        Notes
+        -----
+        This isn&#39;t fast compared to standard smooth as it requires an
+        additional spline interpolation step.
+
+        Parameters
+        ----------
+        beam_map : numpy.ndarray (float)
+        steps : numpy.ndarray (int)
+            The kernel steps in each dimension.
+        reference_index : numpy.ndarray (float), optional
+            The reference index (center) of the beam_map kernel.  By default
+            this will be set to (beam_map.shape - 1)[::-1] / 2.  Note that the
+            reference index should by supplied in (x, y) order for FITS.
+        weights : numpy.ndarray (float), optional
+            If not supplied, defaults to the observation weights.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if weights is None:
+            weights = self.weight.data
+
+        smoothed, smoothed_weight = self.get_fast_smoothed(
+            beam_map, steps, reference_index=reference_index, weights=weights,
+            get_weights=True)
+
+        smoothed_exposure = self.get_exposure_image().get_fast_smoothed(
+            beam_map, steps, reference_index=reference_index, weights=weights,
+            get_weights=False)
+
+        self.set_image(smoothed)
+        self.set_weight_image(smoothed_weight)
+        self.set_exposure_image(smoothed_exposure)
+        self.add_smoothing(
+            self.default_beam().get_equivalent(beam_map, self.grid.resolution))</div>
+
+
+<div class="viewcode-block" id="Observation2D.filter_correct">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.filter_correct">[docs]</a>
+    def filter_correct(self, underlying_fwhm, reference=None, valid=None):
+        &quot;&quot;&quot;
+        Apply filter correction.
+
+        Parameters
+        ----------
+        underlying_fwhm : astropy.units.Quantity
+        reference : FlaggedArray or numpy.ndarray, optional
+        valid : numpy.ndarray (bool), optional
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if reference is None:
+            reference = self.significance_values()
+        super().filter_correct(underlying_fwhm, reference=reference,
+                               valid=valid)</div>
+
+
+<div class="viewcode-block" id="Observation2D.undo_filter_correct">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.undo_filter_correct">[docs]</a>
+    def undo_filter_correct(self, reference=None, valid=None):
+        &quot;&quot;&quot;
+        Undo the last filter correction.
+
+        Parameters
+        ----------
+        reference : FlaggedArray or numpy.ndarray (float), optional
+            The data set to determine valid data within the blanking range.
+            Defaults to self.data.
+        valid : numpy.ndarray (bool), optional
+            `True` indicates a data element that may have the filter correction
+            factor un-applied.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if reference is None:
+            reference = self.significance_values()
+        super().undo_filter_correct(reference=reference, valid=valid)</div>
+
+
+<div class="viewcode-block" id="Observation2D.fft_filter_above">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.fft_filter_above">[docs]</a>
+    def fft_filter_above(self, fwhm, valid=None, weight=None):
+        &quot;&quot;&quot;
+        Apply FFT filtering above a given FWHM.
+
+        Parameters
+        ----------
+        fwhm : astropy.units.Quantity
+        valid : numpy.ndarray (bool), optional
+        weight : FlaggedArray or numpy.ndarray (float)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if weight is None:
+            weight = self.weight
+        super().fft_filter_above(fwhm, valid=valid, weight=weight)</div>
+
+
+<div class="viewcode-block" id="Observation2D.resample_from_map">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.resample_from_map">[docs]</a>
+    def resample_from_map(self, obs2d, weights=None):
+        &quot;&quot;&quot;
+        Resample from one map to another.
+
+        Parameters
+        ----------
+        obs2d : Observation2D
+            The map to resample from.
+        weights : numpy.ndarray (float), optional
+            Optional weights to use during the resampling.  If not supplied,
+            defaults to the weights of the supplied observation.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not isinstance(obs2d, Observation2D):
+            raise ValueError(f&quot;{self.__class__} cannot be resampled from &quot;
+                             f&quot;{obs2d}.&quot;)
+
+        if weights is None:
+            weights = obs2d.weight
+
+        beam = self.get_anti_aliasing_beam_image_for(obs2d)
+        map_indices = self.get_index_transform_to(obs2d)
+        self.resample_from(obs2d, map_indices, kernel=beam, weights=weights)
+        self.get_exposure_image().resample_from(
+            obs2d.get_exposure_image(), map_indices, kernel=beam,
+            weights=weights)
+        self.get_weight_image().resample_from(
+            obs2d.get_weight_image(), map_indices, kernel=beam, weights=None)
+        self.copy_processing_from(obs2d)</div>
+
+
+<div class="viewcode-block" id="Observation2D.get_table_entry">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Return a parameter value for a given name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the entry to retrieve.
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        if name == &#39;depth&#39;:
+            return self.get_weights().mean()[0] / self.unit.value
+        return super().get_table_entry(name)</div>
+
+
+<div class="viewcode-block" id="Observation2D.get_hdus">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.get_hdus">[docs]</a>
+    def get_hdus(self):
+        &quot;&quot;&quot;
+        Return the FITS HDUs for the observation.
+
+        Returns
+        -------
+        hdus: list (astropy.io.fits.hdu.base.ExtensionHDU)
+        &quot;&quot;&quot;
+        hdus = super().get_hdus()
+        hdu = self.get_exposures().create_hdu()
+        ext_comment = &#39;Identifier of data contained in this HDU&#39;
+        hdu.header[&#39;EXTNAME&#39;] = &#39;Exposure&#39;, ext_comment
+        self.edit_header(hdu.header)
+        hdus.append(hdu)
+
+        hdu = self.get_noise().create_hdu()
+        hdu.header[&#39;EXTNAME&#39;] = &#39;Noise&#39;, ext_comment
+        self.edit_header(hdu.header)
+        hdus.append(hdu)
+
+        hdu = self.get_significance().create_hdu()
+        hdu.header[&#39;EXTNAME&#39;] = &#39;S/N&#39;, ext_comment
+        self.edit_header(hdu.header)
+        hdus.append(hdu)
+
+        return hdus</div>
+
+
+<div class="viewcode-block" id="Observation2D.get_info">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.get_info">[docs]</a>
+    def get_info(self):
+        &quot;&quot;&quot;
+        Get a list of info strings for the observation.
+
+        Returns
+        -------
+        list of str
+        &quot;&quot;&quot;
+        info = super().get_info()
+        if self.noise_rescale != 1.0:
+            info.append(f&#39;Noise re-scaling: {self.noise_rescale:.2f}x &#39;
+                        f&#39;(from image variance).&#39;)
+        return info</div>
+
+
+<div class="viewcode-block" id="Observation2D.index_of_max">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.observation_2d.Observation2D.html#sofia_redux.scan.source_models.maps.observation_2d.Observation2D.index_of_max">[docs]</a>
+    def index_of_max(self, sign=1, data=None):
+        &quot;&quot;&quot;
+        Return the maximum value and index of maximum value.
+
+        Parameters
+        ----------
+        sign : int or float, optional
+            If positive, find the maximum value in the array.  If negative,
+            find the minimum value in the array.  If zero, find the maximum
+            magnitude in the array.
+        data : numpy.ndarray (float), optional
+            The data array to examine.  Default is the significance values.
+
+        Returns
+        -------
+        maximum_value, maximum_index : float, int
+        &quot;&quot;&quot;
+        if data is None:
+            data = self.significance_values()
+        return super().index_of_max(sign=sign, data=data)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

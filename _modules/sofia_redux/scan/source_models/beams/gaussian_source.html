@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.source_models.beams.gaussian_source &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.source_models.beams.gaussian_source</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log, units
+from astropy.stats import gaussian_fwhm_to_sigma
+import numpy as np
+from scipy.optimize import curve_fit
+import warnings
+
+from sofia_redux.scan.source_models.beams.gaussian_2d import Gaussian2D
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.index_2d import Index2D
+from sofia_redux.scan.utilities.utils import (
+    round_values, to_header_quantity, UNKNOWN_FLOAT_VALUE)
+
+__all__ = [&#39;GaussianSource&#39;]
+
+
+<div class="viewcode-block" id="GaussianSource">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource">[docs]</a>
+class GaussianSource(Gaussian2D):
+    def __init__(self, peak=1.0, x_mean=0.0, y_mean=0.0,
+                 x_fwhm=0.0, y_fwhm=0.0, theta=0.0 * units.Unit(&#39;deg&#39;),
+                 peak_unit=None, position_unit=None, gaussian_model=None):
+        &quot;&quot;&quot;
+        Initialize a GaussianSource model.
+
+        The GaussianSource is an extension of the Gaussian2D model that allows
+        the model to be fit to (or from) a source map.
+
+        Parameters
+        ----------
+        peak : float or units.Quantity, optional
+            The peak amplitude of the Gaussian.
+        x_mean : float or units.Quantity, optional
+            The position of the peak along the x-axis.
+        y_mean : float or units.Quantity, optional
+            The position of the peak along the y-axis.
+        x_fwhm : float or units.Quantity, optional
+            The Full-Width-Half-Max beam width in the x-direction.
+        y_fwhm : float or units.Quantity, optional
+            The Full-Width-Half-Max beam width in the y-direction.
+        theta : float or units.Quantity, optional
+            The rotation of the beam pertaining to `x_fwhm` and `y_fwhm` in
+            relation to the actual (x, y) coordinate axis.  If a float value is
+            supplied, it is assumed to be in degrees.
+        peak_unit : units.Unit or units.Quantity or str, optional
+            The physical units for the peak amplitude.  The default is
+            dimensionless.
+        position_unit : units.Unit or units.Quantity or str, optional
+            The physical units of all position based parameters (`x_mean`,
+            `y_mean`, `x_fwhm`, `y_fwhm`)
+        gaussian_model : Gaussian2D, optional
+            If supplied, extracts all the above parameters from the supplied
+            model.
+        &quot;&quot;&quot;
+        self.positioning_method = &#39;position&#39;
+        self.coordinates = None
+        self.source_mask = None
+        self.source_radius = None
+        self.source_sum = 0.0
+        self.grid = None
+        self.center_index = None
+        self.peak_weight = 1.0
+        self.fwhm_weight = 1.0
+        self.is_corrected = False
+
+        if isinstance(gaussian_model, Gaussian2D):
+            super().__init__(peak=gaussian_model.peak,
+                             x_mean=gaussian_model.x_mean,
+                             y_mean=gaussian_model.y_mean,
+                             x_fwhm=gaussian_model.x_fwhm,
+                             y_fwhm=gaussian_model.y_fwhm,
+                             theta=gaussian_model.theta,
+                             peak_unit=gaussian_model.unit)
+        else:
+            super().__init__(peak=peak, x_mean=x_mean, y_mean=y_mean,
+                             x_fwhm=x_fwhm, y_fwhm=y_fwhm, theta=theta,
+                             peak_unit=peak_unit, position_unit=position_unit)
+
+<div class="viewcode-block" id="GaussianSource.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the Gaussian source.
+
+        Returns
+        -------
+        GaussianSource
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+    @property
+    def referenced_attributes(self):
+        &quot;&quot;&quot;
+        Return the names of attributes to be referenced rather than copied.
+
+        Returns
+        -------
+        set of str
+        &quot;&quot;&quot;
+        attrs = super().referenced_attributes
+        attrs.add(&#39;grid&#39;)
+        return attrs
+
+    @property
+    def position(self):
+        &quot;&quot;&quot;
+        Return the (x, y) position coordinate.
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        return Coordinate2D([self.x_mean, self.y_mean])
+
+    @position.setter
+    def position(self, value):
+        &quot;&quot;&quot;
+        Set the peak position.
+
+        Parameters
+        ----------
+        value : Coordinate2D
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_peak_position(value)
+
+    @property
+    def peak_significance(self):
+        &quot;&quot;&quot;
+        Return the peak significance.
+
+        Returns
+        -------
+        float
+        &quot;&quot;&quot;
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            return np.abs(self.peak) * np.sqrt(self.peak_weight)
+
+    @property
+    def peak_rms(self):
+        &quot;&quot;&quot;
+        Return the peak rms.
+
+        Returns
+        -------
+        float
+        &quot;&quot;&quot;
+        weight = self.peak_weight
+        if weight &gt; 0:
+            return 1.0 / np.sqrt(weight)
+        else:
+            return weight * 0
+
+    @property
+    def fwhm_significance(self):
+        &quot;&quot;&quot;
+        Return the FWHM significance.
+
+        Returns
+        -------
+        float
+        &quot;&quot;&quot;
+        return (np.abs(self.fwhm) * np.sqrt(self.fwhm_weight)).value
+
+    @property
+    def fwhm_rms(self):
+        &quot;&quot;&quot;
+        Return the FWHM RMS.
+
+        Returns
+        -------
+        float or astropy.units.Quantity
+        &quot;&quot;&quot;
+        weight = self.fwhm_weight
+
+        if isinstance(self.fwhm, units.Quantity):
+            rms_unit = self.fwhm.unit
+        else:  # pragma: no cover
+            rms_unit = None
+
+        rms = 0.0 if weight &lt;= 0 else 1.0 / np.sqrt(self.fwhm_weight)
+        if not isinstance(rms, units.Quantity) and rms_unit is not None:
+            rms = rms * rms_unit  # pragma: no cover
+        return rms
+
+    def __eq__(self, other):
+        &quot;&quot;&quot;
+        Test if this GaussianSource is functionally equivalent to another.
+
+        Note that only the model is tested for equality.  No factors such as
+        grid or coordinates will be examined.
+
+        Parameters
+        ----------
+        other : GaussianSource
+
+        Returns
+        -------
+        equal : bool
+        &quot;&quot;&quot;
+        if self is other:
+            return True
+        if not super().__eq__(other):
+            return False
+        if self.is_corrected != other.is_corrected:
+            return False
+        return True
+
+<div class="viewcode-block" id="GaussianSource.set_positioning_method">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.set_positioning_method">[docs]</a>
+    def set_positioning_method(self, method):
+        &quot;&quot;&quot;
+        Set the peak positioning method.
+
+        Parameters
+        ----------
+        method : str
+            May be one of {&#39;position&#39;, &#39;peak&#39;, &#39;centroid&#39;}.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        methods = [&#39;position&#39;, &#39;centroid&#39;, &#39;peak&#39;]
+        s = str(method).lower().strip()
+        if s not in methods:
+            raise ValueError(f&quot;Available positioning methods are {methods}. &quot;
+                             f&quot;Received {method}.&quot;)
+        if s == &#39;peak&#39;:
+            s = &#39;position&#39;
+        self.positioning_method = s</div>
+
+
+<div class="viewcode-block" id="GaussianSource.set_peak_position">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.set_peak_position">[docs]</a>
+    def set_peak_position(self, peak_position):
+        &quot;&quot;&quot;
+        Set the peak position.
+
+        Parameters
+        ----------
+        peak_position : Coordinate2D or Quantity or numpy.ndarray
+            The (x, y) peak position.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if isinstance(peak_position, Coordinate2D):
+            self.x_mean = peak_position.x
+            self.y_mean = peak_position.y
+            self.coordinates = peak_position.copy()
+        elif isinstance(peak_position, np.ndarray):
+            if peak_position.shape != ():
+                self.x_mean = peak_position[0]
+                self.y_mean = peak_position[1]
+                self.coordinates = Coordinate2D(peak_position)
+        else:  # pragma: no cover
+            self.x_mean = peak_position
+            self.y_mean = peak_position
+            self.coordinates = Coordinate2D([peak_position, peak_position])</div>
+
+
+<div class="viewcode-block" id="GaussianSource.fit_map_least_squares">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.fit_map_least_squares">[docs]</a>
+    def fit_map_least_squares(self, map2d, degree=3, reduce_degrees=False):
+        &quot;&quot;&quot;
+        Fit the Gaussian to a given map using LSQ method (adaptTo).
+
+        Parameters
+        ----------
+        map2d : Map2D or Observation2D
+        degree : int, optional
+            The spline degree used to fit the map peak value.
+        reduce_degrees : bool, optional
+            If `True`, allow the spline fit to reduce the number of degrees
+            in cases where there are not enough points available to perform
+            the spline fit of `degree`.  If `False`, a ValueError will be
+            raised if such a fit fails.
+
+        Returns
+        -------
+        data_sum : float
+            The sum of the source withing the source radius.
+        &quot;&quot;&quot;
+        if hasattr(map2d, &#39;get_significance&#39;):
+            # Use significance if an Observation2D object
+            image = map2d.get_significance()
+        else:
+            image = map2d
+
+        # Get peak in (x, y) indexing
+        self.grid = map2d.grid
+        data = image.data.copy()
+        func, p0, bounds = self.get_lsq_fit_parameters(image)
+
+        y, x = np.indices(data.shape)
+        d, x, y = data.ravel(), x.ravel(), y.ravel()
+        p_opt, p_cov = curve_fit(func, (x, y), d, p0=p0, bounds=bounds)
+
+        amplitude, x0, y0, pixel_stddev = p_opt
+        self.set_center_index(Coordinate2D([x0, y0]))
+
+        # fwhm = sqrt(i * a / peak_value) / fwhm2size
+        # fwhm * fwhm2size = sqrt(i * a / peak_value)
+        # (fwhm * fwhm2size)^2 = i * a / peak_value
+        # (peak_value) / a * (fwhm * fwhm2size)^2 = i
+
+        fwhm_pix = pixel_stddev / gaussian_fwhm_to_sigma
+        fwhm = fwhm_pix * np.sqrt(self.grid.get_pixel_area())
+        self.fwhm = fwhm
+
+        if image is not map2d:
+            self.set_peak_from(map2d, degree=degree,
+                               reduce_degrees=reduce_degrees)
+            fwhm_rms = np.sqrt(2) * fwhm / self.peak_significance
+            self.fwhm_weight = 1 / (fwhm_rms ** 2)
+
+        integrated_value = self.peak * (
+            (fwhm_pix * self.FWHM_TO_SIZE) ** 2)
+
+        return integrated_value</div>
+
+
+<div class="viewcode-block" id="GaussianSource.get_lsq_fit_parameters">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.get_lsq_fit_parameters">[docs]</a>
+    def get_lsq_fit_parameters(self, image):
+        &quot;&quot;&quot;
+        Return the LSQ fit parameters for curve_fit.
+
+        Determines the entry parameters for a non-linear least squares fit to
+        the Gaussian source.  These are the initial guess parameters for the
+        peak amplitude, (x, y) mean, and standard deviation.  The bounds for
+        these parameters are also returned.  For the GaussianSource, the
+        amplitude and centroid location are unbounded, and a minimum bound on
+        the standard deviation is set, based on the currently set FWHM.
+
+        Parameters
+        ----------
+        image : Observation2D or SignificanceMap
+
+        Returns
+        -------
+        function, initial_values, bounds
+        &quot;&quot;&quot;
+        peak_coordinates = self.find_peak(image, sign=0)
+        x0, y0 = peak_coordinates.coordinates
+        amplitude = image.data[round_values(y0), round_values(x0)]
+        pixel_size = self.grid.get_pixel_size().coordinates
+        fwhm_pix = (self.fwhm / pixel_size.min()).decompose().value
+        sigma_pix = gaussian_fwhm_to_sigma * fwhm_pix
+        sigma_pix = np.max([1, sigma_pix])
+
+        p0 = (amplitude, x0, y0, sigma_pix)
+        bounds = ((-np.inf, -np.inf, -np.inf, sigma_pix),
+                  (np.inf, np.inf, np.inf, np.inf))
+        return self.gaussian_2d_fit, p0, bounds</div>
+
+
+<div class="viewcode-block" id="GaussianSource.gaussian_2d_fit">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.gaussian_2d_fit">[docs]</a>
+    @staticmethod
+    def gaussian_2d_fit(coordinates, amplitude, x0, y0, sigma):
+        &quot;&quot;&quot;
+        A simple 2-dimensional Gaussian function.
+
+        The return value is:
+
+            z = A.exp((-(x - x0)^2) / (2 sigma^2)) +
+                      (-(y - y0)^2) / (2 sigma^2)))
+
+        Parameters
+        ----------
+        coordinates : 2-tuple (numpy.ndarray)
+            The (x, y) coordinates to evaluate.
+        amplitude : float
+            The scaling factor.
+        x0 : float
+            The center of the Gaussian in x.
+        y0 : float
+            The center of the Gaussian in y.
+        sigma : float
+            The Gaussian standard deviation.
+
+        Returns
+        -------
+        z : numpy.ndarray (float)
+            The derived function value.  Will be the same shape as x or y
+            in the `coordinates`.
+        &quot;&quot;&quot;
+        dx = coordinates[0] - x0
+        dy = coordinates[1] - y0
+        a = 2 * (sigma ** 2)
+        x1 = -(dx ** 2) / a
+        x2 = -(dy ** 2) / a
+        return amplitude * np.exp(x1 + x2)</div>
+
+
+<div class="viewcode-block" id="GaussianSource.fit_map">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.fit_map">[docs]</a>
+    def fit_map(self, map2d, max_iterations=40, radius_increment=1.1,
+                tolerance=0.05, degree=3, reduce_degrees=False):
+        &quot;&quot;&quot;
+        Fit the Gaussian source to a given map.
+
+        An Observation2D object or Map2D overlap object may be supplied
+        and fit with a Gaussian source.  If an Observation2D is supplied, the
+        Gaussian is fit to the significance image, and thus the FWHM rms may
+        also be determined.  Otherwise, all other parameters aside from the
+        FWHM weight will be fit for.
+
+        Parameters
+        ----------
+        map2d : Map2D or Observation2D
+        max_iterations : int, optional
+            The maximum number of iterations by which to increase the radius.
+        radius_increment : float, optional
+            The factor by which to increase the radius for each iteration.  The
+            initial radius size is set to min(grid.pixel_size).
+        tolerance : float, optional
+            Stop the iterations if (1-tolerance) * last_sum &lt;= sum &lt;=
+            (1+tolerance).
+        degree : int, optional
+            The spline degree used to determine the peak value if necessary.
+        reduce_degrees : bool, optional
+            If `True`, allow the spline fit to reduce the number of degrees
+            in cases where there are not enough points available to perform
+            the spline fit of `degree`.  If `False`, a ValueError will be
+            raised if such a fit fails.
+
+        Returns
+        -------
+        data_sum : float
+            The sum of the source withing the source radius.
+        &quot;&quot;&quot;
+        if hasattr(map2d, &#39;get_significance&#39;):
+            # Use significance if an Observation2D object
+            image = map2d.get_significance()
+        else:
+            image = map2d
+
+        # Get peak in (x, y) indexing
+        self.grid = map2d.grid
+        self.set_center_index(self.find_peak(image, sign=0))
+
+        self.find_source_extent(image, max_iterations=max_iterations,
+                                radius_increment=radius_increment,
+                                tolerance=tolerance)
+
+        # Calculate the peak value and fwhm from the image (maybe significance)
+        self.set_peak_from(image, degree=degree, reduce_degrees=reduce_degrees)
+        fwhm2 = np.abs(self.source_sum
+                       * self.grid.get_pixel_area()
+                       / self.peak)
+        self.fwhm = np.sqrt(fwhm2) / self.FWHM_TO_SIZE
+        fwhm_unit = self.fwhm.unit
+        self.fwhm_weight = 1.0 / (fwhm_unit ** 2)
+
+        # If the image is not the map, calculate the actual peak value.
+        if image is not map2d:
+            # Sets the peak, peak weight, and unit.
+            self.set_peak_from(map2d, degree=degree,
+                               reduce_degrees=reduce_degrees)
+            fwhm_rms = np.sqrt(2.0) * self.fwhm / self.peak_significance
+            if fwhm_rms != 0 and not np.isnan(fwhm_rms):
+                self.fwhm_weight = 1.0 / (fwhm_rms ** 2)
+            else:
+                self.fwhm_weight = np.inf / (fwhm_unit ** 2)
+
+        fwhm_pix = self.fwhm / np.sqrt(self.grid.get_pixel_area())
+        integrated_value = self.peak * (
+            (fwhm_pix * self.FWHM_TO_SIZE) ** 2)
+
+        return integrated_value</div>
+
+
+<div class="viewcode-block" id="GaussianSource.set_center_index">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.set_center_index">[docs]</a>
+    def set_center_index(self, center_index):
+        &quot;&quot;&quot;
+        Set the center pixel index on the image for the source.
+
+        Parameters
+        ----------
+        center_index : Coordinate2D
+            The (x, y) center index.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.position = self.get_grid_coordinates(center_index)
+        self.center_index = center_index</div>
+
+
+<div class="viewcode-block" id="GaussianSource.get_grid_coordinates">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.get_grid_coordinates">[docs]</a>
+    def get_grid_coordinates(self, index):
+        &quot;&quot;&quot;
+        Return the grid coordinates for the given map indices.
+
+        Parameters
+        ----------
+        index : Coordinate2D
+            The dimensionless map pixel coordinates.
+
+        Returns
+        -------
+        coordinates : Coordinate2D
+            The physical map coordinates for the given `index`.
+        &quot;&quot;&quot;
+        offset = self.grid.index_to_offset(index)
+        grid_coordinates = self.grid.reference.copy()
+        self.grid.projection.deproject(offset, coordinates=grid_coordinates)
+        return grid_coordinates</div>
+
+
+<div class="viewcode-block" id="GaussianSource.find_source_extent">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.find_source_extent">[docs]</a>
+    def find_source_extent(self, image, max_iterations=40,
+                           radius_increment=0.1, tolerance=0.05):
+        &quot;&quot;&quot;
+        Find the extent of the source and shape.
+
+        Calculates the integral of the source, a circular source radius, and
+        a source mask.  The algorithm for determining the source iterates using
+        an expanding circular aperture centered on the currently defined
+        `center_index` attribute.  The iteration will be halted, and parameters
+        updated once either the `max_iteration` number of iterations has been
+        reached, or::
+
+            data_sum &lt;= last_data_sum * (1 + tolerance)
+
+        The data_sum is the sum of data values inside the circular aperture,
+        and the last_data_sum is that same sum from the previous iteration.
+        Each iteration the radius of the aperture is increased by::
+
+            min(pixel_size, radius_increment * current_radius)
+
+        The starting radius is equal to the pixel size in the data.
+
+        Parameters
+        ----------
+        image : FlaggedArray
+        max_iterations : int, optional
+            The maximum number of iterations, each of which increases the
+            search radius by `radius_increment`.
+        radius_increment : float, optional
+            The factor by which to increase the search radius between
+            iterations.
+        tolerance : float, optional
+            Halt iterations if the change in data sum is less than
+            1 + `tolerance` between iterations.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        offset = Coordinate2D(np.indices(image.shape)[::-1])  # numpy to FITS
+        offset.subtract(self.center_index)
+        pixel_size = self.grid.get_pixel_size()
+        offset.scale(pixel_size)
+        grow = np.min(pixel_size.coordinates)
+
+        radius = offset.length
+        search_radius = 1.0 * grow
+
+        sort_index = np.argsort(radius.ravel())
+        radius_sort = radius.ravel()[sort_index]
+        data_sort = image.data.ravel()[sort_index]
+        search_index = np.nonzero(radius_sort &lt;= search_radius)[0]
+        if len(search_index) == 0:
+            search_index = 0
+        else:
+            search_index = search_index[-1]
+
+        tolerance_check = 1 + tolerance
+
+        last_data_sum = np.sum(data_sort[:search_index + 1])
+        for iteration in range(max_iterations):
+
+            break_limit = tolerance_check * last_data_sum
+
+            search_radius += min([grow, radius_increment * search_radius])
+            search_index = np.nonzero(radius_sort &lt;= search_radius)[0]
+            if len(search_index) == 0:
+                search_index = 0
+            else:
+                search_index = search_index[-1]
+            data_sum = np.sum(data_sort[:search_index + 1])
+
+            if data_sum == 0:  # may be the case for simulated data/pixel maps
+                last_data_sum = 0.0
+                continue
+
+            if data_sum &gt;= 0:
+                if data_sum &lt;= break_limit:
+                    break
+            else:
+                if data_sum &gt;= break_limit:
+                    break
+            last_data_sum = data_sum
+
+        self.source_radius = search_radius
+        self.source_mask = radius &lt;= search_radius
+        self.source_sum = last_data_sum</div>
+
+
+<div class="viewcode-block" id="GaussianSource.get_center_offset">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.get_center_offset">[docs]</a>
+    def get_center_offset(self, offset=None):
+        &quot;&quot;&quot;
+        Find the offset of the source position from the grid reference.
+
+        Parameters
+        ----------
+        offset : Coordinate2D, optional
+            An optional offset into which to place the results.
+
+        Returns
+        -------
+        offset : Coordinate2D
+        &quot;&quot;&quot;
+        center_offset = self.grid.index_to_offset(self.center_index)
+        if offset is None:
+            return center_offset
+        offset.copy_coordinates(center_offset)
+        return offset</div>
+
+
+<div class="viewcode-block" id="GaussianSource.find_peak">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.find_peak">[docs]</a>
+    def find_peak(self, image, grid=None, sign=0):
+        &quot;&quot;&quot;
+        Fit the peak coordinates from a given map. (moveTo)
+
+        Parameters
+        ----------
+        image : FlaggedArray (float)
+            The image to fit.
+        grid : SphericalGrid
+            The grid to fit onto.
+        sign : int or float, optional
+            If positive, fit to positive sources in the map.  If negative,
+            fit to negative sources in the map.  If zero, fit to source
+            magnitudes in the map.  Note, this only takes affect if `position`
+            is set as the positioning_method.
+
+        Returns
+        -------
+        peak : Coordinate2D
+            The (x, y) peak position.
+        &quot;&quot;&quot;
+        # Note that the peak position is in terms of pixels (y, x)
+        if self.positioning_method == &#39;position&#39;:
+            peak = self.find_local_peak(image, sign=sign)
+        elif self.positioning_method == &#39;centroid&#39;:
+            peak = self.find_local_centroid(image)
+        else:
+            raise ValueError(
+                f&quot;Unknown positioning method: {self.positioning_method}.&quot;)
+
+        # peak is in pixel positions (y, x) format
+        if grid is None:
+            return peak
+        else:
+            return grid.projection.deproject(peak)</div>
+
+
+<div class="viewcode-block" id="GaussianSource.find_local_peak">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.find_local_peak">[docs]</a>
+    @staticmethod
+    def find_local_peak(image, sign=0):
+        &quot;&quot;&quot;
+        Find the local peak in a map using the &#39;position&#39; method.
+
+        Parameters
+        ----------
+        image : FlaggedArray
+            The image to fit.
+        sign : int or float, optional
+            If positive, fit to positive sources in the map.  If negative,
+            fit to negative sources in the map.  If zero, fit to source
+            magnitudes in the map.  Note, this only takes affect if `position`
+            is set as the positioning_method.
+
+        Returns
+        -------
+        peak : Coordinate2D
+            The (x, y) pixel peak position.
+        &quot;&quot;&quot;
+        peak_value, peak_index = image.index_of_max(sign=sign)
+        if isinstance(peak_index, Coordinate2D):
+            peak_index = Index2D(peak_index.coordinates)
+        else:  # pragma: no cover
+            peak_index = Index2D(peak_index)
+        return Coordinate2D(image.get_refined_peak_index(peak_index))</div>
+
+
+<div class="viewcode-block" id="GaussianSource.find_local_centroid">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.find_local_centroid">[docs]</a>
+    @staticmethod
+    def find_local_centroid(image):
+        &quot;&quot;&quot;
+        Find the local peak in a map using the &#39;centroid&#39; method.
+
+        Parameters
+        ----------
+        image : FlaggedArray
+
+        Returns
+        -------
+        peak : Coordinate2D
+            The (x, y) peak position.
+        &quot;&quot;&quot;
+        indices = np.indices(image.shape)[::-1]  # to (x, y) FITS format
+        data = image.data
+
+        w = np.abs(data) * image.valid
+        w[np.isnan(w)] = 0.0
+        w_sum = w.sum()
+        wd_sum = np.empty(image.ndim, dtype=float)
+        for dimension in range(image.ndim):
+            wd_sum[dimension] = np.sum(indices[dimension] * w)
+
+        return Coordinate2D(wd_sum / w_sum)</div>
+
+
+<div class="viewcode-block" id="GaussianSource.set_peak_from">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.set_peak_from">[docs]</a>
+    def set_peak_from(self, image, degree=3, reduce_degrees=False):
+        &quot;&quot;&quot;
+        Set the peak value from a given image.
+
+        The peak value is determined from spline interpolation on the image
+        at `self.center_index`.  This will also set the weight of the peak
+        as exact (infinity) or will interpolate from a weight map if available.
+
+        Parameters
+        ----------
+        image : FlaggedArray or Map2D
+        degree : int, optional
+            The spline degree to fit.
+        reduce_degrees : bool, optional
+            If `True`, allow the spline fit to reduce the number of degrees
+            in cases where there are not enough points available to perform
+            the spline fit of `degree`.  If `False`, a ValueError will be
+            raised if such a fit fails.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        peak_value = image.value_at(self.center_index, degree=degree,
+                                    reduce_degrees=reduce_degrees)
+        unit = getattr(image, &#39;unit&#39;, 1.0 * units.dimensionless_unscaled)
+        self.peak = peak_value
+        if hasattr(image, &#39;weight&#39;):
+            self.peak_weight = image.get_weights().value_at(
+                self.center_index, degree=degree,
+                reduce_degrees=reduce_degrees)
+        else:
+            self.set_exact()  # peak weight set to infinity
+
+        self.set_unit(unit)</div>
+
+
+<div class="viewcode-block" id="GaussianSource.set_unit">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.set_unit">[docs]</a>
+    def set_unit(self, unit):
+        &quot;&quot;&quot;
+        Set the unit of the Gaussian peak.
+
+        Parameters
+        ----------
+        unit : units.Quantity or units.Unit or float or str or None
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if unit is None:
+            unit_value = 1.0
+            unit_type = units.dimensionless_unscaled
+        elif isinstance(unit, units.Quantity):
+            unit_value = unit.value
+            unit_type = unit.unit
+        elif isinstance(unit, (units.Unit, str)):
+            unit = units.Unit(unit)
+            unit_value = 1.0
+            unit_type = unit
+        else:  # assume a number
+            unit_value = float(unit)
+            unit_type = units.dimensionless_unscaled
+
+        self.unit = unit_type
+        self.scale_peak(unit_value)</div>
+
+
+<div class="viewcode-block" id="GaussianSource.scale_peak">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.scale_peak">[docs]</a>
+    def scale_peak(self, factor):
+        &quot;&quot;&quot;
+        Scale the peak by a given amount.
+
+        Parameters
+        ----------
+        factor : float
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if factor == 1:
+            return
+        self.peak = self.peak * factor
+        self.peak_weight /= factor ** 2</div>
+
+
+<div class="viewcode-block" id="GaussianSource.scale_fwhm">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.scale_fwhm">[docs]</a>
+    def scale_fwhm(self, factor):
+        &quot;&quot;&quot;
+        Scale the fwhm by a given amount
+
+        Parameters
+        ----------
+        factor : float
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if factor == 1:
+            return
+        self.fwhm *= factor
+        self.fwhm_weight /= factor ** 2</div>
+
+
+<div class="viewcode-block" id="GaussianSource.set_exact">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.set_exact">[docs]</a>
+    def set_exact(self):
+        &quot;&quot;&quot;
+        Set the peak to be &#39;exact&#39;.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.peak_weight = np.inf</div>
+
+
+<div class="viewcode-block" id="GaussianSource.get_correction_factor">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.get_correction_factor">[docs]</a>
+    def get_correction_factor(self, map2d):
+        &quot;&quot;&quot;
+        Get the correction factor for a given map.
+
+        Notes
+        -----
+        The original CRUSH would always return a value of 1, since the logic
+        based on the map2d.filter_fwhm returns 1 if it is not NaN, and sets the
+        filtering factor to 0 if it is NaN.  This has been remedied here, but
+        does not appear to actually be used during the reduction.
+
+        Parameters
+        ----------
+        map2d : Map2D
+
+        Returns
+        -------
+        correction_factor : float
+        &quot;&quot;&quot;
+        if not map2d.is_filtered():  # map2d.filter_fwhm = NaN
+            return 1.0
+
+        if map2d.is_filter_blanked():
+            filter_fraction = min(
+                map2d.filter_blanking / self.peak_significance, 1.0)
+        else:
+            filter_fraction = 1.0
+
+        filtering = 1.0 - (1.0 / map2d.get_filter_correction_factor())
+        correction = 1.0 / (1.0 - filtering * filter_fraction)
+        return correction</div>
+
+
+<div class="viewcode-block" id="GaussianSource.correct">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.correct">[docs]</a>
+    def correct(self, map2d):
+        &quot;&quot;&quot;
+        Apply peak value correction from a map.
+
+        Parameters
+        ----------
+        map2d : Map2d
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.is_corrected:
+            log.warning(&quot;Source is already corrected.&quot;)
+            return
+        self.scale_peak(self.get_correction_factor(map2d))
+        self.is_corrected = True</div>
+
+
+<div class="viewcode-block" id="GaussianSource.uncorrect">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.uncorrect">[docs]</a>
+    def uncorrect(self, map2d):
+        &quot;&quot;&quot;
+        Uncorrect the peak value for a given map.
+
+        Parameters
+        ----------
+        map2d : Map2d
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.is_corrected:
+            log.warning(&quot;Source is already uncorrected&quot;)
+            return
+        self.scale_peak(1.0 / self.get_correction_factor(map2d))
+        self.is_corrected = False</div>
+
+
+<div class="viewcode-block" id="GaussianSource.get_gaussian_2d">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.get_gaussian_2d">[docs]</a>
+    def get_gaussian_2d(self):
+        &quot;&quot;&quot;
+        Return a representation of the beam as a Gaussian2D object.
+
+        Returns
+        -------
+        Gaussian2D
+        &quot;&quot;&quot;
+        return Gaussian2D(peak=self.peak,
+                          x_fwhm=self.x_fwhm,
+                          y_fwhm=self.y_fwhm,
+                          x_mean=self.x_mean,
+                          y_mean=self.y_mean,
+                          theta=self.theta)</div>
+
+
+<div class="viewcode-block" id="GaussianSource.deconvolve_with">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.deconvolve_with">[docs]</a>
+    def deconvolve_with(self, psf):
+        &quot;&quot;&quot;
+        Deconvolve with a given psf.
+
+        Note that this process will result in a circular beam.  I.e. one in
+        which the FWHM in the x and y-directions are equivalent.
+
+        Parameters
+        ----------
+        psf : Gaussian2D
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        factor = self.fwhm
+        beam = self.get_gaussian_2d()
+        beam.deconvolve_with(psf)
+        self.fwhm = beam.get_circular_equivalent_fwhm()
+        new_fwhm = self.fwhm
+
+        if isinstance(self.fwhm, units.Quantity):
+            weight_unit = (1 / self.fwhm.unit) ** 2
+        else:  # pragma: no cover
+            weight_unit = None
+
+        if new_fwhm == 0:
+            self.fwhm_weight = 0.0
+        else:
+            factor /= new_fwhm
+            self.fwhm_weight /= factor ** 2
+
+        if weight_unit is not None:
+            if not isinstance(self.fwhm_weight, units.Quantity) or (
+                    self.fwhm_weight.unit == units.dimensionless_unscaled):
+                self.fwhm_weight = self.fwhm_weight * weight_unit</div>
+
+
+<div class="viewcode-block" id="GaussianSource.convolve_with">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.convolve_with">[docs]</a>
+    def convolve_with(self, psf):
+        &quot;&quot;&quot;
+        Convolve with a given PSF.
+
+        Convolve the current beam with a given PSF.  The shape of the beam
+        will be accounted for correctly in both (x, y) dimensions unlike
+        the `deconvolve_with` method.
+
+        Parameters
+        ----------
+        psf : Gaussian2D
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        factor = self.fwhm
+        beam = self.get_gaussian_2d()
+        beam.convolve_with(psf)
+        self.set_xy_fwhm(beam.x_fwhm, beam.y_fwhm)
+        new_fwhm = self.fwhm
+        if new_fwhm == 0:
+            self.fwhm_weight = 0.0
+        else:
+            factor /= new_fwhm
+            self.fwhm_weight /= factor ** 2
+
+        if isinstance(self.fwhm, units.Quantity):
+            weight_unit = (1 / self.fwhm.unit) ** 2
+            if not isinstance(self.fwhm_weight, units.Quantity) or (
+                    self.fwhm_weight.unit == units.dimensionless_unscaled):
+                self.fwhm_weight = self.fwhm_weight * weight_unit</div>
+
+
+<div class="viewcode-block" id="GaussianSource.edit_header">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.edit_header">[docs]</a>
+    def edit_header(self, header, fits_id=&#39;&#39;, beam_name=None, size_unit=None):
+        &quot;&quot;&quot;
+        Edit a FITS header with the beam parameters.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The FITS header to edit.
+        fits_id : str, optional
+            Not used.
+        beam_name : str, optional
+            The name of the beam.  Not implemented for the GaussianSource.
+        size_unit : astropy.units.Unit or Quantity or str, optional
+            If set, convert the major/minor beam values to this unit before
+            setting in the header.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        fwhm = to_header_quantity(self.fwhm, unit=size_unit)
+        if size_unit is None and isinstance(fwhm, units.Quantity):
+            size_unit = fwhm.unit
+        fwhm_rms = to_header_quantity(self.fwhm_rms, unit=size_unit)
+        if size_unit is None and isinstance(
+                fwhm_rms, units.Quantity):  # pragma: no cover
+            # Cannot reach in normal operation
+            size_unit = fwhm_rms.unit
+            if not isinstance(fwhm, units.Quantity):
+                fwhm = to_header_quantity(fwhm, unit=size_unit)
+
+        if isinstance(fwhm, units.Quantity):
+            size_comment = f&#39;({size_unit}) &#39;
+            fwhm = fwhm.value
+            fwhm_rms = fwhm_rms.value
+        else:
+            size_comment = &#39;&#39;
+
+        peak_unit = self.unit
+        peak = to_header_quantity(self.peak, unit=peak_unit)
+        if isinstance(peak, units.Quantity):
+            peak_unit = peak.unit
+        else:
+            peak_unit = None
+
+        peak_rms = to_header_quantity(self.peak_rms, unit=peak_unit)
+        if peak_unit is None and isinstance(
+                peak_rms, units.Quantity):  # pragma: no cover
+            # Cannot reach in normal operation
+            peak_unit = peak_rms.unit
+            peak = to_header_quantity(peak, unit=peak_unit)
+
+        if isinstance(peak, units.Quantity):
+            unit_comment = f&#39;({peak_unit}) &#39;
+            peak = peak.value
+            peak_rms = peak_rms.value
+        else:
+            unit_comment = &#39;&#39;
+
+        header[&#39;SRCPEAK&#39;] = peak, unit_comment + &#39;source peak flux.&#39;
+        header[&#39;SRCPKERR&#39;] = peak_rms, unit_comment + &#39;peak flux error.&#39;
+
+        if np.isfinite(fwhm) and fwhm != UNKNOWN_FLOAT_VALUE:
+            header[&#39;SRCFWHM&#39;] = fwhm, size_comment + &#39;source FWHM.&#39;
+        if (self.fwhm_weight &gt; 0 and np.isfinite(fwhm_rms)
+                and fwhm_rms != UNKNOWN_FLOAT_VALUE):
+            header[&#39;SRCWERR&#39;] = fwhm_rms, size_comment + &#39;FWHM error.&#39;</div>
+
+
+<div class="viewcode-block" id="GaussianSource.get_integral">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.get_integral">[docs]</a>
+    def get_integral(self, psf_area):
+        &quot;&quot;&quot;
+        Return the integral over a given area.
+
+        Parameters
+        ----------
+        psf_area : astropy.units.Quantity or float
+            The area over which to evaluate the integral.
+
+        Returns
+        -------
+        integral, weight : (float, float) or (Quantity, Quantity)
+        &quot;&quot;&quot;
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            factor = self.area / psf_area
+            if isinstance(factor, units.Quantity):
+                factor = factor.decompose().value
+            integral = self.peak * factor
+            weight = self.peak_weight / (factor ** 2)
+        return integral, weight</div>
+
+
+<div class="viewcode-block" id="GaussianSource.pointing_info">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.pointing_info">[docs]</a>
+    def pointing_info(self, map2d):
+        &quot;&quot;&quot;
+        Return a list of strings with pointing information.
+
+        Parameters
+        ----------
+        map2d : Map2d
+
+        Returns
+        -------
+        info : list (str)
+        &quot;&quot;&quot;
+        peak = to_header_quantity(self.peak, unit=self.unit)
+        peak_value = peak.value if isinstance(peak, units.Quantity) else peak
+        if peak_value == UNKNOWN_FLOAT_VALUE:
+            peak_value = self.peak
+
+        unit_str = f&#39; {peak.unit}&#39; if isinstance(peak, units.Quantity) else &#39;&#39;
+        info = [f&#39;Peak: {peak_value:.5f}{unit_str} &#39;
+                f&#39;(S/N ~ {self.peak_significance:.5f})&#39;]
+        size_unit = map2d.display_grid_unit
+        integral, integral_weight = self.get_integral(
+            map2d.underlying_beam.area)
+
+        if integral_weight &gt; 0:
+            integral_rms = 1.0 / np.sqrt(integral_weight)
+        else:
+            integral_rms = integral_weight * 0
+        if integral_rms != 0:
+            info.append(
+                f&#39;Integral: {integral:.4f} +- {integral_rms:.4f}{unit_str}&#39;)
+        else:
+            info.append(f&#39;Integral: {integral:.4f}{unit_str}&#39;)
+
+        fwhm = to_header_quantity(self.fwhm, unit=size_unit)
+        if size_unit is None and isinstance(fwhm, units.Quantity):
+            size_unit = fwhm.unit
+        fwhm_rms = to_header_quantity(self.fwhm_rms, unit=size_unit)
+        if size_unit is None and isinstance(
+                fwhm_rms, units.Quantity):  # pragma: no cover
+            # Cannot reach during normal operation
+            size_unit = fwhm_rms.unit
+            fwhm = to_header_quantity(fwhm, unit=size_unit)
+
+        if isinstance(fwhm, units.Quantity):
+            unit_str = f&#39; ({fwhm.unit})&#39;
+            fwhm = fwhm.value
+            fwhm_rms = fwhm_rms.value
+        else:
+            unit_str = &#39;&#39;
+
+        if fwhm_rms == 0:
+            info.append(f&#39;FWHM: {fwhm:.4f}{unit_str}&#39;)
+        else:
+            info.append(f&#39;FWHM: {fwhm:.4f} +- {fwhm_rms:.4f}{unit_str}&#39;)
+        return info</div>
+
+
+<div class="viewcode-block" id="GaussianSource.get_asymmetry_2d">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.get_asymmetry_2d">[docs]</a>
+    def get_asymmetry_2d(self, image, angle, radial_range):
+        &quot;&quot;&quot;
+        Return the asymmetry of the GaussianSource.
+
+        Parameters
+        ----------
+        image : Image2D
+            The image from which to determine the asymmetry.
+        angle : units.Quantity
+            The rotation of the image with respect to the GaussianSource.
+        radial_range : Range
+            The range over which the asymmetry should be calculated.
+
+        Returns
+        -------
+        asymmetry : Asymmetry2D
+        &quot;&quot;&quot;
+        return image.get_asymmetry_2d(self.grid, self.center_index,
+                                      angle, radial_range)</div>
+
+
+<div class="viewcode-block" id="GaussianSource.get_representation">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.get_representation">[docs]</a>
+    def get_representation(self, grid):
+        &quot;&quot;&quot;
+        Return a representation of the Gaussian source on a new grid.
+
+        Parameters
+        ----------
+        grid : Grid2D
+            The new grid to apply to a copy of this GaussianSource.
+
+        Returns
+        -------
+        GaussianSource
+            A copy of the Gaussian source on the new grid.
+        &quot;&quot;&quot;
+        center_offset = self.grid.index_to_offset(self.center_index)
+        new = self.copy()
+        new.grid = grid.copy()
+        new.set_center_index(new.grid.offset_to_index(center_offset))
+        return new</div>
+
+
+<div class="viewcode-block" id="GaussianSource.get_data">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.html#sofia_redux.scan.source_models.beams.gaussian_source.GaussianSource.get_data">[docs]</a>
+    def get_data(self, map2d, size_unit=None):
+        &quot;&quot;&quot;
+        Return a dictionary of properties for to the source model on a map.
+
+        The key values returned are:
+
+          - peak: The fitted peak value
+          - dpeak: The fitted peak value RMS
+          - peakS2N: The peak signal-to-noise ratio
+          - int: The integral of the peak on the map
+          - dint: The integral rms of the peak on the map
+          - intS2N: The significance of the peak on the map
+          - FWHM: The full-width-half maximum of the peak
+          - dFWHM: The full-width-half-maximum RMS of the peak
+
+        Parameters
+        ----------
+        map2d : Map2D
+            The map for which to calculate an integral.
+        size_unit : units.Unit or str, optional
+            If set, converts FWHM and dFWHM to `size_unit`.
+
+        Returns
+        -------
+        data : dict
+        &quot;&quot;&quot;
+        data = {}
+        if map2d.underlying_beam is not None:
+            i, iw = self.get_integral(map2d.underlying_beam.area)
+        else:
+            i, iw = 0.0, np.inf
+
+        fwhm = self.fwhm
+        fwhm_rms = self.fwhm_rms
+
+        data[&#39;peak&#39;] = self.peak * self.unit
+        data[&#39;dpeak&#39;] = self.peak_rms * self.unit
+        data[&#39;peakS2N&#39;] = self.peak_significance
+        data[&#39;int&#39;] = i * self.unit
+        data[&#39;dint&#39;] = 1.0 / np.sqrt(iw) * self.unit
+        if i == 0 and iw == np.inf:
+            data[&#39;intS2N&#39;] = 0.0
+        else:
+            data[&#39;intS2N&#39;] = np.abs(i) * np.sqrt(iw)
+
+        fwhm = to_header_quantity(fwhm, unit=size_unit, keep=True)
+        fwhm_rms = to_header_quantity(fwhm_rms, unit=size_unit, keep=True)
+
+        data[&#39;FWHM&#39;] = fwhm
+        data[&#39;dFWHM&#39;] = fwhm_rms
+        return data</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

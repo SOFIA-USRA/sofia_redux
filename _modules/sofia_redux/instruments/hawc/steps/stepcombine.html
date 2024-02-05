@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepcombine &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepcombine</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Time series combination pipeline step.&quot;&quot;&quot;
+
+import numpy as np
+
+from astropy import log
+from astropy.io import fits
+
+from sofia_redux.instruments.hawc.steps.basehawc import clipped_mean
+from sofia_redux.instruments.hawc.stepparent import StepParent
+
+__all__ = [&#39;StepCombine&#39;]
+
+
+<div class="viewcode-block" id="StepCombine">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepcombine.StepCombine.html#sofia_redux.instruments.hawc.steps.stepcombine.StepCombine">[docs]</a>
+class StepCombine(StepParent):
+    &quot;&quot;&quot;
+    Combine time series data for R+T and R-T flux samples.
+
+    This step averages all chop-subtracted samples for each nod and
+    HWP setting, for the R+T and R-T images.  Outliers are identified
+    via iterative sigma-clipping (Chauvenet&#39;s criterion).  Errors
+    are propagated from the input variance images or, optionally,
+    reported as the standard deviation across the time samples.
+
+    After this step, R-T images are propagated for polarimetry data
+    only (NHWP &gt; 1).
+
+    This step should be run after the
+    `sofia_redux.instruments.hawc.steps.StepSplit` pipeline step.
+    It requires the following extensions: for each
+    HWP angle *M* and Nod *N* there should be six images: DATA R-T
+    HWP M NOD N, DATA R+T HWP M NOD N, VAR R-T HWP M,
+    NOD N, VAR R+T HWP M NOD N, VAR R HWP M NOD N, VAR T
+    HWP M NOD N. In addition, there must be a table containing the
+    rows corresponding to a given HWP and Nod, named TABLE HWP M
+    NOD N. Finally, there should be a single bad pixel mask image.
+
+    The output extensions are the same as the input extensions,
+    except that VAR R+T and VAR R-T are replaced with ERROR R+T
+    and ERROR R-T extensions.
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepCombine.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepcombine.StepCombine.html#sofia_redux.instruments.hawc.steps.stepcombine.StepCombine.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;combine&#39;, and are named with
+        the step abbreviation &#39;CMB&#39;.
+
+        Parameters defined for this step are:
+
+        sigma : float
+            Reject outliers more than this many sigma from the mean.
+        sum_sigma : float
+            Reject additional R+T outliers more than this many sigma
+            from the mean.
+        use_error : bool
+            Set to True to use the standard deviation across the time
+            samples as the output error, rather than propagating input
+            variances.
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;combine&#39;
+        self.description = &#39;Combine Time Series&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;cmb&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+
+        # Append parameters
+        self.paramlist.append([&#39;sigma&#39;, 3.0,
+                               &quot;Reject outliers more than this many &quot;
+                               &quot;sigma from the mean&quot;])
+        self.paramlist.append([&#39;sum_sigma&#39;, 4.0,
+                               &quot;Reject additional R+T outliers more &quot;
+                               &quot;than sum_sigma from the mean&quot;])
+        self.paramlist.append([&#39;use_error&#39;, False,
+                               &quot;Set to True to use Chauvenet output &quot;
+                               &quot;errors rather than propagating input &quot;
+                               &quot;variances&quot;])</div>
+
+
+<div class="viewcode-block" id="StepCombine.comb_table">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepcombine.StepCombine.html#sofia_redux.instruments.hawc.steps.stepcombine.StepCombine.comb_table">[docs]</a>
+    def comb_table(self, table, newmask):
+        &quot;&quot;&quot;
+        Average all rows for a table.
+
+        Parameters
+        ----------
+        table : fits.FITS_rec
+            The table to average.
+        newmask : array-like of bool
+            Table rows to combine.
+
+        Returns
+        -------
+        BinTableHDU
+            The averaged table.
+        &quot;&quot;&quot;
+        names = table.names
+        formats = table.columns.formats
+        dims = table.columns.dims
+        units = table.columns.units
+        cols = []
+
+        outrow = self.dataout.tablemergerows(table[newmask])
+        for n, f, d, u in zip(names, formats, dims, units):
+            cols.append(fits.Column(name=n, format=f, dim=d, unit=u,
+                                    array=[outrow[n]]))
+        tbhdu = fits.BinTableHDU.from_columns(fits.ColDefs(cols))
+        return tbhdu</div>
+
+
+<div class="viewcode-block" id="StepCombine.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepcombine.StepCombine.html#sofia_redux.instruments.hawc.steps.stepcombine.StepCombine.run">[docs]</a>
+    def run(self):
+        r&quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        Because this step is single-in, single-out (SISO),
+        self.datain must be a DataFits object.  The output
+        is also a DataFits object, stored in self.dataout.
+
+        This step combines the chop cycles for each HWP angle
+        and Nod separately (and each pixel as well). This happens first for
+        the R-T data, as follows:
+
+        1. For each pixel in R-T, compute the mean value and standard
+           deviation.
+        2. Reject any chop cycles more than *sigma* away from the mean.
+        3. Repeat 1-2 until no more chop cycles are removed.
+
+        Any masked pixels from R-T deglitching are also masked in R+T.
+        Additional deglitching in R+T follows the same outlier rejection as
+        for R-T, with the sigma cutoff specified by the *sum\_sigma*
+        parameter.
+        &quot;&quot;&quot;
+        self.dataout = self.datain.copy()
+        nhwp = self.datain.getheadval(&#39;nhwp&#39;)
+        nodpatt = self.datain.getheadval(&quot;nodpatt&quot;)
+        nnod = len(set(nodpatt))
+
+        chauvenet = self.getarg(&#39;sigma&#39;)
+        sum_sigma = self.getarg(&#39;sum_sigma&#39;)
+        use_error = self.getarg(&#39;use_error&#39;)
+
+        for hwp in range(nhwp):
+            for nod in range(nnod):
+                log.debug(&#39;starting hwp %d nod %d&#39; % (hwp, nod))
+                rmt_data = &#39;DATA R-T HWP%d NOD%d&#39; % (hwp, nod)
+                rpt_data = &#39;DATA R+T HWP%d NOD%d&#39; % (hwp, nod)
+                rmt_var = &#39;VAR R-T HWP%d NOD%d&#39; % (hwp, nod)
+                rpt_var = &#39;VAR R+T HWP%d NOD%d&#39; % (hwp, nod)
+                r_var = &#39;VAR R HWP%d NOD%d&#39; % (hwp, nod)
+                t_var = &#39;VAR T HWP%d NOD%d&#39; % (hwp, nod)
+                rmt_sigma = &#39;ERROR R-T HWP%d NOD%d&#39; % (hwp, nod)
+                rpt_sigma = &#39;ERROR R+T HWP%d NOD%d&#39; % (hwp, nod)
+
+                # make sure data is float64
+                rmt = self.datain.imageget(rmt_data).astype(np.float64)
+                rpt = self.datain.imageget(rpt_data).astype(np.float64)
+                rptv = self.datain.imageget(rpt_var).astype(np.float64)
+                rv = self.datain.imageget(r_var).astype(np.float64)
+                tv = self.datain.imageget(t_var).astype(np.float64)
+                table = self.datain.tableget(&#39;TABLE HWP%d NOD%d&#39; % (hwp, nod))
+
+                nplane, nrow, ncol = rmt.shape
+                mask = np.zeros_like(rmt)
+
+                # run Chauvenet&#39;s criterion to reject outliers
+                mean, sigma = clipped_mean(rmt, mask, sigma=chauvenet)
+
+                maskvar = rptv.copy()
+                maskvar[mask == 1] = np.nan
+                count = np.sum(1 - mask, axis=0)
+                rmtv = np.nansum(maskvar, axis=0) / count ** 2
+
+                num = int(np.sum(mask))
+                log.info(&#39;R-T deglitching: masked %d of %d &#39;
+                         &#39;samples in hwp %d, nod %d&#39; %
+                         (num, nplane * nrow * ncol, hwp, nod))
+
+                # Note: if nhwp = 1, then it doesn&#39;t really make sense to have
+                # R-T data.  We&#39;ll keep it for this step for consistency,
+                # but it will be discarded after this step.
+                self.dataout.imageset(mean, rmt_data)
+                if use_error:
+                    self.dataout.imageset(sigma, rmt_sigma)
+                else:
+                    self.dataout.imageset(np.sqrt(rmtv), rmt_sigma)
+                self.dataout.imagedel(rmt_var)
+
+                # run Chauvenet&#39;s criterion to find additional outliers
+                mean, sigma = clipped_mean(rpt, mask, sigma=sum_sigma)
+
+                rptv[mask == 1] = np.nan
+                count = np.sum(1 - mask, axis=0)
+                rptv = np.nansum(rptv, axis=0) / count ** 2
+
+                # propagate R and T variance as well --
+                # needed for covariance calculations later
+                rv[mask == 1] = np.nan
+                tv[mask == 1] = np.nan
+                rv = np.nansum(rv, axis=0) / count ** 2
+                tv = np.nansum(tv, axis=0) / count ** 2
+
+                log.info(&#39;R+T deglitching: masked additional &#39;
+                         &#39;%d of %d samples in hwp %d, nod %d&#39; %
+                         (int(np.sum(mask)) - num,
+                          nplane * nrow * ncol, hwp, nod))
+                self.dataout.imageset(mean, rpt_data)
+
+                if use_error:
+                    # keep the output errors from the Chauvenet algorithm
+                    self.dataout.imageset(sigma, rpt_sigma)
+
+                    # also set the R and V variances to zero; no covariances
+                    # available for this error propagation method
+                    log.warning(&#39;Covariances between initial &#39;
+                                &#39;Stokes parameters are &#39;
+                                &#39;not propagated with Chauvenet errors&#39;)
+                    rv *= 0.0
+                    tv *= 0.0
+
+                else:
+                    # otherwise, keep the propagated variances
+                    self.dataout.imageset(np.sqrt(rptv), rpt_sigma)
+
+                # delete the old variances, add the new ones onto the end
+                self.dataout.imagedel(rpt_var)
+                self.dataout.imagedel(r_var)
+                self.dataout.imagedel(t_var)
+                self.dataout.imageset(rv, r_var)
+                self.dataout.imageset(tv, t_var)
+
+                tmpmask = np.ones(len(table), dtype=bool)
+                tbhdu = self.comb_table(table, tmpmask)
+                self.dataout.tableset(tbhdu.data,
+                                      &#39;TABLE HWP%d NOD%d&#39; % (hwp, nod),
+                                      tbhdu.header)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

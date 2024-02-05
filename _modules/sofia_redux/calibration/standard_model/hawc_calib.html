@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.calibration.standard_model.hawc_calib &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.calibration.standard_model.hawc_calib</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Generate a thermal model for a given object at a specified time&quot;&quot;&quot;
+
+import numpy as np
+import pandas as pd
+
+from sofia_redux.calibration.standard_model import calibration_io
+from sofia_redux.calibration.standard_model import background as bg
+from sofia_redux.calibration.standard_model import isophotal_wavelength as iso
+from sofia_redux.calibration.standard_model import derived_optics as dopt
+
+
+<div class="viewcode-block" id="hawc_calib">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.hawc_calib.hawc_calib.html#sofia_redux.calibration.standard_model.hawc_calib.hawc_calib">[docs]</a>
+def hawc_calib(infile, atmofile, outfile=None,
+               iq=5.3, no_atm=False, emiss=0.15, snrval=4.0,
+               alpha=None, temp=None, normfits=False,
+               fscal=1.0, txt=False, noplot=False,
+               dataframe=False):
+    &quot;&quot;&quot;
+    Calculate source flux from calibrated observations.
+
+    Parameters
+    ----------
+    infile : str, pandas.DataFrame
+        Name of file containing the calibrated model. Typically
+        this is a Herschel model, a blackbody model, or a
+        power law model. The file can be formatted in a FITS file,
+        a pandas DataFrame, or plain ASCII text. If a generic model
+        is preferred, `infile` can be set to &#39;Blackbody&#39; or
+        &#39;PowerLaw&#39;, to generate a blackbody or power law model
+        respectively.
+    atmofile : str
+        Name of the ATRAN file to use for modelling the
+        atmosphere.
+    outfile : str, optional
+        Name of the file to write the final derived flux.
+        If not provided, try to pull the filename from the
+        contents of `infile`. If that fails, write the model
+        to &#39;flux_values.out&#39;.
+    iq : float, optional
+        Image quality d_80. Defaults to 5.3.
+    no_atm : bool, optional
+        If set, do not take atmosphere contained in `atmofile`
+        into account. Defaults to False.
+    emiss : float, optional
+        Telescope emissivity. Defaults to 0.15.
+    snrval : float, optional
+        Signal to noise. Defaults to 4.0.
+    alpha : float, optional for non-power law models
+        If `infile` is `PowerLaw`, `alpha` is the power law
+        index to use to generate the model.
+    temp : float, optional for non-blackbody models
+        If `infile` is &#39;Blackbody&#39;, `temp` is the temperature to
+        use to generate the model.
+    normfits : bool, optional for non-FITS infiles
+        If set, `infile` is a FITS file.
+    fscal : float, optional
+        Scale factor to apply to fluxes. Defaults to 1.0.
+    txt : bool, optional
+        If set, `infile` is a plain text ASCII file.
+    noplot : bool, optional
+        If set, do not create a plot of the results. Defaults
+        to False.
+    dataframe : bool, optional
+        If set, `infile` is a pandas DataFrame.
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    Process:
+      #. Read in the model of the target flux, which is either
+         a scaled Herschel model for major targets or a scaled
+         blackbody if an asteroid.
+      #. Read in the ATRAN file to get the atmospheric transmission
+         as a function of wavelength.
+      #. Loop through each HAWC+ filter
+      #. Calculate the total transmission (telescope, filter, and
+         instrument).
+      #. Calculate the size of the source in pixels
+      #. Calculate the total background photon flux from the
+         sky, telescope, window, foreoptics, and instrument.
+      #. Several integrals to calculate everything. See Tokunaga,
+         Vacca (2005) for details on what&#39;s happening.
+      #. Write results to file
+
+    &quot;&quot;&quot;
+
+    # Constants and converstions
+    # h = 6.62607e-27  # ergs-s
+    c = 2.99792e10  # cm/s
+
+    cm2mum = 1e4  # Convert cm to microns
+    # ergs2W = 1e-7  # Convert ergs/s to Watts
+    r2a = 206265.  # radians to arcsecs
+    Jy2W = 1e-26  # Convert Jy to W/m2/Hz
+
+    # Telescope diameter in m
+    telescope_diameter = 2.50
+    # Telescope area in m^2
+    telescope_area = np.pi * telescope_diameter ** 2 / 4.
+
+    # Temperatures
+    temperatures = setup_temperatures()
+
+    telescope_emissivity = emiss  # Telescope emissivity
+
+    # HAWC parameters
+    wmin = 40.0
+    wmax = 300.0
+
+    # Pixel size arsec
+    theta_pix = np.array([2.6, 4.0, 4.0, 6.9, 9.4])
+    # Pixel solid angle steradians
+    omega_pix = (theta_pix / r2a) ** 2
+
+    eta_tel = 1 - telescope_emissivity
+    eta_fo = 0.96
+    eta_wrefl = 0.92
+    eta_wabs = np.array([0.63, 0.67, 0.79, 0.86, 0.87])
+    eta_win = eta_wabs * eta_wrefl
+    eta_inst = np.array([0.146, 0.190, 0.213, 0.286, 0.247])
+    tput = eta_tel * eta_fo * eta_win * eta_inst
+    etas = {&#39;telescope&#39;: eta_tel, &#39;foreoptics&#39;: eta_fo,
+            &#39;window&#39;: eta_win, &#39;instrument&#39;: eta_inst}
+
+    window_emissivity = 1 - eta_wabs  # Window emissivity
+    foreoptics_emissivity = 1 - eta_fo  # Foreoptics emissivity
+    emissivity = {&#39;window&#39;: window_emissivity,
+                  &#39;foreoptics&#39;: foreoptics_emissivity,
+                  &#39;telescope&#39;: telescope_emissivity,
+                  &#39;atmosphere&#39;: np.nan,
+                  &#39;instrument&#39;: 1}
+
+    # Filter transmission files
+    fnames = [f&#39;HAWC_band{i}.txt&#39; for i in list(&#39;ABCDE&#39;)]
+    filter_names = [s.split(&#39;.&#39;)[0].split(&#39;_&#39;)[-1] for s in fnames]
+    lam_c = [53.0, 63.0, 89.0, 155.0, 216.0]
+
+    Nf = len(fnames)
+    columns = [&#39;lambda_c&#39;, &#39;lambda_mean&#39;, &#39;lambda_1&#39;, &#39;lambda_pivot&#39;,
+               &#39;lambda_eff&#39;, &#39;lambda_eff_jv&#39;, &#39;width&#39;,
+               &#39;response&#39;, &#39;flux_mean&#39;, &#39;flux_nu_mean&#39;, &#39;color_term_k0&#39;,
+               &#39;color_term_k1&#39;, &#39;source_rate&#39;, &#39;source_size&#39;, &#39;source_fwhm&#39;,
+               &#39;background_power&#39;, &#39;nep&#39;, &#39;nefd&#39;, &#39;mdcf&#39;, &#39;npix_mean&#39;,
+               &#39;lambda_prime&#39;, &#39;lamcorr&#39;, &#39;isophotal&#39;, &#39;isophotal_wt&#39;]
+
+    for index, obs in infile.iterrows():
+        print(f&quot;\nObservation: {obs[&#39;date&#39;]}, {obs[&#39;time&#39;]}&quot;)
+        calibration_results = pd.DataFrame(columns=columns, index=filter_names)
+        calibration_results.rename_axis(index=&#39;filter&#39;)
+
+        # Read in stellar spectrum input file
+        wstar, fstar, pl, bb = \
+            calibration_io.model_spectrum(infile, txt, dataframe,
+                                          alpha, temp, df_index=index)
+
+        # Pull out the unique wavelengths
+        model_wave, model_flux = \
+            calibration_io.unique_wavelengths(wstar, fstar,
+                                              wmin=wmin, wmax=wmax)
+
+        # Convert stellar flux to W/m2/micron
+        model_flux *= Jy2W * c * cm2mum / (model_wave ** 2)
+
+        atran_group = \
+            calibration_io.read_atran(atmofile, model_wave, no_atm=no_atm,
+                                      wmin=wmin, wmax=wmax)
+        atmosphere_wave, atmosphere_transmission, afile = atran_group
+
+        # Local data path
+        caldata = calibration_io.calibration_data_path()
+
+        # Open output file
+        outf = calibration_io.open_outfile_and_header(outfile, no_atm, afile,
+                                                      infile, index)
+
+        isophotal_weights = np.zeros(len(fnames))
+
+        # Start main loop
+        for i in range(0, Nf):
+
+            result = pd.Series(index=columns, name=filter_names[i])
+            result[&#39;lambda_c&#39;] = lam_c[i]
+
+            filtered_models = \
+                dopt.apply_filter(caldata, fnames[i], atmosphere_wave,
+                                  atmosphere_transmission, model_wave,
+                                  model_flux)
+            (filter_wavelength, filter_tranmission,
+             atmosphere_transmission_in_filter, model_flux_in_filter,
+             wavelengths, filter_name) = filtered_models
+
+            emissivity[&#39;atmosphere&#39;] = 1.0 - atmosphere_transmission_in_filter
+
+            # Fit splines to the transmissions
+            tfi = iso.interpol(filter_tranmission, filter_wavelength,
+                               wavelengths)
+
+            # Total instrument+filter+telescope throughput
+            total_throughput = tfi * tput[i]
+
+            fwhm, num_pix, ffrac = dopt.source_size(wavelengths, iq,
+                                                    theta_pix[i])
+
+            # Computer background photon flux from various components
+            plancks = bg.derive_background_photon_flux(wavelengths,
+                                                       temperatures)
+
+            bg_integrand1 = \
+                bg.background_integrand_1(plancks, emissivity, etas,
+                                          total_throughput, tfi,
+                                          filter_number=i)
+            bg_integrand2 = \
+                bg.background_integrand_2(plancks, temperatures, wavelengths,
+                                          total_throughput, emissivity, etas,
+                                          transmissions=tfi, filter_number=i)
+
+            # Mean number of pixels in extraction area
+            result[&#39;npix_mean&#39;] = \
+                dopt.mean_pixels_in_beam(num_pix, total_throughput,
+                                         wavelengths)
+
+            # Background power W in extraction area (beam)
+            result[&#39;background_power&#39;] = \
+                bg.background_power(telescope_area, omega_pix[i],
+                                    bg_integrand1, num_pix, wavelengths)
+
+            result[&#39;nep&#39;] = \
+                dopt.noise_equivalent_power(bg_integrand1, bg_integrand2,
+                                            num_pix, wavelengths, omega_pix[i],
+                                            telescope_area)
+
+            # Compute integrals for wavelengths and mean_flux
+            integrands = \
+                bg.setup_integrands(total_throughput,
+                                    atmosphere_transmission_in_filter,
+                                    telescope_area, wavelengths,
+                                    model_flux_in_filter, num_pix,
+                                    fwhm)
+            integrals = bg.integrate_integrands(integrands, wavelengths)
+
+            result[&#39;width&#39;] = integrals[&#39;0&#39;]
+
+            # lambdas = calculated_lambdas(integrals)
+            result = iso.calculated_lambdas(result, integrals)
+
+            result = dopt.mean_fluxes(result, integrals)
+
+            resp, result[&#39;response&#39;] = dopt.response(result, integrals)
+
+            result = dopt.source_descriptions(result, integrals, ffrac)
+
+            result = iso.calc_isophotal(result, wavelengths, pl, alpha,
+                                        model_flux_in_filter,
+                                        atmosphere_transmission_in_filter,
+                                        total_throughput)
+
+            result = dopt.limiting_flux(result, integrals, snrval)
+
+            fref, wref = None, None
+            result = dopt.color_terms(result, fref, pl, bb, alpha, wref,
+                                      temp, model_flux_in_filter, wavelengths)
+
+            calibration_results.loc[filter_names[i]] = result
+
+            # Print output values
+            calibration_io.report_result(result, filter_name, outf)
+
+            calibration_results.to_csv(&#39;test_results.csv&#39;)
+
+        # Plot fmean values at lambda_iso wavelengths
+        if not noplot:
+            plot_name = (f&quot;{obs[&#39;target&#39;].capitalize()}_{obs[&#39;date&#39;]}_&quot;
+                         f&quot;{obs[&#39;time&#39;]}_model.out&quot;)
+            plot_name = plot_name.replace(&#39;:&#39;, &#39;&#39;)
+            calibration_io.plot_spectrum(model_wave, model_flux, pl, bb,
+                                         isophotal_weights,
+                                         calibration_results,
+                                         outfile=plot_name)
+
+        # Close files
+        outf.close()</div>
+
+
+
+<div class="viewcode-block" id="setup_temperatures">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.hawc_calib.setup_temperatures.html#sofia_redux.calibration.standard_model.hawc_calib.setup_temperatures">[docs]</a>
+def setup_temperatures():
+    &quot;&quot;&quot;
+    Define the temperatures of background sources.
+
+    Returns
+    -------
+    temperatures : dict
+        Collection of sources and their corresponding temperatures.
+
+    &quot;&quot;&quot;
+    Ttel = 240.  # Telescope temperature
+    Tsky = 240.  # Sky temperature
+    Twin = 278.  # Window temperature
+    Tfo = 293.  # Foreoptics temperature
+    Tinst = 10.  # Internal optics temperature
+
+    temperatures = {&#39;atmosphere&#39;: Tsky, &#39;telescope&#39;: Ttel,
+                    &#39;window&#39;: Twin, &#39;foreoptics&#39;: Tfo,
+                    &#39;instrument&#39;: Tinst}
+    return temperatures</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

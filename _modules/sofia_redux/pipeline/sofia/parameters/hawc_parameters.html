@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.sofia.parameters.hawc_parameters &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.sofia.parameters.hawc_parameters</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;HAWC parameter sets.&quot;&quot;&quot;
+
+from sofia_redux.instruments.hawc.datafits import DataFits
+from sofia_redux.pipeline.parameters import Parameters
+
+__all__ = [&#39;HAWCParameters&#39;]
+
+
+# these step lists override the config in the hawc pipeline config,
+# in order to call special redux-defined super steps
+STEPLISTS = {
+    # primary nod and nodpol modes: make flats if necessary,
+    # then prepare/demodulate, then run the rest of the reduction
+    &#39;nodpol&#39;: [&#39;make_flats&#39;, &#39;demodulate&#39;,
+               &#39;StepDmdPlot&#39;, &#39;StepDmdCut&#39;, &#39;StepFlat&#39;,
+               &#39;StepShift&#39;, &#39;StepSplit&#39;, &#39;StepCombine&#39;,
+               &#39;StepNodPolSub&#39;, &#39;StepStokes&#39;, &#39;StepWcs&#39;,
+               &#39;StepIP&#39;, &#39;StepRotate&#39;, &#39;StepOpacity&#39;,
+               &#39;StepCalibrate&#39;, &#39;StepBgSubtract&#39;, &#39;StepBinPixels&#39;,
+               &#39;StepMerge&#39;, &#39;StepPolVec&#39;, &#39;StepRegion&#39;, &#39;StepPolMap&#39;],
+    &#39;nod&#39;: [&#39;make_flats&#39;, &#39;demodulate&#39;,
+            &#39;StepDmdPlot&#39;, &#39;StepDmdCut&#39;, &#39;StepFlat&#39;,
+            &#39;StepShift&#39;, &#39;StepSplit&#39;, &#39;StepCombine&#39;,
+            &#39;StepNodPolSub&#39;, &#39;StepStokes&#39;, &#39;StepWcs&#39;,
+            &#39;StepOpacity&#39;, &#39;StepBgSubtract&#39;, &#39;StepBinPixels&#39;,
+            &#39;StepMerge&#39;, &#39;StepCalibrate&#39;, &#39;StepImgMap&#39;],
+    # intermediate nod and nodpol modes, starting from Level 1
+    # demodulated data: still make flats if necessary,
+    # then continue reduction
+    &#39;nodpol_dmd&#39;: [&#39;make_flats&#39;,
+                   &#39;StepDmdPlot&#39;, &#39;StepDmdCut&#39;, &#39;StepFlat&#39;,
+                   &#39;StepShift&#39;, &#39;StepSplit&#39;, &#39;StepCombine&#39;,
+                   &#39;StepNodPolSub&#39;, &#39;StepStokes&#39;, &#39;StepWcs&#39;,
+                   &#39;StepIP&#39;, &#39;StepRotate&#39;, &#39;StepOpacity&#39;,
+                   &#39;StepCalibrate&#39;, &#39;StepBgSubtract&#39;, &#39;StepBinPixels&#39;,
+                   &#39;StepMerge&#39;, &#39;StepPolVec&#39;, &#39;StepRegion&#39;,
+                   &#39;StepPolMap&#39;],
+    &#39;nod_dmd&#39;: [&#39;make_flats&#39;,
+                &#39;StepDmdPlot&#39;, &#39;StepDmdCut&#39;, &#39;StepFlat&#39;,
+                &#39;StepShift&#39;, &#39;StepSplit&#39;, &#39;StepCombine&#39;,
+                &#39;StepNodPolSub&#39;, &#39;StepStokes&#39;, &#39;StepWcs&#39;,
+                &#39;StepOpacity&#39;, &#39;StepBgSubtract&#39;, &#39;StepBinPixels&#39;,
+                &#39;StepMerge&#39;, &#39;StepCalibrate&#39;, &#39;StepImgMap&#39;],
+    # now the same, but for flux standards -- they have an extra
+    # photometry/calibration step instead of regular calibration
+    &#39;nodpol_std&#39;: [&#39;make_flats&#39;, &#39;demodulate&#39;,
+                   &#39;StepDmdPlot&#39;, &#39;StepDmdCut&#39;, &#39;StepFlat&#39;,
+                   &#39;StepShift&#39;, &#39;StepSplit&#39;, &#39;StepCombine&#39;,
+                   &#39;StepNodPolSub&#39;, &#39;StepStokes&#39;, &#39;StepWcs&#39;,
+                   &#39;StepIP&#39;, &#39;StepRotate&#39;, &#39;StepOpacity&#39;,
+                   &#39;StepBgSubtract&#39;, &#39;StepMerge&#39;,
+                   &#39;StepStdPhotCal&#39;, &#39;StepPolVec&#39;,
+                   &#39;StepRegion&#39;, &#39;StepPolMap&#39;],
+    &#39;nod_std&#39;: [&#39;make_flats&#39;, &#39;demodulate&#39;,
+                &#39;StepDmdPlot&#39;, &#39;StepDmdCut&#39;, &#39;StepFlat&#39;,
+                &#39;StepShift&#39;, &#39;StepSplit&#39;, &#39;StepCombine&#39;,
+                &#39;StepNodPolSub&#39;, &#39;StepStokes&#39;, &#39;StepWcs&#39;,
+                &#39;StepOpacity&#39;, &#39;StepBgSubtract&#39;,
+                &#39;StepMerge&#39;, &#39;StepStdPhotCal&#39;, &#39;StepImgMap&#39;],
+    &#39;nodpol_std_dmd&#39;: [&#39;make_flats&#39;,
+                       &#39;StepDmdPlot&#39;, &#39;StepDmdCut&#39;, &#39;StepFlat&#39;,
+                       &#39;StepShift&#39;, &#39;StepSplit&#39;, &#39;StepCombine&#39;,
+                       &#39;StepNodPolSub&#39;, &#39;StepStokes&#39;, &#39;StepWcs&#39;,
+                       &#39;StepIP&#39;, &#39;StepRotate&#39;, &#39;StepOpacity&#39;,
+                       &#39;StepBgSubtract&#39;, &#39;StepMerge&#39;,
+                       &#39;StepStdPhotCal&#39;, &#39;StepPolVec&#39;, &#39;StepRegion&#39;,
+                       &#39;StepPolMap&#39;],
+    &#39;nod_std_dmd&#39;: [&#39;make_flats&#39;,
+                    &#39;StepDmdPlot&#39;, &#39;StepDmdCut&#39;, &#39;StepFlat&#39;,
+                    &#39;StepShift&#39;, &#39;StepSplit&#39;, &#39;StepCombine&#39;,
+                    &#39;StepNodPolSub&#39;, &#39;StepStokes&#39;, &#39;StepWcs&#39;,
+                    &#39;StepOpacity&#39;, &#39;StepBgSubtract&#39;,
+                    &#39;StepMerge&#39;, &#39;StepStdPhotCal&#39;, &#39;StepImgMap&#39;],
+    # additional calibration mode for skycals: process intcal,
+    # then make skycal
+    &#39;skycal&#39;: [&#39;process_intcal&#39;, &#39;StepCheckhead&#39;, &#39;StepScanMapFlat&#39;,
+               &#39;StepSkycal&#39;],
+}
+
+
+<div class="viewcode-block" id="HAWCParameters">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters">[docs]</a>
+class HAWCParameters(Parameters):
+    &quot;&quot;&quot;Reduction parameters for the HAWC pipeline.&quot;&quot;&quot;
+    def __init__(self, config=None, param_lists=None, mode=None):
+        &quot;&quot;&quot;
+        Initialize parameters from HAWC DRP step defaults.
+
+        Parameters
+        ----------
+        config : `configobj.ConfigObj` or dict-like, optional
+            DRP configuration object.
+        param_lists : dict
+            DRP pipeline step parameter lists for all available steps.
+            Keys are pipeline step names.
+        &quot;&quot;&quot;
+        # read default pipeline parameters from parameter lists
+        # extracted from the pipeline steps
+        default = self.read_parameters(param_lists)
+
+        # update them from the config file
+        default = self.update_parameters(default, config=config)
+
+        # initialize with the default dictionary
+        super().__init__(default)
+
+        # track an override mode, if necessary
+        self.override_mode = mode
+
+<div class="viewcode-block" id="HAWCParameters.read_parameters">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.read_parameters">[docs]</a>
+    def read_parameters(self, param_lists):
+        &quot;&quot;&quot;
+        Read parameters from DRP parameter lists.
+
+        DRP parameter types are inferred from their default values
+        (see `Parameters.get_param_type`).
+
+        A standard set of Redux control parameters are also added to each
+        pipeline step (save, undo, display, load, keep_auxout).  These
+        may be later overridden by methods in this class.
+
+        Parameters
+        ----------
+        param_lists : dict
+            DRP pipeline step parameter lists for all available steps.
+            Keys are pipeline step names.
+
+        Returns
+        -------
+        default : dict
+            Mapping of step names to parameter set values.
+            Keys are pipeline step names; values are dicts with
+            `ParameterSet` keywords.
+        &quot;&quot;&quot;
+        default = {}
+        if param_lists is None:
+            return default
+
+        for step_name, par_list in param_lists.items():
+            default[step_name] = []
+
+            # always add save/undo/display parameters
+            for pset in self.standard_param():
+                default[step_name].append(pset)
+
+            for par in par_list:
+                key, value, description = par
+                dtype = self.get_param_type(value)
+                if dtype == &#39;bool&#39;:
+                    wtype = &#39;check_box&#39;
+                else:
+                    wtype = &#39;text_box&#39;
+                pdict = {
+                    &#39;key&#39;: key,
+                    &#39;value&#39;: self.fix_param_type(value, dtype),
+                    &#39;description&#39;: description,
+                    &#39;dtype&#39;: dtype,
+                    &#39;wtype&#39;: wtype
+                }
+                default[step_name].append(pdict)
+        return default</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.standard_param">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.standard_param">[docs]</a>
+    def standard_param(self):
+        &quot;&quot;&quot;
+        Return a standard set of parameters to add to all steps.
+
+        The default is:
+
+        * don&#39;t save output from the step
+        * allow undo of the step
+        * display the output of the step
+        * load the input data from memory if it has not
+          already been loaded
+        * don&#39;t keep auxiliary output from the previous step
+          for re-display after this step
+
+        &quot;&quot;&quot;
+        save = {
+            &#39;key&#39;: &#39;save&#39;,
+            &#39;value&#39;: False,
+            &#39;description&#39;: &#39;Save output data&#39;,
+            &#39;dtype&#39;: &#39;bool&#39;,
+            &#39;wtype&#39;: &#39;check_box&#39;
+        }
+        undo = {
+            &#39;key&#39;: &#39;undo&#39;,
+            &#39;value&#39;: True,
+            &#39;description&#39;: &#39;Allow undo&#39;,
+            &#39;dtype&#39;: &#39;bool&#39;,
+            &#39;wtype&#39;: &#39;check_box&#39;,
+            &#39;hidden&#39;: True
+        }
+        display = {
+            &#39;key&#39;: &#39;display&#39;,
+            &#39;value&#39;: True,
+            &#39;description&#39;: &#39;Display output data&#39;,
+            &#39;dtype&#39;: &#39;bool&#39;,
+            &#39;wtype&#39;: &#39;check_box&#39;,
+            &#39;hidden&#39;: True
+        }
+        load = {
+            &#39;key&#39;: &#39;load&#39;,
+            &#39;value&#39;: True,
+            &#39;description&#39;: &#39;Load input data into memory&#39;,
+            &#39;dtype&#39;: &#39;bool&#39;,
+            &#39;wtype&#39;: &#39;check_box&#39;,
+            &#39;hidden&#39;: True
+        }
+        keep_auxout = {
+            &#39;key&#39;: &#39;keep_auxout&#39;,
+            &#39;value&#39;: False,
+            &#39;description&#39;: &#39;Keep auxout data for next step&#39;,
+            &#39;dtype&#39;: &#39;bool&#39;,
+            &#39;wtype&#39;: &#39;check_box&#39;,
+            &#39;hidden&#39;: True
+        }
+        return [save, undo, display, load, keep_auxout]</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.update_parameters">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.update_parameters">[docs]</a>
+    def update_parameters(self, default, config=None):
+        &quot;&quot;&quot;
+        Update parameter values from a DRP configuration.
+
+        Parameters
+        ----------
+        default : dict
+            Default parameter dictionary to update.  Updates are
+            made in place.
+        config : `configobj.ConfigObj`, optional
+            DRP configuration object.  If not provided, the default
+            configuration will be used.
+
+        Returns
+        -------
+        dict
+            Updated default parameter dictionary.
+        &quot;&quot;&quot;
+        df = DataFits(config=config)
+        for key, pset in df.config.items():
+            if key not in default:
+                continue
+            for pkey in pset:
+                for init_par in default[key]:
+                    if init_par[&#39;key&#39;].lower() == pkey.lower():
+                        pval = pset[pkey]
+                        init_par[&#39;value&#39;] = \
+                            self.fix_param_type(pval, init_par[&#39;dtype&#39;])
+                        break
+
+        return default</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.to_config">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.to_config">[docs]</a>
+    def to_config(self):
+        &quot;&quot;&quot;
+        Read parameter values into a configuration object.
+
+        Section names in the output object are written as
+        ``stepindex: stepname`` in order to record the order of
+        reduction steps, and to keep any repeated step names uniquely
+        identified.  Only the current parameter values are recorded.
+        Other information, such as data or widget type or default
+        values, is lost.
+
+        Overrides parent function in order to add an override mode
+        flag to the top-level configuration.
+
+        Returns
+        -------
+        ConfigObj
+            The parameter values in a `configobj.ConfigObj` object.
+        &quot;&quot;&quot;
+        config = super().to_config()
+        # add mode if necessary
+        if self.override_mode is not None:
+            config[&#39;mode&#39;] = self.override_mode
+        return config</div>
+
+
+    # modify defaults for some steps
+
+<div class="viewcode-block" id="HAWCParameters.checkhead">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.checkhead">[docs]</a>
+    def checkhead(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the checkhead step.
+
+        This step only checks headers.  Don&#39;t save, load, or
+        display the data.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        self.current[step_index].set_value(&quot;undo&quot;, False)
+        self.current[step_index].set_value(&quot;display&quot;, False)
+        self.current[step_index].set_value(&quot;load&quot;, False)
+        self.current[step_index].set_value(&quot;save&quot;, False)
+        self.current[step_index][&quot;save&quot;][&quot;hidden&quot;] = True</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.fluxjump">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.fluxjump">[docs]</a>
+    def fluxjump(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the fluxjump step.
+
+        No undo or display for raw data.  Do load, don&#39;t save.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        self.current[step_index].set_value(&quot;undo&quot;, False)
+        self.current[step_index].set_value(&quot;display&quot;, False)
+        self.current[step_index].set_value(&quot;load&quot;, True)
+        self.current[step_index].set_value(&quot;save&quot;, False)</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.prepare">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.prepare">[docs]</a>
+    def prepare(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the prepare step.
+
+        No undo or display for raw data.  Do load, don&#39;t save.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        self.current[step_index].set_value(&quot;undo&quot;, False)
+        self.current[step_index].set_value(&quot;display&quot;, False)
+        self.current[step_index].set_value(&quot;load&quot;, True)
+        self.current[step_index].set_value(&quot;save&quot;, False)</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.dmdcut">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.dmdcut">[docs]</a>
+    def dmdcut(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the dmdcut step.
+
+        No display for demodulated data.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        self.current[step_index].set_value(&quot;display&quot;, False)</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.dmdplot">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.dmdplot">[docs]</a>
+    def dmdplot(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the dmdplot step.
+
+        No display for demodulated data.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        self.current[step_index].set_value(&quot;display&quot;, False)</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.opacity">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.opacity">[docs]</a>
+    def opacity(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the opacity step.
+
+        Save the output data by default.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        self.current[step_index].set_value(&quot;save&quot;, True)</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.merge">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.merge">[docs]</a>
+    def merge(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the merge step.
+
+        Save the output data by default.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        self.current[step_index].set_value(&quot;save&quot;, True)</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.stdphotcal">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.stdphotcal">[docs]</a>
+    def stdphotcal(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the stdphotcal step.
+
+        Save the output data by default.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        self.current[step_index].set_value(&quot;save&quot;, True)</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.calibrate">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.calibrate">[docs]</a>
+    def calibrate(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the calibrate step.
+
+        Save the output data by default.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        self.current[step_index].set_value(&quot;save&quot;, True)</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.polmap">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.polmap">[docs]</a>
+    def polmap(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the polmap step.
+
+        Save the output data by default.  Keep the auxout
+        from the previous step (DS9 regions).
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        self.current[step_index].set_value(&quot;keep_auxout&quot;, True)</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.scanmap">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.scanmap">[docs]</a>
+    def scanmap(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the scanmap step.
+
+        Don&#39;t load data into memory: scanmap loads it separately.
+        If no output is expected, don&#39;t save or display the output.
+        If output is expected, do save and display it.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        # never load data -- it will do it itself.
+        self.current[step_index].set_value(&quot;load&quot;, False)
+
+        try:
+            no_out = self.current[step_index].get_value(&quot;noout&quot;)
+        except KeyError:
+            no_out = False
+
+        if no_out:
+            # no output is expected:
+            # set save to False and hide it -- attempting to
+            # save this data will crash the pipeline.
+            self.current[step_index].set_value(&quot;save&quot;, False)
+            self.current[step_index][&quot;save&quot;][&quot;hidden&quot;] = True
+            # also don&#39;t try to display
+            self.current[step_index].set_value(&quot;display&quot;, False)
+        else:
+            self.current[step_index].set_value(&quot;save&quot;, True)
+            self.current[step_index].set_value(&quot;display&quot;, True)</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.scanmappol">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.scanmappol">[docs]</a>
+    def scanmappol(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the scanmappol step.
+
+        Don&#39;t load data into memory: scanmap loads it separately.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        # never load data -- it will do it itself.
+        self.current[step_index].set_value(&quot;load&quot;, False)
+
+        # save and display data
+        self.current[step_index].set_value(&quot;save&quot;, True)
+        self.current[step_index].set_value(&quot;display&quot;, True)</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.scanmapflat">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.scanmapflat">[docs]</a>
+    def scanmapflat(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the scanmapflat step.
+
+        Don&#39;t load data into memory: scanmap loads it separately.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        # never load data for scanmap -- it will do it itself.
+        self.current[step_index].set_value(&quot;load&quot;, False)
+
+        # save data
+        self.current[step_index].set_value(&quot;save&quot;, True)</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.skycal">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.skycal">[docs]</a>
+    def skycal(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the skycal step.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        # save data
+        self.current[step_index].set_value(&quot;save&quot;, True)</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.skydip">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.skydip">[docs]</a>
+    def skydip(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the skydip step.
+
+        No output FITS file; hide save, don&#39;t display.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        self.current[step_index].set_value(&quot;display&quot;, False)
+        self.current[step_index].set_value(&quot;save&quot;, False)
+        self.current[step_index][&quot;save&quot;][&quot;hidden&quot;] = True</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.poldip">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.poldip">[docs]</a>
+    def poldip(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the poldip step.
+
+        Save the output by default.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        self.current[step_index].set_value(&quot;save&quot;, True)</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.scanmapfocus">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.scanmapfocus">[docs]</a>
+    def scanmapfocus(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the scanmapfocus step.
+
+        This step calls scanmap: don&#39;t load the input data.
+        Do save the output.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        self.current[step_index].set_value(&quot;load&quot;, False)
+        self.current[step_index].set_value(&quot;save&quot;, True)</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.focus">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.focus">[docs]</a>
+    def focus(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the focus step.
+
+        No output FITS file; hide save, don&#39;t display.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        self.current[step_index].set_value(&quot;display&quot;, False)
+        self.current[step_index].set_value(&quot;save&quot;, False)
+        self.current[step_index][&quot;save&quot;][&quot;hidden&quot;] = True</div>
+
+
+    # add param definitions for some custom steps
+
+<div class="viewcode-block" id="HAWCParameters.make_flats">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.make_flats">[docs]</a>
+    def make_flats(self, step_index):
+        &quot;&quot;&quot;
+        Define parameters for the make_flats super-step.
+
+        Parameters for the mkflat step are added.  Earlier steps
+        (prepare, demodulate, etc.) are not, since these parameters
+        generally do not need modification by the user.  They
+        can still be overridden by modifying a DRP configuration
+        file.
+
+        Save is off by default for the final DCL file.  Don&#39;t allow
+        undo or display; the auxiliary OFT file will still display.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        # add the standard parameters
+        for pset in self.standard_param():
+            self.current[step_index].set_param(**pset)
+
+        # add the mkflat parameters; the rest shouldn&#39;t be needed
+        if &#39;mkflat&#39; in self.default:
+            for pkey, pset in self.default[&#39;mkflat&#39;].items():
+                if pkey in [&#39;save&#39;, &#39;undo&#39;, &#39;display&#39;]:
+                    continue
+                self.current[step_index].set_param(key=pkey, **pset)
+
+        self.current[step_index].set_value(&quot;undo&quot;, False)
+        self.current[step_index].set_value(&quot;display&quot;, False)
+        self.current[step_index].set_value(&quot;keep_auxout&quot;, True)
+
+        # for this step, &quot;save&quot; means save the DCL file only
+        self.current[step_index][&quot;save&quot;][&quot;value&quot;] = False
+        self.current[step_index][&quot;save&quot;][&quot;name&quot;] = &quot;Save DCL file&quot;
+        self.current[step_index][&quot;save&quot;][&quot;description&quot;] = \
+            &quot;Save final output file from flat process\n&quot; \
+            &quot;(may be useful for instrument diagnosis).\n&quot; \
+            &quot;OFT file is always saved.&quot;</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.process_intcal">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.process_intcal">[docs]</a>
+    def process_intcal(self, step_index):
+        &quot;&quot;&quot;
+        Define parameters for the process_intcal super-step.
+
+        Parameters for the mkflat step are added.  Earlier steps
+        (prepare, demodulate, etc.) are not, since these parameters
+        generally do not need modification by the user.  They
+        can still be overridden by modifying a DRP configuration
+        file.
+
+        Save is on by default for the final DCL file.  Don&#39;t allow undo.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        # add the standard parameters
+        for pset in self.standard_param():
+            self.current[step_index].set_param(**pset)
+
+        # add the mkflat parameters; the rest shouldn&#39;t be needed
+        if &#39;mkflat&#39; in self.default:
+            for pkey, pset in self.default[&#39;mkflat&#39;].items():
+                if pkey in [&#39;save&#39;, &#39;undo&#39;, &#39;display&#39;]:
+                    continue
+                elif pkey == &#39;dcl_only&#39;:
+                    pset[&#39;value&#39;] = True
+                elif pkey == &#39;flatoutfolder&#39;:
+                    pset[&#39;value&#39;] = &#39;intcals&#39;
+                self.current[step_index].set_param(key=pkey, **pset)
+
+        self.current[step_index].set_value(&quot;undo&quot;, False)
+        self.current[step_index].set_value(&quot;display&quot;, True)
+        self.current[step_index].set_value(&quot;keep_auxout&quot;, True)
+
+        # for this step, &quot;save&quot; means save the DCL file only,
+        # and it should be saved to the flats folder instead
+        self.current[step_index][&quot;save&quot;][&quot;value&quot;] = False
+        self.current[step_index][&quot;save&quot;][&quot;hidden&quot;] = True
+        self.current[step_index][&quot;save&quot;][&quot;name&quot;] = &quot;Save DCL file&quot;</div>
+
+
+<div class="viewcode-block" id="HAWCParameters.demodulate">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.html#sofia_redux.pipeline.sofia.parameters.hawc_parameters.HAWCParameters.demodulate">[docs]</a>
+    def demodulate(self, step_index):
+        &quot;&quot;&quot;
+        Define parameters for the demodulate super-step.
+
+        Start with the parameters for the DRP demodulate step,
+        then add in the abort parameter for the checkhead step.
+        The final DMD file is saved by default; undo and display
+        are turned off.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        # add the header check abort parameter
+        if &#39;checkhead&#39; in self.default:
+            pset = self.default[&#39;checkhead&#39;][&#39;abort&#39;]
+            self.current[step_index].set_param(key=&#39;abort&#39;, **pset)
+        else:
+            self.current[step_index].set_param(key=&#39;abort&#39;, value=True)
+        self.current[step_index][&quot;abort&quot;][&quot;name&quot;] = &quot;Abort for bad headers&quot;
+
+        # set undo, display, and load to false
+        self.current[step_index].set_value(&quot;undo&quot;, False)
+        self.current[step_index].set_value(&quot;display&quot;, False)
+
+        # for this super step, &quot;save&quot; means save the DMD file only.
+        # Earlier sub-steps should never be saved.
+        self.current[step_index].set_value(&quot;save&quot;, True)
+        self.current[step_index][&quot;save&quot;][&quot;name&quot;] = &quot;Save DMD file&quot;</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

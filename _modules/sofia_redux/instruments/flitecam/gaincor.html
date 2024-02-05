@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.flitecam.gaincor &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.flitecam.gaincor</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.toolkit.utilities.fits import hdinsert
+
+__all__ = [&#39;gaincor&#39;]
+
+
+<div class="viewcode-block" id="gaincor">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.flitecam.gaincor.gaincor.html#sofia_redux.instruments.flitecam.gaincor.gaincor">[docs]</a>
+def gaincor(hdul):
+    &quot;&quot;&quot;
+    Correct flux data for gain variations.
+
+    The normalized flat field and associated error should have been
+    previously generated and attached to the input.
+
+    Flat errors are propagated to the output error plane, assuming
+    that flat and flux are statistically independent.  Note that this
+    may not be a correct assumption for all FLITECAM data.  For example,
+    sky files corrected with a master sky flat generated from those
+    files will have correlated pixels.  Error estimates in cases like
+    these should be treated as suspect.
+
+    Parameters
+    ----------
+    hdul : fits.HDUList
+        Input data.  Should have FLUX, ERROR, FLAT, and FLAT_ERROR
+        extensions.
+
+    Returns
+    -------
+    fits.HDUList
+        Corrected data, with updated FLUX and ERROR extensions.
+        The FLAT and FLAT_ERROR extensions are dropped.
+    &quot;&quot;&quot;
+    # input data
+    flux = hdul[&#39;FLUX&#39;].data
+    var = hdul[&#39;ERROR&#39;].data ** 2
+    flat = hdul[&#39;FLAT&#39;].data
+    if &#39;FLAT_ERROR&#39; in hdul:
+        flat_var = hdul[&#39;FLAT_ERROR&#39;].data ** 2
+    else:
+        flat_var = np.zeros_like(flat)
+    flat_hdr = hdul[&#39;FLAT&#39;].header
+    flat_norm = flat_hdr.get(&#39;FLATNORM&#39;, 1.0)
+    flat_obs = flat_hdr.get(&#39;ASSC_OBS&#39;, &#39;UNKNOWN&#39;)
+
+    # check for zeros
+    flat[flat == 0] = np.nan
+
+    # divide by flat
+    corrected_flux = flux / flat
+
+    # propagate error, assuming flat and flux are statistically
+    # independent
+    corrected_var = var / flat ** 2 + flat_var * flux ** 2 / flat ** 4
+
+    # make output hdul with only science extensions
+    corrected = fits.HDUList()
+    expected = [&#39;FLUX&#39;, &#39;ERROR&#39;, &#39;BADMASK&#39;, &#39;EXPOSURE&#39;]
+    for hdu in hdul:
+        if hdu.name in expected:
+            corrected.append(hdu)
+
+    corrected[&#39;FLUX&#39;].data = corrected_flux
+    corrected[&#39;ERROR&#39;].data = np.sqrt(corrected_var)
+
+    # add some flat values to output header
+    header = corrected[0].header
+    hdinsert(header, &#39;FLATNORM&#39;, flat_norm, &#39;Flat normalization value&#39;)
+    hdinsert(header, &#39;FLAT_OBS&#39;, flat_obs, &#39;Flat OBS-IDs&#39;)
+
+    return corrected</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

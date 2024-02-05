@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>parse_condition &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../_static/plot_directive.css" />
+    
+    <script src="../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../_static/doctools.js?v=888ff710"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../_static/copybutton.js"></script>
+    <link rel="icon" href="../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="hdrequirements" href="sofia_redux.instruments.forcast.hdrequirements.hdrequirements.html" />
+    <link rel="prev" title="hdcheck" href="sofia_redux.instruments.forcast.hdcheck.hdcheck.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li class="right">
+	<a href="sofia_redux.instruments.forcast.hdrequirements.hdrequirements.html" title="hdrequirements">
+	  next &raquo;
+	</a>
+      </li>
+      <li class="right">
+	<a href="sofia_redux.instruments.forcast.hdcheck.hdcheck.html" title="hdcheck">
+	  &laquo; previous
+	</a>
+	 |
+      </li>
+      <li>
+	<a href="../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../sofia_redux/index.html" >SOFIA Redux</a> &#187;</li>
+      <li><a href="../manuals/forcast/developers/developers.html" accesskey="U">FORCAST Redux Developer’s Manual</a> &#187;</li>
+      
+      <li>parse_condition</li> 
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="parse-condition">
+<h1>parse_condition<a class="headerlink" href="#parse-condition" title="Link to this heading">¶</a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="sofia_redux.instruments.forcast.hdrequirements.parse_condition">
+<span class="sig-prename descclassname"><span class="pre">sofia_redux.instruments.forcast.hdrequirements.</span></span><span class="sig-name descname"><span class="pre">parse_condition</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">condition</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sofia_redux/instruments/forcast/hdrequirements.html#parse_condition"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sofia_redux.instruments.forcast.hdrequirements.parse_condition" title="Link to this definition">¶</a></dt>
+<dd><p>Parse a condition value defined in the keyword table</p>
+<p>Conditions in the keyword table are usually defined as
+single condition=(KEYWORD&lt;comparison operator&gt;value) statements.
+However, there is a facility to provide AND or OR type logic across
+multiple conditions.  The order in which conditions are supplied
+is important, as OR conditions will contain a set of AND conditions.</p>
+<p>If all of the AND conditions in a single OR condition are satisfied
+then there is no need to check any of the other OR conditions and
+we can report that the full condition (the condition parameter)
+has passed.  For example if condition string passed in was of the
+form:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>&lt;C1&gt;&amp;&lt;C2&gt;&amp;&lt;C3&gt; | &lt;C4&gt;&lt;C5&gt;
+</pre></div>
+</div>
+<p>If all of the conditions in the first OR condition set (C1, C2, and C3)
+were satisfied, then we do not need to check C4 or C5 since the
+condition has already been satisfied.  If one or more of the conditions
+was not met in the first OR set, we would need to check that both
+C4 and C5 in the second OR set are satisfied in order to report
+whether the overall condition has been met.</p>
+<p>The return value of parse_condition examines the input &lt;condition&gt;
+string and returns an outer list of OR conditions containing an
+inner list of AND conditions.  The above example would be converted
+to the form:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>[[c1, c2, c3], [c4, c5]]
+</pre></div>
+</div>
+<p>where the lowercase c now represents one of the AND conditions as
+a tuple of the form:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>(keyword, comparison operator, value)
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>condition</strong><span class="classifier">str</span></dt><dd><p>Of the form KEYWORD&lt;comparison operator&gt;&lt;value&gt;</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>list of list of tuple of str</dt><dd><p>The outer list contains a list of ‘OR’ (|, ||) conditions,
+which is a sublist or ‘AND’ (&amp;, &amp;&amp;) conditions.  i.e.
+‘OR’ condition = [AND condition 1, AND condition 2,…]</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+<ul>
+<li><a class="reference internal" href="#">parse_condition</a><ul>
+<li><a class="reference internal" href="#sofia_redux.instruments.forcast.hdrequirements.parse_condition"><code class="docutils literal notranslate"><span class="pre">parse_condition()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right">
+    <a href="../_sources/api/sofia_redux.instruments.forcast.hdrequirements.parse_condition.rst.txt"
+       rel="nofollow">Page Source</a> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

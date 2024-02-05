@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepstdphotcal &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepstdphotcal</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Flux standard photometry pipeline step.&quot;&quot;&quot;
+
+from astropy import log
+
+from sofia_redux.calibration.pipecal_util import run_photometry, \
+    apply_fluxcal, get_fluxcal_factor
+from sofia_redux.calibration.pipecal_config import pipecal_config
+
+from sofia_redux.instruments.hawc.stepparent import StepParent
+
+__all__ = [&#39;StepStdPhotCal&#39;]
+
+
+<div class="viewcode-block" id="StepStdPhotCal">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepstdphotcal.StepStdPhotCal.html#sofia_redux.instruments.hawc.steps.stepstdphotcal.StepStdPhotCal">[docs]</a>
+class StepStdPhotCal(StepParent):
+    &quot;&quot;&quot;
+    Measure photometry and calibrate flux standard observations.
+
+    This pipeline step runs aperture photometry on flux standards
+    in raw units, then applies a standard flux calibration factor to
+    calibrate the flux to physical units (Jy/pixel).
+
+    It is assumed that the input data have been opacity-corrected
+    to a reference altitude and zenith angle, and that the calibration
+    factors were derived from flux standards that were similarly
+    corrected. This step should be run after the
+    `sofia_redux.instruments.hawc.steps.StepOpacity` pipeline step.
+
+    Calibration factors are tracked and applied by configuration files and
+    algorithms in the `sofia_redux.calibration` package:
+
+      - `sofia_redux.calibration.pipecal_config`: `pipecal_config`
+      - `sofia_redux.calibration.pipecal_util`:
+        `get_fluxcal_factor`, `apply_fluxcal`
+
+    Photometry routines are also provided by the
+    `sofia_redux.calibration` package, via:
+
+      - `sofia_redux.calibration.pipecal_util`: `run_photometry`
+
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepStdPhotCal.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepstdphotcal.StepStdPhotCal.html#sofia_redux.instruments.hawc.steps.stepstdphotcal.StepStdPhotCal.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;stdphotcal&#39;, and are named with
+        the step abbreviation &#39;STD&#39;.
+
+        Parameters defined for this step are:
+
+        srcpos : str
+            Initial guess position for photometry, given as &quot;x,y&quot;.
+            If a blank string is provided, the brightest peak in the
+            image will be used as the source position.
+        fitsize : int
+            Sub-image size to use for profile fit, in pixels.
+        fwhm : float
+            Initial FWHM for profile fit, in pixels.
+        profile : str
+            Profile type for source fit (moffat, gaussian).
+        aprad : float
+            Aperture radius for photometry, in pixels.
+        skyrad : list of float
+            Background annulus radii, in pixels, given as [inner, outer].
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;stdphotcal&#39;
+        self.description = &#39;Compute Photometry&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;std&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+        self.paramlist.append([&#39;srcpos&#39;, &#39;&#39;,
+                               &#39;Initial guess position for photometry&#39;])
+        self.paramlist.append([&#39;fitsize&#39;, 100,
+                               &#39;Photometry fit size (pix)&#39;])
+        self.paramlist.append([&#39;fwhm&#39;, 5.0,
+                               &#39;Initial FWHM for fits (pix)&#39;])
+        self.paramlist.append([&#39;profile&#39;, &#39;moffat&#39;,
+                               &#39;Profile type for fits (moffat, gaussian)&#39;])
+        self.paramlist.append([&#39;aprad&#39;, 20.0,
+                               &#39;Aperture radius (pixels)&#39;])
+        self.paramlist.append([&#39;skyrad&#39;, [25.0, 35.0],
+                               &#39;Background annulus radii &#39;
+                               &#39;(inner,outer in pixels)&#39;])</div>
+
+
+<div class="viewcode-block" id="StepStdPhotCal.run_phot">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepstdphotcal.StepStdPhotCal.html#sofia_redux.instruments.hawc.steps.stepstdphotcal.StepStdPhotCal.run_phot">[docs]</a>
+    def run_phot(self, cal_conf, kwargs, write=False):
+        &quot;&quot;&quot;
+        Run aperture photometry measurement.
+
+        Data in self.dataout are used as input.  If a &#39;PRIMARY IMAGE&#39;
+        extension is present (as from ScanMap), it is used.  Otherwise,
+        a &#39;STOKES I&#39; image is used.  Associated error planes are also
+        passed to the photometry algorithm.
+
+        Parameters
+        ----------
+        cal_conf : dict
+            Pipecal configuration information.
+        kwargs : dict
+            Arguments to pass to the run_photometry function.
+        write : bool, optional
+            If set, photometry keywords are written to the primary
+            header for the self.dataout DataFits.
+
+        Returns
+        -------
+        list of str
+            Extension names used for photometry.
+        &quot;&quot;&quot;
+        header = self.dataout.header.copy()
+        imgnames = self.dataout.imgnames
+        if &#39;PRIMARY IMAGE&#39; in imgnames and &#39;NOISE&#39; in imgnames:
+            # for scan products
+            flux = self.dataout.imageget(&#39;PRIMARY IMAGE&#39;)
+            variance = self.dataout.imageget(&#39;NOISE&#39;) ** 2
+            extnames = [&#39;PRIMARY IMAGE&#39;, &#39;NOISE&#39;]
+        else:
+            flux = self.dataout.imageget(&#39;STOKES I&#39;)
+            variance = self.dataout.imageget(&#39;ERROR I&#39;) ** 2
+            extnames = None
+        try:
+            run_photometry(flux, header, variance, cal_conf, **kwargs)
+            if write:
+                self.dataout.header = header
+        except ValueError:
+            log.warning(&#39;Unable to run photometry on flux standard.&#39;)
+        return extnames</div>
+
+
+<div class="viewcode-block" id="StepStdPhotCal.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepstdphotcal.StepStdPhotCal.html#sofia_redux.instruments.hawc.steps.stepstdphotcal.StepStdPhotCal.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        Because this step is single-in, single-out (SISO),
+        self.datain must be a DataFits object. The output
+        is also a DataFits object, stored in self.dataout.
+
+        The process is:
+
+        1. Retrieve calibration configuration from the
+           `sofia_redux.calibration` package.
+        2. Run photometry on the Stokes I image.
+        3. Multiply flux and error images by the calibration factor.
+           Multiply covariance images by the calibration factor squared.
+        4. Set the BUNIT keyword in each extension accordingly (to
+           &#39;Jy/pixel&#39; or &#39;Jy2/pixel2&#39; for covariances).
+        &quot;&quot;&quot;
+
+        # get parameters
+        kwargs = {}
+        srcpos = self.getarg(&#39;srcpos&#39;)
+        if str(srcpos).strip().lower() not in [&#39;none&#39;, &#39;&#39;]:
+            msg = &#39;Invalid source position.&#39;
+            try:
+                srcpos = [float(x) for x in str(srcpos).split(&#39;,&#39;)]
+            except ValueError:
+                log.error(msg)
+                raise ValueError(msg)
+            if len(srcpos) != 2:
+                log.error(msg)
+                raise ValueError(msg)
+            kwargs[&#39;srcpos&#39;] = srcpos
+        kwargs[&#39;fitsize&#39;] = self.getarg(&#39;fitsize&#39;)
+        kwargs[&#39;fwhm&#39;] = self.getarg(&#39;fwhm&#39;)
+        kwargs[&#39;profile&#39;] = self.getarg(&#39;profile&#39;)
+        kwargs[&#39;aprad&#39;] = self.getarg(&#39;aprad&#39;)
+        kwargs[&#39;skyrad&#39;] = self.getarg(&#39;skyrad&#39;)
+
+        # Copy datain to dataout
+        self.dataout = self.datain.copy()
+        header = self.dataout.header
+
+        # Test for previous calibration
+        try:
+            bunit = header[&#39;BUNIT&#39;]
+        except KeyError:
+            bunit = &#39;UNKNOWN&#39;
+        if &#39;JY&#39; not in str(bunit).strip().upper():
+            calibrated = False
+        else:
+            calibrated = True
+
+        # Get pipecal config
+        cal_conf = pipecal_config(self.dataout.header)
+        log.debug(&#39;Full calibration config:&#39;)
+        for key, val in cal_conf.items():
+            log.debug(&#39;  {}: {}&#39;.format(key, val))
+
+        # first run photometry on the Stokes I image
+        log.info(&#39;&#39;)
+        if not calibrated:
+            log.info(&#39;Before calibration:&#39;)
+
+        # run the photometry
+        extnames = self.run_phot(cal_conf, kwargs, write=True)
+
+        if calibrated:
+            # skip calibration if already done
+            log.info(&#39;&#39;)
+            return
+
+        # Then calibrate to Jy
+
+        # Assemble extensions to correct, if not already retrieved
+        if extnames is None:
+            try:
+                nhwp = self.dataout.getheadval(&#39;nhwp&#39;)
+            except KeyError:
+                nhwp = 1
+            if nhwp == 1:
+                stokes = [&#39;I&#39;]
+            else:
+                stokes = [&#39;I&#39;, &#39;Q&#39;, &#39;U&#39;]
+
+            # flux, error
+            extnames = []
+            for var in stokes:
+                extnames.append(&#39;STOKES %s&#39; % var)
+                extnames.append(&#39;ERROR %s&#39; % var)
+
+            # stokes covariances
+            if nhwp &gt; 1:
+                stokes = [&#39;Q I&#39;, &#39;U I&#39;, &#39;Q U&#39;]
+                for var in stokes:
+                    extnames.append(&#39;COVAR %s&#39; % var)
+
+        # Correct each extension
+        header = self.dataout.header
+        corrfac = None
+        for i, extname in enumerate(extnames):
+            data = self.dataout.imageget(extname)
+            hdr = self.dataout.getheader(extname)
+
+            if i == 0:
+                # correct data and write values to primary header
+                corrdata = apply_fluxcal(data, header, cal_conf)
+                corrfac, _ = get_fluxcal_factor(header, cal_conf)
+                if corrfac is None:
+                    log.warning(&#39;No calibration factor found; &#39;
+                                &#39;not calibrating data.&#39;)
+                else:
+                    log.info(&#39;&#39;)
+                    log.info(&#39;Applying flux calibration factor: &#39;
+                             &#39;{:.4f}&#39;.format(corrfac))
+            else:
+                if corrfac is None:
+                    break
+                if &#39;VAR&#39; in extname:
+                    corrdata = data / corrfac ** 2
+                    hdr[&#39;BUNIT&#39;] = (&#39;Jy2/pixel2&#39;, &#39;Data units&#39;)
+                else:
+                    corrdata = data / corrfac
+                    hdr[&#39;BUNIT&#39;] = (&#39;Jy/pixel&#39;, &#39;Data units&#39;)
+
+            self.dataout.imageset(corrdata, extname)
+
+        # Print source flux after calibration
+        try:
+            flux = header[&#39;STAPFLX&#39;] / corrfac
+            flux_err = header[&#39;STAPFLXE&#39;] / corrfac
+            log.info(&#39;&#39;)
+            log.info(&#39;After calibration:&#39;)
+            log.info(&#39;Source Flux: &#39;
+                     &#39;{:.2f} +/- {:.2f} Jy&#39;.format(flux, flux_err))
+        except (KeyError, ValueError, TypeError):
+            pass
+        else:
+            try:
+                modlflx = header[&#39;MODLFLX&#39;]
+                modlflxe = header[&#39;MODLFLXE&#39;]
+                log.info(&#39;Model Flux: &#39;
+                         &#39;{:.3f} +/- {:.3f} Jy&#39;.format(modlflx, modlflxe))
+                log.info(&#39;Percent difference from model: &#39;
+                         &#39;{:.1f}%&#39;.format(100 * (flux - modlflx) / modlflx))
+            except KeyError:
+                pass
+            log.info(&#39;&#39;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

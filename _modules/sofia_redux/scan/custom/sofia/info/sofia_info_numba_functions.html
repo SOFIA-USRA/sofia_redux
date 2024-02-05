@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.info.sofia_info_numba_functions &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.info.sofia_info_numba_functions</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numba as nb
+import numpy as np
+
+nb.config.THREADING_LAYER = &#39;threadsafe&#39;
+
+__all__ = [&#39;get_drift_corrections&#39;]
+
+
+<div class="viewcode-block" id="get_drift_corrections">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.sofia_info_numba_functions.get_drift_corrections.html#sofia_redux.scan.custom.sofia.info.sofia_info_numba_functions.get_drift_corrections">[docs]</a>
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def get_drift_corrections(frame_utc, frame_valid, drift_utc_ranges,
+                          drift_deltas):  # pragma: no cover
+    &quot;&quot;&quot;
+    Get the drift corrections by linear interpolation between drifts.
+
+    The drift correction will be given as:
+
+    delta_i * (frame_time - start_i) / (end_i - start_i)
+
+    where the start and end are the UTC start and end times for a given drift
+    where start &lt; frame_time &lt;= end.  If the frame_time is greater than the
+    maximum available drift end time, then extrapolation will be used.
+
+    Parameters
+    ----------
+    frame_utc : numpy.ndarray (float)
+        An array of shape (n_frames,) containing the frame UTC times.
+    frame_valid : numpy.ndarray (bool)
+        A boolean mask of shape (n_frames,) where `False` skips the correction
+        calculation for that frame.
+    drift_utc_ranges : numpy.ndarray (float)
+        The start and end times for the drifts of shape (n_drifts, 2) where
+        index [0, 0] gives the start time of the first drift, and index [0, 1]
+        gives the end time of the first drift.
+    drift_deltas : numpy.ndarray (float)
+        The drift offset deltas of shape (n_drifts, 2) where index [0, 0] gives
+        the delta of the first drift in the x-direction, and index [0, 1] gives
+        the delta of the first drift in the y-direction.
+
+    Returns
+    -------
+    drift_correction, extrapolation_frame : numpy.ndarray (float), int
+        The drift correction is an array of shape (n_frames, 2) where index
+        [0, 0] gives the correction for frame 0 in the x-direction and
+        index [0, 1] gives the correction for frame 0 in the y-direction.
+        The extrapolation frame will be set to a positive number indicating the
+        frame from which extrapolation was required.  If no extrapolation
+        occurred, this value is -1.
+    &quot;&quot;&quot;
+    extrapolate_index = -1
+    drift_index = 0
+    n_frames = frame_utc.size
+    n_drifts = drift_utc_ranges.shape[0]
+    drift_correction = np.empty((n_frames, 2), dtype=nb.float64)
+    if n_drifts == 0:
+        for frame in range(n_frames):
+            drift_correction[frame, 0] = 0.0
+            drift_correction[frame, 1] = 0.0
+        return drift_correction, extrapolate_index
+
+    min_utc = drift_utc_ranges[0, 0]
+    max_utc = drift_utc_ranges[0, 1]
+    utc_span = max_utc - min_utc
+    dx = drift_deltas[0, 0]
+    dy = drift_deltas[0, 1]
+
+    for frame in range(frame_utc.size):
+        if not frame_valid[frame]:
+            drift_correction[frame, 0] = 0.0
+            drift_correction[frame, 1] = 0.0
+            continue
+        utc = frame_utc[frame]
+
+        if extrapolate_index &lt; 0 and (utc &lt; min_utc or utc &gt; max_utc):
+            drift_index += 1
+            if drift_index &gt;= n_drifts:
+                extrapolate_index = frame
+                drift_index = -1
+
+            min_utc = drift_utc_ranges[drift_index, 0]
+            max_utc = drift_utc_ranges[drift_index, 1]
+            utc_span = max_utc - min_utc
+            dx = drift_deltas[drift_index, 0]
+            dy = drift_deltas[drift_index, 1]
+
+        dt = (utc - min_utc) / utc_span
+        drift_correction[frame, 0] = dx * dt
+        drift_correction[frame, 1] = dy * dt
+
+    return drift_correction, extrapolate_index</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

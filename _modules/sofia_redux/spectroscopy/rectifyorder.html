@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.rectifyorder &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.rectifyorder</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+from scipy.sparse import csr_matrix
+
+from sofia_redux.toolkit.utilities.fits import hdinsert
+from sofia_redux.toolkit.fitting.polynomial import polyinterp2d
+from sofia_redux.toolkit.interpolate import tabinv, Interpolate
+from sofia_redux.toolkit.image.fill import polyfillaa
+
+__all__ = [&#39;get_rect_xy&#39;, &#39;trim_xy&#39;, &#39;rectifyorder&#39;, &#39;update_wcs&#39;,
+           &#39;rectifyorder&#39;]
+
+
+<div class="viewcode-block" id="get_rect_xy">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.rectifyorder.get_rect_xy.html#sofia_redux.spectroscopy.rectifyorder.get_rect_xy">[docs]</a>
+def get_rect_xy(xarray, yarray, xvals, yvals, dx=None, dy=None, mask=None,
+                poly_order=3):
+    &quot;&quot;&quot;
+    Given arrays of x and y coordinates, interpolate to defined grids
+
+    Parameters
+    ----------
+    xarray : array_like of float
+        (nrows, ncols)
+    yarray : array_like of float
+        (nrows, ncols)
+    xvals : array_like of float
+        (nrows, ncols)
+    yvals : array_like of float
+        (nrows, ncols)
+    dx : float, optional
+        Spacing of the output grids in the x-direction.  If not supplied,
+        then taken to be range(xarray)/range(xvals)
+    dy : float, optional
+        Spacing of the output grids in the y-direction.  If not supplied,
+        then taken to be range(yarray)/range(yvals)
+    mask : numpy.ndarray, optional
+    poly_order : int, optional
+        Polynomial order used to interpolate to the new coordinates
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray, numpy.ndarray, numpy.ndarray
+        (rectx, recty, gridx, gridy)
+        where rectx and recty are the x and y arrays interpolated onto
+        a regular grid.  gridx and gridy are the coordinates of the
+        regular grid.
+    &quot;&quot;&quot;
+    s = xarray.shape
+    if yarray.shape != s or xvals.shape != s or yvals.shape != s:
+        log.error(&quot;Incompatible array dimensions&quot;)
+        return
+    gi = np.isfinite(xarray) &amp; np.isfinite(yarray)
+    gi &amp;= np.isfinite(xvals) &amp; np.isfinite(yvals)
+    if isinstance(mask, np.ndarray):
+        if mask.shape != s:
+            log.error(&quot;Incompatible mask dimensions&quot;)
+            return
+        gi &amp;= mask
+    if not gi.any():
+        log.error(&quot;All valid x, y values are invalid or masked out&quot;)
+        return
+
+    xv, yv = xvals[gi].copy(), yvals[gi].copy()
+    xa, ya = xarray[gi].copy(), yarray[gi].copy()
+
+    xrange, yrange = np.ptp(xa), np.ptp(ya)
+    if dx is None:
+        dx = xrange / np.ptp(xv)
+    if dy is None:
+        dy = yrange / np.ptp(yv)
+
+    nx = int(xrange / dx) + 1
+    ny = int(yrange / dy) + 1
+    yout, xout = np.mgrid[:ny, :nx]
+    xout = xout * dx + xa.min()
+    yout = yout * dy + ya.min()
+    ix = polyinterp2d(xa, ya, xv, xout, yout, order=poly_order, full=False)
+    iy = polyinterp2d(xa, ya, yv, xout, yout, order=poly_order, full=False)
+    return ix, iy, xout[0], yout[:, 0]</div>
+
+
+
+<div class="viewcode-block" id="trim_xy">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.rectifyorder.trim_xy.html#sofia_redux.spectroscopy.rectifyorder.trim_xy">[docs]</a>
+def trim_xy(xarray, yarray, xgrid, ygrid, ybuffer=None, xbuffer=None,
+            xrange=None, yrange=None):
+    &quot;&quot;&quot;
+    Trim rows and columns from the edges of the coordinate arrays.
+
+    Parameters
+    ----------
+    xarray : numpy.ndarray
+        (nrows, ncols) array of x-coordinates
+    yarray : numpy.ndarray
+        (nrows, ncols) array of y-coordinates
+    xgrid : numpy.ndarray
+        (ncols,) array of x-coordinates along the x-axis of the rectified
+        arrays.
+    ygrid : numpy.ndarray
+        (nrows,) array of y-coordinates along the y-axis of the rectified
+        arrays.
+    ybuffer : int, optional
+        number of pixels to cut from the top and bottom of the arrays
+    xbuffer : int, optional
+        number of pixels to cut from the left and right of the arrays
+    xrange : array_like of float
+        (2,) [lower limit, upper limit] defining the range of valid
+        x values.
+    yrange : array_like of float
+        (2,) [lower limit, upper limit] defining the range of valid
+        y values.
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray, numpy.ndarray, numpy.ndarray
+        (xarray2, yarray2, xgrid2, ygrid2) where array dimensions may
+        be smaller than the original input arrays.
+    &quot;&quot;&quot;
+    ix, iy = xarray.copy(), yarray.copy()
+    xg, yg = xgrid.copy(), ygrid.copy()
+
+    # apply buffers to edges of arrays
+    if isinstance(ybuffer, int) and ybuffer &gt; 0:
+        ix = ix[ybuffer:-ybuffer, :]
+        iy = iy[ybuffer:-ybuffer, :]
+        yg = yg[ybuffer:-ybuffer]
+    if isinstance(xbuffer, int) and xbuffer &gt; 0:
+        ix = ix[:, xbuffer:-xbuffer]
+        iy = iy[:, xbuffer:-xbuffer]
+        xg = xg[xbuffer:-xbuffer]
+
+    # trim partial NaNs near the left, right, top, and bottom edges
+    xf = np.argwhere(np.any(np.isfinite(ix), axis=0)).ravel()
+    yf = np.argwhere(np.any(np.isfinite(iy), axis=1)).ravel()
+    xf = [xf.min(), xf.max() + 1] if len(xf) &gt;= 2 else [0, ix.shape[1]]
+    yf = [yf.min(), yf.max() + 1] if len(yf) &gt;= 2 else [0, iy.shape[0]]
+    ix, iy = ix[yf[0]: yf[1], xf[0]: xf[1]], iy[yf[0]: yf[1], xf[0]: xf[1]]
+    xg, yg = xg[xf[0]: xf[1]], yg[yf[0]: yf[1]]
+
+    # trim to avoid the edge of the arrays
+    if xrange is not None:
+        xf = ix.copy()
+        xf[np.isnan(xf)] = xrange[0] - 1
+        xf = np.any((xf &lt;= xrange[0]) | (xf &gt;= xrange[1]), axis=0)
+        xf = np.argwhere(~xf).ravel()
+        xf = [xf.min(), xf.max() + 1] if len(xf) &gt;= 2 else [0, ix.shape[1]]
+    else:
+        xf = [0, ix.shape[1]]
+
+    if yrange is not None:
+        yf = iy.copy()
+        yf[np.isnan(yf)] = yrange[0] - 1
+        yf = np.any((yf &lt;= yrange[0]) | (yf &gt;= yrange[1]), axis=1)
+        yf = np.argwhere(~yf).ravel()
+        yf = [yf.min(), yf.max() + 1] if len(yf) &gt;= 2 else [0, iy.shape[0]]
+    else:
+        yf = [0, iy.shape[0]]
+
+    ix, iy = ix[yf[0]: yf[1], xf[0]: xf[1]], iy[yf[0]: yf[1], xf[0]: xf[1]]
+    xg, yg = xg[xf[0]: xf[1]], yg[yf[0]: yf[1]]
+    return ix, iy, xg, yg</div>
+
+
+
+def reconstruct_slit(image, xarray, yarray, xgrid, ygrid, header=None,
+                     variance=None, bitmask=None, badpix_mask=None,
+                     badfrac=0.1, xrange=None, yrange=None):
+
+    if header is None:
+        header = fits.Header()
+
+    ix, iy = xarray.copy(), yarray.copy()
+    xg, yg = xgrid.copy(), ygrid.copy()
+    nx, ny = xg.size - 1, yg.size - 1
+    dx, dy = np.abs(xg[1] - xg[0]), np.abs(yg[1] - yg[0])
+
+    if xrange is None:
+        xrange = 0, image.shape[1]
+    if yrange is None:
+        yrange = 0, image.shape[0]
+    xrange = np.clip(xrange, 0, image.shape[1])
+    yrange = np.clip(yrange, 0, image.shape[0])
+
+    # slits defines the vertices of the slit
+    slits = np.zeros((2, 4, nx * ny))
+
+    # Order of the vertices is bl -&gt; tl -&gt; tr -&gt; br:
+    # 2-&gt;3
+    # |  |
+    # 1  4
+    # in a clockwise order
+    vx, vy = [0, 0, 1, 1], [0, 1, 1, 0]
+    for k, (j, i) in enumerate(zip(vy, vx)):
+        slits[0, k] = iy[j:ny + j, i:nx + i].ravel()
+        slits[1, k] = ix[j:ny + j, i:nx + i].ravel()
+    # add 0.5 to index pixels at the centre rather than lower-left
+    slits += 0.5
+
+    # remove invalid entries
+    keep = np.all(np.all(np.isfinite(slits), axis=1), axis=0)
+    slits = slits[:, :, keep]
+
+    # Format the data for polyfillaa (calculates area of slit shape)
+    px, py = slits[1].T.ravel(), slits[0].T.ravel()
+    # poly_ind gives the start and end indices defining each shape
+    poly_ind = np.arange(slits.shape[-1]) * 4
+
+    pixels, areas = polyfillaa(px, py, xrange=xrange, yrange=yrange,
+                               start_indices=poly_ind, area=True)[:]
+
+    gs, gw = np.mgrid[:ny, :nx]
+    gs, gw = gs.ravel()[keep], gw.ravel()[keep]
+    dovar = isinstance(variance, np.ndarray)
+    dobits = isinstance(bitmask, np.ndarray)
+
+    # Reorder
+    keys = np.array(list(pixels.keys()))
+    maxind = keys.max() + 1
+    pv = np.full((maxind,), None, dtype=object)
+    av = np.full((maxind,), None, dtype=object)
+    av[keys] = list(areas.values())
+    pv[keys] = list(pixels.values())
+    npix = np.array(list(map(lambda val: 0 if val is None else len(val), pv)))
+    minpix, maxpix = np.min(npix), np.max(npix) + 1
+    nbins = maxpix - minpix
+    pixbins = (npix - minpix).astype(int)
+    npoly_ind = np.arange(npix.size)
+    s = csr_matrix(
+        (npoly_ind, [pixbins, np.arange(npix.size)]),
+        shape=(nbins, npix.size))
+
+    bpm = badpix_mask if badpix_mask is None else badpix_mask.astype(float)
+
+    result = {&#39;image&#39;: np.zeros((ny, nx)),
+              &#39;wave&#39;: xgrid[:nx] + dx / 2,
+              &#39;spatial&#39;: ygrid[:ny] + dy / 2,
+              &#39;mask&#39;: np.zeros((ny, nx)),
+              &#39;bitmask&#39;: np.zeros((ny, nx), dtype=int),
+              &#39;pixsum&#39;: np.zeros((ny, nx)),
+              &#39;variance&#39;: np.zeros((ny, nx)),
+              &#39;header&#39;: header}
+
+    for i, put in enumerate(np.split(s.data, s.indptr[1:-1])):
+        numpix = i + minpix
+        if numpix == 0 or len(put) == 0:  # pragma: no cover
+            continue
+        pix_arr = np.array(list(pv[put]))
+        area_arr = np.array(list(av[put]))
+        takeidx = np.ravel_multi_index(
+            np.reshape(pix_arr, (pix_arr.shape[0] * numpix, 2)).T,
+            image.shape)
+        val_arr = np.reshape(np.take(image, takeidx), area_arr.shape)
+        putidx = tuple(np.array(list(zip(gs[put], gw[put]))).T)
+
+        result[&#39;image&#39;][putidx] += np.sum(area_arr * val_arr, axis=1)
+        asum = np.sum(area_arr, axis=1)
+        result[&#39;pixsum&#39;][putidx] += asum
+        if bpm is not None:
+            bpm_arr = np.reshape(np.take(bpm, takeidx), area_arr.shape)
+            result[&#39;mask&#39;][putidx] += np.sum(area_arr * bpm_arr, axis=1)
+        else:
+            result[&#39;mask&#39;][putidx] += asum
+        if dovar:
+            var_arr = np.reshape(np.take(variance, takeidx), area_arr.shape)
+            result[&#39;variance&#39;][putidx] += np.sum(area_arr * var_arr, axis=1)
+        if dobits:
+            bit_arr = np.reshape(np.take(bitmask, takeidx), area_arr.shape)
+            bit_arr = np.mod(np.product(bit_arr, axis=1), 256)
+            result[&#39;bitmask&#39;][putidx] = bit_arr
+
+    result[&#39;mask&#39;] = np.array(result[&#39;mask&#39;] &gt; (1 - badfrac))
+    result[&#39;mask&#39;] &amp;= ~np.isnan(result[&#39;image&#39;])
+
+    return result
+
+
+<div class="viewcode-block" id="update_wcs">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.rectifyorder.update_wcs.html#sofia_redux.spectroscopy.rectifyorder.update_wcs">[docs]</a>
+def update_wcs(result, spatcal):
+    &quot;&quot;&quot;
+    Update a FITS header with spectral WCS information.
+
+    This function assumes that result[&#39;header&#39;] is a fits.Header,
+    to be updated in place, and that result[&#39;wave&#39;] and
+    result[&#39;spatial&#39;] are appropriately populated.
+
+    Parameters
+    ----------
+    result : dict
+        Rectified result, as produced by `reconstruct_slit`.
+    spatcal : numpy.ndarray of float (nrow, ncol)
+        Spatial coordinates of each input pixel.
+    &quot;&quot;&quot;
+    header = result[&#39;header&#39;]
+    wave = result[&#39;wave&#39;]
+    space = result[&#39;spatial&#39;]
+
+    # get original keywords from input header
+    do_secondary = True
+    specsys = header.get(&#39;SPECSYS&#39;, &#39;TOPOCENT&#39;)
+    try:
+        # this assumes a simple input WCS convention
+        crpix1 = header[&#39;CRPIX1&#39;]
+        crpix2 = header[&#39;CRPIX2&#39;]
+        crval1 = header[&#39;CRVAL1&#39;]
+        crval2 = header[&#39;CRVAL2&#39;]
+        crota2 = np.radians(header.get(&#39;CROTA2&#39;, 0.0))
+        radesys = header.get(&#39;RADESYS&#39;, &#39;FK5&#39;)
+        equinox = header.get(&#39;EQUINOX&#39;, 2000.0)
+    except (KeyError, ValueError, TypeError):
+        do_secondary = False
+        crpix1, crpix2, crval1, crval2 = None, None, None, None
+        crota2, radesys, equinox = None, None, None
+
+    # dw and ds for the new image
+    wave_scale = np.mean(wave[1:] - wave[:-1])
+    space_scale = np.mean(space[1:] - space[:-1])
+
+    # try to get wave units from input header,
+    # assume um if not present
+    wave_units = header.get(&#39;XUNITS&#39;, &#39;um&#39;)
+
+    # assume spatial units are always arcsec/degrees
+    space_units = &#39;arcsec&#39;
+    cunit1 = &#39;deg&#39;
+    cunit2 = &#39;deg&#39;
+
+    # middle pixel
+    middle_wave = wave.size // 2
+    middle_space = space.size // 2
+
+    # add a simple linear primary WCS, referenced to the middle pixel
+    hdinsert(header, &#39;CTYPE1&#39;, &#39;LINEAR&#39;,
+             comment=&#39;Name of the coordinate axis&#39;)
+    hdinsert(header, &#39;CTYPE2&#39;, &#39;LINEAR&#39;,
+             comment=&#39;Name of the coordinate axis&#39;)
+    hdinsert(header, &#39;CUNIT1&#39;, wave_units,
+             comment=&#39;Units of the coordinate axis&#39;)
+    hdinsert(header, &#39;CUNIT2&#39;, space_units,
+             comment=&#39;Units of the coordinate axis&#39;)
+    hdinsert(header, &#39;CRPIX1&#39;, middle_wave + 1,
+             comment=&#39;Coordinate system reference pixel&#39;)
+    hdinsert(header, &#39;CRPIX2&#39;, middle_space + 1,
+             comment=&#39;Coordinate system reference pixel&#39;)
+    hdinsert(header, &#39;CRVAL1&#39;, wave[middle_wave],
+             comment=&#39;Coordinate system value at reference pixel&#39;)
+    hdinsert(header, &#39;CRVAL2&#39;, space[middle_space],
+             comment=&#39;Coordinate system value at reference pixel&#39;)
+    hdinsert(header, &#39;CDELT1&#39;, wave_scale,
+             comment=&#39;Coordinate increment at reference point&#39;)
+    hdinsert(header, &#39;CDELT2&#39;, space_scale,
+             comment=&#39;Coordinate increment at reference point&#39;)
+    hdinsert(header, &#39;CROTA2&#39;, 0.0,
+             comment=&#39;Coordinate system rotation angle&#39;)
+    hdinsert(header, &#39;SPECSYS&#39;, specsys,
+             comment=&#39;Spectral reference frame&#39;)
+
+    # if the input header is non-trivial, add a secondary WCS
+    # with full spatial sky coordinates.
+    # This WCS is not primary because DS9 doesn&#39;t handle it well
+    if do_secondary:
+        # get the reference pixel slit position from the spatial cal
+        interp2d = Interpolate(spatcal, mode=&#39;nearest&#39;, method=&#39;cubic&#39;)
+        ref_arcsec = interp2d(crpix1 - 1, crpix2 - 1)
+
+        # invert to get the effective index in the new spatial grid
+        ref_pix = tabinv(space, ref_arcsec)
+
+        hdinsert(header, &#39;CTYPE1A&#39;, &#39;WAVE&#39;,
+                 comment=&#39;Name of the coordinate axis&#39;)
+        hdinsert(header, &#39;CTYPE2A&#39;, &#39;DEC--TAN&#39;,
+                 comment=&#39;Name of the coordinate axis&#39;)
+        hdinsert(header, &#39;CTYPE3A&#39;, &#39;RA---TAN&#39;,
+                 comment=&#39;Name of the coordinate axis&#39;)
+        hdinsert(header, &#39;CUNIT1A&#39;, wave_units,
+                 comment=&#39;Units of the coordinate axis&#39;)
+        hdinsert(header, &#39;CUNIT2A&#39;, cunit2,
+                 comment=&#39;Units of the coordinate axis&#39;)
+        hdinsert(header, &#39;CUNIT3A&#39;, cunit1,
+                 comment=&#39;Units of the coordinate axis&#39;)
+        hdinsert(header, &#39;CRPIX1A&#39;, middle_wave + 1,
+                 comment=&#39;Coordinate system reference pixel&#39;)
+        hdinsert(header, &#39;CRPIX2A&#39;, ref_pix + 1,
+                 comment=&#39;Coordinate system reference pixel&#39;)
+        hdinsert(header, &#39;CRPIX3A&#39;, 1.0,
+                 comment=&#39;Coordinate system reference pixel&#39;)
+        hdinsert(header, &#39;CRVAL1A&#39;, wave[middle_wave],
+                 comment=&#39;Coordinate system value at reference pixel&#39;)
+        hdinsert(header, &#39;CRVAL2A&#39;, crval2,
+                 comment=&#39;Coordinate system value at reference pixel&#39;)
+        hdinsert(header, &#39;CRVAL3A&#39;, crval1,
+                 comment=&#39;Coordinate system value at reference pixel&#39;)
+        hdinsert(header, &#39;CDELT1A&#39;, wave_scale,
+                 comment=&#39;Coordinate increment at reference point&#39;)
+        hdinsert(header, &#39;CDELT2A&#39;, space_scale / 3600.,
+                 comment=&#39;Coordinate increment at reference point&#39;)
+        hdinsert(header, &#39;CDELT3A&#39;, - space_scale / 3600.,
+                 comment=&#39;Coordinate increment at reference point&#39;)
+        hdinsert(header, &#39;PC2_2A&#39;, np.cos(crota2),
+                 comment=&#39;Coordinate transformation matrix element&#39;)
+        hdinsert(header, &#39;PC2_3A&#39;, -np.sin(crota2),
+                 comment=&#39;Coordinate transformation matrix element&#39;)
+        hdinsert(header, &#39;PC3_2A&#39;, np.sin(crota2),
+                 comment=&#39;Coordinate transformation matrix element&#39;)
+        hdinsert(header, &#39;PC3_3A&#39;, np.cos(crota2),
+                 comment=&#39;Coordinate transformation matrix element&#39;)
+        hdinsert(header, &#39;RADESYSA&#39;, radesys,
+                 comment=&#39;Equatorial coordinate system&#39;)
+        hdinsert(header, &#39;EQUINOXA&#39;, equinox,
+                 comment=&#39;[yr] Equinox of equatorial coordinates&#39;)
+        hdinsert(header, &#39;SPECSYSA&#39;, specsys,
+                 comment=&#39;Spectral reference frame&#39;)</div>
+
+
+
+<div class="viewcode-block" id="rectifyorder">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.rectifyorder.rectifyorder.html#sofia_redux.spectroscopy.rectifyorder.rectifyorder">[docs]</a>
+def rectifyorder(image, ordermask, wavecal, spatcal, order,
+                 header=None, variance=None, mask=None, bitmask=None,
+                 x=None, y=None, dw=None, ds=None,
+                 badfrac=0.1, ybuffer=3, xbuffer=None, poly_order=3):
+    &quot;&quot;&quot;
+    Construct average spatial profiles for a single order
+
+    See `sofia_redux.spectroscopy.mkspatprof` and
+    `sofia_redux.spectroscopy.extspec` for algorithm description.
+
+    Parameters
+    ----------
+    image : numpy.ndarray of float (nrow, ncol)
+        2-d image
+    ordermask : numpy.ndarray of int (nrow, ncol)
+        Order number of each pixel
+    wavecal : numpy.ndarray of float (nrow, ncol)
+        Wavelength of each pixel
+    spatcal : numpy.ndarray of float (nrow, ncol)
+        Spatial coordinates of each pixel
+    order : int
+        order to process
+    header : fits.Header
+        Header to update with spectral WCS.
+    variance : numpy.ndarray of float (nrow, ncol), optional
+        Variance to rectify parallel to the image.
+    mask : numpy.ndarray of bool (nrow, ncol), optional
+        Mask indicating good (True) and bad (False) pixels.
+    bitmask : numpy.ndarray of int (nrow, ncol), optional
+        bit-set flags of each pixel.
+    x : numpy.array, optional
+        (nrow, ncol) x-coordinates
+    y : numpy.array, optional
+        (nrow, ncol) y-coordinates
+    dw : float, optional
+        Delta lambda based on the span of the order in pixels and
+        wavelengths.
+    ds : float, optional
+        The spatial sampling of the resampling slit in arcseconds,
+        typically given by slth_arc / slth_pix.
+    xbuffer : int, optional
+        The number of pixels to ignore near the left and right of the slit.
+    ybuffer : int, optional
+        The number of pixels to ignore near the top and bottom of the slit.
+    badfrac : float, optional
+        If defines the maximum area of a pixel to be missing before
+        that pixel should be considered bad.  For example, a badfrac of 0.1
+        means that output flux of a pixel must be the sum of at least
+        0.9 input pixels.
+    poly_order : int, optional
+        Polynomial order to use when converting wavecal and spatcal to
+        rectified values.
+
+    Returns
+    -------
+    dict
+        image -&gt; numpy.ndarray (ns, nw)
+        wave -&gt; numpy.ndarray (nw,)
+        spatial -&gt; numpy.ndarray (ns,)
+        mask -&gt; numpy.ndarray (ns, nw)
+        bitmask -&gt; numpy.ndarray (ns, nw)
+        pixsum -&gt; numpy.ndarray (ns, nw)
+        variance -&gt; numpy.ndarray (ns, nw)
+        header -&gt; fits.Header
+    &quot;&quot;&quot;
+    nrows, ncols = image.shape[:2]
+    if x is None or y is None:
+        y, x = np.mgrid[:nrows, :ncols]
+    omask = (ordermask == order)
+
+    if poly_order == 0:
+        if not omask.any():
+            log.warning(f&#39;No data for order {order}&#39;)
+            return
+        xmin, xmax = x[omask].min(), x[omask].max() + 1
+        ymin, ymax = y[omask].min(), y[omask].max() + 1
+        nx = xmax - xmin
+        ny = ymax - ymin
+
+        # Assume already rectified and trimmed
+        if header is None:
+            header = fits.Header()
+        result = {&#39;image&#39;: image[ymin:ymax, xmin:xmax].copy(),
+                  &#39;wave&#39;: wavecal[ymin, xmin:xmax].copy(),
+                  &#39;spatial&#39;: spatcal[ymin:ymax, xmin].copy(),
+                  &#39;pixsum&#39;: np.ones((ny, nx)),
+                  &#39;header&#39;: header}
+        if variance is None:
+            result[&#39;variance&#39;] = np.full((ny, nx), np.nan)
+        else:
+            result[&#39;variance&#39;] = variance[ymin:ymax, xmin:xmax].copy()
+        if mask is None:
+            result[&#39;mask&#39;] = np.full((ny, nx), True)
+        else:
+            result[&#39;mask&#39;] = mask[ymin:ymax, xmin:xmax].copy()
+        if bitmask is None:
+            result[&#39;bitmask&#39;] = np.zeros((ny, nx))
+        else:
+            result[&#39;bitmask&#39;] = bitmask[ymin:ymax, xmin:xmax].copy()
+    else:
+        # Straighten the wavelength and spatial coordinates
+        rect_xy = get_rect_xy(wavecal, spatcal, x, y, dy=ds, dx=dw,
+                              mask=omask, poly_order=poly_order)
+        if rect_xy is None:
+            log.error(&quot;Failed to rectify image&quot;)
+            return
+
+        # Trim bad values around the edges of new coordinate arrays
+        rect_xy = trim_xy(*rect_xy, xbuffer=xbuffer, ybuffer=ybuffer,
+                          xrange=[2, ncols - 2], yrange=[2, nrows - 2])
+
+        result = reconstruct_slit(image, *rect_xy,
+                                  header=header, variance=variance,
+                                  bitmask=bitmask, badpix_mask=mask,
+                                  badfrac=badfrac, xrange=[0, ncols],
+                                  yrange=[0, nrows])
+
+    # update the WCS for the new image
+    update_wcs(result, spatcal)
+
+    return result</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

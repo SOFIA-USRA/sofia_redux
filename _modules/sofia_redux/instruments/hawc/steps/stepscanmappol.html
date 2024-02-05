@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepscanmappol &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepscanmappol</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Scanning polarimetry image reconstruction pipeline step.&quot;&quot;&quot;
+
+from datetime import datetime
+import os
+import warnings
+
+from astropy import log
+from astropy.io import fits
+from astropy.wcs import WCS
+import numpy as np
+
+from sofia_redux.instruments.hawc.datafits import DataFits
+from sofia_redux.instruments.hawc.stepmoparent import StepMOParent
+from sofia_redux.instruments.hawc.steps.stepscanmap import StepScanMap
+from sofia_redux.scan.reduction.reduction import Reduction
+
+__all__ = [&#39;StepScanMapPol&#39;]
+
+
+<div class="viewcode-block" id="StepScanMapPol">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepscanmappol.StepScanMapPol.html#sofia_redux.instruments.hawc.steps.stepscanmappol.StepScanMapPol">[docs]</a>
+class StepScanMapPol(StepMOParent):
+    &quot;&quot;&quot;
+    Reconstruct an image from scanning polarimetry data.
+
+    This step requires that scanning polarimetry data are taken with
+    four HWP angles, one per input file. Sets of data are identified
+    by the SCRIPTID keyword, and are passed to the scan map algorithm
+    one group at a  time. R0 and T0 output maps are created for each
+    input file to.  This step assembles them into a single file with
+    R0 and T0 extensions (DATA, ERROR, and EXPOSURE) for each HWP angle.
+    One output file is produced for each set of 4 HWP angles.
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepScanMapPol.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepscanmappol.StepScanMapPol.html#sofia_redux.instruments.hawc.steps.stepscanmappol.StepScanMapPol.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;scanmappol&#39;, and are named with
+        the step abbreviation &#39;SMP&#39;.
+
+        Parameters defined for this step are:
+
+        vpa_tol : float
+            If differences between telescope angles (VPA) are more
+            than this value, this step will issue a warning.
+        use_frames : str
+            Frames to use from the reduction. Specify a particular
+            range, as &#39;400:-400&#39;, or &#39;400:1000&#39;.
+        grid : float
+            Output pixel scale.  If not set, default values from scan map
+            configuration will be used.
+        deep : bool
+            If set, faint point-like emission is prioritized.
+        faint : bool
+            If set, faint emission (point-like or extended) is prioritized.
+        extended : bool
+            If set, extended emission is prioritized.
+            This may increase noise on large angular scales.
+        options : str
+            Additional options to pass to the scan map algorithm.
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;scanmappol&#39;
+        self.description = &#39;Construct Scan Map&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;smp&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+
+        # Append parameters
+        self.paramlist.append([&#39;save_intermediate&#39;, False,
+                               &#39;Save individual scanmap frames&#39;])
+        self.paramlist.append([&#39;vpa_tol&#39;, 5.0,
+                               &#39;Tolerance for matching VPA angle&#39;])
+        self.paramlist.append([&#39;use_frames&#39;, &#39;&#39;,
+                               &quot;Frames to use from reduction. &quot;
+                               &quot;Specify a particular range, as &quot;
+                               &quot;&#39;400:-400&#39;, or &#39;400:1000&#39;.&quot;])
+        self.paramlist.append([&#39;grid&#39;, &#39;&#39;,
+                               &quot;Output pixel scale, if not default. &quot;
+                               &quot;Specify in arcsec.&quot;])
+        self.paramlist.append([&#39;deep&#39;, False,
+                               &#39;Attempt to recover faint point-like &#39;
+                               &#39;emission&#39;])
+        self.paramlist.append([&#39;faint&#39;, False,
+                               &#39;Attempt to recover faint emission &#39;
+                               &#39;(point-like or extended)&#39;])
+        self.paramlist.append([&#39;extended&#39;, False,
+                               &#39;Attempt to recover extended emission &#39;
+                               &#39;(may increase noise)&#39;])
+        self.paramlist.append([&#39;options&#39;, &#39;&#39;,
+                               &#39;Additional options for scan reconstruction&#39;])</div>
+
+
+<div class="viewcode-block" id="StepScanMapPol.assemble_scanpol">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepscanmappol.StepScanMapPol.html#sofia_redux.instruments.hawc.steps.stepscanmappol.StepScanMapPol.assemble_scanpol">[docs]</a>
+    def assemble_scanpol(self, dataout, basehead):
+        &quot;&quot;&quot;
+        Assemble scan maps into a single file.
+
+        HWP angles are determined from the HWPINIT key in the output
+        file headers. If 4 unique angles with two subarray images each
+        are not found, an error is raised.
+
+        Parameters
+        ----------
+        dataout : `list` of DataFits
+            Output scan maps to assemble.
+        basehead : fits.Header
+            Baseline header to update for output file.
+
+        Returns
+        -------
+        DataFits
+            The assembled data file.
+
+        Raises
+        ------
+        ValueError
+            If output is missing keywords HWPINIT, SUBARRAY, or TELVPA,
+            or if 4 unique HWP angles are not found, or if the wrong
+            number of subarray images are found (should be one R and one T).
+        &quot;&quot;&quot;
+        errmsg = &#39;Unexpected scan map output for SCANPOL mode. &#39; \
+                 &#39;Check SUBARRAY, HWPINIT, SCRIPTID, TELVPA.&#39;
+
+        # sort by HWP and subarray
+        hwp = {}
+        dates = []
+        actual_hwp = {}
+        actual_vpa = {}
+        for outfile in dataout:
+            # get the date, for determining header order
+            try:
+                dateobs_str = outfile.getheadval(&#39;DATE-OBS&#39;)
+                dateobs = datetime.strptime(dateobs_str.split(&#39;.&#39;)[0],
+                                            &quot;%Y-%m-%dT%H:%M:%S&quot;)
+                dates.append(dateobs)
+            except (KeyError, ValueError):
+                dates.append(datetime.now())
+
+            try:
+                hwpinit = float(outfile.getheadval(&#39;HWPINIT&#39;))
+                subarray = outfile.getheadval(&#39;SUBARRAY&#39;)
+                telvpa = float(outfile.getheadval(&#39;TELVPA&#39;))
+            except KeyError:
+                log.error(&#39;Scan map output missing required keywords: &#39;
+                          &#39;HWPINIT, SUBARRAY, or TELVPA&#39;)
+                raise ValueError(errmsg)
+            hwpround = int(np.round(hwpinit / 10, decimals=0) * 10)
+
+            # telvpa + 180 for storage
+            rotvpa = telvpa + 180.
+            if rotvpa &gt; 360:
+                rotvpa = rotvpa - 360.
+
+            if hwpround in hwp:
+                if subarray in hwp[hwpround]:
+                    log.error(&#39;Too many subarray={} images for HWP &#39;
+                              &#39;angle={}.&#39;.format(subarray, hwpround))
+                    raise ValueError(errmsg)
+                hwp[hwpround][subarray] = outfile
+                actual_hwp[hwpround].append(hwpinit)
+                actual_vpa[hwpround].append(rotvpa)
+            else:
+                hwp[hwpround] = {subarray: outfile}
+                actual_hwp[hwpround] = [hwpinit]
+                actual_vpa[hwpround] = [rotvpa]
+
+        # check that there are exactly 4 angles
+        # (NOTE: DRP supports multiples of 4, but we don&#39;t currently
+        # use more than 4, so keep it simple here.)
+        hwps = sorted(hwp.keys())
+        nhwp = len(hwps)
+        if nhwp != 4:
+            log.error(&#39;Must be exactly 4 HWP &#39;
+                      &#39;angles. Found: {}.&#39;.format(hwps))
+            raise ValueError(errmsg)
+
+        # now store R and T at each angle
+
+        df = DataFits(config=self.config)
+
+        # merge in all the input headers
+        sort_order = np.argsort(dates)
+        log.debug(f&#39;Setting header from &#39;
+                  f&#39;{dataout[sort_order[0]].filename}&#39;)
+        df.setheader(dataout[sort_order[0]].header)
+        exptime = df.getheadval(&#39;EXPTIME&#39;)
+        ref_arr = df.getheadval(&#39;SUBARRAY&#39;)
+        for idx in sort_order[1:]:
+            outdf = dataout[idx]
+
+            # for time accounting, sum exposure time only over one
+            # simultaneously observed subarray
+            if outdf.getheadval(&#39;SUBARRAY&#39;) == ref_arr:
+                exptime += outdf.getheadval(&#39;EXPTIME&#39;)
+            log.debug(&#39;Merging header for &#39;
+                      &#39;{}&#39;.format(outdf.filename))
+            df.mergehead(outdf)
+
+        # set the summed exptime
+        df.setheadval(&#39;EXPTIME&#39;, exptime, &#39;Total on-source exposure time [s]&#39;)
+
+        # add a few keywords needed for polarimetry processing
+        df.setheadval(&#39;NHWP&#39;, nhwp, &#39;Number of HWP Angles&#39;)
+        df.setheadval(&#39;PIXSCAL&#39;, df.getheadval(&#39;CDELT2&#39;) * 3600.,
+                      &#39;Pixel scale [arcsec]&#39;)
+
+        wcs0 = {}
+        for i, hwp_angle in enumerate(hwps):
+
+            if &#39;R0&#39; not in hwp[hwp_angle]:
+                log.error(&#39;Missing R0 at HWP angle {}&#39;.format(hwp_angle))
+                raise ValueError(errmsg)
+            if &#39;T0&#39; not in hwp[hwp_angle]:
+                log.error(&#39;Missing T0 at HWP angle {}&#39;.format(hwp_angle))
+                raise ValueError(errmsg)
+
+            rfile = hwp[hwp_angle][&#39;R0&#39;]
+            rdata = rfile.imageget(&#39;PRIMARY IMAGE&#39;)
+            rerr = rfile.imageget(&#39;NOISE&#39;)
+            rexp = rfile.imageget(&#39;EXPOSURE&#39;)
+            rwcs = WCS(rfile.header)
+
+            tfile = hwp[hwp_angle][&#39;T0&#39;]
+            tdata = tfile.imageget(&#39;PRIMARY IMAGE&#39;)
+            terr = tfile.imageget(&#39;NOISE&#39;)
+            texp = tfile.imageget(&#39;EXPOSURE&#39;)
+            twcs = WCS(tfile.header)
+
+            # divide by 2 for normalization with
+            # standard scan map calibration factors
+            rdata /= 2.0
+            rerr /= 2.0
+            tdata /= 2.0
+            terr /= 2.0
+
+            # set image extensions, with appropriate WCS keys
+            rd_ext = &#39;DATA R HWP%d&#39; % i
+            td_ext = &#39;DATA T HWP%d&#39; % i
+            re_ext = &#39;ERROR R HWP%d&#39; % i
+            te_ext = &#39;ERROR T HWP%d&#39; % i
+            rx_ext = &#39;EXPOSURE R HWP%d&#39; % i
+            tx_ext = &#39;EXPOSURE T HWP%d&#39; % i
+            if i == 0:
+                # don&#39;t overwrite primary header
+                df.imageset(rdata, rd_ext)
+                wcs0 = rwcs.to_header()
+            else:
+                df.imageset(rdata, rd_ext, rwcs.to_header())
+            df.imageset(tdata, td_ext, twcs.to_header())
+            df.imageset(rerr, re_ext, rwcs.to_header())
+            df.imageset(terr, te_ext, twcs.to_header())
+            df.imageset(rexp, rx_ext, rwcs.to_header())
+            df.imageset(texp, tx_ext, twcs.to_header())
+
+            # set a few more header values as needed
+            d_ext = [rd_ext, td_ext]
+            e_ext = [re_ext, te_ext]
+            x_ext = [rx_ext, tx_ext]
+            r_ext = [rd_ext, re_ext, rx_ext]
+            t_ext = [td_ext, te_ext, tx_ext]
+
+            # set BUNIT in data and error extensions (usually counts)
+            try:
+                bunit = rfile.header[&#39;BUNIT&#39;]
+            except KeyError:
+                log.warning(&#39;BUNIT not found in scan map output&#39;)
+                bunit = &#39;UNKNOWN&#39;
+            for x in d_ext + e_ext:
+                df.setheadval(&#39;BUNIT&#39;, bunit,
+                              comment=&#39;Data units&#39;, dataname=x)
+            # set BUNIT in exposure extensions (seconds)
+            for x in x_ext:
+                df.setheadval(&#39;BUNIT&#39;, &#39;s&#39;,
+                              comment=&#39;Data units&#39;, dataname=x)
+            # set HWP angle in all extensions
+            for x in r_ext + t_ext:
+                hwpinit = float(np.mean(actual_hwp[hwp_angle]))
+                df.setheadval(&#39;HWPINIT&#39;, hwpinit,
+                              comment=&#39;HWP angle [deg]&#39;,
+                              dataname=x)
+            # set SUBARRAY=R0 in R extensions
+            for x in r_ext:
+                df.setheadval(&#39;SUBARRAY&#39;, &#39;R0&#39;,
+                              comment=&#39;Subarrays in image&#39;,
+                              dataname=x)
+            # set SUBARRAY=T0 in T extensions
+            for x in t_ext:
+                df.setheadval(&#39;SUBARRAY&#39;, &#39;T0&#39;,
+                              comment=&#39;Subarrays in image&#39;,
+                              dataname=x)
+            # set average VPA angle
+            for x in r_ext + t_ext:
+                vpos = float(np.mean(actual_vpa[hwp_angle]))
+                df.setheadval(&#39;VPOS_ANG&#39;, vpos,
+                              comment=&#39;Average Array VPA [deg]&#39;,
+                              dataname=x)
+
+        # Copy and save headers
+        scnhead = df.header.copy()
+        df.header = basehead.copy()
+
+        # Merge scanmap headers
+        StepScanMap.merge_scan_hdr(df, scnhead, self.datain)
+
+        # Update primary header with proper WCS
+        for key, value in wcs0.items():
+            df.setheadval(key, value)
+
+        # Update SOFIA mandated keywords (since this is first pipe step)
+        obsid = &#39;P_&#39; + basehead[&#39;OBS_ID&#39;]
+        df.setheadval(&#39;OBS_ID&#39;, obsid)
+        df.setheadval(&#39;PIPELINE&#39;, &#39;HAWC_DRP&#39;)
+
+        return df</div>
+
+
+    def _run_scanmap(self, argset):
+        &quot;&quot;&quot;
+        Run a scan reduction on a data set.
+
+        Helper function to create a map from a group and assemble
+        the output.
+
+        Parameters
+        ----------
+        argset : tuple
+            This tuple should have 4 elements: a list of strings, a dict,
+            a fits.Header, and a string. These are the input
+            files, the keyword parameters, a baseline FITS header,
+            and the group identification string.
+
+        Returns
+        -------
+        df : DataFits
+            The output data object.
+        group : str
+            The group identifier.
+        &quot;&quot;&quot;
+        infiles, kwargs, basehead, group = argset
+
+        # log input
+        log.debug(f&#39;All provided options: {kwargs}&#39;)
+        log.debug(f&#39;Input files: {infiles}&#39;)
+
+        # run map reduction
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            reduction = Reduction(&#39;hawc_plus&#39;)
+            output_list = reduction.run(infiles, **kwargs)
+
+        # read output file(s)
+        if (output_list is None) or (None in output_list):
+            log.error(&#39;No output created.&#39;)
+            return None, group
+        elif isinstance(output_list, fits.HDUList):
+            log.error(&#39;Unexpected output for scan pol mode. &#39;
+                      &#39;Check INSTCFG.&#39;)
+            return None, group
+
+        dataout = []
+        for hdul in output_list:
+            df = DataFits(config=self.config)
+            df.load(hdul=hdul)
+            dataout.append(df)
+
+        try:
+            df = self.assemble_scanpol(dataout, basehead)
+        except ValueError as err:
+            log.error(&#39;Encountered error in assembly:&#39;)
+            log.error(err)
+            df = None
+        return df, group
+
+<div class="viewcode-block" id="StepScanMapPol.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepscanmappol.StepScanMapPol.html#sofia_redux.instruments.hawc.steps.stepscanmappol.StepScanMapPol.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        This step is run as a multi-in multi-out (MIMO) step:
+        self.datain should be a list of DataFits, and output
+        will also be a list of DataFits, stored in self.dataout.
+
+        The process is:
+
+        1. Group input data by the header keyword SCRIPTID.
+        2. Assemble the scan map options from input parameters.
+        3. Call the iterative scan map reconstructor. Internally,
+           the process will run multiple times, with appropriate arguments
+           for each HWP angle. It will create multiple output maps:
+           one for each of the R0 and T0 subarrays at each HWP angle.
+           For the standard four-angle case, 8 maps are created.
+        4. Assemble the output maps into a single output file per
+           group, with a separate extension for flux, error, and
+           exposure at each HWP angle and subarray.
+        5. Merge header keywords from the input FITS files to generate
+           an appropriate output header for each output file.
+
+        &quot;&quot;&quot;
+        vtol = self.getarg(&#39;vpa_tol&#39;)
+
+        # group data by scriptid
+        groups = {}
+        vpa = {}
+        fnum = {}
+        for df in self.datain:
+            try:
+                scriptid = df.getheadval(&#39;SCRIPTID&#39;)
+            except KeyError:
+                scriptid = &#39;UNKNOWN&#39;
+            if scriptid in groups:
+                groups[scriptid].append(df)
+                vpa[scriptid].append(df.getheadval(&#39;TELVPA&#39;))
+                if df.filenum is not None:
+                    fnum[scriptid].append(df.filenum)
+                else:
+                    fnum[scriptid].append(&#39;UNKNOWN&#39;)
+            else:
+                groups[scriptid] = [df]
+                vpa[scriptid] = [df.getheadval(&#39;TELVPA&#39;)]
+                if df.filenum is not None:
+                    fnum[scriptid] = [df.filenum]
+                else:
+                    fnum[scriptid] = [&#39;UNKNOWN&#39;]
+
+        # if scriptids are all different (old data), just run
+        # the data together
+        counts = np.array([len(groups[s]) for s in groups])
+        if len(self.datain) &gt; 1 and not np.any(counts &gt; 1):
+            log.warning(&#39;No matching SCRIPTIDs. &#39;
+                        &#39;Running all data together.&#39;)
+            groups = {&#39;ALL&#39;: self.datain}
+            vpa = {&#39;ALL&#39;: [v[0] for v in vpa.values()]}
+            fnum = {&#39;ALL&#39;: [v[0] for v in fnum.values()]}
+
+        # collect input options in dict
+        kwargs = {}
+        options = {}
+        if not self.getarg(&#39;save_intermediate&#39;):
+            kwargs[&#39;write&#39;] = {&#39;source&#39;: False}
+
+        # output path
+        outpath = os.path.dirname(self.datain[0].filename)
+        kwargs[&#39;outpath&#39;] = outpath
+
+        # add scanpol defaults
+        kwargs[&#39;scanpol&#39;] = True
+
+        # add additional top-level parameters
+        for arg in [&#39;deep&#39;, &#39;faint&#39;, &#39;extended&#39;]:
+            if self.getarg(arg):
+                kwargs[arg] = True
+
+        # add frame clipping if necessary
+        use_frames = str(self.getarg(&#39;use_frames&#39;)).strip()
+        use_frames = StepScanMap.check_use_frames(self.datain, use_frames)
+        if use_frames != &#39;&#39;:
+            kwargs[&#39;frames&#39;] = use_frames
+
+        # set the output pixel scale if supplied
+        try:
+            grid = float(str(self.getarg(&#39;grid&#39;)).strip())
+        except (ValueError, TypeError):
+            grid = None
+        if grid is not None:
+            kwargs[&#39;grid&#39;] = grid
+
+        # add additional options from parameters at end,
+        # so they can override any defaults set by the above
+        additional = str(self.getarg(&#39;options&#39;)).strip()
+        if additional != &#39;&#39;:
+            all_val = additional.split()
+            for val in all_val:
+                try:
+                    k, v = val.split(&#39;=&#39;)
+                except (IndexError, ValueError, TypeError):
+                    pass
+                else:
+                    options[k] = v
+        kwargs[&#39;options&#39;] = options
+
+        # loop over groups, reducing together
+        self.dataout = []
+        for i, group in enumerate(groups):
+            kw = kwargs.copy()
+            log.info(&#39;Group {}/{}: &#39;
+                     &#39;SCRIPTID = {}&#39;.format(i + 1, len(groups), group))
+            log.info(&#39;  Mean, std VPA: &#39;
+                     &#39;{:.2f} +/- {:.2f}&#39;.format(np.mean(vpa[group]),
+                                                np.std(vpa[group])))
+
+            # warn if vpa is outside tolerance
+            if np.any(np.array(vpa[group]) - np.min(vpa[group]) &gt; vtol):
+                log.warning(&#39;VPA is outside tolerance for &#39;
+                            &#39;group {}: {}&#39;.format(i + 1, vpa[group]))
+                log.warning(&#39;Should be within {} degrees&#39;.format(vtol))
+
+            # output base name and header
+            d1 = groups[group][0]
+            basehead = d1.header
+            outname = os.path.basename(d1.filenamebegin
+                                       + self.procname.upper()
+                                       + d1.filenameend)
+            if not self.getarg(&#39;save_intermediate&#39;):
+                kw[&#39;name&#39;] = outname
+
+            # add input file names
+            infiles = []
+            for datain in groups[group]:
+                # get filename
+                if os.path.exists(datain.filename):
+                    fname = datain.filename
+                else:
+                    rawname = datain.rawname
+                    if os.path.exists(rawname):
+                        fname = rawname
+                    else:
+                        msg = &#39;File {} not found&#39;.format(datain.filename)
+                        log.error(msg)
+                        raise ValueError(msg)
+                infiles.append(fname)
+
+            # argument set to run the reduction on the group
+            argset = (infiles, kw, basehead, group)
+
+            # run the group
+            df, group = self._run_scanmap(argset)
+
+            # check for errored reduction
+            if df is None:
+                msg = &#39;Problem in assembling scanpol &#39; \
+                      &#39;data for group {}&#39;.format(group)
+                log.error(msg)
+                log.warning(&#39;Dropping files from reduction:&#39;)
+                for bad_df in groups[group]:
+                    log.warning(&#39;  {}&#39;.format(
+                        os.path.basename(bad_df.filename)))
+                continue
+
+            # update header, filename with MISO-style handling
+            # for file numbers
+            df.filename = groups[group][0].filename
+            self.filenum = fnum[group]
+            self.iomode = &#39;MISO&#39;
+            self.updateheader(df)
+            self.iomode = &#39;MIMO&#39;
+
+            self.dataout.append(df)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

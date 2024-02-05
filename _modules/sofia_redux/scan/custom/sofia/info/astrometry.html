@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.info.astrometry &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.info.astrometry</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+from astropy.time import Time
+
+from sofia_redux.scan.info.astrometry import AstrometryInfo
+from sofia_redux.scan.utilities import utils
+from sofia_redux.scan.coordinate_systems.epoch.epoch import Epoch, J2000
+from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
+    EquatorialCoordinates
+from sofia_redux.scan.coordinate_systems.horizontal_coordinates import \
+    HorizontalCoordinates
+from sofia_redux.scan.coordinate_systems.geodetic_coordinates import \
+    GeodeticCoordinates
+
+__all__ = [&#39;SofiaAstrometryInfo&#39;]
+
+
+<div class="viewcode-block" id="SofiaAstrometryInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.astrometry.SofiaAstrometryInfo.html#sofia_redux.scan.custom.sofia.info.astrometry.SofiaAstrometryInfo">[docs]</a>
+class SofiaAstrometryInfo(AstrometryInfo):
+
+    default_fits_date = &quot;1970-01-01T00:00:00.0&quot;
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize astrometry information for SOFIA observations.
+
+        The SOFIA astrometry information should be relevant to all instruments
+        that may be mounted on SOFIA.  All equatorial observations use the
+        J2000 equinox.  Additionally, SOFIA is considered a ground-based
+        telescope since it still encounters atmospheric effects.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.date = None
+        self.start_time = None
+        self.file_date = None
+        self.epoch = J2000
+        self.requested_equatorial = None
+        self.horizontal = None
+        self.equatorial = None
+        self.ground_based = True
+
+<div class="viewcode-block" id="SofiaAstrometryInfo.apply_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.astrometry.SofiaAstrometryInfo.html#sofia_redux.scan.custom.sofia.info.astrometry.SofiaAstrometryInfo.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Update astrometry information with the FITS header configuration data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.options is None:
+            return
+        self.parse_time()
+        self.parse_astrometry()</div>
+
+
+<div class="viewcode-block" id="SofiaAstrometryInfo.parse_time">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.astrometry.SofiaAstrometryInfo.html#sofia_redux.scan.custom.sofia.info.astrometry.SofiaAstrometryInfo.parse_time">[docs]</a>
+    def parse_time(self):
+        &quot;&quot;&quot;
+        Parse and apply time related keywords from the FITS header.
+
+        The following FITS header keywords are used::
+
+          KEY       DESCRIPTION
+          --------  -----------
+          DATE      Determines the file date (ISOT format, UTC scale)
+          DATE-OBS  The exposure start time (ISOT format, UTC scale)
+          UTCSTART  The UTC of the exposure start (hh:mm:ss.### UTC format)
+          UTCEND    The UTC of the exposure end (hh:mm:ss.### UTC format)
+
+        The modified Julian date (MJD) is calculated, and precessions are
+        initialized relative to the J2000 equinox.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        options = self.options
+        if options is None:
+            return
+        self.file_date = options.get_string(&quot;DATE&quot;)
+        self.date = options.get_string(&quot;DATE-OBS&quot;,
+                                       default=self.default_fits_date)
+
+        start_time = options.get_string(&quot;UTCSTART&quot;)
+        if start_time is not None:
+            self.utc.start = utils.parse_time(start_time)
+
+        end_time = utils.get_string(options.get(&quot;UTCEND&quot;))
+        if end_time is not None:
+            self.utc.end = utils.parse_time(end_time)
+
+        t_ind = self.date.find(&#39;T&#39;)
+        if t_ind != -1:
+            self.time_stamp = self.date
+            self.date = self.time_stamp[:t_ind]
+            start_time = self.time_stamp[(t_ind + 1):]
+        elif start_time is not None:
+            self.time_stamp = self.date + &#39;T&#39; + start_time
+        else:
+            self.time_stamp = self.date
+
+        self.start_time = start_time
+        self.set_mjd(Time(self.time_stamp, format=&#39;isot&#39;, scale=&#39;utc&#39;).mjd)
+        self.calculate_precessions(J2000)</div>
+
+
+<div class="viewcode-block" id="SofiaAstrometryInfo.parse_astrometry">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.astrometry.SofiaAstrometryInfo.html#sofia_redux.scan.custom.sofia.info.astrometry.SofiaAstrometryInfo.parse_astrometry">[docs]</a>
+    def parse_astrometry(self):
+        &quot;&quot;&quot;
+        Parse and apply coordinate related keywords from the FITS header.
+
+        The following FITS header keywords are used::
+
+          KEY       DESCRIPTION
+          --------  -----------
+          EQUINOX   The equinox of the observation (year)
+          OBSRA     The right-ascension of the observed source (hours)
+          OBSDEC    The declination of the observed source (degrees)
+
+        The modified Julian date (MJD) is calculated, and precessions are
+        initialized relative to the J2000 equinox.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        options = self.options
+        if options is None:
+            return
+        if &quot;EQUINOX&quot; in options:
+            self.epoch = Epoch.get_epoch(options.get_float(&quot;EQUINOX&quot;))
+
+        if &quot;OBSRA&quot; in options and &quot;OBSDEC&quot; in options:
+            self.requested_equatorial = EquatorialCoordinates(epoch=self.epoch)
+            self.requested_equatorial.ra = options.get_hms_time(
+                &#39;OBSRA&#39;, angle=True)
+            self.requested_equatorial.dec = options.get_dms_angle(&#39;OBSDEC&#39;)
+
+        if self.is_requested_valid():
+            self.equatorial = self.requested_equatorial.copy()
+            self.calculate_precessions(self.equatorial.epoch)
+        else:
+            log.warning(&quot;No valid OBSRA/OBSDEC in header.&quot;)
+            self.requested_equatorial = None
+            self.equatorial = self.guess_reference_coordinates()
+            self.calculate_precessions(&quot;J2000&quot;)</div>
+
+
+<div class="viewcode-block" id="SofiaAstrometryInfo.is_requested_valid">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.astrometry.SofiaAstrometryInfo.html#sofia_redux.scan.custom.sofia.info.astrometry.SofiaAstrometryInfo.is_requested_valid">[docs]</a>
+    def is_requested_valid(self, header=None):
+        &quot;&quot;&quot;
+        Check whether the requested OBSRA/DEC values in the header are valid.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header, optional
+            The header to read.  If not supplied, the FITS header for the scan
+            will be read instead.
+
+        Returns
+        -------
+        valid : bool
+        &quot;&quot;&quot;
+        if header is None:
+            if self.options is None:
+                return False
+            ra = self.options.get_float(&#39;OBSRA&#39;)
+            dec = self.options.get_float(&#39;OBSDEC&#39;)
+        else:
+            ra = header.get(&#39;OBSRA&#39;)
+            dec = header.get(&#39;OBSDEC&#39;)
+
+        if not self.valid_header_value(ra):
+            return False
+        elif not self.valid_header_value(dec):
+            return False
+        elif ra == 0 and dec == 0:
+            return False
+        else:
+            return True</div>
+
+
+<div class="viewcode-block" id="SofiaAstrometryInfo.coordinate_valid">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.astrometry.SofiaAstrometryInfo.html#sofia_redux.scan.custom.sofia.info.astrometry.SofiaAstrometryInfo.coordinate_valid">[docs]</a>
+    @classmethod
+    def coordinate_valid(cls, coordinate):
+        &quot;&quot;&quot;
+        Check whether a coordinate is valid.
+
+        Parameters
+        ----------
+        coordinate : Coordinate2D
+
+        Returns
+        -------
+        valid : bool
+        &quot;&quot;&quot;
+        if coordinate is None:
+            return False
+        elif not cls.valid_header_value(coordinate.x.value):
+            return False
+        elif not cls.valid_header_value(coordinate.y.value):
+            return False
+        else:
+            return True</div>
+
+
+<div class="viewcode-block" id="SofiaAstrometryInfo.guess_reference_coordinates">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.astrometry.SofiaAstrometryInfo.html#sofia_redux.scan.custom.sofia.info.astrometry.SofiaAstrometryInfo.guess_reference_coordinates">[docs]</a>
+    def guess_reference_coordinates(self, header=None, telescope=None):
+        &quot;&quot;&quot;
+        Guess the reference coordinates of a scan.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.Header, optional
+            The header to read.  The default is to read stored OBSRA/OBSDEC
+            values in the configuration.
+        telescope : SofiaTelescopeInfo, optional
+            A telescope object to extract the boresight equatorial coordinates
+            if all other avenues to the coordinates failed.
+
+        Returns
+        -------
+        coordinates : EquatorialCoordinates
+        &quot;&quot;&quot;
+        if self.coordinate_valid(self.object_coordinates):
+            log.debug(&quot;Referencing scan to object coordinates OBJRA/OBJDEC.&quot;)
+            return self.object_coordinates.copy()
+
+        elif self.is_requested_valid(header=header):
+            log.debug(&quot;Referencing scan to requested coordinates.&quot;)
+            if self.requested_equatorial is not None:
+                return self.requested_equatorial.copy()
+            else:
+                return EquatorialCoordinates(
+                    [header[&#39;OBSRA&#39;], header[&#39;OBSDEC&#39;]],
+                    epoch=header.get(&#39;EQUINOX&#39;, &#39;J2000&#39;))
+
+        elif telescope is not None and self.coordinate_valid(
+                telescope.boresight_equatorial):
+            log.debug(
+                &quot;Referencing scan to initial telescope boresight TELRA/TELDEC&quot;)
+            return telescope.boresight_equatorial.copy()
+
+        else:
+            log.warning(&quot;Referencing scan to initial scan position.&quot;)
+            return None</div>
+
+
+<div class="viewcode-block" id="SofiaAstrometryInfo.validate_astrometry">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.astrometry.SofiaAstrometryInfo.html#sofia_redux.scan.custom.sofia.info.astrometry.SofiaAstrometryInfo.validate_astrometry">[docs]</a>
+    def validate_astrometry(self, scan):
+        &quot;&quot;&quot;
+        Validate astrometry information from a scan.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if scan is None:
+            return
+        first_integration = scan.get_first_integration()
+        if first_integration is None:
+            raise ValueError(&quot;No integrations exist for scan.&quot;)
+        last_integration = scan.get_last_integration()
+        first = first_integration.get_first_frame_index()
+        last = last_integration.get_last_frame_index()
+
+        if self.is_nonsidereal:
+            oe0 = first_integration.frames.object_equatorial[first]
+            oe1 = last_integration.frames.object_equatorial[last]
+            self.object_coordinates = EquatorialCoordinates(epoch=oe0.epoch)
+            self.object_coordinates.ra = 0.5 * (oe0.ra + oe1.ra)
+            self.object_coordinates.dec = 0.5 * (oe0.dec + oe1.dec)
+            self.equatorial = self.object_coordinates.copy()
+
+        h0 = first_integration.frames.horizontal[first]
+        h1 = last_integration.frames.horizontal[last]
+        self.horizontal = HorizontalCoordinates()
+        self.horizontal.az = 0.5 * (h0.x + h1.x)
+        self.horizontal.el = 0.5 * (h0.y + h1.y)
+
+        s0 = first_integration.frames.site[first]
+        s1 = last_integration.frames.site[last]
+        self.site = GeodeticCoordinates()
+        self.site.longitude = 0.5 * (s0.x + s1.x)
+        self.site.latitude = 0.5 * (s0.y + s1.y)
+        log.info(f&quot;Location: {self.site}&quot;)
+
+        log.info(f&quot;Mean telescope VPA is {scan.get_telescope_vpa():.6f}&quot;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

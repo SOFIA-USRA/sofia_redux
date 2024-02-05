@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.calibration.standard_model.modconvert &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.calibration.standard_model.modconvert</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Scale models to account for object distance&quot;&quot;&quot;
+
+import os
+import pandas as pd
+import numpy as np
+from sofia_redux.calibration.pipecal_error import PipeCalError
+
+
+<div class="viewcode-block" id="modconvert">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.modconvert.modconvert.html#sofia_redux.calibration.standard_model.modconvert.modconvert">[docs]</a>
+def modconvert(infile, outfile, scale_factor=1.0):
+    &quot;&quot;&quot;
+    Scale a Herschel model by a constant factor.
+
+    Parameters
+    ----------
+    infile : str
+        Name of file containing Herschel model.
+    outfile : str
+        Name of file to write scaled model to.
+    scale_factor : float
+        Factor to scale model in `infile` by.
+
+    Returns
+    -------
+    model : pandas.DataFrame
+        The scaled model.
+
+    &quot;&quot;&quot;
+    index, freq, brightness_temp, flux, rj_temp = read_infile(infile)
+
+    wave, flux, temp = sort_spectrum(freq, flux, brightness_temp)
+
+    scaled_flux = scale_factor * flux
+
+    plot_scaled_spectrum(wave, scaled_flux, scale_factor, infile)
+
+    write_scaled_spectrum(wave, scaled_flux, scale_factor, temp,
+                          infile, outfile)
+
+    model = pd.DataFrame({&#39;wavelength&#39;: wave, &#39;flux&#39;: scaled_flux,
+                          &#39;t_br&#39;: temp})
+    return model</div>
+
+
+
+<div class="viewcode-block" id="read_infile">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.modconvert.read_infile.html#sofia_redux.calibration.standard_model.modconvert.read_infile">[docs]</a>
+def read_infile(infile):
+    &quot;&quot;&quot;
+    Read in a Herschel model.
+
+    Parameters
+    ----------
+    infile : str
+        Name of Herchel file.
+
+    Returns
+    -------
+    index : numpy.array
+        Index value of each row in `infile`.
+    freq : numpy.array
+        Frequency of each row in `infile`.
+    tbr : numpy.array
+        Brightness temperature of each row in `infile`.
+    flux : numpy.array
+        Flux value of each row in `infile`.
+    trj : numpy.array
+        Rayleigh-Jeans temperature value of each row in `infile`.
+
+    &quot;&quot;&quot;
+    # There are a variable header lengths possible.
+    # Loop through and look for when the line starts
+    # with &#39;1&#39;, the first index.
+    nheader = 0
+    try:
+        with open(infile, &#39;r&#39;) as f:
+            for line in f:
+                if line.strip().startswith(&#39;1&#39;):
+                    break
+                nheader += 1
+    except IOError:
+        message = f&#39;Unable to open {infile} in modconvert.&#39;
+        raise PipeCalError(message)
+    index, freq, tbr, flux, trj = np.genfromtxt(infile, unpack=True,
+                                                skip_header=nheader)
+    return index, freq, tbr, flux, trj</div>
+
+
+
+<div class="viewcode-block" id="sort_spectrum">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.modconvert.sort_spectrum.html#sofia_redux.calibration.standard_model.modconvert.sort_spectrum">[docs]</a>
+def sort_spectrum(freq, flux, brightness_temp):
+    &quot;&quot;&quot;
+    Sort the flux and brightness temp by increasing wavelength.
+
+    Parameters
+    ----------
+    freq : numpy.array
+        Frequency data.
+    flux : numpy.array
+        Flux data.
+    brightness_temp : numpy.array
+        Brightness temperature data.
+
+    Returns
+    -------
+    w : numpy.array
+        Wavelength of each data point.
+    f : numpy.array
+        Flux at each wavelength in `w`.
+    t : numpy.array
+        Brightness temperature at each wavelength in `w`.
+
+    &quot;&quot;&quot;
+    # Speed of light in microns/sec
+    clight = 2.9979e14
+    wave = clight / (freq * 1e9)
+
+    # Sort the data by wavelength
+    sortind = np.argsort(wave)
+    w = wave[sortind]
+    f = flux[sortind]
+    t = brightness_temp[sortind]
+
+    return w, f, t</div>
+
+
+
+<div class="viewcode-block" id="plot_scaled_spectrum">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.modconvert.plot_scaled_spectrum.html#sofia_redux.calibration.standard_model.modconvert.plot_scaled_spectrum">[docs]</a>
+def plot_scaled_spectrum(wave, scaled_flux, scale_factor, infile):
+    &quot;&quot;&quot;
+    Plot the scaled Herschel model.
+
+    Parameters
+    ----------
+    wave : numpy.array
+        Wavelength data of spectrum.
+    scaled_flux : numpy.array
+        Flux data of spectrum.
+    scale_factor : numpy.array
+        Scale factor applied to Herschel model.
+    infile : str
+        Name of Herschel model.
+
+    Returns
+    -------
+    None
+
+    &quot;&quot;&quot;
+    from matplotlib.backends.backend_agg \
+        import FigureCanvasAgg as FigureCanvas
+    from matplotlib.figure import Figure
+
+    fig = Figure(figsize=(10, 10))
+    FigureCanvas(fig)
+    ax = fig.add_subplot(1, 1, 1)
+
+    ax.plot(wave, scaled_flux)
+    ax.set_xlim([30, 300])
+    ax.set_xscale(&#39;log&#39;)
+    ax.set_yscale(&#39;log&#39;)
+    ax.set_xlabel(&#39;Wavelength (microns)&#39;)
+    ax.set_ylabel(&#39;Flux (Jy)&#39;)
+    ax.set_title(f&#39;Scale = {scale_factor:.3f}&#39;)
+    fig.savefig(f&#39;scaled_flux_{os.path.basename(infile).split(&quot;.&quot;)[0]}.png&#39;,
+                bbox_inches=&#39;tight&#39;)</div>
+
+
+
+<div class="viewcode-block" id="write_scaled_spectrum">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.modconvert.write_scaled_spectrum.html#sofia_redux.calibration.standard_model.modconvert.write_scaled_spectrum">[docs]</a>
+def write_scaled_spectrum(wave, scaled_flux, scale_factor, temp,
+                          infile, outfile):
+    &quot;&quot;&quot;
+    Write the scaled Herschel model to file.
+
+    Parameters
+    ----------
+    wave : numpy.array
+        Wavelength data of spectrum.
+    scaled_flux : numpy.array
+        Flux data of spectrum.
+    scale_factor : float
+        Scale factor applied to Herschel model.
+    temp : numpy.array
+        Brightness temperature data of spectrum.
+    infile : str
+        Name of Herschel file.
+    outfile : str
+        Name of file to create with scaled spectrum.
+
+    Returns
+    -------
+    None
+
+    &quot;&quot;&quot;
+    with open(outfile, &#39;w&#39;) as outf:
+        outf.write(&#39;; {0:s}\n&#39;.format(infile))
+        outf.write(&#39;; FSCALE = {}\n&#39;.format(scale_factor))
+        outf.write(&#39;; Wave (microns) Flux (Jy)      T_br (K) &#39;
+                   &#39;     Fscale = {0:.3f}\n&#39;.format(scale_factor))
+
+        for i in range(len(wave)):
+            outf.write(f&#39;{wave[i]:.6f}\t{scaled_flux[i]:.6f}\t{temp[i]:.6f}\n&#39;)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

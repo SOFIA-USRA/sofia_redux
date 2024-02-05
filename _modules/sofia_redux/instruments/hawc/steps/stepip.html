@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepip &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepip</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Instrumental polarization correction pipeline step.&quot;&quot;&quot;
+
+import os.path
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.instruments.hawc.datafits import DataFits
+from sofia_redux.instruments.hawc.stepparent import StepParent
+
+__all__ = [&#39;StepIP&#39;]
+
+
+<div class="viewcode-block" id="StepIP">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepip.StepIP.html#sofia_redux.instruments.hawc.steps.stepip.StepIP">[docs]</a>
+class StepIP(StepParent):
+    r&quot;&quot;&quot;
+    Remove instrumental polarization from Stokes images.
+
+    This step subtracts instrumental polarization in the
+    detector frame, either with a different value for each detector
+    pixel, or with a uniform value assigned to all pixels.
+
+    Input for this step is DataFits containing Stokes and Error
+    images for each of I, Q, and U, as well as COVAR Q I and
+    COVAR U I images, a bad pixel image, and a table of data.
+
+    This step is typically run after
+    `sofia_redux.instruments.hawc.steps.StepWcs` and before
+    `sofia_redux.instruments.hawc.steps.StepRotate`.  Output from this
+    step contains the same extensions as the input, with values modified
+    for the Stokes Q and U images, along with their associated error
+    and covariance images.
+
+    Notes
+    -----
+    The correction is applied as
+
+       .. math:: Q&#39; = Q - q&#39; I
+
+       .. math:: U&#39; = U - u&#39; I
+
+    and propagated to the associated error and covariance images as
+
+       .. math:: \sigma_Q&#39; = \sqrt{\sigma_Q^2
+                 + (q&#39; \sigma_I)^2 +  2q&#39;\sigma_{QI}}
+
+       .. math:: \sigma_U&#39; = \sqrt{\sigma_U^2
+                 + (u&#39; \sigma_I)^2 +  2u&#39;\sigma_{UI}}
+
+       .. math:: \sigma_{Q&#39;I} = \sigma_{QI} - q&#39; \sigma_I^2
+
+       .. math:: \sigma_{U&#39;I} = \sigma_{UI} - u&#39; \sigma_I^2
+
+       .. math:: \sigma_{Q&#39;U&#39;} = -u&#39; \sigma_{QI} - q&#39; \sigma_{UI}
+                 + qu\sigma_I^2.
+
+    Note that the input :math:`\sigma_{QU}` is assumed to be identically
+    zero, since this correction is applied before rotation of the Q and U
+    parameters.
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepIP.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepip.StepIP.html#sofia_redux.instruments.hawc.steps.stepip.StepIP.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;ip&#39;, and are named with
+        the step abbreviation &#39;IPS&#39;.
+
+        Parameters defined for this step are:
+
+        qinst : list of float
+            Fractional instrumental polarization in q (one value for
+            each waveband).
+        uinst : list of float
+            Fractional instrumental polarization in u (one value for
+            each waveband).
+        fileip : str
+            If set to &#39;uniform&#39;, then the qinst and uinst values will
+            be applied uniformly to all pixels.  Otherwise, this
+            parameter is expected to be a path to a FITS file
+            containing IP values for each pixel, at each waveband.
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;ip&#39;
+        self.description = &#39;Correct IP&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;ips&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+
+        # Append parameters
+        self.paramlist.append([&#39;qinst&#39;, [0.0, 0.0, 0.0, 0.0, 0.0],
+                               &#39;Fractional instrumental polarization &#39;
+                               &#39;in q (each waveband)&#39;])
+        self.paramlist.append([&#39;uinst&#39;, [0.0, 0.0, 0.0, 0.0, 0.0],
+                               &#39;Fractional instrumental polarization &#39;
+                               &#39;in u (each waveband)&#39;])
+        self.paramlist.append([&#39;fileip&#39;, &#39;uniform&#39;,
+                               &#39;Fits file with ip array values. If set &#39;
+                               &#39;to &quot;uniform&quot;, will use qinst and uinst &#39;
+                               &#39;to make a uniform correction for all pixels&#39;])</div>
+
+
+<div class="viewcode-block" id="StepIP.read_ip">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepip.StepIP.html#sofia_redux.instruments.hawc.steps.stepip.StepIP.read_ip">[docs]</a>
+    def read_ip(self):
+        &quot;&quot;&quot;
+        Read IP q and u values from the parameters.
+
+        The parameters are expected to be defined as a list, with
+        one entry for each HAWC band.  The correct value for the
+        input data is selected from the list.
+
+        Returns
+        -------
+        qi : float
+            IP q value for the input data.
+        ui : float
+            IP u value for the input data.
+        &quot;&quot;&quot;
+        # NOTE: These values are reduced Stokes parameters
+        qi = self.getarg(&#39;qinst&#39;)
+        ui = self.getarg(&#39;uinst&#39;)
+        waveband = self.datain.getheadval(&#39;spectel1&#39;)
+        bands = [&#39;A&#39;, &#39;B&#39;, &#39;C&#39;, &#39;D&#39;, &#39;E&#39;]
+        try:
+            idx = bands.index(waveband[-1])
+        except (ValueError, IndexError):
+            # waveband not in list
+            msg = &#39;Cannot parse waveband: %s&#39; % waveband
+            log.error(msg)
+            raise ValueError(msg)
+        try:
+            qi = qi[idx]
+            ui = ui[idx]
+        except IndexError:
+            msg = &#39;Missing IP values for all wavebands&#39;
+            log.error(msg)
+            raise IndexError(msg)
+
+        # since these are normalized stokes parameters, ensure none are &gt; 1.
+        for stokes in [qi, ui]:
+            if abs(float(stokes)) &gt; 1:
+                msg = &quot;Absolute value of IP parameters must be &lt;= 1!&quot;
+                log.error(msg)
+                raise ValueError(msg)
+
+        return qi, ui</div>
+
+
+<div class="viewcode-block" id="StepIP.fill_nan_median">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepip.StepIP.html#sofia_redux.instruments.hawc.steps.stepip.StepIP.fill_nan_median">[docs]</a>
+    def fill_nan_median(self, array):
+        &quot;&quot;&quot;
+        Fill in NaNs in an array with its median value.
+
+        Parameters
+        ----------
+        array : array-like
+            The array to process.
+
+        Returns
+        -------
+        array-like
+            The array with NaN values replaced.
+        &quot;&quot;&quot;
+        nans = np.where(array != array)
+        median = np.nanmedian(array)
+        array[nans] = median
+
+        return array</div>
+
+
+<div class="viewcode-block" id="StepIP.read_file_ip">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepip.StepIP.html#sofia_redux.instruments.hawc.steps.stepip.StepIP.read_file_ip">[docs]</a>
+    def read_file_ip(self, fileip):
+        &quot;&quot;&quot;
+        Read IP values from a file.
+
+        Extract correct arrays given the observing wavelength,
+        and return them.  For waveband X, the file must contain
+        extensions &#39;IP q band X&#39;, &#39;Error IP q band X&#39;,
+        &#39;IP u band X&#39;, and &#39;Error IP u band X&#39;.
+
+        Parameters
+        ----------
+        fileip : str
+            Path to an IP FITS file.
+
+        Returns
+        -------
+        qi : array-like
+            IP q value matching the input data.
+        ui : array-like
+            IP u value matching the input data.
+        eqi : array-like
+            Error on the IP q value.
+        eui : array-like
+            Error on the IP u value.
+        band : str
+            Filter band name.
+        &quot;&quot;&quot;
+        ipdata = DataFits(config=self.config)
+        ipdata.load(fileip)
+
+        waveband = self.datain.getheadval(&#39;spectel1&#39;)
+        band = waveband[-1]
+
+        try:
+            qi = ipdata.imageget(&#39;IP q band %s&#39; % band)
+            eqi = ipdata.imageget(&#39;Error IP q band %s&#39; % band)
+            ui = ipdata.imageget(&#39;IP u band %s&#39; % band)
+            eui = ipdata.imageget(&#39;Error IP u band %s&#39; % band)
+        except ValueError:
+            msg = &#39;Problem with band %s HDU in fileip. &#39; \
+                  &#39;Unable to perform IP correction&#39; % band
+            log.error(msg)
+            raise ValueError(msg)
+
+        # NaNs are replaced by the array&#39;s median value
+        qi = self.fill_nan_median(qi)
+        eqi = self.fill_nan_median(eqi)
+        ui = self.fill_nan_median(ui)
+        eui = self.fill_nan_median(eui)
+
+        return qi, ui, eqi, eui, band</div>
+
+
+<div class="viewcode-block" id="StepIP.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepip.StepIP.html#sofia_redux.instruments.hawc.steps.stepip.StepIP.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        Because this step is single-in, single-out (SISO),
+        self.datain must be a DataFits object.  The output
+        is also a DataFits object, stored in self.dataout.
+
+        The process is:
+
+        1. Determine the IP correction from the parameters.
+        2. Apply it to Q and U images, and propagate errors
+           and covariances.
+        &quot;&quot;&quot;
+
+        self.dataout = self.datain.copy()
+        nhwp = self.dataout.getheadval(&#39;nhwp&#39;)
+
+        if nhwp == 1:
+            log.info(&#39;Only 1 HWP, so skipping step %s&#39; % self.name)
+            return
+
+        fileip = self.getarg(&#39;fileip&#39;)
+        if fileip is not None:
+            fileip = os.path.expandvars(fileip)
+        if fileip == &#39;uniform&#39;:
+            qi, ui = self.read_ip()
+            log.debug(&quot;Using q, u correction: &quot;
+                      &quot;{:.4f}, {:.4f}&quot;.format(qi, ui))
+        else:
+            fileexist = os.path.isfile(fileip)
+            if fileexist:
+                qi, ui, eqi, eui, band = self.read_file_ip(fileip)
+                msg = &quot;Using fileip (%s) for band %s IP correction.&quot; % \
+                      (fileip, band)
+                log.info(msg)
+                log.debug(&quot;Median q, u correction: &quot;
+                          &quot;{:.4f}, {:.4f}&quot;.format(np.nanmedian(qi),
+                                                  np.nanmedian(ui)))
+            else:
+                msg = &quot;Fileip (%s) was not found. Set fileip &quot; \
+                      &quot;to &#39;uniform&#39; to use qinst and uinst instead&quot; % \
+                      fileip
+                log.error(msg)
+                raise ValueError(msg)
+
+        qraw = qi
+        uraw = ui
+
+        image_i = self.dataout.imageget(&#39;STOKES I&#39;)
+        var_i = (self.dataout.imageget(&#39;ERROR I&#39;)) ** 2
+
+        # propagation equations:
+        # I&#39; = I
+        # Q&#39; = Q - qI
+        # U&#39; = U - uI
+        # VI&#39; = VI
+        # VQ&#39; = VQ + q^2 VI - 2q cov(Q,I)
+        # VU&#39; = VU + u^2 VI - 2u cov(U,I)
+        # cov(Q&#39;,I&#39;) = cov(Q,I) - q VI
+        # cov(U&#39;,I&#39;) = cov(U,I) - u VI
+        # cov(Q&#39;,U&#39;) = -u cov(Q,I) - q cov(U,I) + q u VI
+
+        # get images
+        q = self.dataout.imageget(&#39;STOKES Q&#39;)
+        u = self.dataout.imageget(&#39;STOKES U&#39;)
+        var_q = (self.dataout.imageget(&#39;ERROR Q&#39;)) ** 2
+        var_u = (self.dataout.imageget(&#39;ERROR U&#39;)) ** 2
+        cov_qi = self.dataout.imageget(&#39;COVAR Q I&#39;)
+        cov_ui = self.dataout.imageget(&#39;COVAR U I&#39;)
+
+        # Q and U
+        q -= qraw * image_i
+        var_q += qraw**2 * var_i - 2 * qraw * cov_qi
+        u -= uraw * image_i
+        var_u += uraw**2 * var_i - 2 * uraw * cov_ui
+
+        # covariances
+        cov_qu = -uraw * cov_qi - qraw * cov_ui + qraw * uraw * var_i
+        cov_qi -= qraw * var_i
+        cov_ui -= uraw * var_i
+
+        # set images
+        self.dataout.imageset(q, &#39;STOKES Q&#39;)
+        self.dataout.imageset(u, &#39;STOKES U&#39;)
+        self.dataout.imageset(np.sqrt(var_q), &#39;ERROR Q&#39;)
+        self.dataout.imageset(np.sqrt(var_u), &#39;ERROR U&#39;)
+        self.dataout.imageset(cov_qi, &#39;COVAR Q I&#39;)
+        self.dataout.imageset(cov_ui, &#39;COVAR U I&#39;)
+        self.dataout.imageset(cov_qu, &#39;COVAR Q U&#39;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

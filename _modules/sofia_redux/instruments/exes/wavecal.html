@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.exes.wavecal &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.exes.wavecal</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.instruments.exes.utils import parse_central_wavenumber
+
+__all__ = [&#39;wavecal&#39;]
+
+
+<div class="viewcode-block" id="wavecal">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.wavecal.wavecal.html#sofia_redux.instruments.exes.wavecal.wavecal">[docs]</a>
+def wavecal(header, order=None):
+    &quot;&quot;&quot;
+    Generate a wavelength calibration map from the grating equation.
+
+    Dispersion parameters are read from the header and used to
+    calculate the wavenumber values for each pixel.  The assumed central
+    wavenumber for the observation (WAVENO0) is used for the first
+    pass calibration; this value may be overridden by setting
+    header[&#39;WNO0&#39;] to a more accurate value.
+
+    Parameters
+    ----------
+    header : fits.Header
+        Header of EXES FITS file.
+    order : int, optional
+        Cross-dispersed order to calculate wavelengths for. If
+        provided, only the 1D wavelength array is produced.
+
+    Returns
+    -------
+    wavemap : numpy.ndarray
+        Array containing the wavelength values. If `order` is not
+        provided, then a 3D data cube is produced, where the first
+        plane is an image containing the wavelength value at each pixel,
+        the second plane is an image containing the spatial coordinates
+        for each pixel, and the third is an image containing the order
+        number for each pixel. Keywords describing the wavelength
+        calibration are added to `header`. If `order` is specified, only
+        the 1D wavelength array is produced and the header is not modified.
+    &quot;&quot;&quot;
+    try:
+        params = _parse_inputs(header, order)
+    except ValueError as msg:
+        log.error(msg)
+        return np.empty(0)
+
+    _setup_wavemap(params)
+    _populate_wavecal(params)
+    _update_header(params)
+
+    return params[&#39;wavemap&#39;]</div>
+
+
+
+def _parse_inputs(header, order):
+    &quot;&quot;&quot;Read wavecal parameters from input header.&quot;&quot;&quot;
+    nx = header[&#39;NSPAT&#39;]
+    ny = header[&#39;NSPEC&#39;]
+    pixelwd = header[&#39;PIXELWD&#39;]
+    hrr = header[&#39;HRR&#39;]
+    hrdgr = header[&#39;HRDGR&#39;]
+    hrfl = header[&#39;HRFL&#39;]
+    xdr = header[&#39;XDR&#39;]
+    xdfl = header[&#39;XDFL&#39;]
+    slitoff = header[&#39;SLITOFF&#39;]
+    norders = header[&#39;NORDERS&#39;]
+    orders = header[&#39;ORDERS&#39;]
+    ordr_b = header[&#39;ORDR_B&#39;]
+    ordr_t = header[&#39;ORDR_T&#39;]
+    ordr_s = header[&#39;ORDR_S&#39;]
+    ordr_e = header[&#39;ORDR_E&#39;]
+    instcfg = header[&#39;INSTCFG&#39;]
+    pltscale = header[&#39;PLTSCALE&#39;]
+
+    crossdisp = instcfg in [&#39;HIGH_MED&#39;, &#39;HIGH_LOW&#39;]
+    wnoc = parse_central_wavenumber(header)
+
+    if crossdisp:
+        ns = nx
+        nw = ny
+        dlnw = pixelwd / (2 * hrr * (1 - slitoff / 20.) * hrfl)
+        dw = 0.5 / (np.sqrt(hrr ** 2 / (1 + hrr ** 2)) * hrdgr)
+    else:
+        ns = ny
+        nw = nx
+        dlnw = pixelwd / (2 * xdr * xdfl)
+        dw = 1
+
+    ob = _check_order(ordr_b)
+    ot = _check_order(ordr_t, ns)
+    os = _check_order(ordr_s)
+    oe = _check_order(ordr_e, nw)
+    order_numbers = _check_order(orders)
+
+    if crossdisp:
+        # invert top and bottom for rotation
+        tmp = ob.copy()
+        ob = ny - ot - 1
+        ot = ny - tmp - 1
+        if (len(ob) != norders or len(ot) != norders
+                or len(order_numbers) != norders):
+            message = (f&quot;Can&#39;t determine edges for XD orders. &quot;
+                       f&quot;Not calculating wavenumbers\n&quot;
+                       f&quot;  Number of orders      : {norders}\n&quot;
+                       f&quot;  Number of order names : {len(order_numbers)}\n&quot;
+                       f&quot;  Number of bottom edges: {len(ob)}\n&quot;
+                       f&quot;  Number of top edges   : {len(ot)}&quot;)
+            raise ValueError(message)
+
+    params = {&#39;header&#39;: header, &#39;crossdisp&#39;: crossdisp, &#39;order&#39;: order,
+              &#39;nx&#39;: nx, &#39;ny&#39;: ny, &#39;norders&#39;: norders,
+              &#39;order_numbers&#39;: order_numbers,
+              &#39;ns&#39;: ns, &#39;nw&#39;: nw, &#39;dlnw&#39;: dlnw, &#39;dw&#39;: dw,
+              &#39;ob&#39;: ob, &#39;ot&#39;: ot, &#39;os&#39;: os, &#39;oe&#39;: oe,
+              &#39;wnoc&#39;: wnoc, &#39;pltscale&#39;: pltscale, &#39;instcfg&#39;: instcfg
+              }
+    return params
+
+
+def _setup_wavemap(params):
+    &quot;&quot;&quot;Initialize the wavecal map.&quot;&quot;&quot;
+    nx = params[&#39;nx&#39;]
+    ny = params[&#39;ny&#39;]
+    norders = params[&#39;norders&#39;]
+    oe = params[&#39;oe&#39;]
+    os = params[&#39;os&#39;]
+    crossdisp = params[&#39;crossdisp&#39;]
+    order = params[&#39;order&#39;]
+    try:
+        order = int(order)
+    except (ValueError, TypeError):
+        valid_order = False
+    else:
+        valid_order = True
+    if valid_order and 0 &lt; order &lt;= norders:
+        order_idx = norders - order + 1
+        wavemap = np.zeros(oe[order_idx - 1] - os[order_idx - 1])
+        wavecal_ = np.empty(0)
+        spatcal = np.empty(0)
+        order_mask = np.empty(0)
+        if crossdisp:
+            w = np.arange(ny)
+            nw2 = ny / 2
+        else:
+            w = np.arange(nx)
+            nw2 = nx / 2
+        s = np.empty(0)
+    else:
+        order_idx = -1
+        wavemap = np.full((3, ny, nx), np.nan)
+        wavecal_ = wavemap[0]
+        spatcal = wavemap[1]
+        order_mask = wavemap[2]
+
+        # Make column and row index arrays
+        w = np.zeros((ny, nx), dtype=int)
+        s = np.zeros_like(w, dtype=int)
+        if crossdisp:
+            w.T[:] = np.arange(ny).T
+            s[:] = np.arange(nx)
+            nw2 = ny / 2
+        else:
+            w[:] = np.arange(nx)
+            s.T[:] = np.arange(ny).T
+            nw2 = nx / 2
+
+    params[&#39;wavemap&#39;] = wavemap
+    params[&#39;wavecal&#39;] = wavecal_
+    params[&#39;spatcal&#39;] = spatcal
+    params[&#39;order_mask&#39;] = order_mask
+    params[&#39;w&#39;] = w
+    params[&#39;s&#39;] = s
+    params[&#39;nw2&#39;] = nw2
+    params[&#39;order_idx&#39;] = order_idx
+
+
+def _check_order(order, default=0):
+    &quot;&quot;&quot;Parse integer orders from a string list.&quot;&quot;&quot;
+    if order != &#39;UNKNOWN&#39;:
+        checked = [int(o) for o in order.split(&#39;,&#39;)]
+    else:
+        checked = [default]
+    return np.array(checked)
+
+
+def _populate_wavecal(params):
+    &quot;&quot;&quot;Populate the wavecal map with calibrated values.&quot;&quot;&quot;
+    s = params[&#39;s&#39;]
+    w = params[&#39;w&#39;]
+    wave_cal = params[&#39;wavecal&#39;]
+    spat_cal = params[&#39;spatcal&#39;]
+    order_mask = params[&#39;order_mask&#39;]
+    dlnw = params[&#39;dlnw&#39;]
+    nw2 = params[&#39;nw2&#39;]
+    plate_scale = params[&#39;pltscale&#39;]
+    order_numbers = params[&#39;order_numbers&#39;]
+
+    # start with order mask set to zero
+    order_mask[:] = 0
+
+    for i in range(1, params[&#39;norders&#39;] + 1):
+        if params[&#39;order_idx&#39;] != -1:
+            if i != params[&#39;order&#39;]:
+                continue
+            idx = params[&#39;order_idx&#39;]
+        else:
+            idx = i
+
+        wnoi = params[&#39;wnoc&#39;] + params[&#39;dw&#39;] * (
+            idx - (params[&#39;norders&#39;] + 1) / 2)
+        bottom = params[&#39;ob&#39;][idx - 1]
+        top = params[&#39;ot&#39;][idx - 1]
+        start = params[&#39;os&#39;][idx - 1]
+        stop = params[&#39;oe&#39;][idx - 1]
+
+        if params[&#39;order_idx&#39;] == -1:
+            in_range = ((s &gt;= bottom) &amp; (s &lt;= top)
+                        &amp; (w &gt;= start) &amp; (w &lt;= stop))
+            if np.sum(in_range) == 0:  # pragma: no cover
+                continue
+
+            wave_cal[in_range] = wnoi * np.exp(
+                dlnw * (w[in_range] - nw2 + 0.5))
+            if params[&#39;crossdisp&#39;]:
+                spat_cal[in_range] = (top - s[in_range]) * plate_scale
+            else:
+                spat_cal[in_range] = (s[in_range] - bottom) * plate_scale
+            order_mask[in_range] = order_numbers[i - 1]
+        else:
+            in_range = (w &gt;= start) &amp; (w &lt;= stop)
+            if np.sum(in_range) == 0:  # pragma: no cover
+                continue
+            params[&#39;wavemap&#39;] = wnoi * np.exp(dlnw * (w[in_range] - nw2 + 0.5))
+
+
+def _update_header(params):
+    &quot;&quot;&quot;Update the header with wavecal keys.&quot;&quot;&quot;
+    header = params[&#39;header&#39;]
+    if params[&#39;order_idx&#39;] == -1:
+        params[&#39;wavemap&#39;][0] = params[&#39;wavecal&#39;]
+        params[&#39;wavemap&#39;][1] = params[&#39;spatcal&#39;]
+        params[&#39;wavemap&#39;][2] = params[&#39;order_mask&#39;]
+        header[&#39;WCTYPE&#39;] = (&#39;1D&#39;, &#39;Wavecal type (2D or 1D)&#39;)
+        header[&#39;BUNIT1&#39;] = (&#39;cm-1&#39;, &#39;Data units for first plane of image&#39;)
+        header[&#39;BUNIT2&#39;] = (&#39;arcsec&#39;, &#39;Data units for second plane of image&#39;)
+        header[&#39;BUNIT3&#39;] = (&#39;&#39;, &#39;Data units for third plane of image&#39;)
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

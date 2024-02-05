@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.filters.varied_filter &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.filters.varied_filter</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import abstractmethod
+from astropy.stats import gaussian_sigma_to_fwhm
+import numpy as np
+
+from sofia_redux.scan.filters.filter import Filter
+from sofia_redux.scan.filters import filters_numba_functions as fnf
+
+__all__ = [&#39;VariedFilter&#39;]
+
+
+<div class="viewcode-block" id="VariedFilter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.varied_filter.VariedFilter.html#sofia_redux.scan.filters.varied_filter.VariedFilter">[docs]</a>
+class VariedFilter(Filter):
+
+    def __init__(self, integration=None, data=None):
+        &quot;&quot;&quot;
+        Initialize an integration varied filter.
+
+        The filter is designed to filter integration data using an FFT.  The
+        varied filter also contains a source profile, point response, and
+        `dp` or delta dependents for channels.  This is an abstract class
+        used to model a varying filter response across frequencies.
+
+        Parameters
+        ----------
+        integration : Integration, optional
+        data : numpy.ndarray (float), optional
+            An array of shape (nt, n_channels) where nt is the nearest power of
+            2 integer above the number of integration frames. i.e., if
+            n_frames=5, nt=8, or if n_frames=13, nt=16.  If not provided will
+            be set to frame_data * frame_relative_weight.
+        &quot;&quot;&quot;
+        self.source_profile = None
+        self.point_response = None
+        self.dp = None
+        self.source_norm = 0.0
+        super().__init__(integration=integration, data=data)
+
+    @property
+    def channel_dependent_attributes(self):
+        &quot;&quot;&quot;
+        Return attributes that are dependent on the parent channels.
+
+        This is required during a slim operation (reducing number of channels).
+
+        Returns
+        -------
+        set (str)
+        &quot;&quot;&quot;
+        attributes = super().channel_dependent_attributes
+        attributes.add(&#39;dp&#39;)
+        attributes.add(&#39;point_response&#39;)
+        return attributes
+
+<div class="viewcode-block" id="VariedFilter.get_source_profile">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.varied_filter.VariedFilter.html#sofia_redux.scan.filters.varied_filter.VariedFilter.get_source_profile">[docs]</a>
+    def get_source_profile(self):
+        &quot;&quot;&quot;
+        Return the source profile of the varied filter.
+
+        Returns
+        -------
+        source_profile : numpy.ndarray (float)
+            The source profile of shape (nf + 1) where nf = nt // 2 and
+            nt = pow2ceil(integration.size).
+        &quot;&quot;&quot;
+        return self.source_profile</div>
+
+
+<div class="viewcode-block" id="VariedFilter.set_integration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.varied_filter.VariedFilter.html#sofia_redux.scan.filters.varied_filter.VariedFilter.set_integration">[docs]</a>
+    def set_integration(self, integration):
+        &quot;&quot;&quot;
+        Set the varied filter integration.
+
+        Sets the padding of the FFT filter, the number of frequencies, the
+        frequency spacing, and retrieves the channels from the integration if
+        necessary.
+
+        Parameters
+        ----------
+        integration : Integration
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_integration(integration)
+        self.point_response = np.ones(self.get_channels().size,
+                                      dtype=float)
+        self.dp = np.zeros(self.get_channels().size, dtype=float)
+        self.update_source_profile()</div>
+
+
+<div class="viewcode-block" id="VariedFilter.pre_filter_channels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.varied_filter.VariedFilter.html#sofia_redux.scan.filters.varied_filter.VariedFilter.pre_filter_channels">[docs]</a>
+    def pre_filter_channels(self, channels=None):
+        &quot;&quot;&quot;
+        Performs the pre-filtering channels steps.
+
+        Parameters
+        ----------
+        channels : ChannelGroup, optional
+            The channel group for which to perform the pre-filtering step.
+            If not supplied, defaults to the filtering channels.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.is_sub_filter:
+            if channels is None or channels is self.channels:
+                channels = self.get_channels()
+                channel_indices = np.arange(self.channels.size)
+            else:
+                channel_indices = self.channels.find_fixed_indices(
+                    channels.fixed_index)
+
+            response = self.point_response[channel_indices]
+            apply = response &gt; 0
+            if apply.any():
+                factor = response[apply]
+                direct_filtering = channels.direct_filtering
+                source_filtering = channels.source_filtering
+                direct_filtering[apply] /= factor
+                source_filtering[apply] /= factor
+                channels.direct_filtering = direct_filtering
+                channels.source_filtering = source_filtering
+
+        super().pre_filter_channels(channels=channels)</div>
+
+
+<div class="viewcode-block" id="VariedFilter.post_filter_channels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.varied_filter.VariedFilter.html#sofia_redux.scan.filters.varied_filter.VariedFilter.post_filter_channels">[docs]</a>
+    def post_filter_channels(self, channels=None):
+        &quot;&quot;&quot;
+        Performs the post-filtering channels steps.
+
+        Parameters
+        ----------
+        channels : ChannelGroup, optional
+            The channel group for which to perform the post-filtering step.
+            If not supplied, defaults to the filtering channels.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().post_filter_channels(channels=channels)
+
+        if channels is None:
+            channels = self.get_channels()
+
+        if channels is self.channels:
+            channel_indices = np.arange(channels.size)
+        else:
+            channel_indices = self.channels.find_fixed_indices(
+                channels.fixed_index)
+
+        rejected = self.count_parms()
+
+        if isinstance(rejected, np.ndarray) and rejected.shape != ():
+            rejected_array = True
+            rejected = rejected[channel_indices]
+            self.parms.add_async(channels, rejected[channel_indices])
+        else:
+            rejected_array = False
+
+        self.parms.add_async(channels, rejected)
+        self.dp = np.zeros(self.channels.size, dtype=float)
+
+        if isinstance(self.points, np.ndarray):
+            nzi = self.points &gt; 0
+            if rejected_array:
+                self.dp[nzi] = rejected[nzi] / self.points[nzi]
+            else:
+                self.dp[nzi] = rejected / self.points[nzi]
+            self.dp[~nzi] = 0.0
+        elif self.points &gt; 0:
+            self.dp[channels.indices] = rejected / self.points
+        else:
+            self.dp[channels.indices] = 0.0
+
+        response = self.calc_point_response()[channel_indices]
+        self.point_response[channel_indices] = response
+
+        # Do not directly update the channel filtering if a sub-filter since
+        # this is the job of the parent filter.
+        if not self.is_sub_filter:
+            direct_filtering = channels.direct_filtering
+            source_filtering = channels.source_filtering
+            direct_filtering *= response
+            source_filtering *= response
+            channels.direct_filtering = direct_filtering
+            channels.source_filtering = source_filtering</div>
+
+
+<div class="viewcode-block" id="VariedFilter.remove_from_frames">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.varied_filter.VariedFilter.html#sofia_redux.scan.filters.varied_filter.VariedFilter.remove_from_frames">[docs]</a>
+    def remove_from_frames(self, rejected_signal, frames, channels):
+        &quot;&quot;&quot;
+        Remove the rejected signal from frame data.
+
+        Parameters
+        ----------
+        rejected_signal : numpy.ndarray (float)
+            The rejected signal of shape (filtering_channels.size, n_frames).
+        frames : Frames
+            The frames for which to remove the rejected signal.
+        channels : ChannelGroup
+            The channel for which to subtract the signal.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().remove_from_frames(rejected_signal, frames, channels)
+
+        fnf.apply_rejection_to_parms(
+            frame_valid=frames.valid,
+            frame_weight=frames.relative_weight,
+            frame_parms=self.frame_parms,
+            dp=self.dp,
+            channel_indices=channels.indices,
+            sample_flag=frames.sample_flag)</div>
+
+
+<div class="viewcode-block" id="VariedFilter.dft_filter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.varied_filter.VariedFilter.html#sofia_redux.scan.filters.varied_filter.VariedFilter.dft_filter">[docs]</a>
+    def dft_filter(self, channels=None):
+        &quot;&quot;&quot;
+        Return the filter rejection using a discrete FFT.
+
+        UNSUPPORTED FOR THE VARIED FILTER.
+
+        Parameters
+        ----------
+        channels : ChannelGroup, optional
+            The channel group for which the filtering applied.  By default,
+            set to the filtering channels.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        raise NotImplementedError(&quot;No DFT for varied filters.&quot;)</div>
+
+
+<div class="viewcode-block" id="VariedFilter.get_point_response">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.varied_filter.VariedFilter.html#sofia_redux.scan.filters.varied_filter.VariedFilter.get_point_response">[docs]</a>
+    def get_point_response(self, channels=None):
+        &quot;&quot;&quot;
+        Return the point response for the filter.
+
+        Parameters
+        ----------
+        channels : ChannelGroup, optional
+            The channels for which to extract the point response.  The default
+            is the filtering channels.
+
+        Returns
+        -------
+        point_response : numpy.ndarray (float)
+            The point response for the given channels.
+        &quot;&quot;&quot;
+        if channels is None or channels is self.channels:
+            return self.point_response
+        else:
+            channel_indices = self.channels.find_fixed_indices(
+                channels.fixed_index)
+            return self.point_response[channel_indices]</div>
+
+
+<div class="viewcode-block" id="VariedFilter.get_mean_point_response">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.varied_filter.VariedFilter.html#sofia_redux.scan.filters.varied_filter.VariedFilter.get_mean_point_response">[docs]</a>
+    def get_mean_point_response(self):
+        &quot;&quot;&quot;
+        Return the mean point response of the filter.
+
+        Returns
+        -------
+        response : float
+        &quot;&quot;&quot;
+        channels = self.get_channels()
+        unflagged = channels.is_unflagged()
+        responses = self.get_point_response()[unflagged]
+        weights = channels.weight[unflagged]
+
+        g = weights * responses
+        g2 = g * responses
+        return np.sum(g2) / np.sum(g)</div>
+
+
+<div class="viewcode-block" id="VariedFilter.update_source_profile">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.varied_filter.VariedFilter.html#sofia_redux.scan.filters.varied_filter.VariedFilter.update_source_profile">[docs]</a>
+    def update_source_profile(self):
+        &quot;&quot;&quot;
+        Create the source profile based on integration crossing time.
+
+        The source is assumed to be Gaussian.  Updates the `source_profile`
+        and `source_norm` attributes.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        t = self.integration.get_point_crossing_time().decompose().value
+        sigma = gaussian_sigma_to_fwhm / (2 * np.pi * t * self.df)
+        a = -0.5 / (sigma ** 2)
+        fch = np.arange(self.nf + 1)
+        self.source_profile = np.exp(a * (fch ** 2))
+        self.source_norm = np.sum(self.source_profile)</div>
+
+
+<div class="viewcode-block" id="VariedFilter.calc_point_response">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.varied_filter.VariedFilter.html#sofia_redux.scan.filters.varied_filter.VariedFilter.calc_point_response">[docs]</a>
+    def calc_point_response(self, channels=None):
+        &quot;&quot;&quot;
+        Return the point response of the source profile.
+
+        channels : ChannelGroup, optional
+            The channel group for which to calculate the point response.  The
+            default is all filtering channels.
+
+        The point response is given as:
+
+        sum(profile &lt;below hi-pass&gt;) + sum(profile * response &lt;above hi-pass&gt;)
+        divided by the `source_norm` attribute.
+
+        Returns
+        -------
+        response : numpy.ndarray (float)
+            The point response for each channel of shape (n_channels,).
+        &quot;&quot;&quot;
+        if channels is None:
+            channel_indices = np.arange(self.channels.size)
+        else:
+            channel_indices = self.channels.find_fixed_indices(
+                channels.fixed_index)
+
+        profiles = self.response_at(np.arange(self.nf + 1))
+        if profiles.ndim == 1:
+            profiles = profiles[None]
+
+        result = fnf.calculate_channel_point_responses(
+            min_fch=self.get_high_pass_index(),
+            source_profile=self.source_profile,
+            profiles=profiles,
+            channel_indices=channel_indices,
+            source_norm=self.source_norm)
+
+        return result</div>
+
+
+<div class="viewcode-block" id="VariedFilter.get_id">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.varied_filter.VariedFilter.html#sofia_redux.scan.filters.varied_filter.VariedFilter.get_id">[docs]</a>
+    @abstractmethod
+    def get_id(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the filter ID.
+
+        Returns
+        -------
+        filter_id : str
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="VariedFilter.get_config_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.varied_filter.VariedFilter.html#sofia_redux.scan.filters.varied_filter.VariedFilter.get_config_name">[docs]</a>
+    @abstractmethod
+    def get_config_name(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the configuration name.
+
+        Returns
+        -------
+        config_name : str
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="VariedFilter.response_at">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.varied_filter.VariedFilter.html#sofia_redux.scan.filters.varied_filter.VariedFilter.response_at">[docs]</a>
+    @abstractmethod
+    def response_at(self, fch):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the response at a given frequency channel(s).
+
+        Parameters
+        ----------
+        fch : int or numpy.ndarray (int or bool) or slice
+            The frequency channel or channels in question.
+
+        Returns
+        -------
+        response : numpy.ndarray (float)
+        &quot;&quot;&quot;
+        pass</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

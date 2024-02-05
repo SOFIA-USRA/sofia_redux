@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.visualization.models.reference_model &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.visualization.models.reference_model</h1><div class="highlight"><pre>
+<span></span>import copy
+import os
+
+import astropy.units as u
+import numpy as np
+from typing import Optional
+import pandas as pd
+from sofia_redux.visualization import log
+from sofia_redux.visualization.utils import unit_conversion as uc
+
+
+<div class="viewcode-block" id="ReferenceData">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.reference_model.ReferenceData.html#sofia_redux.visualization.models.reference_model.ReferenceData">[docs]</a>
+class ReferenceData(object):
+    &quot;&quot;&quot;
+    Model and manage reference data.
+
+    This class is intended for use with the `ReferenceWindow`
+    interface. The user does not interact with it directly.
+
+    Methods implemented here parse data from .txt or .csv files.
+    These files may contain one or two columns. If two columns are
+    provided, the first column must contain wavelength/wavenumber.
+    Input files may optionally contain headers.
+
+    This class also implements the following features:
+        - change axis units based on user selection.
+        - reset labels and lines
+
+    Attributes
+    ----------
+    line_list : dict
+        Values are wavelengths and labels.
+    line_unit : str or astropy.units.Unit
+        Wavelength unit for reference lines.
+    enabled : dict
+        Keys are `ref_line` and `ref_label`. Values are boolean flags
+        indicating whether lines and labels are displayed.
+    &quot;&quot;&quot;
+
+    def __init__(self):
+        self.line_list = dict()
+        self.line_unit = None
+        self.enabled = {&#39;ref_line&#39;: False,
+                        &#39;ref_label&#39;: False}
+
+    def __add__(self, other):
+        if isinstance(other, type(self)):
+            new = ReferenceData()
+            self.line_list.update(other.line_list)
+            new.line_list = self.line_list.copy()
+            for key, value in self.enabled.items():
+                new.enabled[key] = value or other.enabled[key]
+            new.line_unit = other.line_unit
+
+            return new
+
+        else:
+            raise ValueError(&#39;Invalid type for addition&#39;)
+
+    def __repr__(self):
+        lines = list()
+        lines.append(&#39;Reference data:&#39;)
+        lines.append(f&#39;\t{len(self.line_list)} lines loaded&#39;)
+        lines.append(f&#39;\tVisibility: {self.enabled}&#39;)
+        return &#39;\n&#39;.join(lines)
+
+<div class="viewcode-block" id="ReferenceData.add_line_list">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.reference_model.ReferenceData.html#sofia_redux.visualization.models.reference_model.ReferenceData.add_line_list">[docs]</a>
+    def add_line_list(self, filename: str) -&gt; bool:
+        &quot;&quot;&quot;
+        Add new spectral lines.
+
+        Reads in reference data from a file and sets the visibility
+        for the corresponding labels and lines.
+
+        Wavelength units are currently assumed to be microns (um).
+
+        Parameters
+        ----------
+        filename : str
+            Name of the file containing reference data.
+
+        Returns
+        -------
+        bool
+            True if data is parsed successfully; False otherwise.
+        &quot;&quot;&quot;
+        log.info(f&#39;Loading line list from {filename}&#39;)
+        if not os.path.isfile(filename):
+            log.error(f&#39;Line list file {filename} not found&#39;)
+            return False
+
+        try:
+            # attempt standard formats
+            self._read_line_list(filename)
+        except ValueError:
+            try:
+                # attempt space delimited
+                self._read_line_list_space_delim(filename)
+            except (ValueError, TypeError, OSError, UnicodeError) as err:
+                log.debug(f&#39;Error in reading line list: {err}&#39;)
+                return False
+        except (TypeError, OSError, UnicodeError) as err:
+            log.debug(f&#39;Error in reading line list: {err}&#39;)
+            return False
+
+        # check for empty list
+        if len(self.line_list) == 0:
+            log.debug(&#39;Line list is empty&#39;)
+            return False
+
+        self.line_unit = u.um
+        self.set_visibility([&#39;ref_line&#39;, &#39;ref_label&#39;], True)
+        return True</div>
+
+
+    def _read_line_list(self, filename):
+        # allows single column or
+        # 2+ column with comma, tab, or | as delimiter
+        log.debug(&#39;Attempting to read most common line list formats&#39;)
+        data = pd.read_table(filename, header=None, sep=r&#39;\,|\t+|\|&#39;,
+                             engine=&#39;python&#39;, comment=&#39;#&#39;,
+                             skip_blank_lines=True)
+        shape = data.shape[1]
+        if shape &gt;= 2:
+            for i in range(len(data[0])):
+                transition = data[1][i].strip()
+                wavelength = float(data[0][i])
+                if transition in self.line_list:
+                    self.line_list[transition].append(wavelength)
+                else:
+                    self.line_list[transition] = [wavelength]
+        elif shape == 1:
+            for i in range(len(data[0])):
+                wavelength = float(data[0][i])
+                transition = f&#39;{float(wavelength):.5g} um&#39;
+                self.line_list[transition] = [wavelength]
+        else:  # pragma: no cover
+            raise ValueError(&#39;Unexpected line list format&#39;)
+
+    def _read_line_list_space_delim(self, filename):
+        # allows space-separated two column files with
+        # the first column a number
+        log.debug(&#39;Attempting to read space delimited line list&#39;)
+        data = pd.read_table(filename, header=None, comment=&#39;#&#39;,
+                             skip_blank_lines=True,
+                             sep=r&#39;(?&lt;=\d)\s+&#39;, engine=&#39;python&#39;,
+                             names=[&#39;wave&#39;, &#39;label&#39;], usecols=(0, 1))
+
+        for i in range(len(data[&#39;wave&#39;])):
+            transition = str(data[&#39;label&#39;][i]).strip()
+            wavelength = float(data[&#39;wave&#39;][i])
+            if transition in self.line_list:
+                self.line_list[transition].append(wavelength)
+            else:
+                self.line_list[transition] = [wavelength]
+
+<div class="viewcode-block" id="ReferenceData.set_visibility">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.reference_model.ReferenceData.html#sofia_redux.visualization.models.reference_model.ReferenceData.set_visibility">[docs]</a>
+    def set_visibility(self, targets, state):
+        &quot;&quot;&quot;
+        Set the visibility of lines and labels.
+
+        Parameters
+        ----------
+        targets : list of str or str
+            May be &#39;all&#39;, &#39;ref_line&#39;, or &#39;ref_label&#39;.
+        state : bool
+            The visibility state to set.
+        &quot;&quot;&quot;
+        if not isinstance(targets, list):
+            targets = [targets]
+        if &#39;all&#39; in targets:
+            targets = [&#39;ref_line&#39;, &#39;ref_label&#39;]
+        for target in targets:
+            if target in self.enabled:
+                self.enabled[target] = bool(state)</div>
+
+
+<div class="viewcode-block" id="ReferenceData.get_visibility">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.reference_model.ReferenceData.html#sofia_redux.visualization.models.reference_model.ReferenceData.get_visibility">[docs]</a>
+    def get_visibility(self, target: str) -&gt; Optional[bool]:
+        &quot;&quot;&quot;
+        Get current visibility setting.
+
+        Parameters
+        ----------
+        target : {&#39;ref_line&#39;, &#39;ref_label&#39;}
+            The target to examine (lines or labels).
+
+        Returns
+        -------
+        visibility : bool or None
+            Visibility for the specified target. If the target is not
+            found, None is returned.
+        &quot;&quot;&quot;
+        try:
+            return self.enabled[target]
+        except KeyError:
+            return None</div>
+
+
+<div class="viewcode-block" id="ReferenceData.convert_line_list_unit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.reference_model.ReferenceData.html#sofia_redux.visualization.models.reference_model.ReferenceData.convert_line_list_unit">[docs]</a>
+    def convert_line_list_unit(self, target_unit, names=None):
+        &quot;&quot;&quot;
+        Convert line list data to new units.
+
+        Parameters
+        ----------
+        target_unit : str or astropy.units.Unit
+            Unit to convert to.
+        names : list or dict
+            If list, return all wavelengths matching the name.
+            If dict, matching wavelength values only are returned.
+            Wavelengths should be specified in units before conversion.
+
+        Returns
+        -------
+        converted : dict
+            If names is provided, matching lines are returned. Otherwise,
+            the full line list is returned.
+        &quot;&quot;&quot;
+        try:
+            conv_line_list = {k: uc.convert_wave(v, self.line_unit,
+                                                 target_unit)
+                              for k, v in self.line_list.items()}
+        except ValueError:
+            conv_line_list = copy.deepcopy(self.line_list)
+
+        converted = conv_line_list
+        if names:
+            if isinstance(names, list):
+                converted = {k: v for k, v in conv_line_list.items()
+                             if k in names}
+            elif isinstance(names, dict):
+                converted = dict()
+                for name, waves in self.line_list.items():
+                    if name in names:
+                        for i, wave in enumerate(waves):
+                            match = any([np.isclose(w, wave)
+                                         for w in names[name]])
+                            if match:
+                                cwave = conv_line_list[name][i]
+                                if name in converted:
+                                    converted[name].append(cwave)
+                                else:
+                                    converted[name] = [cwave]
+        return converted</div>
+
+
+<div class="viewcode-block" id="ReferenceData.unload_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.reference_model.ReferenceData.html#sofia_redux.visualization.models.reference_model.ReferenceData.unload_data">[docs]</a>
+    def unload_data(self):
+        &quot;&quot;&quot;Reset the line_list, line_unit, and enabled flags.&quot;&quot;&quot;
+        self.line_list = dict()
+        self.line_unit = None
+        self.enabled = {&#39;ref_line&#39;: False,
+                        &#39;ref_label&#39;: False}</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.info.gyro_drifts &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.info.gyro_drifts</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC
+import numpy as np
+from astropy import units, log
+
+from sofia_redux.scan.custom.sofia.info import sofia_info_numba_functions \
+    as sinf
+from sofia_redux.scan.info.base import InfoBase
+from sofia_redux.scan.utilities.range import Range
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.epoch.epoch import J2000, Epoch
+from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
+    EquatorialCoordinates
+from sofia_redux.scan.utilities import utils
+
+__all__ = [&#39;SofiaGyroDriftsInfo&#39;, &#39;GyroDrift&#39;]
+
+
+<div class="viewcode-block" id="SofiaGyroDriftsInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.html#sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo">[docs]</a>
+class SofiaGyroDriftsInfo(InfoBase):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize the SOFIA gyro drift information.
+
+        Contains information on the SOFIA gyro drifts and provides methods
+        to correct integrations/scans.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.drifts = None
+
+    @property
+    def log_id(self):
+        &quot;&quot;&quot;
+        Return the string log ID for the info.
+
+        The log ID is used to extract certain information from table data.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;gyro&#39;
+
+    @property
+    def n_drifts(self):
+        &quot;&quot;&quot;
+        Return the number of drifts (utc ranges) available.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        if self.drifts is None:
+            return 0
+        return len(self.drifts)
+
+    @property
+    def lengths(self):
+        &quot;&quot;&quot;
+        Return the length of each drift (utc range).
+
+        Returns
+        -------
+        astropy.units.Quantity (numpy.array)
+            An array containing the length of each drift.
+        &quot;&quot;&quot;
+        if self.n_drifts == 0:
+            return np.empty(0, dtype=np.float64) * units.Unit(&#39;deg&#39;)
+        return np.array(
+            [d.length.to(units.Unit(&#39;deg&#39;)).value for d in self.drifts]
+        ) * units.Unit(&#39;deg&#39;)
+
+<div class="viewcode-block" id="SofiaGyroDriftsInfo.apply_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.html#sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Apply the configuration to the information.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.add_drifts()
+        super().apply_configuration()</div>
+
+
+<div class="viewcode-block" id="SofiaGyroDriftsInfo.add_drifts">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.html#sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.add_drifts">[docs]</a>
+    def add_drifts(self):
+        &quot;&quot;&quot;
+        Read the FITS header options and create drifts.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        options = self.options
+        if options is None:
+            return
+        self.drifts = []
+        drift_index = 0
+        while True:
+            drift = GyroDrift(options.header, drift_index)
+            if drift.valid:
+                self.drifts.append(drift)
+                log.debug(f&quot;drift {drift.index}: {drift.length.to(&#39;arcsec&#39;)}&quot;)
+            else:  # pragma: no cover
+                break
+            drift_index += 1</div>
+
+
+<div class="viewcode-block" id="SofiaGyroDriftsInfo.get_max">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.html#sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.get_max">[docs]</a>
+    def get_max(self):
+        &quot;&quot;&quot;
+        Return the maximum drift.
+
+        Returns
+        -------
+        astropy.units.Quantity
+            The maximum drift.
+        &quot;&quot;&quot;
+        if self.n_drifts == 0:
+            return np.nan * units.Unit(&#39;deg&#39;)
+        return np.max(self.lengths)</div>
+
+
+<div class="viewcode-block" id="SofiaGyroDriftsInfo.get_rms">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.html#sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.get_rms">[docs]</a>
+    def get_rms(self):
+        &quot;&quot;&quot;
+        Return the drift RMS.
+
+        Returns
+        -------
+        astropy.units.Quantity
+            The drift RMS.
+        &quot;&quot;&quot;
+        if self.n_drifts == 0:
+            return np.nan * units.Unit(&#39;deg&#39;)
+        else:
+            return np.sqrt(np.sum(self.lengths ** 2) / self.n_drifts)</div>
+
+
+<div class="viewcode-block" id="SofiaGyroDriftsInfo.get_drift_utc_ranges">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.html#sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.get_drift_utc_ranges">[docs]</a>
+    def get_drift_utc_ranges(self):
+        &quot;&quot;&quot;
+        Return the drift UTC ranges.
+
+        Returns
+        -------
+        numpy.ndarray (float)
+        &quot;&quot;&quot;
+        utc_ranges = np.full((self.n_drifts, 2), np.nan)
+        if self.n_drifts == 0:
+            return utc_ranges
+
+        for i, drift in enumerate(self.drifts):
+            utc_ranges[i] = drift.utc_range.min, drift.utc_range.max
+        return utc_ranges</div>
+
+
+<div class="viewcode-block" id="SofiaGyroDriftsInfo.get_drift_deltas">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.html#sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.get_drift_deltas">[docs]</a>
+    def get_drift_deltas(self):
+        &quot;&quot;&quot;
+        Return the offsets for all drifts.
+
+        Returns
+        -------
+        astropy.units.Quantity (numpy.ndarray)
+        &quot;&quot;&quot;
+        offsets = np.zeros((self.n_drifts, 2)) * units.Unit(&#39;arcsec&#39;)
+        if self.n_drifts == 0:
+            return offsets
+        for i, drift in enumerate(self.drifts):
+            offsets[i, 0] = drift.delta.x
+            offsets[i, 1] = drift.delta.y
+        return offsets</div>
+
+
+<div class="viewcode-block" id="SofiaGyroDriftsInfo.get_table_entry">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.html#sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Return a parameter value for the given name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the parameter to retrieve.
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        if name == &#39;max&#39;:
+            return self.get_max().to(&#39;arcsec&#39;)
+        elif name == &#39;rms&#39;:
+            return self.get_rms().to(&#39;arcsec&#39;)
+        else:
+            return None</div>
+
+
+<div class="viewcode-block" id="SofiaGyroDriftsInfo.validate_time_range">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.html#sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.validate_time_range">[docs]</a>
+    def validate_time_range(self, scan):
+        &quot;&quot;&quot;
+        Ensure the UTC time ranges for each drift are correct.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if scan is None or self.n_drifts == 0:
+            return
+        t = scan.get_first_integration().frames.get_first_frame_value(&#39;utc&#39;)
+        for drift in self.drifts:
+            drift.utc_range.min = t
+            t = drift.next_utc</div>
+
+
+<div class="viewcode-block" id="SofiaGyroDriftsInfo.correct">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.html#sofia_redux.scan.custom.sofia.info.gyro_drifts.SofiaGyroDriftsInfo.correct">[docs]</a>
+    def correct(self, integration):
+        &quot;&quot;&quot;
+        Apply the gyro drift corrections to an integration.
+
+        Equatorial offsets are added to the integration frames.
+
+        Parameters
+        ----------
+        integration : Integration
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.n_drifts == 0:
+            log.warning(&quot;Skipping gyro drift correction. No data...&quot;)
+            return
+
+        config = integration.configuration
+        limit = config.get_float(&#39;gyrocorrect.max&#39;, default=np.nan
+                                 ) * units.Unit(&#39;arcsec&#39;)
+
+        if np.isfinite(limit) and (self.get_max() &gt; limit):
+            log.warning(&quot;Skipping gyro drift correction. &quot;
+                        &quot;Drifts are too large.&quot;)
+            return
+
+        log.debug(&quot;Correcting for gyro drifts.&quot;)
+        self.validate_time_range(integration.scan)
+
+        drift_correction, extrapolate_frame = sinf.get_drift_corrections(
+            frame_utc=integration.frames.utc,
+            frame_valid=integration.frames.valid,
+            drift_utc_ranges=self.get_drift_utc_ranges(),
+            drift_deltas=self.get_drift_deltas().value)
+
+        if extrapolate_frame &gt;= 0:
+            log.warning(f&quot;Extrapolated drift correction after &quot;
+                        f&quot;frame {extrapolate_frame}&quot;)
+
+        offset = Coordinate2D(drift_correction.T, unit=&#39;arcsec&#39;)
+        integration.frames.equatorial.add_offset(offset)
+        integration.frames.equatorial_to_horizontal_offset(
+            offset, in_place=True)
+        integration.frames.horizontal_offset.add(offset)
+        integration.frames.horizontal.add_offset(offset)</div>
+</div>
+
+
+
+<div class="viewcode-block" id="GyroDrift">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.gyro_drifts.GyroDrift.html#sofia_redux.scan.custom.sofia.info.gyro_drifts.GyroDrift">[docs]</a>
+class GyroDrift(ABC):
+
+    def __init__(self, header, index):
+        &quot;&quot;&quot;
+        Initializes a single drift.
+
+        Contains information on a single drift consisting of a spatial
+        delta between one time and another.
+
+        Parameters
+        ----------
+        header : fits.header.Header
+        index : str or int
+            The drift index identifier.
+        &quot;&quot;&quot;
+        self.index = int(index)
+        self.valid = False
+        self.delta = Coordinate2D(unit=&#39;arcsec&#39;)
+        self.before = None
+        self.after = None
+        self.epoch = None
+        self.utc_range = Range()
+        self.next_utc = None
+        self.parse_header(header)
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the GyroDrift.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        s = &#39;&#39;
+        for key, value in self.__dict__.items():
+            s += f&#39;{key}: {value}\n&#39;
+        return s
+
+    @property
+    def length(self):
+        &quot;&quot;&quot;
+        Return the length of the drift.
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        if self.delta is None:
+            return np.nan * units.Unit(&#39;arcsec&#39;)
+        return np.hypot(self.delta.x, self.delta.y).to(units.Unit(&#39;deg&#39;))
+
+<div class="viewcode-block" id="GyroDrift.parse_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.gyro_drifts.GyroDrift.html#sofia_redux.scan.custom.sofia.info.gyro_drifts.GyroDrift.parse_header">[docs]</a>
+    def parse_header(self, header):
+        &quot;&quot;&quot;
+        Apply the fits options to the drift.
+
+        Parameters
+        ----------
+        header : fits.header.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        drift_values = {}
+        for key in [&#39;DBRA&#39;, &#39;DBDEC&#39;, &#39;DARA&#39;, &#39;DADEC&#39;]:
+            key_index = f&#39;{key}{self.index}&#39;
+            if key_index not in header:
+                self.valid = False
+                return
+            drift_values[key] = header[key_index]
+
+        if &#39;EQUINOX&#39; in header:
+            self.epoch = Epoch.get_epoch(header[&#39;EQUINOX&#39;])
+        else:
+            self.epoch = J2000
+
+        self.before = EquatorialCoordinates(epoch=self.epoch)
+        self.after = EquatorialCoordinates(epoch=self.epoch)
+
+        self.before.ra = utils.get_hms_time(
+            drift_values[&#39;DBRA&#39;], angle=True)
+        self.before.dec = utils.get_dms_angle(drift_values[&#39;DBDEC&#39;])
+        self.after.ra = utils.get_hms_time(drift_values[&#39;DARA&#39;], angle=True)
+        self.after.dec = utils.get_dms_angle(drift_values[&#39;DADEC&#39;])
+
+        self.delta = self.after.get_offset_from(self.before)
+        if np.isnan(self.delta.length):
+            log.warning(&quot;Could not parse gyro drift values - will not apply.&quot;)
+            self.valid = False
+            return
+
+        self.utc_range.max = header.get(f&#39;DBTIME{self.index}&#39;, np.nan)
+        self.next_utc = header.get(f&#39;DATIME{self.index}&#39;, np.nan)
+        self.valid = True</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.fifi_ls.apply_static_flat &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.fifi_ls.apply_static_flat</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import os
+
+from astropy import log
+from astropy.io import fits
+import numba as nb
+import numpy as np
+import pandas
+
+from sofia_redux.instruments import fifi_ls
+from sofia_redux.toolkit.utilities \
+    import (gethdul, goodfile, hdinsert, write_hdul,
+            multitask)
+from sofia_redux.toolkit.interpolate \
+    import interp_1d_point_with_error as interp
+
+
+__all__ = [&#39;clear_flat_cache&#39;, &#39;get_flat_from_cache&#39;, &#39;store_flat_in_cache&#39;,
+           &#39;get_flat&#39;, &#39;apply_flat_to_hdul&#39;, &#39;apply_static_flat&#39;,
+           &#39;wrap_apply_static_flat&#39;]
+
+__flat_cache = {}
+
+
+<div class="viewcode-block" id="clear_flat_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.apply_static_flat.clear_flat_cache.html#sofia_redux.instruments.fifi_ls.apply_static_flat.clear_flat_cache">[docs]</a>
+def clear_flat_cache():
+    &quot;&quot;&quot;
+    Clear all data from the flat cache.
+    &quot;&quot;&quot;
+    global __flat_cache
+    __flat_cache = {}</div>
+
+
+
+<div class="viewcode-block" id="get_flat_from_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.apply_static_flat.get_flat_from_cache.html#sofia_redux.instruments.fifi_ls.apply_static_flat.get_flat_from_cache">[docs]</a>
+def get_flat_from_cache(specfile, spatfile, obsdate):
+    &quot;&quot;&quot;
+    Retrieves flat data from the flat cache.
+
+    Checks to see if the file still exists, can be read, and has not
+    been altered since last time.  If the file has changed, it will be
+    deleted from the cache so that it can be re-read.
+
+    Parameters
+    ----------
+    specfile : str
+        File path to the spectral flat file
+    spatfile : str:
+        File path to the spatial flat file
+
+    Returns
+    -------
+    filename, spat_flat, spec_flat, spec_wave, spec_err
+        filename : str
+            Used to update FLATFILE in FITS headers
+        spat_flat : numpy.ndarray
+            Spatial flat (nwave, nspaxel, nspexel)
+        spec_flat : numpy.ndarray
+            Spectral flat (nwave, nspaxel, nspexel)
+        spec_wave : numpy.ndarray
+            Spectral wavelengths (nwave)
+        spec_err : numpy.ndarray
+            Error at each wavelength (nwave)
+    &quot;&quot;&quot;
+    global __flat_cache
+
+    key = specfile, spatfile, obsdate
+
+    if key not in __flat_cache:
+        return
+
+    for f in [specfile, spatfile]:
+        if not goodfile(f):
+            try:
+                del __flat_cache[key]
+            except KeyError:   # pragma: no cover
+                # this could potentially fail in a race condition
+                pass
+            return
+
+    modkey = &#39;,&#39;.join([str(os.path.getmtime(f))
+                       for f in [specfile, spatfile]])
+    if modkey not in __flat_cache.get(key, {}):
+        return
+
+    log.debug(&quot;Retrieving flat data from cache (%s, %s, %s)&quot; % key)
+    return __flat_cache.get(key, {}).get(modkey)</div>
+
+
+
+<div class="viewcode-block" id="store_flat_in_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.apply_static_flat.store_flat_in_cache.html#sofia_redux.instruments.fifi_ls.apply_static_flat.store_flat_in_cache">[docs]</a>
+def store_flat_in_cache(specfile, spatfile, obsdate,
+                        filename, spat_flat, spec_flat, spec_wave, spec_err):
+    &quot;&quot;&quot;
+    Store flat data in the flat cache.
+
+    Parameters
+    ----------
+    specfile : str
+        File path to the spectral flat file
+    spatfile : str:
+        File path to the spatial flat file
+    filename : str
+        Used to update FLATFILE in FITS headers
+    spat_flat : numpy.ndarray
+        Spatial flat (nwave, nspaxel, nspexel)
+    spec_flat : numpy.ndarray
+        Spectral flat (nwave, nspaxel, nspexel)
+    spec_wave : numpy.ndarray
+        Spectral wavelengths (nwave)
+    spec_err : numpy.ndarray
+        Error at each wavelength (nwave)
+
+    Returns
+    -------
+    None
+    &quot;&quot;&quot;
+    global __flat_cache
+    key = specfile, spatfile, obsdate
+    log.debug(&quot;Storing flat data in cache (%s, %s, %s)&quot; % key)
+    __flat_cache[key] = {}
+    modkey = &#39;,&#39;.join([str(os.path.getmtime(f))
+                       for f in [specfile, spatfile]])
+    __flat_cache[key][modkey] = (
+        filename, spat_flat, spec_flat, spec_wave, spec_err)</div>
+
+
+
+<div class="viewcode-block" id="get_flat">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.apply_static_flat.get_flat.html#sofia_redux.instruments.fifi_ls.apply_static_flat.get_flat">[docs]</a>
+def get_flat(header):
+    &quot;&quot;&quot;
+    Return flat data table
+
+    Parameters
+    ----------
+    header : fits.Header
+        Information from the header will be used to
+        determine the correct default.
+
+    Returns
+    -------
+    filename, spat_flat, spec_flat, spec_wave, spec_err
+        filename : str
+            Used to update FLATFILE header keyword
+        spat_flat : numpy.ndarray
+            Spatial flat (nwave, nspaxel, nspexel)
+        spec_flat : numpy.ndarray
+            Spectral flat (nwave, nspaxel, nspexel)
+        spec_wave : numpy.ndarray
+            Spectral wavelengths (nwave)
+        spec_err : numpy.ndarray
+            Error at each wavelength (nwave)
+    &quot;&quot;&quot;
+    if not isinstance(header, fits.Header) or &#39;DATE-OBS&#39; not in header:
+        log.error(&quot;Cannot determine DATE-OBS from header&quot;)
+        return
+
+    for required_key in [&#39;DATE-OBS&#39;, &#39;CHANNEL&#39;, &#39;DICHROIC&#39;, &#39;G_ORD_B&#39;]:
+        if required_key not in header:
+            log.error(&quot;Header is missing %s keyword&quot; % required_key)
+            return
+
+    # get the date
+    dateobs = str(header.get(&#39;DATE-OBS&#39;))
+    try:
+        obsdate = int(&#39;&#39;.join([x.zfill(2) for x in dateobs[:10].split(&#39;-&#39;)]))
+    except ValueError:
+        obsdate = -9999
+    if obsdate &lt; 20000000:
+        log.error(&quot;Invalid DATE-OBS %s&quot; % dateobs)
+        return
+
+    # get the channel, dichroic, and order
+    channel = str(header.get(&#39;CHANNEL&#39;, &#39;UNKNOWN&#39;)).strip().upper()
+    dichroic = int(header.get(&#39;DICHROIC&#39;))
+    b_order = str(header.get(&#39;G_ORD_B&#39;)).strip().upper()
+    dstr = &#39;D130&#39; if dichroic == 130 else &#39;D105&#39;
+
+    # also check for the order filter for blue
+    # This keyword is only present from 10/2019 on.
+    # If not present, or it&#39;s a bad value, assume the value
+    # matches the order
+    if &#39;G_FLT_B&#39; in header:
+        b_filter = str(header[&#39;G_FLT_B&#39;]).upper().strip()
+        if b_filter not in [&#39;1&#39;, &#39;2&#39;]:
+            b_filter = b_order
+    else:
+        b_filter = b_order
+
+    if channel == &#39;RED&#39;:
+        fstr = &#39;R&#39;
+        cstr = &#39;R1&#39;
+    else:
+        fstr = f&#39;B{b_order}&#39;
+        if b_order == b_filter:
+            cstr = f&#39;B{b_order}&#39;
+        else:
+            cstr = f&#39;B{b_order}{b_filter}&#39;
+
+    # expected spatial and spectral file names
+    spatfile = &#39;spatialFlat{}{}.txt&#39;.format(fstr, dstr)
+    specfile = &#39;spectralFlats{}{}.fits&#39;.format(cstr, dstr)
+
+    # paths to files
+    flat_path = os.path.join(os.path.dirname(fifi_ls.__file__),
+                             &#39;data&#39;, &#39;flat_files&#39;)
+    spatfile = os.path.join(flat_path, spatfile)
+    specfile = os.path.join(flat_path, specfile)
+
+    if not goodfile(spatfile, verbose=True):
+        log.error(&quot;Cannot locate spatial flat {}&quot;.format(spatfile))
+        return
+    if not goodfile(specfile, verbose=True):
+        log.error(&quot;Cannot locate spectral flat {}&quot;.format(specfile))
+        return
+
+    # read the spatial flat file
+    df = pandas.read_csv(spatfile, comment=&#39;#&#39;, delim_whitespace=True)
+    df.sort_values(&#39;date&#39;, inplace=True)
+    df = df[df[&#39;date&#39;] &gt;= obsdate]
+    if len(df) == 0:
+        log.error(&quot;No spatial flat found for {}&quot;.format(dateobs))
+        return
+    spat_row = df.reset_index().loc[0]
+
+    log.debug(&#39;For: {} {} {}&#39;.format(cstr, dstr, obsdate))
+    log.debug(&#39;Found spatial flat: &#39;
+              &#39;{}[{:.0f}]&#39;.format(spatfile, spat_row[&#39;date&#39;]))
+    log.debug(&#39;Found spectral flat: {}&#39;.format(specfile))
+    fname = &#39;flat_files/{}[{:.0f}],flat_files/{}&#39;.format(
+        os.path.basename(spatfile), spat_row[&#39;date&#39;],
+        os.path.basename(specfile))
+
+    flatdata = get_flat_from_cache(specfile, spatfile, obsdate)
+    if flatdata is not None:
+        return flatdata
+
+    # spatial flat is an array of 25 numbers
+    spat = np.asarray(
+        spat_row[[&#39;p{}&#39;.format(i) for i in range(25)]], dtype=float)
+
+    # read the spectral flat file: wavelengths, flat values, errors
+    spec_hdul = fits.open(specfile)
+    spec_wave = np.asarray(spec_hdul[1].data, dtype=float)
+    spec_flat = np.asarray(spec_hdul[2].data, dtype=float)
+    spec_err = np.asarray(spec_hdul[3].data, dtype=float)
+    spec_hdul.close()
+
+    store_flat_in_cache(specfile, spatfile, obsdate,
+                        fname, spat, spec_flat, spec_wave, spec_err)
+
+    return fname, spat, spec_flat, spec_wave, spec_err</div>
+
+
+
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def stripnans(x, y, e):   # pragma: no cover
+    n = x.size
+    xout = np.empty(n, dtype=nb.float64)
+    yout = np.empty(n, dtype=nb.float64)
+    eout = np.empty(n, dtype=nb.float64)
+    found = 0
+    for i in range(n):
+        yi = y[i]
+        if not np.isnan(yi):
+            xout[found] = x[i]
+            eout[found] = e[i]
+            yout[found] = yi
+            found += 1
+    return xout[:found], yout[:found], eout[:found]
+
+
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def calculate_flat(wave, data, var, spatdata, specdata,
+                   specwave, specerr, skiperr):   # pragma: no cover
+    &quot;&quot;&quot;Workhorse for math stuff - fast&quot;&quot;&quot;
+
+    shape = data.shape
+    ndata, nw, ns = shape
+    ndns = ndata * ns
+    nwave, nspaxel, nspexel = specdata.shape
+
+    flat_corr = np.empty(shape, dtype=nb.float64)
+    var_corr = np.empty(shape, dtype=nb.float64)
+    flat_store = np.empty(shape, dtype=nb.float64)
+    flat_err_store = np.empty(shape, dtype=nb.float64)
+    dostrip = np.any(np.isnan(specdata))
+
+    # loop over data samples and spaxels
+    for ij in range(ndns):
+        i = ij // ns
+        j = ij % ns
+
+        x = wave[:, j]
+        y = data[i, :, j]
+        v = var[i, :, j]
+        sfac = spatdata[j]
+
+        # spexel loop: each one has its own spectral response
+        for k in nb.prange(nspexel):
+
+            if dostrip:
+                sw, sd, se = stripnans(
+                    specwave, specdata[:, j, k], specerr[:, j, k])
+            else:
+                sw, sd, se = specwave, specdata[:, j, k], specerr[:, j, k]
+
+            xk = x[k]
+
+            # Interpolate spectral response onto wavelength for spexel
+            flatval, eout = interp(sw, sd, se, xk)
+
+            if flatval &lt; 0.1 or np.isnan(flatval):
+                flat_store[i, k, j] = np.nan
+                flat_corr[i, k, j] = np.nan
+                flat_err_store[i, k, j] = np.nan
+                var_corr[i, k, j] = np.nan
+                continue
+
+            # Apply spatial response
+            flatval *= sfac
+            eout *= sfac
+
+            # Apply flat to data and error
+            yk = y[k]
+            flat_store[i, k, j] = flatval
+            flat_corr[i, k, j] = yk / flatval
+            flat_err_store[i, k, j] = eout
+
+            flatval *= flatval  # flat squared in-place for speed
+            var_corr[i, k, j] = v[k] / flatval
+            if not skiperr:
+                # Propagate the flat variance
+                # (+= flat_variance * flux^2 / (flat^4)
+                ey = eout * yk
+                ey *= ey  # this is flat_variance * (flux^2)
+                flatval *= flatval  # this is flat^4
+                var_corr[i, k, j] += ey / flatval
+
+    return flat_corr, var_corr, flat_store, flat_err_store
+
+
+<div class="viewcode-block" id="apply_flat_to_hdul">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.apply_static_flat.apply_flat_to_hdul.html#sofia_redux.instruments.fifi_ls.apply_static_flat.apply_flat_to_hdul">[docs]</a>
+def apply_flat_to_hdul(hdul, flatdata, skip_err=True):
+    &quot;&quot;&quot;
+    Divide extension data by static flat.  Update header.
+
+    Parameters
+    ----------
+    hdul : fits.HDUList
+    flatdata : 4-tuple of numpy.ndarray
+    skip_err : bool, optional
+
+    Returns
+    -------
+    fits.HDUList
+    &quot;&quot;&quot;
+    # flat data from get_flat:
+    flatfile, spatdata, specdata, specwave, specerr = flatdata
+
+    # update the header for the output file;
+    # add the flat file name to it
+    primehead = hdul[0].header
+
+    # loop over extensions
+    result = fits.HDUList(fits.PrimaryHDU(header=primehead))
+    primehead = result[0].header
+    hdinsert(primehead, &#39;FLATFILE&#39;, flatfile,
+             comment=&#39;Flat filename&#39;)
+    primehead[&#39;HISTORY&#39;] = &#39;Flat-field corrected&#39;
+    hdinsert(primehead, &#39;PRODTYPE&#39;, &#39;flat_fielded&#39;)
+    hdinsert(primehead, &#39;FILENAME&#39;, hdul[0].header[&#39;FILENAME&#39;].replace(
+        &#39;XYC&#39;, &#39;FLF&#39;))
+
+    ngrating = hdul[0].header.get(&#39;NGRATING&#39;, 1)
+    for idx in range(ngrating):
+        name = f&#39;FLUX_G{idx}&#39;
+
+        data = np.asarray(hdul[name].data, dtype=float)
+        var = np.asarray(hdul[name.replace(&#39;FLUX&#39;, &#39;STDDEV&#39;)].data,
+                         dtype=float) ** 2
+        wave = np.asarray(hdul[name.replace(&#39;FLUX&#39;, &#39;LAMBDA&#39;)].data,
+                          dtype=float)
+        if data.ndim &lt; 3:
+            data = data.reshape((1, *data.shape))
+            var = var.reshape((1, *var.shape))
+            do_reshape = True
+        else:
+            do_reshape = False
+
+        hdu_result = calculate_flat(wave, data, var, spatdata, specdata,
+                                    specwave, specerr, skip_err)
+
+        # store data in output FITS:
+        # FLUX, STDDEV, LAMBDA, XS, YS
+        exthdr = hdul[name].header
+        if do_reshape:
+            # standard data: is 2D, so take first plane only
+            result.append(fits.ImageHDU(hdu_result[0][0],
+                                        header=exthdr, name=name))
+            result.append(fits.ImageHDU(np.sqrt(hdu_result[1][0]),
+                                        header=exthdr,
+                                        name=name.replace(&#39;FLUX&#39;, &#39;STDDEV&#39;)))
+        else:
+            # OTF data: is 3D, propagate all planes
+            result.append(fits.ImageHDU(hdu_result[0],
+                                        header=exthdr, name=name))
+            result.append(fits.ImageHDU(np.sqrt(hdu_result[1]), header=exthdr,
+                                        name=name.replace(&#39;FLUX&#39;, &#39;STDDEV&#39;)))
+        result.append(hdul[name.replace(&#39;FLUX&#39;, &#39;LAMBDA&#39;)].copy())
+        result.append(hdul[name.replace(&#39;FLUX&#39;, &#39;XS&#39;)].copy())
+        result.append(hdul[name.replace(&#39;FLUX&#39;, &#39;YS&#39;)].copy())
+        result.append(hdul[name.replace(&#39;FLUX&#39;, &#39;RA&#39;)].copy())
+        result.append(hdul[name.replace(&#39;FLUX&#39;, &#39;DEC&#39;)].copy())
+
+        # also store flat and flat error, for diagnostic purposes
+        # this is always 2D
+        exthdr[&#39;BUNIT&#39;] = &#39;&#39;
+        result.append(fits.ImageHDU(hdu_result[2][0], header=exthdr,
+                                    name=name.replace(&#39;FLUX&#39;, &#39;FLAT&#39;)))
+        result.append(fits.ImageHDU(hdu_result[3][0], header=exthdr,
+                                    name=name.replace(&#39;FLUX&#39;, &#39;FLATERR&#39;)))
+
+    return result</div>
+
+
+
+<div class="viewcode-block" id="apply_static_flat">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.apply_static_flat.apply_static_flat.html#sofia_redux.instruments.fifi_ls.apply_static_flat.apply_static_flat">[docs]</a>
+def apply_static_flat(filename, outdir=None, write=None, skip_err=True):
+    &quot;&quot;&quot;
+    Apply pre-reduced and normalized flat to FIFI-LS data.
+
+    The procedure is:
+
+        1. Identify a spatial and spectral flat field to use.  The code
+           will look for flat files that match the current configuration
+           (channel, dichroic, and order), and the observation date
+           (spatial flats only).
+        2. Loop through each grating scan extension in the input file,
+           composing a flat cube from the spatial and spectral flat
+           inputs.
+        3. Divide the data cube by the flat cube and optionally
+           propagate the flat error to the error cube.
+        4. Create FITS file and (optionally) write results to disk.
+
+    The output FITS file contains n_scan * 7 image extensions:
+    FLUX, STDDEV, LAMBDA, XS, YS, FLAT, and FLATERR data cubes,
+    with a &#39;_G{i}&#39; suffix for each grating extension i.
+    For most data, FLUX and STDDEV are 25 x 16 arrays; for OTF
+    data they are 25 x 16 x n_ramp.  The XS and YS arrays are usually
+    25-element 1D arrays; for OTF data they are 25 x 1 x n_ramp.
+    The LAMBDA, FLAT, and FLATERR arrays are always 25 x 16.
+
+    Parameters
+    ----------
+    filename : str
+        File to be flat field corrected.  Should have been generated
+        by fifi_ls.spatial_calibrate.
+    outdir : str, optional
+        Directory path to write output.  If None, output files
+        will be written to the same directory as the input files.
+    write : bool, optional
+        If True, write to disk and return the path to the output
+        file.  If False, return the HDUL. The output filename is created
+        from the input filename, with the suffix &#39;XYC&#39; replaced with &#39;FLF&#39;.
+    skip_err : bool, optional
+        If True, flat errors will not be propagated.
+
+    Returns
+    -------
+    fits.HDUList or str
+        Either the HDU (if write is False) or the filename of the output file
+        (if write is True)
+    &quot;&quot;&quot;
+    if isinstance(outdir, str):
+        if not os.path.isdir(outdir):
+            log.error(&quot;Output directory %s does not exist&quot; % outdir)
+            return
+
+    hdul = gethdul(filename, verbose=True)
+    if hdul is None:
+        return
+    if not isinstance(filename, str):
+        filename = hdul[0].header[&#39;FILENAME&#39;]
+    if not isinstance(outdir, str):
+        outdir = os.path.dirname(filename)
+
+    flatdata = get_flat(header=hdul[0].header)
+    if flatdata is None:
+        log.error(&#39;No flat found.&#39;)
+        return
+    result = apply_flat_to_hdul(hdul, flatdata, skip_err=skip_err)
+    if not write:
+        return result
+    else:
+        return write_hdul(result, outdir=outdir, overwrite=True)</div>
+
+
+
+def apply_static_flat_wrap_helper(_, kwargs, filename):
+    return apply_static_flat(filename, **kwargs)
+
+
+<div class="viewcode-block" id="wrap_apply_static_flat">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.apply_static_flat.wrap_apply_static_flat.html#sofia_redux.instruments.fifi_ls.apply_static_flat.wrap_apply_static_flat">[docs]</a>
+def wrap_apply_static_flat(files, outdir=None, allow_errors=False,
+                           write=False, skip_err=True, jobs=None):
+    &quot;&quot;&quot;
+    Wrapper for apply_static_flat over multiple files.
+
+    See `apply_static_flat` for full description of reduction
+    on a single file.
+
+    Parameters
+    ----------
+    files : array_like of str
+        paths to files to be flat corrected
+    outdir : str, optional
+        Directory path to write output.  If None, output files
+        will be written to the same directory as the input files.
+    allow_errors : bool, optional
+        If True, return all created files on error.  Otherwise, return None
+    write : bool, optional
+        If True, output files will be written to disk.
+    skip_err : bool, optional
+        If True, flat errors will not be propagated to the flux errors.
+    jobs : int, optional
+        Specifies the maximum number of concurrently running jobs.
+        Values of 0 or 1 will result in serial processing.  A negative
+        value sets jobs to `n_cpus + 1 + jobs` such that -1 would use
+        all cpus, and -2 would use all but one cpu.
+
+    Returns
+    -------
+    tuple of str
+        output filenames written to disk
+    &quot;&quot;&quot;
+    if isinstance(files, str):
+        files = [files]
+    if not hasattr(files, &#39;__len__&#39;):
+        log.error(&quot;Invalid input files type (%s)&quot; % repr(files))
+        return
+
+    clear_flat_cache()
+
+    kwargs = {&#39;write&#39;: write, &#39;outdir&#39;: outdir, &#39;skip_err&#39;: skip_err}
+    output = multitask(apply_static_flat_wrap_helper, files, None, kwargs,
+                       jobs=jobs)
+
+    failure = False
+    result = []
+    for x in output:
+        if x is None:
+            failure = True
+        else:
+            result.append(x)
+    if failure:
+        if len(result) &gt; 0:
+            if not allow_errors:
+                log.error(&quot;Errors were encountered but the following &quot;
+                          &quot;files were created:\n%s&quot; % &#39;\n&#39;.join(result))
+                return
+
+    clear_flat_cache()
+
+    return tuple(result)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

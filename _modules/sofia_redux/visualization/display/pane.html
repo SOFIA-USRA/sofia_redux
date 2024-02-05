@@ -1,0 +1,3630 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.visualization.display.pane &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.visualization.display.pane</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import colorsys
+import copy
+import itertools
+import os
+import re
+import uuid
+from typing import (Dict, List, Union, TypeVar,
+                    Optional, Tuple, Any, Sequence)
+import warnings
+
+from astropy import modeling as am
+import numpy as np
+import matplotlib
+from matplotlib import axes as ma
+from matplotlib import backend_bases as mbb
+from matplotlib import collections as mcl
+from matplotlib import colors as mc
+from matplotlib import lines as ml
+from matplotlib import patches as mp
+from matplotlib import text as mt
+from matplotlib import image as mi
+import scipy.optimize as sco
+
+from sofia_redux.visualization import log
+from sofia_redux.visualization.signals import Signals
+from sofia_redux.visualization.models import high_model, reference_model
+from sofia_redux.visualization.utils.eye_error import EyeError
+from sofia_redux.visualization.utils import model_fit
+from sofia_redux.visualization.display import drawing
+
+try:
+    matplotlib.use(&#39;QT5Agg&#39;)
+    matplotlib.rcParams[&#39;axes.formatter.useoffset&#39;] = False
+except ImportError:  # pragma: no cover
+    HAS_PYQT5 = False
+else:
+    HAS_PYQT5 = True
+
+__all__ = [&#39;Pane&#39;, &#39;OneDimPane&#39;, &#39;TwoDimPane&#39;]
+
+MT = TypeVar(&#39;MT&#39;, bound=high_model.HighModel)
+RT = TypeVar(&#39;RT&#39;, bound=reference_model.ReferenceData)
+DT = TypeVar(&#39;DT&#39;, bound=drawing.Drawing)
+Num = TypeVar(&#39;Num&#39;, int, float)
+Art = TypeVar(&#39;Art&#39;, ml.Line2D, mt.Annotation, mi.AxesImage)
+ArrayLike = TypeVar(&#39;ArrayLike&#39;, List, Tuple, Sequence, np.ndarray)
+IDT = TypeVar(&#39;IDT&#39;, str, uuid.UUID)
+
+
+<div class="viewcode-block" id="Pane">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane">[docs]</a>
+class Pane(object):
+    &quot;&quot;&quot;
+    Plot window management.
+
+    The Pane class is analogous to a matplotlib subplot. It
+    contains plot axes and instantiates artists associated with
+    them.  This class determines appropriate updates for display
+    options, but it does not manage updating artists themselves
+    after they are instantiated.  The `Gallery` class manages all
+    artist modifications.
+
+    The Pane class is abstract.  It should not be instantiated directly:
+    it should be subclassed to provide specific display functionality,
+    depending on desired plot type.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes, optional
+        Plot axes to display in the pane.
+
+    Attributes
+    ----------
+    ax : matplotlib.axes.Axes
+        Plot axes to display in the pane.
+    ax_alt : matplotlib.axes.Axes
+        Alternative plot axes to display in the pane.
+    models : dict
+        Data models displayed in the pane.  Keys are model IDs;
+        values are sofia_redux.visualization.models.HighModel instances.
+    reference : dict
+        Reference model for lines and corresponding labels.
+        Values are sofia_redux.visualization.models.reference_model
+        .ReferenceData instances.
+    fields : dict
+        Model fields currently displayed in the pane.
+    show_overplot: bool
+        To over plot the alternative axis.
+    brewer_cycle : list of str
+        Color hex values for the &#39;spectral&#39; color cycle.
+    tab10_cycle : list of str
+        Color hex values for the &#39;tableau&#39; color cycle.
+    accessible_cycle : list of str
+        Color hex values for the &#39;accessible&#39; color cycle.
+    default_colors : list of str
+        Default color cycle.  Set to `accessible_cycle` on initialization.
+    default_markers : list of str
+        Default plot marker cycle.
+    fit_linestyles : iterable
+        Line style cycle, for use in feature fit overlays.
+    border : matplotlib.Rectangle
+        Border artist, used to highlight the current pane in the
+        view display.
+    &quot;&quot;&quot;
+
+    def __init__(self, signals: Signals, ax: Optional[ma.Axes] = None) -&gt; None:
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for the Eye.&#39;)
+
+        self.ax = ax
+        self.ax_alt = None
+        self.models = dict()
+        self.reference = None
+        self.fields = dict()
+        self.plot_kind = &#39;&#39;
+        self.show_overplot = False
+
+        # xvspec default:
+        # 9 selections from Brewer 10-color diverging Spectral
+        # http://colorbrewer2.org/#type=diverging&amp;scheme=Spectral&amp;n=10
+        self.brewer_cycle = [
+            &#39;#66c2a5&#39;, &#39;#3288bd&#39;, &#39;#5e4fa2&#39;, &#39;#9e0142&#39;,
+            &#39;#d53e4f&#39;, &#39;#f46d43&#39;, &#39;#fdae61&#39;, &#39;#fee08b&#39;, &#39;#abdda4&#39;]
+
+        # matplotlib default: plt.cycler(&quot;color&quot;, plt.cm.tab10.colors)
+        # Removed gray color (#f7f7f7) because gray is its own
+        # compliment, so all apertures will have the same color
+        self.tab10_cycle = [&#39;#1f77b4&#39;, &#39;#ff7f0e&#39;, &#39;#2ca02c&#39;, &#39;#d62728&#39;,
+                            &#39;#9467bd&#39;, &#39;#8c564b&#39;, &#39;#e377c2&#39;,
+                            &#39;#bcbd22&#39;, &#39;#17becf&#39;]
+
+        # 7 visually separated colors picked from
+        # https://colorcyclepicker.mpetroff.net/
+        self.accessible_cycle = [&#39;#2848ad&#39;, &#39;#59d4db&#39;, &#39;#f37738&#39;,
+                                 &#39;#c6ea6c&#39;, &#39;#b9a496&#39;, &#39;#d0196b&#39;, &#39;#7b85d4&#39;]
+
+        # default is accessible
+        self.default_colors = self.accessible_cycle
+
+        self.aperture_cycle = dict()
+        self.order_cycle = list()
+
+        self.set_aperture_cycle()
+
+        self.default_markers = [&#39;x&#39;, &#39;o&#39;, &#39;^&#39;, &#39;+&#39;, &#39;v&#39;, &#39;*&#39;]
+        self.fit_linestyles = itertools.cycle([&#39;dashed&#39;,
+                                               &#39;dotted&#39;, &#39;dashdot&#39;])
+        self.border = None
+
+    def __eq__(self, other):  # pragma: no cover
+        return self.ax == other.ax
+
+<div class="viewcode-block" id="Pane.axes">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.axes">[docs]</a>
+    def axes(self):
+        &quot;&quot;&quot;
+        Get primary and alternate axes.
+
+        Returns
+        -------
+        axes : list of matplotlib.axes.Axes
+            The current axes, as [primary, alternate].
+        &quot;&quot;&quot;
+        return [self.ax, self.ax_alt]</div>
+
+
+<div class="viewcode-block" id="Pane.set_axis">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.set_axis">[docs]</a>
+    def set_axis(self, ax: ma.Axes, kind: str = &#39;primary&#39;) -&gt; None:
+        &quot;&quot;&quot;
+        Assign an axes instance to the pane.
+
+        Also instantiates the border highlight for the pane.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            The axes to assign.
+        kind : {&#39;primary&#39;, &#39;secondary&#39;}, optional
+            If given, specifies which axis is being given.
+            Defaults to &#39;primary&#39;.
+        &quot;&quot;&quot;
+        if kind == &#39;primary&#39;:
+            self.ax = ax
+            self.border = self._add_border_highlight()
+        else:
+            self.ax_alt = ax</div>
+
+
+<div class="viewcode-block" id="Pane.overplot_state">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.overplot_state">[docs]</a>
+    def overplot_state(self) -&gt; bool:
+        &quot;&quot;&quot;
+        Get current overplot state.
+
+        Returns
+        -------
+        state : bool
+            True if overplot is shown; False otherwise.
+        &quot;&quot;&quot;
+        return self.show_overplot</div>
+
+
+<div class="viewcode-block" id="Pane.model_count">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.model_count">[docs]</a>
+    def model_count(self) -&gt; int:
+        &quot;&quot;&quot;
+        Get the number of models attached to the pane.
+
+        Returns
+        -------
+        count : int
+            The model count.
+        &quot;&quot;&quot;
+        return len(self.models)</div>
+
+
+<div class="viewcode-block" id="Pane.add_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.add_model">[docs]</a>
+    def add_model(self, model: MT) -&gt; None:
+        &quot;&quot;&quot;
+        Add a model to the pane.
+
+        Parameters
+        ----------
+        model : high_model.HighModel
+            The model to add.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.remove_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.remove_model">[docs]</a>
+    def remove_model(self, filename: Optional[str] = None,
+                     model_id: Optional[IDT] = None,
+                     model: Optional[MT] = None) -&gt; None:
+        &quot;&quot;&quot;
+        Remove a model from the pane.
+
+        Either filename or model must be specified.
+
+        Parameters
+        ----------
+        filename : str, optional
+            Model filename to remove.
+        model: high_model.HighModel, optional
+            Model instance to remove.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.model_extensions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.model_extensions">[docs]</a>
+    def model_extensions(self, model_id: str) -&gt; List[str]:
+        &quot;&quot;&quot;
+        Obtain a list of extensions for a model with a given model_id.
+
+        Parameters
+        ----------
+        model_id : str
+            Specific id to a model object (high_model.HighModel).
+
+        Returns
+        -------
+        model.extension() : list of str
+            Model extensions are a list of the hdu names for a given hdul.
+            If `model_id` is not found, returns empty list.
+        &quot;&quot;&quot;
+        try:
+            model = self.models[model_id]
+        except (IndexError, KeyError):
+            return list()
+        else:
+            return model.extensions()</div>
+
+
+<div class="viewcode-block" id="Pane.possible_units">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.possible_units">[docs]</a>
+    def possible_units(self) -&gt; Dict[str, List[Any]]:
+        &quot;&quot;&quot;
+        Retrieve possible units for the model.
+
+        Returns
+        -------
+        units : dict
+            Keys are axis names; values are lists of unit names.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.current_units">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.current_units">[docs]</a>
+    def current_units(self) -&gt; Dict[str, str]:
+        &quot;&quot;&quot;
+        Retrieve the currently displayed units.
+
+        Returns
+        -------
+        units : dict
+            Keys are axis names; values are unit names.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.set_orders">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.set_orders">[docs]</a>
+    def set_orders(self, orders: Dict[str, List[Any]],
+                   enable: Optional[bool] = True,
+                   aperture: Optional[bool] = False,
+                   return_updates:
+                   Optional[bool] = False) -&gt; Optional[List[Any]]:
+        &quot;&quot;&quot;
+        Enable specified orders.
+
+        Parameters
+        ----------
+        orders : dict
+            Keys are model IDs; values are lists of orders
+            to enable.
+        enable : bool, optional
+            Set to True to enable; False to disable.
+        aperture : bool, optional
+            True if apertures are present; False otherwise.
+        return_updates : bool, optional
+            If set, an update structure is returned.
+
+
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.ap_order_state">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.ap_order_state">[docs]</a>
+    def ap_order_state(self, model_ids: Union[List[IDT], IDT]
+                       ) -&gt; Tuple[Dict[IDT, int], Dict[IDT, int]]:
+        &quot;&quot;&quot;
+        Determine number of orders and apertures for each model_id.
+
+        Parameters
+        ----------
+        model_ids: uuid.UUID, list(uuid.UUID)
+            Single or list of model_ids.
+
+        Returns
+        -------
+        apertures, orders: dict
+            Dictionaries with model_ids as keys and values are
+            the total number of apertures and orders respectively
+            that model contains.
+
+        &quot;&quot;&quot;
+        if not isinstance(model_ids, list):
+            model_ids = [model_ids]
+        apertures = dict.fromkeys(model_ids)
+        orders = dict.fromkeys(model_ids)
+        for model_id in model_ids:
+            try:
+                n_ap, n_ord = self.models[model_id].ap_order_count()
+            except (IndexError, KeyError):
+                n_ap = 0
+                n_ord = 0
+            apertures[model_id] = n_ap
+            orders[model_id] = n_ord
+        return apertures, orders</div>
+
+
+    def _add_border_highlight(self, color: Optional[str] = None,
+                              width: Optional[int] = 2) -&gt; mp.Rectangle:
+        &quot;&quot;&quot;
+        Add a border to the pane to identify it.
+
+        Created when an axis is added to the pane.
+
+        Parameters
+        ----------
+        color : str, optional
+            Color of the border.  If not specified, the second color
+            in the default color cycle will be used.
+        width : int, optional
+            Width of the border.
+
+        Returns
+        -------
+        rect : matplotlib.Rectangle
+            Artist object representing the border.
+        &quot;&quot;&quot;
+        if color is None:
+            color = self.default_colors[1]
+
+        # bottom-left and top-right
+        x0, y0 = 0, 0
+        x1, y1 = 1, 1
+
+        rect = mp.Rectangle((x0, y0), x1 - x0, y1 - y0,
+                            color=color, animated=True,
+                            zorder=-1, lw=2 * width + 1, fill=None)
+        rect.set_visible(False)
+        rect.set_transform(self.ax.transAxes)
+        self.ax.add_patch(rect)
+        return rect
+
+<div class="viewcode-block" id="Pane.get_border">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.get_border">[docs]</a>
+    def get_border(self) -&gt; mp.Rectangle:
+        &quot;&quot;&quot;
+        Retrieve the current border artist.
+
+        Returns
+        -------
+        border : matplotlib.Rectangle
+            The border artist.
+        &quot;&quot;&quot;
+        return self.border</div>
+
+
+<div class="viewcode-block" id="Pane.set_border_visibility">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.set_border_visibility">[docs]</a>
+    def set_border_visibility(self, state: bool) -&gt; None:
+        &quot;&quot;&quot;
+        Set the border visibility.
+
+        Parameters
+        ----------
+        state : bool
+            If True, the border is shown.  If False, the border
+            is hidden.
+        &quot;&quot;&quot;
+        try:
+            self.border.set_visible(state)
+        except AttributeError:
+            pass</div>
+
+
+<div class="viewcode-block" id="Pane.get_axis_limits">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.get_axis_limits">[docs]</a>
+    def get_axis_limits(self) -&gt; Dict[str, Union[Tuple, str]]:
+        &quot;&quot;&quot;
+        Get the current axis limits.
+
+        Returns
+        -------
+        limits : dict
+            Keys are axis names; values are current limits.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.get_unit_string">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.get_unit_string">[docs]</a>
+    def get_unit_string(self, axis: str) -&gt; str:
+        &quot;&quot;&quot;
+        Get the current unit string for the plot label.
+
+        Parameters
+        ----------
+        axis : str
+            The axis name to retrieve units from.
+
+        Returns
+        -------
+        unit_name : str
+            The unit label.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.get_axis_scale">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.get_axis_scale">[docs]</a>
+    def get_axis_scale(self) -&gt; Dict[str, str]:
+        &quot;&quot;&quot;
+        Get the axis scale setting.
+
+        Returns
+        -------
+        scale : dict
+            Keys are axis names; values are &#39;log&#39; or &#39;linear&#39;.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.get_field">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.get_field">[docs]</a>
+    def get_field(self, axis: Optional[str]) -&gt; Union[str, Dict[str, str]]:
+        &quot;&quot;&quot;
+        Get the currently displayed field.
+
+        Parameters
+        ----------
+        axis : str, optional
+            If provided, retrieves the field only for the specified axis.
+
+        Returns
+        -------
+        field : str or dict
+            If axis is specified, only the field name for that axis is
+            returned.  Otherwise, a dictionary with axis name keys and
+            field name values is returned.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.get_unit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.get_unit">[docs]</a>
+    def get_unit(self, axis: Optional[str]) -&gt; Union[str, Dict[str, str]]:
+        &quot;&quot;&quot;
+        Get the currently displayed unit.
+
+        Parameters
+        ----------
+        axis : str, optional
+            If provided, retrieves the unit only for the specified axis.
+
+        Returns
+        -------
+        unit : str or dict
+            If axis is specified, only the unit name for that axis is
+            returned.  Otherwise, a dictionary with axis name keys and
+            unit name values is returned.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.get_scale">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.get_scale">[docs]</a>
+    def get_scale(self, axis: Optional[str]) -&gt; Union[str, Dict[str, str]]:
+        &quot;&quot;&quot;
+        Get the currently displayed scale.
+
+        Parameters
+        ----------
+        axis : str, optional
+            If provided, retrieves the scale only for the specified axis.
+
+        Returns
+        -------
+        scale : str or dict
+            If axis is specified, only the scale name for that axis is
+            returned.  Otherwise, a dictionary with axis name keys and
+            scale name values is returned.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.get_orders">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.get_orders">[docs]</a>
+    def get_orders(self, axis: Optional[str],
+                   **kwargs) -&gt; Union[str, Dict[str, str]]:
+        &quot;&quot;&quot;
+        Get the currently displayed orders.
+
+        Parameters
+        ----------
+        axis : str, optional
+            If provided, retrieves the orders only for the specified axis.
+
+        Returns
+        -------
+        orders : str or dict
+            If axis is specified, only the order name for that axis is
+            returned.  Otherwise, a dictionary with axis name keys and
+            order name values is returned.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.set_limits">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.set_limits">[docs]</a>
+    def set_limits(self, limits: Dict[str, float]) -&gt; None:
+        &quot;&quot;&quot;
+        Set the plot limits.
+
+        Parameters
+        ----------
+        limits : dict
+            Keys are axis names; values are limits to set.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.set_scales">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.set_scales">[docs]</a>
+    def set_scales(self, scale: Dict[str, str]) -&gt; None:
+        &quot;&quot;&quot;
+        Set the plot scale.
+
+        Parameters
+        ----------
+        scale : dict
+            Keys are axis names; values are scales to set
+            (&#39;log&#39; or &#39;linear&#39;).
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.set_units">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.set_units">[docs]</a>
+    def set_units(self, units: Dict[str, str], axes: str) -&gt; Any:
+        &quot;&quot;&quot;
+        Set the plot units.
+
+        Parameters
+        ----------
+        units : dict
+            Keys are axis names; values are units to set.
+        axes : str
+            Which axes to pull data from.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.set_fields">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.set_fields">[docs]</a>
+    def set_fields(self, fields: Dict[str, str]) -&gt; None:
+        &quot;&quot;&quot;
+        Set the plot fields.
+
+        Parameters
+        ----------
+        fields : dict
+            Keys are axis names; values are fields to set.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.set_color_cycle_by_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.set_color_cycle_by_name">[docs]</a>
+    def set_color_cycle_by_name(self, cycle_name: str) -&gt; None:
+        &quot;&quot;&quot;
+        Set the color cycle to be used in displayed plots.
+
+        Parameters
+        ----------
+        cycle_name : [&#39;spectral&#39;, &#39;tableau&#39;, &#39;accessible&#39;]
+            The color cycle to set.
+        &quot;&quot;&quot;
+        # TODO -- allow general matplotlib cmap names
+        name = cycle_name.lower()
+        if &#39;spectral&#39; in name:
+            self.default_colors = self.brewer_cycle
+        elif &#39;tableau&#39; in name:
+            self.default_colors = self.tab10_cycle
+        else:
+            self.default_colors = self.accessible_cycle
+        self.set_aperture_cycle()</div>
+
+
+<div class="viewcode-block" id="Pane.grayscale">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.grayscale">[docs]</a>
+    @staticmethod
+    def grayscale(color: str, scheme: Optional[str] = &#39;yiq&#39;):
+        &quot;&quot;&quot;
+        Translate color hex to equivalent grayscale value.
+
+        Parameters
+        ----------
+        color : str
+            Color hex value.
+        scheme : {&#39;yiq&#39;, &#39;hex&#39;, &#39;rgb&#39;}
+            Color scheme to use for formatting output grayscale.
+
+        Returns
+        -------
+        gray : str
+            Grayscale value equivalent to the input color.
+        &quot;&quot;&quot;
+        if isinstance(color, list):
+            color = color[0]
+        yiq = colorsys.rgb_to_yiq(*mc.to_rgb(color))
+        if scheme == &#39;yiq&#39;:
+            gray = str(yiq[0])
+        elif scheme == &#39;hex&#39;:
+            gray = mc.to_hex(colorsys.yiq_to_rgb(yiq[0], 0, 0))
+        elif scheme == &#39;rgb&#39;:
+            gray = colorsys.yiq_to_rgb(yiq[0], 0, 0)
+        else:
+            raise EyeError(f&#39;Unknown color scheme {scheme}&#39;)
+        return gray</div>
+
+
+<div class="viewcode-block" id="Pane.set_aperture_cycle">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.set_aperture_cycle">[docs]</a>
+    def set_aperture_cycle(self):
+        &quot;&quot;&quot;Set the color cycle for apertures.&quot;&quot;&quot;
+        self.aperture_cycle = dict()
+        for color in self.default_colors:
+            self.aperture_cycle[color] = self.analogous(color)</div>
+
+
+<div class="viewcode-block" id="Pane.split_complementary">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.split_complementary">[docs]</a>
+    @staticmethod
+    def split_complementary(color):
+        &quot;&quot;&quot;
+        Produce split complementary colors to the input color.
+
+        Parameters
+        ----------
+        color : str
+            Color hex value.
+
+        Returns
+        -------
+        complements : list of str
+            Two-element list of complements to the input color.
+        &quot;&quot;&quot;
+        r, g, b = tuple(mc.to_rgb(color))
+        # value has to be 0&lt;x&lt;1 in order to convert to hls
+        # hls provides color in radial scale
+        h, l, s = colorsys.rgb_to_hls(r, g, b)
+        # get hue changes at 150 and 210 degrees
+        deg_150_hue = h + (150.0 / 360.0)
+        deg_210_hue = h + (210.0 / 360.0)
+        # convert to rgb
+        color_150_rgb = list(map(lambda x: round(x * 255),
+                                 colorsys.hls_to_rgb(deg_150_hue, l, s)))
+        color_210_rgb = list(map(lambda x: round(x * 255),
+                                 colorsys.hls_to_rgb(deg_210_hue, l, s)))
+
+        color_150 = mc.rgb2hex([x / 255 for x in color_150_rgb])
+        color_210 = mc.rgb2hex([x / 255 for x in color_210_rgb])
+
+        return [color_150, color_210]</div>
+
+
+<div class="viewcode-block" id="Pane.analogous">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.analogous">[docs]</a>
+    @staticmethod
+    def analogous(color, degree=130.0):
+        &quot;&quot;&quot;
+        Produce list of analogous colors to the input color.
+
+        Parameters
+        ----------
+        color : str
+            Color hex value.
+        degree : float
+            Color wheel angle to set as the distance above and below
+            the input color.
+
+        Returns
+        -------
+        analogous : list of str
+            Two-element list of colors analogous to the input color.
+        &quot;&quot;&quot;
+        r, g, b = tuple(mc.to_rgb(color))
+        # set color wheel angle
+        degree /= 360.0
+        # hls provides color in radial scale
+        h, l, s = colorsys.rgb_to_hls(r, g, b)
+        # rotate hue by d
+        h = [(h + d) % 1 for d in (-degree, degree)]
+        analogous_list = list()
+        for nh in h:
+            new_rgb = list(map(lambda x: round(x * 255),
+                               colorsys.hls_to_rgb(nh, l, s)))
+            analogous_list.append(mc.rgb2hex([x / 255 for x in new_rgb]))
+        return analogous_list</div>
+
+
+<div class="viewcode-block" id="Pane.update_colors">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.update_colors">[docs]</a>
+    def update_colors(self) -&gt; None:
+        &quot;&quot;&quot;Update colors in currently displayed plots.&quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.perform_zoom">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.perform_zoom">[docs]</a>
+    def perform_zoom(self, zoom_points: List, direction: str) -&gt; None:
+        &quot;&quot;&quot;
+        Perform a zoom action.
+
+        Parameters
+        ----------
+        zoom_points : list
+            User selected cursor positions, defining the zoom
+            limits.
+        direction :  str
+            Direction of the zoom.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.set_plot_type">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.set_plot_type">[docs]</a>
+    def set_plot_type(self, plot_type: str) -&gt; None:
+        &quot;&quot;&quot;
+        Set the plot line type.
+
+        Parameters
+        ----------
+        plot_type : str
+            The plot type to set.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.set_markers">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.set_markers">[docs]</a>
+    def set_markers(self, state: bool) -&gt; List:
+        &quot;&quot;&quot;Set the plot marker symbols.&quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.set_grid">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.set_grid">[docs]</a>
+    def set_grid(self, state: bool) -&gt; None:
+        &quot;&quot;&quot;Set the plot grid visibility.&quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.set_error">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.set_error">[docs]</a>
+    def set_error(self, state: bool) -&gt; None:
+        &quot;&quot;&quot;Set the plot error range visibility.&quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="Pane.create_artists_from_current_models">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.Pane.html#sofia_redux.visualization.display.pane.Pane.create_artists_from_current_models">[docs]</a>
+    def create_artists_from_current_models(self) -&gt; None:
+        &quot;&quot;&quot;Create new artists from all current models.&quot;&quot;&quot;
+        raise NotImplementedError</div>
+</div>
+
+
+
+<div class="viewcode-block" id="OneDimPane">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane">[docs]</a>
+class OneDimPane(Pane):
+    &quot;&quot;&quot;
+    Single axis pane, for one-dimensional plots.
+
+    This class is primarily intended to support spectral flux plots,
+    but may be used for any one-dimensional line or scatter plot.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes, optional
+        Plot axes to display in the pane.
+
+    Attributes
+    ----------
+    orders : dict
+        Enabled spectral orders.
+    plot_kind : str
+        Kind of plot displayed (e.g. &#39;spectrum&#39;).
+    fields : dict
+        Keys are axis names; values are currently displayed fields.
+    units : dict
+        Keys are axis names; values are currently displayed units.
+    scale : dict
+        Keys are axis names; values are currently displayed plot scales.
+    limits : dict
+        Keys are axis names; values are currently displayed plot limits.
+    plot_type : [&#39;step&#39;, &#39;line&#39;, &#39;scatter&#39;]
+        The currently displayed plot line type.
+    show_markers : bool
+        Flag for marker visibility.
+    show_grid : bool
+        Flag for grid visibility.
+    show_error : bool
+        Flag for error range visibility.
+    colors : dict
+        Current plot colors.  Keys are model IDs; values are color
+        hex values.
+    markers : dict
+        Current plot markers.  Keys are model IDs; values are marker
+        symbol names.
+    ref_color: str
+        Color value used for all reference line overlays.
+    guide_line_style : dict
+        Style parameters for guide line overlays.
+    data_changed : bool
+        Flag to indicate that data has changed recently.
+    signals : sofia_redux.visualization.signals.Signals
+        Custom signals, used to pass information to the controlling Figure.
+    &quot;&quot;&quot;
+
+    def __init__(self, signals: Signals, ax: Optional[ma.Axes] = None) -&gt; None:
+        super().__init__(signals, ax)
+        self.orders = dict()
+        self.plot_kind = &#39;spectrum&#39;
+        self.fields = {&#39;x&#39;: &#39;wavepos&#39;,
+                       &#39;y&#39;: &#39;spectral_flux&#39;,
+                       &#39;y_alt&#39;: None}
+        self.units = dict.fromkeys([&#39;x&#39;, &#39;y&#39;, &#39;y_alt&#39;], &#39;&#39;)
+        self.scale = {&#39;x&#39;: &#39;linear&#39;, &#39;y&#39;: &#39;linear&#39;, &#39;y_alt&#39;: None}
+        self.limits = {&#39;x&#39;: [0, 1], &#39;y&#39;: [0, 1], &#39;y_alt&#39;: None}
+        self.plot_type = &#39;step&#39;
+        self.show_markers = False
+        self.show_grid = False
+        self.show_error = True
+        self.show_overplot = False
+
+        self.colors = dict()
+        self.markers = dict()
+        self.ref_color = &#39;dimgray&#39;
+
+        self.guide_line_style = {&#39;linestyle&#39;: &#39;:&#39;,
+                                 &#39;color&#39;: &#39;darkgray&#39;,
+                                 &#39;linewidth&#39;: 1,
+                                 &#39;animated&#39;: True}
+
+        self.data_changed = True
+        self.signals = signals
+
+    def __eq__(self, other):
+        if isinstance(other, OneDimPane):
+            return self.ax == other.ax
+        else:
+            return False
+
+    ####
+    # Models/Data
+    ####
+<div class="viewcode-block" id="OneDimPane.model_summaries">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.model_summaries">[docs]</a>
+    def model_summaries(self) -&gt; Dict[str, Dict[str, Union[str, bool]]]:
+        &quot;&quot;&quot;
+        Summarize the models contained in this pane.
+
+        Returns
+        -------
+        details : dict
+            Keys and value types are &#39;filename&#39;: str, &#39;extension&#39;: str,
+            &#39;model_id&#39;: str, &#39;enabled&#39;: bool, &#39;color&#39;: str, &#39;marker&#39;: str.
+        &quot;&quot;&quot;
+        details = dict()
+        for model_id, model in self.models.items():
+            details[model_id] = {&#39;filename&#39;: os.path.basename(model.filename),
+                                 &#39;extension&#39;: self.fields[&#39;y&#39;],
+                                 &#39;alt_extension&#39;: self.fields[&#39;y_alt&#39;],
+                                 &#39;model_id&#39;: model_id,
+                                 &#39;enabled&#39;: model.enabled,
+                                 &#39;color&#39;: mc.to_hex(self.colors[model_id][0]),
+                                 &#39;marker&#39;: self.markers[model_id],
+                                 }
+        return details</div>
+
+
+<div class="viewcode-block" id="OneDimPane.add_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.add_model">[docs]</a>
+    def add_model(self, model: MT) -&gt; List[DT]:
+        &quot;&quot;&quot;
+        Add a model to the pane.
+
+        The model is copied before adding so the data can be manipulated
+        without changing the root model.
+
+        If the model already exists in the pane, no action is taken.
+
+        Parameters
+        ----------
+        model : high_model.HighModel
+            Model object to add.
+
+        Returns
+        -------
+        new_lines : list
+            Keys are model IDs; values are dicts with order number
+            keys and dict values, containing new artists added to
+            the Pane axes.
+        &quot;&quot;&quot;
+        new_lines = list()
+
+        if model.id not in self.models.keys():
+            self.models[model.id] = copy.deepcopy(model)
+            self.models[model.id].extension = self.fields[&#39;y&#39;]
+
+            marker_index = model.index % len(self.default_markers)
+            self.markers[model.id] = self.default_markers[marker_index]
+
+            self.orders[model.id] = list()
+            self.colors[model.id] = list()
+            for order in model.orders:
+                label = f&#39;{order.number}.{order.aperture}&#39;
+                self.orders[model.id].append(label)
+
+                base_color_index = model.index % len(self.default_colors)
+                base_color = self.default_colors[base_color_index]
+                if order.aperture &gt; 0:
+                    aperture_colors = [base_color]
+                    aperture_colors.extend(self.aperture_cycle[base_color])
+                    color_index = order.aperture % len(aperture_colors)
+                    color = aperture_colors[color_index]
+                else:
+                    color = base_color
+                self.colors[model.id].append(color)
+                log.debug(f&#39;Model index: {model.index}; &#39;
+                          f&#39;color index: {base_color_index}&#39;)
+
+            self.data_changed = True
+
+            new_order_lines = self._plot_model(self.models[model.id])
+            if new_order_lines:
+                new_lines.extend(new_order_lines)
+            else:
+                raise EyeError(&#39;Unable to plot model&#39;)
+
+        return new_lines</div>
+
+
+<div class="viewcode-block" id="OneDimPane.update_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.update_model">[docs]</a>
+    def update_model(self, models: MT):
+        &quot;&quot;&quot;
+        Update a pre-existing model with a copy of the original model.
+
+        The model is copied so that the data can be manipulated
+        without changing the root model.
+
+        Parameters
+        ----------
+        models : high_model.HighModel
+            Model object to add.
+        &quot;&quot;&quot;
+
+        for model_id, backup_model in models.items():
+            if model_id in self.models.keys():
+                # Need to get the current enabled status of the model
+                # and apply it to the backup
+                state = self.models[model_id].enabled_state()
+                self.models[model_id] = copy.deepcopy(backup_model)
+                self.models[model_id].set_enabled_state(state)</div>
+
+
+<div class="viewcode-block" id="OneDimPane.remove_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.remove_model">[docs]</a>
+    def remove_model(self, filename: Optional[str] = None,
+                     model_id: Optional[IDT] = None,
+                     model: Optional[MT] = None) -&gt; None:
+        &quot;&quot;&quot;
+        Remove a model from the pane.
+
+        The model can be specified by either its filename or
+        the model directly.
+
+        Parameters
+        ----------
+        filename : str, optional
+            Name of the file corresponding to the model to remove.
+        model_id : str, optional
+            Specific id to a model object (high_model.HighModel).
+        model : high_model.HighModel, optional
+            Model object to remove.
+        &quot;&quot;&quot;
+        target_mid = None
+        if model_id:
+            target_mid = model_id
+        else:
+            for k, m in self.models.items():
+                if model:
+                    if k == model.id:
+                        target_mid = k
+                elif filename:
+                    if filename == m.filename:
+                        target_mid = k
+        if target_mid:
+            log.debug(f&#39;Removing {target_mid}&#39;)
+            for collection in [self.models, self.colors, self.markers,
+                               self.orders]:
+                try:
+                    del collection[target_mid]
+                except KeyError:
+                    pass
+            if self.model_count() == 0:
+                self.units = dict()
+        else:
+            log.debug(f&#39;Unable to remove {model_id} ({model}, {filename})&#39;)</div>
+
+
+<div class="viewcode-block" id="OneDimPane.contains_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.contains_model">[docs]</a>
+    def contains_model(self, model_id: str, order: Optional[int] = None
+                       ) -&gt; bool:
+        &quot;&quot;&quot;
+        Check if a specified model exists in the pane.
+
+        Parameters
+        ----------
+        model_id : str
+            Model to be inspected.
+        order : int, optional
+            Order number to match. If provided, the order&#39;s presence
+            in the pane is verified. If not, only the model&#39;s presence
+            is verified.
+
+        Returns
+        -------
+        bool
+            True if the model/order are present; False otherwise.
+
+        &quot;&quot;&quot;
+        if model_id in self.models.keys():
+            if order is not None:
+                if order in self.orders[model_id]:
+                    return True
+                else:
+                    return False
+            else:
+                return True
+        return False</div>
+
+
+<div class="viewcode-block" id="OneDimPane.update_reference_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.update_reference_data">[docs]</a>
+    def update_reference_data(self, reference_models: Optional[RT] = None,
+                              plot: Optional[bool] = True
+                              ) -&gt; Optional[List[Union[DT, Dict]]]:
+        &quot;&quot;&quot;
+        Update the reference data.
+
+        Parameters
+        ----------
+        reference_models : reference_model.ReferenceData, optional
+            Reference models to update.
+        plot : bool
+            If set, reference data is (re)plotted. Otherwise, current
+            reference options are returned.
+
+        Returns
+        -------
+        reference_artists : list
+            A list of drawing.Drawing objects when `plot` is True.
+            A list of dictionaries when `plot` is False. If the
+            inputs are invalid then None is returned.
+
+        &quot;&quot;&quot;
+        if reference_models is None and self.reference is None:
+            return None
+        if self.fields[&#39;x&#39;] != &#39;wavepos&#39;:
+            return None
+        if reference_models is not None:
+            # replace any existing reference with new one
+            self.reference = reference_models
+        if plot:
+            reference_artists = self._plot_reference_lines()
+        else:
+            reference_artists = self._current_reference_options()
+
+        return reference_artists</div>
+
+
+<div class="viewcode-block" id="OneDimPane.unload_ref_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.unload_ref_model">[docs]</a>
+    def unload_ref_model(self):
+        &quot;&quot;&quot;Unload the reference data.&quot;&quot;&quot;
+        if self.reference:
+            self.reference.unload_data()</div>
+
+
+<div class="viewcode-block" id="OneDimPane.possible_units">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.possible_units">[docs]</a>
+    def possible_units(self) -&gt; Dict[str, List[str]]:
+        &quot;&quot;&quot;
+        Determine the possible units for the current fields.
+
+        Returns
+        -------
+        units : dict
+            Keys are axis names; values are lists of unit names.
+        &quot;&quot;&quot;
+        available = dict()
+        for axis in [&#39;x&#39;, &#39;y&#39;, &#39;y_alt&#39;]:
+            available[axis] = list()
+            for model in self.models.values():
+                low_model = model.retrieve(order=0, field=self.fields[axis],
+                                           level=&#39;low&#39;)
+                if low_model is None:
+                    continue
+                available[axis].extend(
+                    low_model.available_units[low_model.kind])
+        return available</div>
+
+
+<div class="viewcode-block" id="OneDimPane.current_units">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.current_units">[docs]</a>
+    def current_units(self) -&gt; Dict[str, str]:
+        &quot;&quot;&quot;
+        Determine the current units for the current fields.
+
+        Returns
+        -------
+        units : dict
+            Keys are axis names; values are unit names.
+        &quot;&quot;&quot;
+        current = {&#39;x&#39;: &#39;&#39;, &#39;y&#39;: &#39;&#39;, &#39;y_alt&#39;: &#39;&#39;}
+        if not self.models:
+            return current
+        else:
+            if any(self.units.values()):
+                return self.units
+            else:
+                for axis in current.keys():
+                    # take unit from first model only -- they better match
+                    if self.fields[axis] is None:
+                        continue
+                    models = list(self.models.values())
+                    low_model = models[0].retrieve(
+                        order=0, field=self.fields[axis], level=&#39;low&#39;)
+                    if low_model is None:
+                        continue
+                    current[axis] = low_model.unit_key
+                return current</div>
+
+
+<div class="viewcode-block" id="OneDimPane.set_orders">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.set_orders">[docs]</a>
+    def set_orders(self, orders: Dict[IDT, List[int]],
+                   enable: Optional[bool] = True,
+                   aperture: Optional[bool] = False,
+                   return_updates: Optional[bool] = False
+                   ) -&gt; Optional[List[DT]]:
+        &quot;&quot;&quot;
+        Enable specified orders.
+
+        Parameters
+        ----------
+        orders : dict
+            Keys are model IDs; values are lists of orders
+            to enable.
+        enable : bool, optional
+            Set to True to enable; False to disable.
+        aperture : bool, optional
+            True if apertures are present; False otherwise.
+        return_updates : bool, optional
+            If set, an update structure is returned.
+
+        Returns
+        -------
+        updates : list, optional
+            Order visibility updates applied.
+        &quot;&quot;&quot;
+        updates = list()
+        for model_id, model_orders in orders.items():
+            try:
+                available_orders = self.orders[model_id]
+            except KeyError:
+                continue
+            else:
+                log.debug(f&#39;{&quot;Enabling&quot; if enable else &quot;Disabling&quot;} &#39;
+                          f&#39; {model_orders} in &#39;
+                          f&#39;{available_orders}&#39;)
+                self.models[model_id].enable_orders(model_orders, enable,
+                                                    aperture)
+                self.data_changed = True
+
+                if return_updates:
+                    updates.extend(self._order_visibility_updates(model_id))
+        return updates</div>
+
+
+    def _order_visibility_updates(self, model_id, error=False):
+        model = self.models[model_id]
+        updates = list()
+        for order_number in self.orders[model_id]:
+            try:
+                o_num, a_num = order_number.split(&#39;.&#39;)
+            except ValueError:  # pragma: no cover
+                o_num = order_number
+                a_num = 0
+            order = model.retrieve(order=o_num, aperture=a_num,
+                                   level=&#39;high&#39;)
+            spectrum = model.retrieve(order=order_number, aperture=a_num,
+                                      level=&#39;low&#39;, field=self.fields[&#39;y&#39;])
+            if order is None or spectrum is None:  # pragma: no cover
+                continue
+            visible = model.enabled &amp; order.enabled &amp; spectrum.enabled
+            error_visible = visible &amp; self.show_error
+            mid_model = f&#39;{o_num}.{a_num}&#39;
+
+            args = {&#39;high_model&#39;: model.filename, &#39;mid_model&#39;: mid_model,
+                    &#39;model_id&#39;: model.id, &#39;axes&#39;: &#39;any&#39;}
+            if error:
+                line = drawing.Drawing(updates={&#39;visible&#39;: error_visible},
+                                       kind=&#39;error&#39;, **args)
+
+                updates.append(line)
+
+            else:
+                line = drawing.Drawing(updates={&#39;visible&#39;: visible},
+                                       kind=&#39;line&#39;, **args)
+
+                updates.append(line)
+                line = drawing.Drawing(updates={&#39;visible&#39;: error_visible},
+                                       kind=&#39;error&#39;, **args)
+
+                updates.append(line)
+        return updates
+
+<div class="viewcode-block" id="OneDimPane.set_model_enabled">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.set_model_enabled">[docs]</a>
+    def set_model_enabled(self, model_id: str, state: bool) -&gt; None:
+        &quot;&quot;&quot;
+        Mark a model as enabled (visible) or disabled (hidden).
+
+        Parameters
+        ----------
+        model_id : str
+            The ID for the model to enable.
+        state : bool
+            If True, enable the model.  If False, disable the model.
+        &quot;&quot;&quot;
+        log.debug(f&#39;Model {model_id} enabled: {state}&#39;)
+        self.models[model_id].enabled = state</div>
+
+
+<div class="viewcode-block" id="OneDimPane.set_all_models_enabled">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.set_all_models_enabled">[docs]</a>
+    def set_all_models_enabled(self, state: bool) -&gt; None:
+        &quot;&quot;&quot;
+        Mark all model as enabled (visible) or disabled (hidden).
+
+        Parameters
+        ----------
+        state : bool
+            If True, enable all models.  If False, disable all models.
+        &quot;&quot;&quot;
+        for model_id in self.models:
+            self.set_model_enabled(model_id, state)</div>
+
+
+    ####
+    # Plotting
+    ####
+<div class="viewcode-block" id="OneDimPane.create_artists_from_current_models">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.create_artists_from_current_models">[docs]</a>
+    def create_artists_from_current_models(self) -&gt; List[DT]:
+        &quot;&quot;&quot;
+        Create new artists from all current models.
+
+        Returns
+        -------
+        new_artists : list
+            A list of reference_model.ReferenceData objects associated with
+            the current model.
+        &quot;&quot;&quot;
+        # TODO add a clause for y-alt
+        if self.fields[&#39;y&#39;] == self.fields[&#39;x&#39;]:
+            self.signals.obtain_raw_model.emit()
+
+        new_artists = list()
+        to_remove = set()
+        for model_id, model in self.models.items():
+            new_artist = self._plot_model(model)
+            if new_artist is None:
+                to_remove.add(model)
+            else:
+                new_artists.extend(new_artist)
+
+        if to_remove:
+            names = list()
+            for model in list(to_remove):
+                self.remove_model(model=model)
+                names.append(os.path.basename(model.filename))
+            log.warning(f&#39;Files {&quot;, &quot;.join(names)} are not compatible with &#39;
+                        f&#39;the pane\&#39;s current settings.&#39;)
+
+        return new_artists</div>
+
+
+    def _plot_model(self, model: MT) -&gt; Optional[List[DT]]:
+        &quot;&quot;&quot;
+        Plot a model in the current axes.
+
+        Parameters
+        ----------
+        model : high_model.HighModel
+            The model to plot.
+
+        Returns
+        -------
+        new_lines : list of Drawing
+            New lines plotted. None is returned if the model is
+            incompatible with the pane, such as irreconcilable units.
+        &quot;&quot;&quot;
+        log.debug(f&#39;Starting limits: {self.get_axis_limits()}, &#39;
+                  f&#39;{self.ax.get_autoscale_on()}&#39;)
+
+        model.extension = self.fields[&#39;y&#39;]
+
+        log.debug(f&#39;Plotting {len(self.orders[model.id])} orders &#39;
+                  f&#39;for {model.id}&#39;)
+        new_lines = list()
+        n_orders = len(model.orders)
+        n_apertures = max([model.num_aperture, 1])
+        if n_orders &gt; 1:
+            alpha_val = np.linspace(0.7, 1, n_orders)
+            log.debug(f&#39;Alpha values for {n_orders} orders: {alpha_val}&#39;)
+        else:
+            alpha_val = [1]
+        for ap_i in range(n_apertures):
+            for order_i, orders in enumerate(model.orders):
+                order = orders.number
+                aperture = orders.aperture
+                spectrum = model.retrieve(order=order, level=&#39;low&#39;,
+                                          field=self.fields[&#39;y&#39;],
+                                          aperture=aperture)
+
+                if spectrum is None:
+                    continue
+                # convert to current units, or remove model and
+                # stop trying to load it
+                # log.debug(f&#39;Current units: {self.units}&#39;)
+                if any(self.units.values()):
+                    try:
+                        if self.fields[&#39;y&#39;] == self.fields[&#39;x&#39;]:
+                            log.debug(f&#39;Testing same fields: {self.fields}&#39;)
+                            x_model, y_model = self.get_xy_data(model, order,
+                                                                aperture)
+                            x = x_model.retrieve(order=order, level=&#39;raw&#39;,
+                                                 field=self.fields[&#39;x&#39;],
+                                                 aperture=aperture)
+                            y = y_model.retrieve(order=order, level=&#39;raw&#39;,
+                                                 field=self.fields[&#39;y&#39;],
+                                                 aperture=aperture)
+                        else:
+                            self._convert_low_model_units(model, order, &#39;y&#39;,
+                                                          self.units[&#39;y&#39;],
+                                                          aperture)
+                            self._convert_low_model_units(model, order, &#39;x&#39;,
+                                                          self.units[&#39;x&#39;],
+                                                          aperture)
+                            x = model.retrieve(order=order, level=&#39;raw&#39;,
+                                               field=self.fields[&#39;x&#39;],
+                                               aperture=aperture)
+                            y = model.retrieve(order=order, level=&#39;raw&#39;,
+                                               field=self.fields[&#39;y&#39;],
+                                               aperture=aperture)
+                    except ValueError:
+                        return None
+                else:
+                    x = model.retrieve(order=order, level=&#39;raw&#39;,
+                                       field=self.fields[&#39;x&#39;],
+                                       aperture=aperture)
+                    y = model.retrieve(order=order, level=&#39;raw&#39;,
+                                       field=self.fields[&#39;y&#39;],
+                                       aperture=aperture)
+
+                if x is None or y is None:
+                    log.debug(f&#39;Failed to retrieve raw data for primary &#39;
+                              f&#39;{model.id}, {order}, {self.fields}&#39;)
+                    continue
+
+                if x.shape != y.shape:
+                    log.debug(f&#39;Incompatible data shapes: &#39;
+                              f&#39;{x.shape} and {y.shape}; skipping.&#39;)
+                    continue
+
+                visible = model.enabled and spectrum.enabled and orders.enabled
+
+                label_fields = [f&#39;{model.filename}&#39;, f&#39;Order {order + 1}&#39;,
+                                f&#39;{self.fields[&quot;y&quot;]}&#39;]
+                if n_apertures &gt; 1:
+                    label_fields.insert(2, f&#39;Aperture {aperture + 1}&#39;)
+                label = &#39;, &#39;.join(label_fields)
+
+                # add line artists
+                line = self._plot_single_line(x, y, model_id=model.id,
+                                              visible=visible, label=label,
+                                              alpha=alpha_val[order_i],
+                                              aperture=aperture)
+                new_line = {&#39;artist&#39;: line, &#39;fields&#39;: self.fields,
+                            &#39;kind&#39;: &#39;line&#39;, &#39;high_model&#39;: model.filename,
+                            &#39;mid_model&#39;: f&#39;{order}.{aperture}&#39;,
+                            &#39;label&#39;: label, &#39;axes&#39;: &#39;primary&#39;,
+                            &#39;model_id&#39;: model.id}
+
+                new_lines.append(drawing.Drawing(**new_line))
+
+                # add cursor artists
+                cursor = self._plot_cursor(x, y, model_id=model.id,
+                                           aperture=aperture)
+                new_line[&#39;artist&#39;] = cursor
+                new_line[&#39;kind&#39;] = &#39;cursor&#39;
+
+                new_lines.append(drawing.Drawing(**new_line))
+
+                fields_with_errors = {&#39;flux&#39;: &#39;spectral_error&#39;,
+                                      &#39;response&#39;: &#39;response_error&#39;}
+                for field, error_field in fields_with_errors.items():
+                    if field not in self.fields[&#39;y&#39;].lower():
+                        continue
+                    elif error_field in self.fields[&#39;y&#39;].lower():
+                        continue
+                    error = model.retrieve(order=order, level=&#39;raw&#39;,
+                                           field=error_field,
+                                           aperture=aperture)
+                    label_fields[-1] = f&#39;{error_field}&#39;
+                    label = &#39;, &#39;.join(label_fields)
+                    color = self.colors[model.id][aperture]
+                    line = self._plot_flux_error(x, y, error,
+                                                 color=color,
+                                                 label=label)
+                    error_visible = visible and self.show_error
+                    if not error_visible:
+                        line.set_visible(False)
+                    new_line[&#39;artist&#39;] = line
+                    new_line[&#39;kind&#39;] = &#39;error_range&#39;
+                    new_line[&#39;label&#39;] = label
+                    new_lines.append(drawing.Drawing(**new_line))
+                if self.show_overplot:
+                    y = model.retrieve(order=order, level=&#39;raw&#39;,
+                                       field=self.fields[&#39;y_alt&#39;])
+                    if y is None:
+                        log.debug(f&#39;Failed to retrieve raw data for alt y &#39;
+                                  f&#39;{model.id}, {order}, {self.fields}&#39;)
+                    elif x.shape == y.shape:
+                        # only add overplot if x and y shapes match
+                        label_fields[-1] = f&#39;{self.fields[&quot;y_alt&quot;]}&#39;
+                        label = &#39;, &#39;.join(label_fields)
+                        line = self._plot_single_line(x, y, model_id=model.id,
+                                                      visible=visible,
+                                                      label=label, axis=&#39;alt&#39;)
+                        new_line[&#39;axes&#39;] = &#39;alt&#39;
+                        new_line[&#39;artist&#39;] = line
+                        new_line[&#39;kind&#39;] = &#39;line&#39;
+                        new_line[&#39;label&#39;] = label
+                        new_lines.append(drawing.Drawing(**new_line))
+
+                        cursor = self._plot_cursor(x, y, model_id=model.id,
+                                                   axis=&#39;alt&#39;,
+                                                   aperture=aperture)
+                        new_line[&#39;artist&#39;] = cursor
+                        new_line[&#39;kind&#39;] = &#39;cursor&#39;
+                        new_lines.append(drawing.Drawing(**new_line))
+
+            # turn on/off grid lines as desired
+            else:
+                # This is only reached if the order loop did
+                # not break. Breaks occur if the data is incompatible
+                # with the current pane, and will be true for all
+                # apertures in the model. Without this and the following
+                # break statement the user would get a separate pop-up
+                # warning for each aperture.
+                continue
+            break  # pragma: no cover
+        self.ax.grid(self.show_grid)
+
+        # set initial units from first loaded model
+        if not any(self.units.values()):
+            self.units = self.current_units()
+
+        # reset units if no models are loaded
+        if self.model_count() == 0:
+            self.units = dict.fromkeys(self.units, &#39;&#39;)
+
+        log.debug(f&#39;Ending limits: {self.get_axis_limits()}, &#39;
+                  f&#39;{self.ax.get_autoscale_on()}&#39;)
+        self.apply_configuration()
+
+        return new_lines
+
+    def _plot_single_line(self, x, y, label, model_id, visible,
+                          axis=&#39;primary&#39;, alpha=1, aperture=None):
+        if axis == &#39;primary&#39;:
+            ax = self.ax
+            width = 1.5
+            scalex = True
+            if self.plot_type == &#39;scatter&#39;:
+                style = &#39;&#39;
+                marker = self.markers[model_id]
+            else:
+                style = &#39;-&#39;
+                if self.show_markers:
+                    marker = self.markers[model_id]
+                else:
+                    marker = None
+        else:
+            ax = self.ax_alt
+            alpha = 0.5
+            width = 1
+            style = &#39;:&#39;
+            scalex = False
+            marker = None
+        if aperture is None:
+            aper_index = 0
+        else:
+            aper_index = aperture % len(self.aperture_cycle)
+        color = self.colors[model_id][aper_index]
+        style_kwargs = {&#39;color&#39;: color,
+                        &#39;alpha&#39;: alpha,
+                        &#39;linewidth&#39;: width,
+                        &#39;linestyle&#39;: style,
+                        &#39;marker&#39;: marker,
+                        &#39;scalex&#39;: scalex}
+
+        if self.plot_type == &#39;step&#39;:
+            (line,) = ax.step(x, y, where=&#39;mid&#39;, animated=True, label=label,
+                              **style_kwargs)
+        else:
+            (line,) = ax.plot(x, y, animated=True, label=label,
+                              **style_kwargs)
+        if not visible:
+            line.set_visible(False)
+        return line
+
+    def _plot_cursor(self, x, y, model_id, axis=&#39;primary&#39;, aperture=0):
+        &quot;&quot;&quot;
+        Create a cursor marker artist.
+
+        Parameters
+        ----------
+        x : np.ndarray
+            Array of x-axis data points
+        y : np.ndarray
+            Array of y-axis data points
+        model_id : uuid.UUID4
+            Unique id (uuid4) associated with each hdul.
+        axis : {&#39;primary&#39;, &#39;alt&#39;}
+            It denotes which axis is being considered - primary or the
+            alternative axis. Default is set to `Primary`.
+
+        Returns
+        -------
+        Cursor : matplotlib.collections.PathCollection
+            Cursor artist for the given axis.
+        &quot;&quot;&quot;
+        if axis == &#39;primary&#39;:
+            ax = self.ax
+            alpha = 1
+            marker = &#39;x&#39;
+            color = self.colors[model_id][aperture]
+        else:
+            ax = self.ax_alt
+            alpha = 0.5
+            marker = &#39;^&#39;
+            color = self.colors[model_id][aperture]
+        style_kwargs = {&#39;marker&#39;: marker,
+                        &#39;color&#39;: color,
+                        &#39;alpha&#39;: alpha,
+                        &#39;linestyle&#39;: None}
+        # cursor = ax.scatter(x[0], y[0], animated=True, **style_kwargs)
+        cursor = ax.plot(x[0], y[0], animated=True, **style_kwargs)[0]
+        cursor.set_visible(False)
+        return cursor
+
+    def _plot_flux_error(self, x: np.ndarray, y: np.ndarray,
+                         error: np.ndarray, label: str,
+                         color: str) -&gt; mcl.PolyCollection:
+        &quot;&quot;&quot;
+        Plot the error range on the flux.
+
+        Parameters
+        ----------
+        x : np.ndarray
+            Array of x-data.
+        y : np.ndarray
+            Array of y-data.
+        error : np.ndarray
+            Array of error on `y`. Assumed to be symmetric.
+        label : str
+            Label to give to the line.
+        color : str
+            Color for the error range artist.
+
+        Returns
+        -------
+        poly : matplotlib.collections.PolyCollection
+            The plotted error lines.
+        &quot;&quot;&quot;
+        options = {&#39;alpha&#39;: 0.2, &#39;animated&#39;: True, &#39;label&#39;: label,
+                   &#39;color&#39;: color}
+
+        if self.plot_type == &#39;step&#39; or self.plot_type == &#39;scatter&#39;:
+            options[&#39;step&#39;] = &#39;mid&#39;
+        if error is None:
+            error = np.full(len(x), np.nan)
+
+        poly = self.ax.fill_between(x, y - error, y + error,
+                                    **options)
+        return poly
+
+    def _plot_reference_lines(self) -&gt; List[Optional[DT]]:
+        &quot;&quot;&quot;
+        Generate a list of reference lines.
+
+        Returns
+        -------
+        lines : list
+            List of drawing.Drawing objects for reference lines to be plotted.
+        &quot;&quot;&quot;
+        lines = list()
+        if self.reference is None or len(self.models) == 0:
+            return lines
+        label_style = {&#39;color&#39;: self.ref_color, &#39;fontfamily&#39;: &#39;monospace&#39;,
+                       &#39;rotation&#39;: &#39;vertical&#39;, &#39;horizontalalignment&#39;: &#39;right&#39;,
+                       &#39;zorder&#39;: 0, &#39;alpha&#39;: 0.6, &#39;fontsize&#39;: &#39;small&#39;}
+        line_style = {&#39;color&#39;: self.ref_color, &#39;alpha&#39;: 0.6, &#39;linestyle&#39;: &#39;-&#39;,
+                      &#39;zorder&#39;: 0}
+
+        label_ypos = 0.05  # in axes fraction
+        to_plot = self._window_line_list()
+        for name, wavelengths in to_plot.items():
+            for wavelength in wavelengths:
+                if self.reference.get_visibility(&#39;ref_line&#39;):
+                    line = self.ax.axvline(wavelength, label=name,
+                                           **line_style)
+                    if self.reference.get_visibility(&#39;ref_label&#39;):
+                        label = self.ax.annotate(
+                            name, (wavelength, label_ypos),
+                            xycoords=(&#39;data&#39;, &#39;axes fraction&#39;), **label_style)
+                    else:
+                        label = None
+                else:
+                    line = None
+                    label = None
+
+                new = {&#39;artist&#39;: line, &#39;kind&#39;: &#39;ref_line&#39;,
+                       &#39;fields&#39;: self.fields,
+                       &#39;high_model&#39;: &#39;reference&#39;, &#39;mid_model&#39;: &#39;line&#39;,
+                       &#39;axis&#39;: &#39;primary&#39;, &#39;pane&#39;: self}
+                lines.append(drawing.Drawing(**new))
+                new = {&#39;artist&#39;: label, &#39;kind&#39;: &#39;ref_label&#39;,
+                       &#39;fields&#39;: self.fields,
+                       &#39;high_model&#39;: &#39;reference&#39;, &#39;mid_model&#39;: &#39;label&#39;,
+                       &#39;axis&#39;: &#39;primary&#39;, &#39;data_id&#39;: f&#39;{wavelength:.5f}&#39;,
+                       &#39;pane&#39;: self}
+                lines.append(drawing.Drawing(**new))
+        return lines
+
+    def _window_line_list(self, xlim: Optional[Union[Tuple, List[Num]]] = None
+                          ) -&gt; Dict[str, List[float]]:
+        if xlim is None:
+            xlim = self.get_axis_limits(&#39;x&#39;)
+        names_in_limits = dict()
+        try:
+            converted_lines = self.reference.convert_line_list_unit(
+                target_unit=self.units[&#39;x&#39;])
+        except KeyError:
+            return names_in_limits
+
+        for n, w in converted_lines.items():
+            for x in w:
+                if xlim[0] &lt; x &lt; xlim[1]:
+                    if n in names_in_limits:
+                        names_in_limits[n].append(x)
+                    else:
+                        names_in_limits[n] = [x]
+        if self.units[&#39;x&#39;] == &#39;pixel&#39;:
+            names_in_limits = dict()
+
+        return names_in_limits
+
+    def _current_reference_options(self):
+        kinds = [&#39;ref_line&#39;, &#39;ref_label&#39;]
+        artist_kinds = [&#39;ref_lines&#39;, &#39;ref_labels&#39;]
+        options = list()
+        if self.reference is None:
+            return options
+
+        to_plot = self._window_line_list()
+        for name, wavelength in to_plot.items():
+            for a_kind, kind in zip(artist_kinds, kinds):
+                option = dict()
+                option[&#39;model_id&#39;] = a_kind
+                option[&#39;order&#39;] = name
+                option[&#39;color&#39;] = self.colors.get(kind, self.ref_color)
+                option[&#39;visible&#39;] = self.reference.get_visibility(kind)
+                options.append(option)
+        return options
+
+<div class="viewcode-block" id="OneDimPane.apply_configuration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.apply_configuration">[docs]</a>
+    def apply_configuration(self) -&gt; None:
+        &quot;&quot;&quot;Update limits, scales, and labels for the plot.&quot;&quot;&quot;
+        self._apply_limits()
+        self._apply_scales()
+        self._apply_labels()</div>
+
+
+    def _apply_limits(self) -&gt; None:
+        &quot;&quot;&quot;Update plot limits for current data.&quot;&quot;&quot;
+        if self.data_changed:
+            self.reset_zoom()
+            self.data_changed = False
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter(&#39;ignore&#39;, UserWarning)
+                self.ax.set_xlim(self.limits[&#39;x&#39;])
+                self.ax.set_ylim(self.limits[&#39;y&#39;])
+                if self.show_overplot:
+                    self.ax_alt.set_xlim(self.limits[&#39;x&#39;])
+                    self.ax_alt.set_ylim(self.limits[&#39;y_alt&#39;])
+
+    def _apply_scales(self) -&gt; None:
+        &quot;&quot;&quot;Update plot scales for current preferences.&quot;&quot;&quot;
+        self.ax.set_xscale(self.scale[&#39;x&#39;])
+        self.ax.set_yscale(self.scale[&#39;y&#39;])
+        if self.show_overplot:
+            self.ax_alt.set_yscale(self.scale[&#39;y_alt&#39;])
+
+    def _apply_labels(self) -&gt; None:
+        &quot;&quot;&quot;Update plot labels for current fields and units.&quot;&quot;&quot;
+        x_label = self._generate_axes_label(self.fields[&#39;x&#39;],
+                                            self.units.get(&#39;x&#39;, &#39;&#39;))
+        self.ax.set_xlabel(x_label)
+
+        y_label = self._generate_axes_label(self.fields[&#39;y&#39;],
+                                            self.units.get(&#39;y&#39;, &#39;&#39;))
+        self.ax.set_ylabel(y_label)
+
+        if self.show_overplot:
+            y_label = self._generate_axes_label(self.fields[&#39;y_alt&#39;],
+                                                self.units.get(&#39;y_alt&#39;, &#39;&#39;))
+            self.ax_alt.set_ylabel(y_label)
+
+        for ax in [self.ax, self.ax_alt]:
+            try:
+                ax.get_xaxis().get_major_formatter().set_useOffset(False)
+                ax.get_yaxis().get_major_formatter().set_useOffset(False)
+            except AttributeError:
+                pass
+
+    @staticmethod
+    def _generate_axes_label(name: str, unit: str) -&gt; str:
+        &quot;&quot;&quot;
+        Generate a formatted axis label.
+
+        Parameters
+        ----------
+        name : str
+            The field name for the axis.
+        unit : str
+            Unit name for the axis.
+
+        Returns
+        -------
+        label : str
+            The formatted label.
+        &quot;&quot;&quot;
+        name_string = name.capitalize()
+        unit_string = unit.__str__()
+        if len(unit_string) == 0:
+            label = f&#39;{name_string}&#39;
+        elif len(unit_string) &gt; 10:
+            label = f&#39;{name_string}\n[{unit_string}]&#39;
+        else:
+            label = f&#39;{name_string} [{unit_string}]&#39;
+        return label
+
+<div class="viewcode-block" id="OneDimPane.update_colors">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.update_colors">[docs]</a>
+    def update_colors(self) -&gt; List[DT]:
+        &quot;&quot;&quot;
+        Update plot colors for current loaded data.
+
+        Returns
+        -------
+        updates : list of drawing.Drawing
+            Drawing objects containing all color updates.
+        &quot;&quot;&quot;
+        updates = list()
+        for model_id, model in self.models.items():
+            self.colors[model.id] = list()
+            for order_number in self.orders[model_id]:
+                base_color_index = model.index % len(self.default_colors)
+                base_color = self.default_colors[base_color_index]
+                a = int(order_number.split(&#39;.&#39;)[1])
+                if a &gt; 0:
+                    aperture_colors = self.aperture_cycle[base_color]
+                    index = a % len(aperture_colors)
+                    line_color = aperture_colors[index]
+                else:
+                    line_color = base_color
+                self.colors[model_id].append(line_color)
+                fit_color = self.grayscale(line_color)
+                args = {&#39;high_model&#39;: model.filename,
+                        &#39;mid_model&#39;: order_number,
+                        &#39;model_id&#39;: model.id}
+                line = drawing.Drawing(kind=&#39;line&#39;, axes=&#39;primary&#39;,
+                                       updates={&#39;color&#39;: line_color}, **args)
+                line_alt = drawing.Drawing(kind=&#39;line&#39;, axes=&#39;alt&#39;,
+                                           updates={&#39;color&#39;: line_color},
+                                           **args)
+                error = drawing.Drawing(kind=&#39;error_range&#39;,
+                                        updates={&#39;color&#39;: line_color}, **args)
+                fit = drawing.Drawing(kind=&#39;fit&#39;, updates={&#39;color&#39;: fit_color},
+                                      **args)
+                cursor = drawing.Drawing(kind=&#39;cursor&#39;,
+                                         updates={&#39;color&#39;: line_color}, **args)
+                updates.append(line)
+                updates.append(line_alt)
+                updates.append(error)
+                updates.append(fit)
+                updates.append(cursor)
+
+        # also update border color
+        border = drawing.Drawing(high_model=&#39;border&#39;, kind=&#39;border&#39;,
+                                 updates={&#39;color&#39;: self.default_colors[1]})
+        updates.append(border)
+
+        return updates</div>
+
+
+<div class="viewcode-block" id="OneDimPane.update_visibility">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.update_visibility">[docs]</a>
+    def update_visibility(self, error: Optional = False) -&gt; List[DT]:
+        &quot;&quot;&quot;
+        Update plot visibility for current loaded data.
+
+        Parameters
+        ----------
+        error : bool, optional
+            If set, visibility update is applied to error range plots
+            only.
+
+        Returns
+        -------
+        updates : list of drawing.Drawing
+            Drawing objects containing all visibility updates.
+        &quot;&quot;&quot;
+        updates = list()
+        for model_id, model in self.models.items():
+            updates.extend(self._order_visibility_updates(model_id, error))
+        return updates</div>
+
+
+    ####
+    # Getters
+    ####
+<div class="viewcode-block" id="OneDimPane.get_axis_limits">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.get_axis_limits">[docs]</a>
+    def get_axis_limits(self, axis: Optional[str] = None
+                        ) -&gt; Union[Dict[str, List[Num]], List[Num]]:
+        &quot;&quot;&quot;
+        Get the current axis limits.
+
+        Parameters
+        ----------
+        axis : str, optional
+            The axis name to retrieve limits from. If not provided,
+            both axis limits for the axes are returned.
+
+        Returns
+        -------
+        limits : list or dict
+            If axis is specified, only the limits for that axis are
+            returned.  Otherwise, a dictionary with axis name keys and
+            limit values is returned.  Limit values are [low, high].
+        &quot;&quot;&quot;
+        if axis is None:
+            return self.limits
+        else:
+            return self.limits[axis]</div>
+
+
+<div class="viewcode-block" id="OneDimPane.get_unit_string">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.get_unit_string">[docs]</a>
+    def get_unit_string(self, axis: str) -&gt; str:
+        &quot;&quot;&quot;
+        Get the current unit string for the plot label.
+
+        Parameters
+        ----------
+        axis : str
+            The axis name to retrieve units from.
+
+        Returns
+        -------
+        unit_name : str
+            The unit label.
+        &quot;&quot;&quot;
+        if axis == &#39;x&#39;:
+            label = self.ax.get_xlabel()
+        elif axis == &#39;y&#39;:
+            label = self.ax.get_ylabel()
+        elif axis == &#39;z&#39;:
+            label = self.ax.get_zlabel()
+        else:
+            raise SyntaxError(f&#39;Invalid axis selection {axis}&#39;)
+        try:
+            unit = re.split(r&#39;[\[\]]&#39;, label)[1]
+        except IndexError:
+            unit = &#39;-&#39;
+        return unit</div>
+
+
+<div class="viewcode-block" id="OneDimPane.get_axis_scale">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.get_axis_scale">[docs]</a>
+    def get_axis_scale(self) -&gt; Dict[str, str]:
+        &quot;&quot;&quot;
+        Get the axis scale setting.
+
+        Returns
+        -------
+        scale : dict
+            Keys are axis names; values are &#39;log&#39; or &#39;linear&#39;.
+        &quot;&quot;&quot;
+        return self.scale</div>
+
+
+<div class="viewcode-block" id="OneDimPane.get_orders">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.get_orders">[docs]</a>
+    def get_orders(self, enabled_only: bool = False,
+                   by_model: bool = False,
+                   target_model: Optional[MT] = None,
+                   filename: Optional[str] = None,
+                   model_id: Optional[IDT] = None,
+                   kind: Optional[str] = &#39;order&#39;,
+                   ) -&gt; Union[Dict[str, List], List]:
+        &quot;&quot;&quot;
+        Get the orders available for the models in this pane.
+
+        Parameters
+        ----------
+        enabled_only : bool, optional
+            If set, only return the enabled orders. Otherwise,
+            return all orders. Default is False.
+        by_model : bool, optional.
+            If set, return a dictionary with the keys are model names
+            and the values are the orders for that model. Otherwise,
+            return a list of all model orders combined.
+        target_model : high_model.HighModel, optional
+            Target model
+        filename : str, optional
+            Name of file
+        model_id : uuid.UUID, optional
+            Unique UUID for an HDUL.
+        kind : str, optional
+            If &#39;aperture&#39;, only apertures are returned. If &#39;order&#39;,
+            only orders are returned. Otherwise, both are returned.
+
+        Returns
+        -------
+        orders : list, dict
+            Format and details depend on arguments.
+        &quot;&quot;&quot;
+        target = None
+        identifiers = [model_id, target_model, filename]
+        if all([i is None for i in identifiers]):
+            targets = list(self.models.values())
+        else:
+            try:
+                target = self.models[model_id]
+            except KeyError:
+                for mid, model in self.models.items():
+                    if target_model:  # pragma: no cover
+                        if model == target_model:
+                            target = model
+                        else:
+                            continue
+                    elif filename:
+                        if model.filename == filename:
+                            target = model
+                        else:  # pragma: no cover
+                            continue
+            if target is None:
+                return list()
+            else:
+                targets = [target]
+        orders = dict()
+        for target in targets:
+            if enabled_only:
+                enabled = target.list_enabled()
+                if kind == &#39;aperture&#39;:
+                    model_orders = enabled[&#39;apertures&#39;]
+                elif kind == &#39;order&#39;:
+                    model_orders = enabled[&#39;orders&#39;]
+                else:
+                    model_orders = list(set(enabled[&#39;apertures&#39;]
+                                            + enabled[&#39;orders&#39;]))
+            else:
+                if kind == &#39;aperture&#39;:
+                    model_orders = [o.aperture for o in target.orders]
+                elif kind == &#39;order&#39;:
+                    model_orders = [o.number for o in target.orders]
+                else:
+                    model_orders = list(set(
+                        [o.aperture for o in target.orders]
+                        + [o.number for o in target.orders]))
+            orders[target.id] = model_orders
+        if by_model:
+            return orders
+        else:
+            full_orders = list()
+            for v in orders.values():
+                full_orders.extend(list(v))
+            full_orders = list(set(full_orders))
+            return full_orders</div>
+
+
+<div class="viewcode-block" id="OneDimPane.get_field">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.get_field">[docs]</a>
+    def get_field(self, axis: Optional[str] = None
+                  ) -&gt; Union[Dict[str, str], str]:
+        &quot;&quot;&quot;
+        Get the currently displayed field.
+
+        Parameters
+        ----------
+        axis : str, optional
+            If provided, retrieves the field only for the specified axis.
+
+        Returns
+        -------
+        field : str or dict
+            If axis is specified, only the field name for that axis is
+            returned.  Otherwise, a dictionary with axis name keys and
+            field name values is returned.
+        &quot;&quot;&quot;
+        if axis is None or axis == &#39;&#39;:
+            field = self.fields
+        else:
+            try:
+                if axis == &#39;alt&#39;:
+                    field = self.fields[&#39;y_alt&#39;]
+                else:
+                    field = self.fields[axis]
+            except KeyError:
+                field = None
+        if field is None:
+            raise EyeError(f&#39;Unable to retrieve field for axis {axis}&#39;)
+        else:
+            return field</div>
+
+
+<div class="viewcode-block" id="OneDimPane.get_unit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.get_unit">[docs]</a>
+    def get_unit(self, axis: Optional[str] = None
+                 ) -&gt; Union[str, Dict[str, str]]:
+        &quot;&quot;&quot;
+        Get the currently displayed unit.
+
+        Parameters
+        ----------
+        axis : str, optional
+            If provided, retrieves the unit only for the specified axis.
+
+        Returns
+        -------
+        unit : str or dict
+            If axis is specified, only the unit name for that axis is
+            returned.  Otherwise, a dictionary with axis name keys and
+            unit name values is returned.
+        &quot;&quot;&quot;
+        if axis is None or axis == &#39;&#39;:
+            if not self.units:
+                units = {&#39;x&#39;: &#39;&#39;, &#39;y&#39;: &#39;&#39;, &#39;y_alt&#39;: &#39;&#39;}
+            else:
+                units = self.units
+        else:
+            try:
+                if axis == &#39;alt&#39;:
+                    units = self.units[&#39;y_alt&#39;]
+                else:
+                    units = self.units[axis]
+            except KeyError:
+                units = None
+        if units is None:
+            raise EyeError(f&#39;Unable to retrieve units for axis {axis}&#39;)
+        else:
+            return units</div>
+
+
+<div class="viewcode-block" id="OneDimPane.get_scale">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.get_scale">[docs]</a>
+    def get_scale(self, axis: Optional[str] = None
+                  ) -&gt; Union[str, Dict[str, str]]:
+        &quot;&quot;&quot;
+        Get the currently displayed scale.
+
+        Parameters
+        ----------
+        axis : str, optional
+            If provided, retrieves the scale only for the specified axis.
+
+        Returns
+        -------
+        scale : str or dict
+            If axis is specified, only the scale name for that axis is
+            returned.  Otherwise, a dictionary with axis name keys and
+            scale name values is returned.
+        &quot;&quot;&quot;
+        if axis is None or axis == &#39;&#39;:
+            scale = self.scale
+        else:
+            try:
+                if axis == &#39;alt&#39;:
+                    scale = self.scale[&#39;y_alt&#39;]
+                else:
+                    scale = self.scale[axis]
+            except KeyError:
+                scale = None
+        if scale is None:
+            raise EyeError(f&#39;Unable to retrieve scale for axis {axis}&#39;)
+        else:
+            return scale</div>
+
+
+    ####
+    # Setters
+    ####
+    # TODO: Add legend support
+<div class="viewcode-block" id="OneDimPane.set_legend">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.set_legend">[docs]</a>
+    def set_legend(self):
+        &quot;&quot;&quot;
+        Set a legend for the plot.
+
+        Not yet implemented.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="OneDimPane.set_limits">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.set_limits">[docs]</a>
+    def set_limits(self, limits: Dict[str, Sequence[Num]]) -&gt; None:
+        &quot;&quot;&quot;
+        Set the plot limits.
+
+        Parameters
+        ----------
+        limits : dict
+            Keys are axis names; values are limits to set.
+        &quot;&quot;&quot;
+        log.debug(f&#39;Setting axis limits to {limits}&#39;)
+        for axis in self.limits.keys():
+            try:
+                self.limits[axis] = sorted(limits[axis])
+            except (KeyError, TypeError):
+                continue
+        try:
+            alt = self.ax_alt.get_ylim()
+        except AttributeError:
+            alt = None
+        log.debug(f&#39;Verify: x={self.ax.get_xlim()}, &#39;
+                  f&#39;y={self.ax.get_ylim()}, y_alt={alt}&#39;)</div>
+
+
+<div class="viewcode-block" id="OneDimPane.set_scales">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.set_scales">[docs]</a>
+    def set_scales(self, scales: Dict[str, str]) -&gt; None:
+        &quot;&quot;&quot;
+        Set the plot scale.
+
+        Parameters
+        ----------
+        scales : dict
+            Keys are axis names; values are scales to set
+            (&#39;log&#39; or &#39;linear&#39;).
+        &quot;&quot;&quot;
+        log.debug(f&#39;Setting axis scales to {scales}&#39;)
+        for axis in self.scale.keys():
+            try:
+                if scales[axis] in [&#39;linear&#39;, &#39;log&#39;]:
+                    self.scale[axis] = scales[axis]
+            except KeyError:
+                continue</div>
+
+
+    def _convert_low_model_units(self, model: MT, order_number: int,
+                                 axis: str, target_unit: str, aperture: int
+                                 ) -&gt; None:
+        &quot;&quot;&quot;
+        Convert data to new units.
+
+        Parameters
+        ----------
+        model : high_model.HighModel
+            The model to modify.
+        order_number : int
+            The spectral order to modify.
+        axis : str
+            The axis name to modify (&#39;x&#39; or &#39;y&#39;).
+        target_unit : str
+            The unit to convert to.
+
+        Raises
+        ------
+        ValueError
+            If data cannot be converted to the specified units.
+        &quot;&quot;&quot;
+        spectrum = model.retrieve(order=order_number, aperture=aperture,
+                                  level=&#39;low&#39;, field=self.fields[axis])
+        if spectrum is None:
+            raise EyeError(f&#39;Retrieved None from {model} (order &#39;
+                           f&#39;{order_number}, field {self.fields[axis]}&#39;)
+        if spectrum.kind in [&#39;flux&#39;, &#39;wavelength&#39;]:
+            wave_spectrum = model.retrieve(order=order_number,
+                                           aperture=aperture,
+                                           level=&#39;low&#39;, field=&#39;wavepos&#39;)
+            wavelength_data = wave_spectrum.data
+            wavelength_unit = wave_spectrum.unit_key
+        else:
+            wavelength_data = None
+            wavelength_unit = None
+        spectrum.convert(target_unit, wavelength_data, wavelength_unit)
+
+        if &#39;flux&#39; in self.fields[axis]:
+            error_spectrum = model.retrieve(aperture=aperture,
+                                            order=order_number,
+                                            level=&#39;low&#39;,
+                                            field=&#39;spectral_error&#39;)
+            if error_spectrum is not None:
+                error_spectrum.convert(target_unit, wavelength_data,
+                                       wavelength_unit)
+
+<div class="viewcode-block" id="OneDimPane.get_xy_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.get_xy_data">[docs]</a>
+    def get_xy_data(self, model, order, aperture):
+        &quot;&quot;&quot;
+        Get copies of the low model data for x and y axes.
+
+        Parameters
+        ----------
+        model : high_model.HighModel
+            The model to be copied.
+        order : int
+            The spectral order to retrieve.
+        aperture : int
+            The aperture to retrieve.
+
+        Returns
+        -------
+        x_model : models.high_model.Grism
+            A copy of model along the x-axis
+        y_model : models.high_model.Grism
+            A copy of model along the y-axis
+        &quot;&quot;&quot;
+        x_model = copy.deepcopy(model)
+        y_model = copy.deepcopy(model)
+        self._convert_low_model_units(y_model, order,
+                                      &#39;y&#39;, self.units[&#39;y&#39;], aperture=aperture)
+        self._convert_low_model_units(x_model, order,
+                                      &#39;x&#39;, self.units[&#39;x&#39;], aperture=aperture)
+        return x_model, y_model</div>
+
+
+<div class="viewcode-block" id="OneDimPane.set_units">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.set_units">[docs]</a>
+    def set_units(self, units: Dict[str, str], axes: str,
+                  ) -&gt; List[DT]:
+        &quot;&quot;&quot;
+        Set the plot units.
+
+        Parameters
+        ----------
+        units : dict
+            Keys are axis names; values are units to set.
+        axes: &#39;primary&#39;, &#39;alt&#39;, &#39;both&#39;, &#39;all&#39;
+            Which Axes object to pull data from.
+
+        Returns
+        -------
+        updates : list
+            A list of all artists for plotting the changes in units.
+            May not return anything when unable to convert units.
+        &quot;&quot;&quot;
+        updates = list()
+        if &#39;y_alt&#39; not in units and axes in [&#39;alt&#39;, &#39;all&#39;]:
+            units[&#39;y_alt&#39;] = units[&#39;y&#39;]
+            if axes == &#39;alt&#39;:
+                del units[&#39;y&#39;]
+        for axis, current_unit in self.units.items():
+            try:
+                target_unit = units[axis]
+            except KeyError:
+                continue
+            if target_unit == current_unit:
+                continue
+            updated = False
+            min_lim = np.inf
+            max_lim = -np.inf
+
+            # pixel conversion
+            if current_unit == &#39;pixel&#39;:
+                self.signals.obtain_raw_model.emit()
+
+            if self.units[&#39;x&#39;] == &#39;pixel&#39; and axis == &#39;y&#39;:
+                self.signals.obtain_raw_model.emit()
+
+            for model_id, model in self.models.items():
+                for order_number in self.orders[model_id]:
+                    o_num, a_num = (int(i) for i in order_number.split(&#39;.&#39;))
+                    try:
+                        self._convert_low_model_units(model, o_num,
+                                                      axis, target_unit,
+                                                      a_num)
+                    except ValueError:
+                        log.debug(f&#39;Cannot convert units to &#39;
+                                  f&#39;{target_unit} for {model_id}; &#39;
+                                  f&#39;ignoring&#39;)
+                        break
+                    else:
+                        updated = True
+                        data = model.retrieve(order=o_num,
+                                              level=&#39;raw&#39;, aperture=a_num,
+                                              field=self.fields[axis])
+                        details = {f&#39;{axis}_data&#39;: data}
+                        update = drawing.Drawing(high_model=model.filename,
+                                                 mid_model=order_number,
+                                                 model_id=model.id,
+                                                 fields=self.fields,
+                                                 kind=&#39;line&#39;,
+                                                 updates=details)
+                        updates.append(update)
+
+                        # track limit changes for reference data windowing
+                        data_min, data_max = np.nanpercentile(data, [0, 100])
+                        if data_min &lt; min_lim:
+                            min_lim = data_min
+                        if data_max &gt; max_lim:
+                            max_lim = data_max
+
+            if updated:
+                self.units[axis] = units[axis]
+                self.data_changed = True
+                if np.all(np.isfinite([min_lim, max_lim])):
+                    log.debug(f&#39;Min/max data limits: {min_lim} -&gt; {max_lim}&#39;)
+                    self.limits[axis] = [min_lim, max_lim]
+
+        if len(updates) &gt; 0:
+            if &#39;flux&#39; in self.fields[&#39;y&#39;]:
+                updates.extend(self._update_error_artists())
+
+            if self.reference:
+                ref_updates = self._update_reference_artists()
+                updates.extend(ref_updates)
+        return updates</div>
+
+
+    def _update_error_artists(self) -&gt; List[DT]:
+        &quot;&quot;&quot;
+        Update error range artists to new data.
+
+        Returns
+        -------
+        updates : list
+            A list of all artists for plotting the changes
+            in units in error bars.
+        &quot;&quot;&quot;
+        updates = list()
+
+        for model_id, model in self.models.items():
+            for order in self.orders[model_id]:
+                o_num, a_num = order.split(&#39;.&#39;)
+                args = {&#39;order&#39;: o_num, &#39;aperture&#39;: a_num, &#39;level&#39;: &#39;raw&#39;}
+                error = model.retrieve(field=&#39;spectral_error&#39;, **args)
+                x = model.retrieve(field=self.fields[&#39;x&#39;], **args)
+                y = model.retrieve(field=self.fields[&#39;y&#39;], **args)
+                label = (f&#39;{model.id}, Order {int(o_num) + 1}, &#39;
+                         f&#39;Aperture {int(a_num) + 1} spectral_error&#39;)
+                color = self.colors[model.id][int(a_num)]
+                poly = self._plot_flux_error(x, y, error, label=label,
+                                             color=color)
+                if not model.enabled or not self.show_error:
+                    poly.set_visible(False)
+                update = drawing.Drawing(high_model=model.filename,
+                                         mid_model=order, axis=&#39;primary&#39;,
+                                         kind=&#39;error&#39;, label=label,
+                                         updates={&#39;artist&#39;: poly},
+                                         model_id=model.id)
+                updates.append(update)
+        return updates
+
+    def _update_reference_artists(self) -&gt; List[DT]:
+        updates = self._plot_reference_lines()
+        return updates
+
+<div class="viewcode-block" id="OneDimPane.set_fields">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.set_fields">[docs]</a>
+    def set_fields(self, fields: Dict[str, str]) -&gt; None:
+        &quot;&quot;&quot;
+        Set the plot fields.
+
+        Parameters
+        ----------
+        fields : dict
+            Keys are axis names; values are fields to set.
+        &quot;&quot;&quot;
+        for axis in self.fields.keys():
+            try:
+                new_field = fields[axis]
+            except KeyError:
+                continue
+            if self.fields[axis] != new_field:
+                valid = all([m.valid_field(new_field)
+                             for m in self.models.values()])
+                if valid:
+                    self.fields[axis] = new_field
+                    # reset units so that conversion is not triggered
+                    self.set_default_units_for_fields()
+                    self.data_changed = True
+                else:  # pragma: no cover
+                    # ignore: this is likely from setting an
+                    # all primary/all overplots from another pane&#39;s value
+                    log.debug(f&#39;Invalid field provided for axis {axis}: &#39;
+                              f&#39;{fields[axis]}&#39;)</div>
+
+
+<div class="viewcode-block" id="OneDimPane.set_default_units_for_fields">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.set_default_units_for_fields">[docs]</a>
+    def set_default_units_for_fields(self) -&gt; None:
+        &quot;&quot;&quot;Set default unit values for current fields.&quot;&quot;&quot;
+        for model_id, model in self.models.items():
+            for order_number in self.orders[model_id]:
+                for axis in self.fields.keys():
+                    low_model = model.retrieve(order=order_number,
+                                               level=&#39;low&#39;,
+                                               field=self.fields[axis])
+                    if low_model is not None:
+                        self.units[axis] = low_model.get_unit()</div>
+
+
+<div class="viewcode-block" id="OneDimPane.set_plot_type">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.set_plot_type">[docs]</a>
+    def set_plot_type(self, plot_type: str) -&gt; List[DT]:
+        &quot;&quot;&quot;
+        Set the plot line type.
+
+        Parameters
+        ----------
+        plot_type : [&#39;step&#39;, &#39;line&#39;, &#39;scatter&#39;]
+            The plot type to set.
+
+        Returns
+        -------
+        updates : list
+            A list of dictionaries that each describe the change
+            to a single model.
+
+        &quot;&quot;&quot;
+        self.plot_type = plot_type.lower()
+        updates = list()
+        for model_id, model in self.models.items():
+            for order_number in self.orders[model_id]:
+                details = {&#39;type&#39;: self.plot_type}
+                if self.plot_type == &#39;scatter&#39; or self.show_markers:
+                    details[&#39;marker&#39;] = self.markers[model_id]
+                update = drawing.Drawing(high_model=model.filename,
+                                         mid_model=order_number,
+                                         kind=&#39;line&#39;, axes=&#39;primary&#39;,
+                                         updates=details, model_id=model.id)
+                updates.append(update)
+        return updates</div>
+
+
+<div class="viewcode-block" id="OneDimPane.set_markers">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.set_markers">[docs]</a>
+    def set_markers(self, state: bool) -&gt; List[DT]:
+        &quot;&quot;&quot;
+        Set plot marker symbols.
+
+        Only applies to non-scatter plots. Scatter plots
+        will accept the new state but not update any
+        artists.
+
+        Parameters
+        ----------
+        state : bool
+            Defines the visibility of the makers. True
+            will make the markers visible, False will
+            hide the markers.
+
+        Returns
+        -------
+        updates : list
+            List of drawings describing the changes for each model.
+        &quot;&quot;&quot;
+        self.show_markers = bool(state)
+        updates = list()
+        # no-op for scatter plots
+        if self.plot_type == &#39;scatter&#39;:
+            return updates
+        for model_id, model in self.models.items():
+            for order_number in self.orders[model_id]:
+                if self.show_markers:
+                    marker = {&#39;marker&#39;: self.markers[model_id]}
+                else:
+                    marker = {&#39;marker&#39;: None}
+                args = {&#39;high_model&#39;: model.filename,
+                        &#39;mid_model&#39;: order_number,
+                        &#39;kind&#39;: &#39;line&#39;, &#39;axes&#39;: &#39;primary&#39;,
+                        &#39;model_id&#39;: model.id, &#39;updates&#39;: marker}
+                updates.append(drawing.Drawing(**args))
+        return updates</div>
+
+
+<div class="viewcode-block" id="OneDimPane.get_marker">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.get_marker">[docs]</a>
+    def get_marker(self, model_id: Union[List[IDT], IDT]) -&gt; List[str]:
+        &quot;&quot;&quot;
+        Get the plot markers for a given model_id.
+
+        Parameters
+        ----------
+        model_id : uuid.UUID or list of uuid.UUID
+          Unique id associated with an HDUL
+
+        Returns
+        -------
+        markers : list
+            A list of markers for the model_id
+        &quot;&quot;&quot;
+        markers = list()
+        if not isinstance(model_id, list):
+            model_id = [model_id]
+
+        for model_name, marker in self.markers.items():
+            for name in model_id:
+                if model_name == name:
+                    markers.append(marker)
+        return markers</div>
+
+
+<div class="viewcode-block" id="OneDimPane.get_color">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.get_color">[docs]</a>
+    def get_color(self, model_id):
+        &quot;&quot;&quot;
+        Return colors for a model.
+
+        Parameters
+        ----------
+        model_id : uuid.UUID
+            Unique id of HDUL
+
+        Returns
+        -------
+        colors : list
+            List of colors
+        &quot;&quot;&quot;
+        colors = list()
+        if not isinstance(model_id, list):
+            model_id = [model_id]
+
+        for model_name, color in self.colors.items():
+            for name in model_id:
+                if model_name == name:
+                    colors.append(color)
+        return colors</div>
+
+
+<div class="viewcode-block" id="OneDimPane.set_grid">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.set_grid">[docs]</a>
+    def set_grid(self, state: bool) -&gt; None:
+        &quot;&quot;&quot;
+        Set the plot grid visibility.
+
+        Parameters
+        ----------
+        state : bool
+            True for enabling grid, otherwise False.
+        &quot;&quot;&quot;
+        self.show_grid = bool(state)
+        if self.ax:
+            self.ax.grid(self.show_grid)</div>
+
+
+<div class="viewcode-block" id="OneDimPane.set_error">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.set_error">[docs]</a>
+    def set_error(self, state: bool) -&gt; None:
+        &quot;&quot;&quot;
+        Set the plot error range visibility.
+
+        Parameters
+        ----------
+        state : bool
+            True for enabling error-bars, otherwise False.
+        &quot;&quot;&quot;
+        self.show_error = bool(state)</div>
+
+
+<div class="viewcode-block" id="OneDimPane.set_overplot">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.set_overplot">[docs]</a>
+    def set_overplot(self, state: bool) -&gt; None:
+        &quot;&quot;&quot;
+        Enable/disable overplot, dependent axes, field, and limits.
+
+        Parameters
+        ----------
+        state : bool
+            A boolean which is assigned to the state of show_overplot.
+        &quot;&quot;&quot;
+        if bool(state) is bool(self.show_overplot):  # pragma: no cover
+            return
+        self.show_overplot = bool(state)
+        if self.show_overplot:
+            if self.ax:
+                self.ax_alt = self.ax.twinx()
+                self.ax_alt.autoscale(enable=True, axis=&#39;y&#39;)
+                self.fields[&#39;y_alt&#39;] = &#39;transmission&#39;
+                self.scale[&#39;y_alt&#39;] = &#39;linear&#39;
+                self.limits[&#39;y_alt&#39;] = [0, 1]
+        else:
+            self.fields[&#39;y_alt&#39;] = &#39;&#39;
+            self.scale[&#39;y_alt&#39;] = &#39;&#39;
+            self.limits[&#39;y_alt&#39;] = list()</div>
+
+
+<div class="viewcode-block" id="OneDimPane.reset_alt_axes">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.reset_alt_axes">[docs]</a>
+    def reset_alt_axes(self, remove=False):
+        &quot;&quot;&quot;
+        Remove or reset the alternate axis.
+
+        Replaces the `ax_alt` attribute with None and resets fields,
+        scale, and limit for the &#39;y_alt&#39; axis to empty values.
+
+        Parameters
+        ----------
+        remove : bool, optional
+            If set, an attempt is made to remove the alternate axis
+            from the plot before resetting it.
+        &quot;&quot;&quot;
+        if remove:
+            try:
+                self.ax_alt.remove()
+            except AttributeError:
+                log.debug(f&#39;Failed to remove alt ax {self.ax_alt}&#39;)
+            else:
+                log.debug(&#39;Successfully removed alt ax&#39;)
+        self.ax_alt = None
+        self.fields[&#39;y_alt&#39;] = &#39;&#39;
+        self.scale[&#39;y_alt&#39;] = &#39;&#39;
+        self.limits[&#39;y_alt&#39;] = list()</div>
+
+
+    ####
+    # Mouse events
+    ####
+<div class="viewcode-block" id="OneDimPane.data_at_cursor">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.data_at_cursor">[docs]</a>
+    def data_at_cursor(self, event: mbb.MouseEvent) -&gt; Dict[str, List[Dict]]:
+        &quot;&quot;&quot;
+        Retrieve the model data at the cursor location.
+
+        Parameters
+        ----------
+        event : matplotlib.backend_bases.Event
+            Mouse motion event.
+
+        Returns
+        -------
+        data_coords : dict
+            Keys are model IDs; values are lists of dicts
+            containing &#39;order&#39;, &#39;bin&#39;, &#39;bin_x&#39;, &#39;bin_y&#39;,
+            &#39;x_field&#39;, &#39;y_field&#39;, &#39;color&#39;, and &#39;visible&#39;
+            values to display.
+        &quot;&quot;&quot;
+        data = dict()
+        cursor_x = event.xdata
+
+        for model_id, model in self.models.items():
+            data[model_id] = list()
+
+            for order_number in self.orders[model_id]:
+                try:
+                    o, a = order_number.split(&#39;.&#39;)
+                except ValueError:  # pragma: no cover
+                    o_num = int(order_number)
+                    a_num = 0
+                else:
+                    o_num = int(o)
+                    a_num = int(a)
+                # o_num, a_num are zero-based indexing
+                order = model.retrieve(order=o_num, level=&#39;high&#39;,
+                                       aperture=a_num)
+                spectrum = model.retrieve(order=o_num, level=&#39;low&#39;,
+                                          field=self.fields[&#39;y&#39;],
+                                          aperture=a_num)
+                if self.fields[&#39;y&#39;] == self.fields[&#39;x&#39;]:
+                    x_model, y_model = self.get_xy_data(model, o_num, a_num)
+                else:
+                    x_model, y_model = model, model
+
+                x_data = x_model.retrieve(order=o_num, level=&#39;raw&#39;,
+                                          field=self.fields[&#39;x&#39;],
+                                          aperture=a_num)
+                y_data = y_model.retrieve(order=o_num, level=&#39;raw&#39;,
+                                          field=self.fields[&#39;y&#39;],
+                                          aperture=a_num)
+
+                # skip entirely if order has no data
+                data_list = [x_data, y_data, model, order, spectrum]
+                if any([x is None for x in data_list]):  # pragma: no cover
+                    continue
+
+                visible = model.enabled &amp; order.enabled &amp; spectrum.enabled
+                # skip order if cursor is out of range
+                if (cursor_x &lt; np.nanmin(x_data)
+                        or cursor_x &gt; np.nanmax(x_data)):
+                    visible = False
+
+                index = int(np.nanargmin(np.abs(x_data - cursor_x)))
+                x = x_data[index]
+                y = y_data[index]
+                if all(np.isnan([x, y])):
+                    visible = False
+
+                data[model_id].append({&#39;filename&#39;: model.filename,
+                                       &#39;order&#39;: o_num, &#39;aperture&#39;: a_num,
+                                       &#39;bin&#39;: index, &#39;bin_x&#39;: x, &#39;bin_y&#39;: y,
+                                       &#39;x_field&#39;: self.fields[&#39;x&#39;],
+                                       &#39;y_field&#39;: self.fields[&#39;y&#39;],
+                                       &#39;color&#39;: self.colors[model_id][a_num],
+                                       &#39;visible&#39;: visible,
+                                       &#39;alt&#39;: False
+                                       })
+                if self.show_overplot:
+                    y_data = model.retrieve(order=o_num,
+                                            level=&#39;raw&#39;,
+                                            field=self.fields[&#39;y_alt&#39;],
+                                            aperture=a_num)
+                    if y_data is not None:
+                        y = y_data[index]
+                        if all(np.isnan([x, y])):
+                            visible = False
+                        # Add a 65% alpha to alt-axis color
+                        color = &#39;#A6&#39; + self.colors[model_id][a_num].strip(&#39;#&#39;)
+                        data[model_id].append(
+                            {&#39;filename&#39;: model.filename,
+                             &#39;order&#39;: o_num, &#39;aperture&#39;: a_num,
+                             &#39;bin&#39;: index, &#39;bin_x&#39;: x, &#39;bin_y&#39;: y,
+                             &#39;x_field&#39;: self.fields[&#39;x&#39;],
+                             &#39;y_field&#39;: self.fields[&#39;y_alt&#39;],
+                             &#39;color&#39;: color, &#39;visible&#39;: visible, &#39;alt&#39;: True
+                             })
+
+        return data</div>
+
+
+<div class="viewcode-block" id="OneDimPane.xy_at_cursor">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.xy_at_cursor">[docs]</a>
+    def xy_at_cursor(self, event: mbb.MouseEvent) -&gt; Tuple[float, float]:
+        &quot;&quot;&quot;
+        Retrieve the x and y data at the cursor location.
+
+        Ignores the secondary y-axis, if present.
+
+        Parameters
+        ----------
+        event : matplotlib.backend_bases.Event
+            Mouse motion event.
+
+        Returns
+        -------
+        data_coords : tuple of float
+            (x, y) values for the primary axis.
+        &quot;&quot;&quot;
+        cursor_x = event.xdata
+        cursor_y = event.ydata
+
+        # When overplots are enabled, only the top axis is returned as
+        # the event.x/ydata.
+        # Transform the cursor position to get the primary y data/
+        if self.ax != event.inaxes:
+            inv = self.ax.transData.inverted()
+            _, cursor_y = inv.transform(
+                np.array((event.x, event.y)).reshape(1, 2)).ravel()
+
+        return cursor_x, cursor_y</div>
+
+
+<div class="viewcode-block" id="OneDimPane.plot_crosshair">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.plot_crosshair">[docs]</a>
+    def plot_crosshair(self, cursor_pos: Optional[Union[Tuple, List]] = None
+                       ) -&gt; List[DT]:
+        &quot;&quot;&quot;
+        Create crosshair artists to show the cursor location.
+
+        Parameters
+        ----------
+        cursor_pos : tuple or list, optional
+            Current cursor position [x, y].  If not specified, the
+            cursor is initially set near the center of the plot.
+
+        Returns
+        -------
+        crosshair : list
+            Two element list containing the vertical and horizontal
+            crosshair drawings.
+        &quot;&quot;&quot;
+        if cursor_pos is None:
+            # set cursor near center of plot
+            cursor_pos = [np.mean(self.ax.get_xlim()),
+                          np.mean(self.ax.get_ylim())]
+        vertical = self.ax.axvline(cursor_pos[0], **self.guide_line_style,
+                                   visible=False)
+        horizontal = self.ax.axhline(cursor_pos[1], **self.guide_line_style,
+                                     visible=False)
+        vert = drawing.Drawing(high_model=&#39;crosshair&#39;, mid_model=&#39;vertical&#39;,
+                               kind=&#39;crosshair&#39;, artist=vertical,
+                               fields=self.fields, pane=self)
+        horiz = drawing.Drawing(high_model=&#39;crosshair&#39;, mid_model=&#39;horizontal&#39;,
+                                kind=&#39;crosshair&#39;, artist=horizontal,
+                                fields=self.fields, pane=self)
+        return [vert, horiz]</div>
+
+
+<div class="viewcode-block" id="OneDimPane.plot_guides">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.plot_guides">[docs]</a>
+    def plot_guides(self, cursor_pos: Union[Tuple, List],
+                    kind: str) -&gt; List[DT]:
+        &quot;&quot;&quot;
+        Create guide gallery.
+
+        Guides are lines that stretch the full width or height
+        of the axes, depending on the direction. They are used
+        to denote the edges of ranges of interest, such as
+        new zoom limits or the limits for data to fit a curve to.
+
+        Parameters
+        ----------
+        cursor_pos : tuple or list
+            Current cursor position [x, y].
+        kind : [&#39;horizontal&#39;, &#39;vertical&#39;, &#39;cross&#39;, &#39;x&#39;, &#39;y&#39;, &#39;b&#39;]
+            For &#39;horizontal&#39;, &#39;y&#39;, &#39;cross&#39;, or &#39;b&#39;, a horizontal
+            guide will be created.  For &#39;vertical&#39;, &#39;x&#39;, &#39;cross&#39;,
+            or &#39;b&#39;, a vertical guide will be created.
+
+        Returns
+        -------
+        guides : list
+            Guide drawings corresponding to plotted lines.
+        &quot;&quot;&quot;
+        guides = list()
+        if kind in [&#39;vertical&#39;, &#39;cross&#39;, &#39;x&#39;, &#39;b&#39;]:
+            vertical = self.ax.axvline(cursor_pos[0],
+                                       **self.guide_line_style)
+            vert = drawing.Drawing(high_model=&#39;guide&#39;, mid_model=&#39;vertical&#39;,
+                                   kind=&#39;guide&#39;, artist=vertical,
+                                   pane=self, fields=self.fields)
+            guides.append(vert)
+        if kind in [&#39;horizontal&#39;, &#39;cross&#39;, &#39;y&#39;, &#39;b&#39;]:
+            horizontal = self.ax.axhline(cursor_pos[1],
+                                         **self.guide_line_style)
+            horiz = drawing.Drawing(high_model=&#39;guide&#39;, mid_model=&#39;horizontal&#39;,
+                                    kind=&#39;guide&#39;, artist=horizontal,
+                                    pane=self, fields=self.fields)
+            guides.append(horiz)
+        return guides</div>
+
+
+<div class="viewcode-block" id="OneDimPane.perform_zoom">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.perform_zoom">[docs]</a>
+    def perform_zoom(self, zoom_points: Sequence[Sequence[Num]],
+                     direction: str) -&gt; Dict[str, List[float]]:
+        &quot;&quot;&quot;
+        Perform a zoom action.
+
+        Parameters
+        ----------
+        zoom_points : list
+            User selected cursor positions, defining the zoom
+            limits.
+        direction :  [&#39;x&#39;, &#39;y&#39;, &#39;b&#39;]
+            Direction of the zoom.
+
+        Returns
+        -------
+        limits : dict
+            Keys are axis names (&#39;x&#39; and &#39;y&#39;); values are the
+            new axis limits.
+        &quot;&quot;&quot;
+        log.debug(&#39;Perform zoom&#39;)
+        limits = self.get_axis_limits()
+        log.debug(&#39;Changing axis limits&#39;)
+        if direction in [&#39;x&#39;, &#39;b&#39;]:
+            x_limits = [zp[0] for zp in zoom_points]
+            log.debug(f&#39;Updating x limits to {x_limits}&#39;)
+            limits[&#39;x&#39;] = [min(x_limits), max(x_limits)]
+        if direction in [&#39;y&#39;, &#39;b&#39;]:
+            y_limits = [zp[1] for zp in zoom_points]
+            log.debug(f&#39;Updating y limits to {y_limits}&#39;)
+            limits[&#39;y&#39;] = [min(y_limits), max(y_limits)]
+
+        self.set_limits(limits)
+        self.ax.autoscale(enable=False)
+        if self.show_overplot:
+            self.ax_alt.autoscale(enable=False)
+        return limits</div>
+
+
+<div class="viewcode-block" id="OneDimPane.reset_zoom">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.reset_zoom">[docs]</a>
+    def reset_zoom(self) -&gt; None:
+        &quot;&quot;&quot;Reset plot limits to the full range for current data.&quot;&quot;&quot;
+
+        # Don&#39;t want to include reference data in the relim
+        # note: relim works for lines, but not for true scatter plots
+        children = list()
+        if self.reference:
+            visibility = self.reference.get_visibility(&#39;ref_line&#39;)
+            for child in self.ax.get_children():
+                if (isinstance(child, ml.Line2D)
+                        or isinstance(child, mt.Text)):
+                    if child.get_color() == self.ref_color:
+                        child.set_visible(False)
+                        children.append(child)
+
+        self.ax.relim(visible_only=True)
+        self.ax.autoscale(enable=True)
+
+        new_limits = {&#39;x&#39;: self.ax.get_xlim(),
+                      &#39;y&#39;: self.ax.get_ylim()}
+        if self.show_overplot:
+            self.ax_alt.relim(visible_only=True)
+            self.ax_alt.autoscale(enable=True)
+
+            # the xlim and ylim calls need to be repeated here to
+            # avoid a bug in matplotlib (currently v3.3.4)
+            # relating to twinx and relim
+            # https://github.com/matplotlib/matplotlib/issues/16723
+            new_limits = {&#39;x&#39;: self.ax.get_xlim(),
+                          &#39;y&#39;: self.ax.get_ylim(),
+                          &#39;y_alt&#39;: self.ax_alt.get_ylim()}
+        self.set_limits(limits=new_limits)
+        if self.reference:
+            names_in_limits = self._window_line_list(new_limits[&#39;x&#39;])
+            for child in children:
+                try:
+                    label = str(child.get_text())
+                except AttributeError:
+                    label = str(child.get_label())
+                if label in names_in_limits:
+                    child.set_visible(visibility)</div>
+
+
+<div class="viewcode-block" id="OneDimPane.perform_fit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.perform_fit">[docs]</a>
+    def perform_fit(self, kind: str, limits: Sequence[Sequence[Num]]
+                    ) -&gt; Tuple[Optional[Dict], Optional[Dict]]:
+        &quot;&quot;&quot;
+        Perform a fit to a plot feature.
+
+        Parameters
+        ----------
+        kind : str
+            Kind is formatted as &#39;fit_{feature model}_{baseline mode}&#39;
+            Current features available are Gaussian1D and Moffat1D.
+            Current baselines available are Const1D and Linear1D. If
+            a baseline or feature is not desired, the corresponding field
+            is set to &#39;none&#39;.
+        limits : list of list
+            Low and high limits for data to fit, as
+            [[low_x, low_y], [high_x, high_y]].  Currently
+            only the x values are used.
+
+        Returns
+        -------
+        fit_artists, fit_params : dict, dict
+            The fit_artists dict contains overlay gallery showing
+            the center line and model shape for the fit to data.
+            Keys are {model.id}_fit_line and {model.id}_fit_center.
+            The fit_params dict contains the fit parameters, for
+            display in a separate table widget.  Keys are model IDs.
+        &quot;&quot;&quot;
+        try:
+            feature = kind.split(&#39;_&#39;)[1]
+            background = kind.split(&#39;_&#39;)[2]
+        except IndexError:
+            log.error(f&#39;Improperly formatted fit kind {kind}; skipping&#39;)
+            fit_artists, fit_params = None, None
+        else:
+            if feature == &#39;none&#39; and background == &#39;none&#39;:
+                log.error(f&#39;Feature and/or background must be provided&#39;
+                          f&#39; {kind}; skipping&#39;)
+                fit_artists, fit_params = None, None
+            else:
+                fit_artists, fit_params = self.feature_fit(feature, background,
+                                                           limits)
+        return fit_artists, fit_params</div>
+
+
+<div class="viewcode-block" id="OneDimPane.feature_fit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.feature_fit">[docs]</a>
+    def feature_fit(self, feature: str, background: str,
+                    limits: Sequence[Sequence[Num]]) -&gt; Tuple[Dict, Dict]:
+        &quot;&quot;&quot;
+        Fit a spectral feature.
+
+        Parameters
+        ----------
+        feature : {&#39;moffat&#39;, &#39;gaussian&#39;, &#39;gauss&#39;}
+            Feature model to fit.
+        background : {&#39;linear&#39;, &#39;constant&#39;}
+            Baseline model to fit (Const1D or Linear1D).
+        limits : list of list
+            Low and high limits for data to fit, as
+            [[low_x, low_y], [high_x, high_y]].  Currently
+            only the x values are used.
+
+        Returns
+        -------
+        fit_artists, fit_params : Tuple[list, list]
+             fit_artists - a list of drawing.Drawing objects for fits
+             fit_params - a list of fitting parameters objects for fits
+        &quot;&quot;&quot;
+        fit_params = list()
+        successes = list()
+        for model_id, model_ in self.models.items():
+            # model not enabled: skip
+            if not model_.enabled:
+                log.debug(f&#39;Model {model_.filename} is not enabled; skipping.&#39;)
+                continue
+
+            filename = model_.filename
+            for order in model_.orders:
+                order_num = order.number
+                aper_num = order.aperture
+                order_model = model_.retrieve(order=order_num, level=&#39;high&#39;,
+                                              aperture=aper_num)
+                if order_model is None or not order_model.enabled:
+                    log.debug(f&#39;Order {order_num} of model {model_.filename} &#39;
+                              f&#39;is not enabled; skipping&#39;)
+                    continue
+                spectrum = model_.retrieve(order=order_num, level=&#39;low&#39;,
+                                           aperture=aper_num,
+                                           field=self.fields[&#39;y&#39;])
+                if spectrum is None:  # pragma: no cover
+                    log.debug(f&#39;Order {order_num + 1} is not &#39;
+                              f&#39;available; skipping.&#39;)
+                    continue
+                if not spectrum.enabled:
+                    log.debug(f&#39;Spectrum {self.fields[&quot;y&quot;]} of order &#39;
+                              f&#39;{order_num}, model {model_.filename} is not &#39;
+                              f&#39;enabled; skipping&#39;)
+                    continue
+
+                x = model_.retrieve(order=order_num, level=&#39;raw&#39;,
+                                    aperture=aper_num, field=self.fields[&#39;x&#39;])
+                y = model_.retrieve(order=order_num, level=&#39;raw&#39;,
+                                    aperture=aper_num, field=self.fields[&#39;y&#39;])
+
+                # scale data to account for units with very small increments
+                xs = np.nanmean(x)
+                ys = np.nanmean(y)
+                norm_limits = [[limits[0][0] / xs, limits[0][1] / ys],
+                               [limits[1][0] / xs, limits[1][1] / ys]]
+                xnorm = x / xs
+                ynorm = y / ys
+
+                color = self.colors[model_id][aper_num]
+                blank_fit = self._initialize_model_fit(feature, background,
+                                                       norm_limits, model_id,
+                                                       filename, order_num,
+                                                       aper_num, x, color)
+                try:
+                    xnorm, ynorm, fit_init, bounds = self.initialize_models(
+                        feature, background, xnorm, ynorm, norm_limits)
+                except EyeError as e:
+                    if str(e) == &#39;empty_order&#39;:
+                        log.debug(f&#39;Order {order_num + 1}, aperture &#39;
+                                  f&#39;{aper_num + 1}  has no valid data &#39;
+                                  f&#39;in range; skipping.&#39;)
+                    fit_params.append(blank_fit)
+                    blank_fit.set_status(str(e))
+                    continue
+                else:
+                    blank_fit.set_dataset(x=xnorm, y=ynorm)
+
+                try:
+                    fit_result = self.calculate_fit(xnorm, ynorm,
+                                                    fit_init, bounds)
+                except EyeError as e:
+                    successes.append(False)
+                    if str(e) == &#39;fit_failed&#39;:
+                        log.debug(f&#39;Fit failed; skipping {model_id} &#39;
+                                  f&#39;order {order_num + 1}&#39;)
+                    blank_fit.set_status(str(e))
+                    continue
+                else:
+                    blank_fit.set_status(&#39;pass&#39;)
+                    blank_fit.set_fit(fit_result)
+                finally:
+                    # unscale parameters and data
+                    blank_fit.scale_parameters(xs, ys)
+                    blank_fit.set_dataset(x=(xnorm * xs), y=(ynorm * ys))
+                    blank_fit.set_limits(limits)
+                    fit_params.append(blank_fit)
+
+        fit_artists = self.generate_fit_artists(fit_params)
+        return fit_artists, fit_params</div>
+
+
+    def _initialize_model_fit(self, feature: str, background: str,
+                              limits: List[List[float]], model_id: uuid.UUID,
+                              filename: str, order: int, aperture: int,
+                              columns: ArrayLike, color: str
+                              ) -&gt; model_fit.ModelFit:
+        fit = model_fit.ModelFit()
+
+        # catch &#39;-&#39; from dropdown
+        ftypes = list()
+        for ft in [feature, background]:
+            if ft != &#39;-&#39;:
+                ftypes.append(ft)
+        if len(ftypes) == 0:
+            ftypes.append(&#39;constant&#39;)
+        fit.set_fit_type(ftypes)
+
+        fit.set_fields(self.fields)
+        fit.set_limits(limits)
+        fit.set_units({&#39;x&#39;: self.units[&#39;x&#39;], &#39;y&#39;: self.units[&#39;y&#39;]})
+        fit.set_axis(self.ax)
+        fit.set_model_id(model_id)
+        fit.set_filename(filename)
+        fit.set_order(order)
+        fit.set_aperture(aperture)
+        fit.set_columns(columns)
+        fit.set_color(color)
+        return fit
+
+<div class="viewcode-block" id="OneDimPane.calculate_fit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.calculate_fit">[docs]</a>
+    @staticmethod
+    def calculate_fit(x_data, y_data, fit, bounds):
+        &quot;&quot;&quot;
+        Calculate the fit to a dataset.
+
+        Parameters
+        ----------
+        x_data : np.ndarray
+            x-axis data
+        y_data : np.ndarray
+            y-axis data
+        fit : astropy.modeling.Model
+            Initial fitted model.
+        bounds : tuple[list,list]
+            List of allowed upper bounds and lowers bounds to the fitting
+            parameters. Empty when feature is not available but
+            [-np.inf,np.inf] for just the background.
+
+        Returns
+        -------
+        fit : astropy.modeling.Model
+            The fit model.
+        &quot;&quot;&quot;
+
+        def fit_func(x, *params):
+            fit.parameters = params
+            return fit(x)
+
+        try:
+            coeffs, _ = sco.curve_fit(fit_func, x_data, y_data,
+                                      p0=fit.parameters,
+                                      bounds=bounds)
+        except ValueError as e:
+            if &#39;bound&#39; in str(e):
+                # specified bounds are infeasible, return initial model
+                # This should be hit only when the user has selected
+                # no feature and no baseline to fit -- ie. constant zero.
+                return fit
+            else:
+                raise EyeError(&#39;fit_failed&#39;) from None
+        except RuntimeError:
+            # fit failed
+            raise EyeError(&#39;fit_failed&#39;) from None
+        else:
+            fit.parameters = coeffs
+        return fit</div>
+
+
+<div class="viewcode-block" id="OneDimPane.initialize_models">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.initialize_models">[docs]</a>
+    def initialize_models(self, feature, background,
+                          x_data, y_data, limits):
+
+        &quot;&quot;&quot;
+        Initialize fitting models.
+
+        Parameters
+        ----------
+        feature : {&#39;moffat&#39;, &#39;gaussian&#39;, &#39;gauss&#39;}
+            Feature model to fit.
+        background : {&#39;linear&#39;, &#39;constant&#39;}
+            Baseline model to fit (Const1D or Linear1D).
+        x_data : np.ndarray
+            x-axis data
+        y_data : np.ndarray
+            y-axis data
+        limits : list of lists
+            Low and high limits for data to fit, as
+            [[low_x, low_y], [high_x, high_y]].  Currently
+            only the x values are used.
+
+        Returns
+        -------
+        xval : np.nparray
+            X-array within the given limits.
+        yval : np.nparray
+            Y-array within the given limits.
+        fit_init : astropy.modeling.Model
+            The combined fit to the data and background.
+        bounds : tuple[list,list]
+            List of allowed upper bounds and lowers bounds to the fitting
+            parameters. Empty when feature is not available but
+            [-np.inf,np.inf] for just the background.
+
+        &quot;&quot;&quot;
+        xval, yval = self._subselect_data(x_data, y_data, limits)
+        guess = self._generate_initial_guess(xval, yval, limits)
+
+        if feature == &#39;moffat&#39;:
+            feature_init = am.models.Moffat1D(guess[&#39;amplitude&#39;],
+                                              guess[&#39;peak_location&#39;],
+                                              guess[&#39;width&#39;],
+                                              guess[&#39;power_index&#39;])
+            # Bounds: amplitude, max location, gamma, alpha
+            lower_bounds = [-np.inf, limits[0][0], 0, 0]
+            upper_bounds = [np.inf, limits[1][0], guess[&#39;width&#39;] * 3, np.inf]
+        elif feature in [&#39;gaussian&#39;, &#39;gauss&#39;]:
+            feature_init = am.models.Gaussian1D(guess[&#39;amplitude&#39;],
+                                                guess[&#39;peak_location&#39;],
+                                                guess[&#39;width&#39;])
+            # Bounds: amplitude, max location, gamma
+            lower_bounds = [-np.inf, limits[0][0], 0]
+            upper_bounds = [np.inf, limits[1][0], guess[&#39;width&#39;] * 3]
+        else:
+            feature_init = None
+            lower_bounds = []
+            upper_bounds = []
+
+        if background == &#39;linear&#39;:
+            background_init = am.models.Linear1D(0, guess[&#39;background&#39;])
+            # Bounds: slope, intercept
+            lower_bounds.extend([-np.inf, -np.inf])
+            upper_bounds.extend([np.inf, np.inf])
+        elif background == &#39;constant&#39;:
+            background_init = am.models.Const1D(guess[&#39;background&#39;])
+            # Bounds: constant amplitude
+            lower_bounds.extend([-np.inf])
+            upper_bounds.extend([np.inf])
+        elif feature_init is None:
+            # special case: no fit selected for either feature or
+            # background.  Just return 0.
+            background_init = am.models.Const1D(0)
+            lower_bounds.extend([0])
+            upper_bounds.extend([0])
+        else:
+            background_init = None
+
+        if feature_init is None:
+            fit_init = background_init
+        elif background_init is not None:
+            fit_init = feature_init + background_init
+        else:
+            fit_init = feature_init
+        bounds = (lower_bounds, upper_bounds)
+        return xval, yval, fit_init, bounds</div>
+
+
+    @staticmethod
+    def _subselect_data(x_data, y_data, limits):
+        xrange = [limits[0][0], limits[1][0]]
+        valid = ~(np.isnan(x_data) | np.isnan(y_data))
+        in_range = (x_data &gt;= xrange[0]) &amp; (x_data &lt;= xrange[1])
+
+        # no valid data: skip
+        if not np.any(in_range &amp; valid):
+            raise EyeError(&#39;empty_order&#39;)
+
+        xval = x_data[in_range &amp; valid]
+        yval = y_data[in_range &amp; valid]
+        return xval, yval
+
+    @staticmethod
+    def _generate_initial_guess(x, y, limits):
+        &quot;&quot;&quot;
+        Generate an initial fitting guess for a given dataset.
+
+        Parameters
+        ----------
+        x : array
+            x-axis data
+        y : array
+            y-axis data
+        limits : list of lists
+            Low and high limits for data to fit, as
+            [[low_x, low_y], [high_x, high_y]].  Currently
+            only the x values are used.
+
+        Returns
+        -------
+        guess : Dict
+            A dictionary with keys (&#39;peak_location&#39;, &#39;background&#39;,
+            &#39;amplitude&#39;, &#39;width&#39;, &#39;power_index&#39;) and their corresponding
+            values.
+        &quot;&quot;&quot;
+        guess = dict()
+        mid_index = len(x) // 2
+        guess[&#39;peak_location&#39;] = x[mid_index]
+        guess[&#39;background&#39;] = float(np.nanmedian(y))
+        guess[&#39;amplitude&#39;] = y[mid_index] - guess[&#39;background&#39;]
+        guess[&#39;width&#39;] = (limits[1][0] - limits[0][0]) / 3
+        guess[&#39;power_index&#39;] = 2
+        return guess
+
+<div class="viewcode-block" id="OneDimPane.generate_fit_artists">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.generate_fit_artists">[docs]</a>
+    def generate_fit_artists(self, model_fits: Union[model_fit.ModelFit,
+                                                     List[model_fit.ModelFit]],
+                             x_data: Optional[ArrayLike] = None) -&gt; List[DT]:
+        &quot;&quot;&quot;
+        Generate fit artists for a pane
+
+        Parameters
+        ----------
+        model_fits : model_fit.ModelFit or list of model_fit.ModelFit
+            Models to plot.
+        x_data : array-like, optional
+            Data to plot fit y-values on. If not provided, data is
+            retrieved from the low model.
+        &quot;&quot;&quot;
+        fit_artists = list()
+        if not isinstance(model_fits, list):
+            model_fits = [model_fits]
+        for obj in model_fits:
+            fit = obj.get_fit()
+            if fit is None:
+                continue
+
+            model_id = obj.get_model_id()
+            filename = obj.get_filename()
+            order = obj.get_order()
+            aperture = obj.get_aperture()
+            id_tag = obj.get_id()
+            if x_data is None:
+                fields = obj.get_fields()
+                limits = obj.get_limits()
+                x = self.models[model_id].retrieve(order=order,
+                                                   level=&#39;raw&#39;,
+                                                   aperture=aperture,
+                                                   field=fields[&#39;x&#39;])
+                y = self.models[model_id].retrieve(order=order,
+                                                   level=&#39;raw&#39;,
+                                                   aperture=aperture,
+                                                   field=fields[&#39;y&#39;])
+
+                xrange = [limits[&#39;lower&#39;], limits[&#39;upper&#39;]]
+                valid = ~(np.isnan(x) | np.isnan(y))
+                in_range = (x &gt;= xrange[0]) &amp; (x &lt;= xrange[1])
+                x_data = x[in_range &amp; valid]
+
+            linestyle = next(self.fit_linestyles)
+            fit_line, fit_center = self.plot_fit(fit_obj=obj, x=x_data,
+                                                 style=linestyle)
+            # todo - this overwrites any previous assignment to fit_artists,
+            #  should be fixed for multiple fits passed
+            mid_model = f&#39;{order}.{aperture}&#39;
+            fl = drawing.Drawing(high_model=filename, mid_model=mid_model,
+                                 kind=&#39;fit_line&#39;, data_id=id_tag,
+                                 artist=fit_line, model_id=model_id)
+            fc = drawing.Drawing(high_model=filename, mid_model=mid_model,
+                                 kind=&#39;fit_center&#39;, data_id=id_tag,
+                                 artist=fit_center, model_id=model_id)
+            fit_artists.append(fl)
+            fit_artists.append(fc)
+
+        return fit_artists</div>
+
+
+<div class="viewcode-block" id="OneDimPane.plot_fit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.OneDimPane.html#sofia_redux.visualization.display.pane.OneDimPane.plot_fit">[docs]</a>
+    def plot_fit(self, x: ArrayLike, style: str,
+                 fit_obj: Optional[model_fit.ModelFit] = None,
+                 fit: Optional[am.Model] = None,
+                 model_id: Optional[str] = &#39;&#39;, order: Optional[int] = 0,
+                 aperture: Optional[int] = 0, feature: Optional[str] = &#39;&#39;,
+                 ) -&gt; Tuple[ml.Line2D, ml.Line2D]:
+        &quot;&quot;&quot;
+        Create overlay artists representing a fit to a plot feature.
+
+        Overlay colors are grayscale representations of the displayed
+        model colors.
+
+        Parameters
+        ----------
+        x : array-like
+            Independent coordinates for the fit overlay.
+        style : str
+            Line style for the overlay.
+        fit_obj : model_fit.ModelFit, optional
+            If provided, fit, model, orderm aperture, and feature
+            are retrieved from the provided object instead of the input
+            parameters.
+        fit : astropy.modeling.Model, optional
+            The callable model, fit to the data.
+        model_id : str, optional
+            Model ID associated with the fit.
+        order : int, optional
+            Order number associated with the fit.
+        aperture : int, optional
+            Aperture associated with the fit.
+        feature : str, optional
+            Feature type for the fit.
+
+        Returns
+        -------
+        model, centroid : tuple of Line2D
+            The model artist, plotted over the input x data, and
+            a vertical line artist representing the centroid position.
+        &quot;&quot;&quot;
+        if fit_obj is not None:
+            model_id = fit_obj.get_model_id()
+            order = fit_obj.get_order()
+            aperture = fit_obj.get_aperture()
+            feature = fit_obj.get_feature()
+            fit = fit_obj.get_fit()
+            fit_obj.axis = self.ax
+
+        # convert model color to grayscale, to distinguish
+        # from plot, but keep some separation between different models
+        gray = self.grayscale(self.colors[model_id])
+
+        label = (f&#39;{model_id}, Order {order + 1}, Aperture {aperture + 1},&#39;
+                 f&#39;{feature.capitalize()}&#39;)
+        (line,) = self.ax.plot(x, fit(x), animated=True,
+                               label=f&#39;{label} fit&#39;,
+                               color=gray, linewidth=2, alpha=0.8,
+                               linestyle=style)
+        line.set_visible(fit_obj.get_visibility())
+
+        midpoint = fit_obj.get_mid_point()
+        vline = self.ax.axvline(midpoint, animated=True,
+                                label=f&#39;{label} centroid&#39;,
+                                color=gray, linewidth=1, alpha=0.6,
+                                linestyle=style)
+        vline.set_visible(fit_obj.get_visibility())
+
+        return line, vline</div>
+</div>
+
+
+
+<div class="viewcode-block" id="TwoDimPane">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.pane.TwoDimPane.html#sofia_redux.visualization.display.pane.TwoDimPane">[docs]</a>
+class TwoDimPane(Pane):
+    &quot;&quot;&quot;
+    Two-axis pane, for displaying images.
+
+    Not yet implemented.
+    &quot;&quot;&quot;
+
+    def __init__(self, ax: Optional[ma.Axes] = None) -&gt; None:
+        super().__init__(ax)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

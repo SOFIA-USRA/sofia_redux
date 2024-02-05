@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.source_models.source_model &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.source_models.source_model</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC, abstractmethod
+from astropy import log, units
+from astropy.time import Time
+from copy import deepcopy
+import numpy as np
+import queue
+import re
+import shutil
+
+from sofia_redux.toolkit.utilities import multiprocessing
+from sofia_redux.scan.utilities.class_provider import \
+    info_class_for
+from sofia_redux.scan.utilities.utils import round_values
+from sofia_redux.scan.reduction.version import ReductionVersion
+
+__all__ = [&#39;SourceModel&#39;]
+
+
+<div class="viewcode-block" id="SourceModel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel">[docs]</a>
+class SourceModel(ABC):
+
+    recycler = None
+
+    def __init__(self, info, reduction=None):
+        &quot;&quot;&quot;
+        Initialize a source model.
+
+        The source model is an abstract class used to represent the source for
+        a given reduction, and operate on its contents.
+
+        Parameters
+        ----------
+        info : sofia_redux.scan.info.info.Info
+            The Info object which should belong to this source model.
+        reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
+            The reduction for which this source model should be applied.
+        &quot;&quot;&quot;
+        self.info = None
+        self.scans = None
+        self.hdul = None
+        self.id = &#39;&#39;
+        self.generation = 0
+        self.integration_time = 0.0 * units.Unit(&#39;second&#39;)
+        self.enable_weighting = True
+        self.enable_level = True
+        self.enable_bias = True
+        self.process_brief = None
+        self.reduction = reduction
+        self.set_info(info)
+
+<div class="viewcode-block" id="SourceModel.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.copy">[docs]</a>
+    def copy(self, with_contents=True):
+        &quot;&quot;&quot;
+        Return a copy of the source model.
+
+        Parameters
+        ----------
+        with_contents : bool, optional
+            If `True`, return a true copy of the source model.  Otherwise, just
+            return a basic version with the necessary meta data.
+
+        Returns
+        -------
+        SourceModel
+        &quot;&quot;&quot;
+        new = self.__class__(self.info, reduction=self.reduction)
+        referenced = self.referenced_attributes
+        for attribute, value in self.__dict__.items():
+            if attribute in referenced:
+                setattr(new, attribute, value)
+            elif not with_contents:
+                continue
+            elif hasattr(value, &#39;copy&#39;):
+                setattr(new, attribute, value.copy())
+            else:
+                setattr(new, attribute, deepcopy(value))
+
+        new.process_brief = None
+        return new</div>
+
+
+<div class="viewcode-block" id="SourceModel.clear_all_memory">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.clear_all_memory">[docs]</a>
+    def clear_all_memory(self):
+        &quot;&quot;&quot;
+        Clear all memory references prior to deletion.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.info = None
+        self.scans = None
+        self.hdul = None
+        self.id = &#39;&#39;
+        self.generation = 0
+        self.integration_time = 0.0 * units.Unit(&#39;second&#39;)
+        self.enable_weighting = True
+        self.enable_level = True
+        self.enable_bias = True
+        self.process_brief = None
+        self.reduction = None</div>
+
+
+    @property
+    def referenced_attributes(self):
+        &quot;&quot;&quot;
+        Return attributes that should be referenced during a copy.
+
+        For the basic source model, the reduction and any scans will be
+        copied as references to the original.
+
+        Returns
+        -------
+        set (str)
+        &quot;&quot;&quot;
+        return {&#39;scans&#39;, &#39;reduction&#39;}
+
+<div class="viewcode-block" id="SourceModel.clear_recycler">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.clear_recycler">[docs]</a>
+    @classmethod
+    def clear_recycler(cls):
+        &quot;&quot;&quot;
+        Remove all available models from the recycler.
+
+        NOTE: This needs to be done with parallel queues rather than lists.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if cls.recycler is not None:
+            if cls.recycler.empty():
+                return
+            cls.recycler.task_done()
+            for _ in range(cls.recycler.qsize()):
+                _ = cls.recycler.get()</div>
+
+
+<div class="viewcode-block" id="SourceModel.set_recycler_capacity">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.set_recycler_capacity">[docs]</a>
+    @classmethod
+    def set_recycler_capacity(cls, size):
+        &quot;&quot;&quot;
+        Set the number of available models in the recycler.
+
+        Parameters
+        ----------
+        size : int
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if size &lt;= 0:
+            cls.clear_recycler()
+            cls.recycler = None
+        else:
+            cls.recycler = queue.Queue(maxsize=size)</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_recycled_clean_local_copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_recycled_clean_local_copy">[docs]</a>
+    def get_recycled_clean_local_copy(self, full=False):
+        &quot;&quot;&quot;
+        Return a clean local copy of a source model.
+
+        If the recycler is active and contains free models, one of those will
+        be returned.  Otherwise, one will be generated using
+        :func:`SourceModel.get_clean_local_copy`.
+
+        Parameters
+        ----------
+        full : bool, optional
+            If True, copy additional parameters for stand-alone reductions
+            that would otherwise be referenced.
+
+        Returns
+        -------
+        SourceModel
+        &quot;&quot;&quot;
+        recycler = self.__class__.recycler
+        if isinstance(recycler, queue.Queue) and not recycler.empty():
+            model = recycler.get()
+            model.renew()
+            return model
+        return self.get_clean_local_copy(full=full)</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_clean_local_copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_clean_local_copy">[docs]</a>
+    def get_clean_local_copy(self, full=False):
+        &quot;&quot;&quot;
+        Get an unprocessed copy of the source model.
+
+        Parameters
+        ----------
+        full : bool, optional
+            If True, copy additional parameters for stand-alone reductions
+            that would otherwise be referenced.  Not used for the basic
+            SourceModel.
+
+        Returns
+        -------
+        SourceModel
+        &quot;&quot;&quot;
+        model = self.copy()
+        model.reset_processing()
+        model.clear_content()
+        return model</div>
+
+
+<div class="viewcode-block" id="SourceModel.recycle">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.recycle">[docs]</a>
+    def recycle(self):
+        &quot;&quot;&quot;
+        Add this source model to the list of available recycled source models.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.__class__.recycler is None:
+            return
+
+        if self.__class__.recycler.full():
+            log.warning(&quot;Source recycler overflow.&quot;)
+            return
+
+        self.__class__.recycler.put(self)</div>
+
+
+    @property
+    def frame_flagspace(self):
+        &quot;&quot;&quot;
+        Return the flags specific to integration frames.
+
+        Returns
+        -------
+        Flags
+        &quot;&quot;&quot;
+        if self.scans is None:
+            return None
+        return self.scans[0].frame_flagspace
+
+    @property
+    def channel_flagspace(self):
+        &quot;&quot;&quot;
+        Return the flags specific to channels.
+
+        Returns
+        -------
+        Flags
+        &quot;&quot;&quot;
+        if self.scans is None:
+            return None
+        return self.scans[0].channel_flagspace
+
+    @property
+    def signal_mode(self):
+        &quot;&quot;&quot;
+        Return the signal mode flag.
+
+        Returns
+        -------
+        enum
+        &quot;&quot;&quot;
+        return self.frame_flagspace.flags.TOTAL_POWER
+
+    @property
+    def exclude_samples(self):
+        &quot;&quot;&quot;
+        Return the sample exclusion flags.
+
+        Returns
+        -------
+        enum.Enum
+        &quot;&quot;&quot;
+        return ~self.frame_flagspace.flags.SAMPLE_SOURCE_BLANK
+
+    @property
+    def logging_id(self):
+        &quot;&quot;&quot;
+        Return the logging ID.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;model&#39;
+
+    @property
+    def n_scans(self):
+        &quot;&quot;&quot;
+        Return the number of scans in the source model.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        return 0 if self.scans is None else len(self.scans)
+
+    @property
+    def configuration(self):
+        &quot;&quot;&quot;
+        Return the configuration for the source model.
+
+        Returns
+        -------
+        Configuration
+        &quot;&quot;&quot;
+        if self.info is None:
+            return None
+        return self.info.configuration
+
+<div class="viewcode-block" id="SourceModel.has_option">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.has_option">[docs]</a>
+    def has_option(self, option):
+        &quot;&quot;&quot;
+        Return whether the configuration option is configured.
+
+        In order to be considered &quot;configured&quot;, the option must exist
+        and also have a value.
+
+        Parameters
+        ----------
+        option : str
+
+        Returns
+        -------
+        configured : bool
+        &quot;&quot;&quot;
+        return self.configuration.is_configured(option)</div>
+
+
+<div class="viewcode-block" id="SourceModel.source_option">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.source_option">[docs]</a>
+    @staticmethod
+    def source_option(option_name):
+        &quot;&quot;&quot;
+        Return the name of the option in configuration specific to the source.
+
+        Parameters
+        ----------
+        option_name : str
+            Name of the option.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return f&#39;source.{option_name}&#39;</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_first_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_first_scan">[docs]</a>
+    def get_first_scan(self):
+        &quot;&quot;&quot;
+        Return the first scan in the source model scans.
+
+        Returns
+        -------
+        Scan
+        &quot;&quot;&quot;
+        if self.scans is None:
+            return None
+        return self.scans[0]</div>
+
+
+<div class="viewcode-block" id="SourceModel.next_generation">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.next_generation">[docs]</a>
+    def next_generation(self):
+        &quot;&quot;&quot;
+        Initiate a new source model generation.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.generation += 1</div>
+
+
+<div class="viewcode-block" id="SourceModel.add_integration_time">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.add_integration_time">[docs]</a>
+    def add_integration_time(self, time):
+        &quot;&quot;&quot;
+        Add integration time to the source model.
+
+        Parameters
+        ----------
+        time : astropy.units.Quantity
+            The time to add.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.integration_time += time</div>
+
+
+<div class="viewcode-block" id="SourceModel.set_info">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.set_info">[docs]</a>
+    def set_info(self, info):
+        &quot;&quot;&quot;
+        Set the primary Info object for the source model.
+
+        This sets the provided `info` as the primary Info object containing
+        the configuration and reduction information for the source model.
+        The source model will also take ownership of the `info`.
+
+        Parameters
+        ----------
+        info : sofia_redux.info.info.Info
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.info = info
+        if self.info is not None:
+            self.info.set_parent(self)</div>
+
+
+<div class="viewcode-block" id="SourceModel.add_process_brief">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.add_process_brief">[docs]</a>
+    def add_process_brief(self, message):
+        &quot;&quot;&quot;
+        Add a message to the process brief.
+
+        Parameters
+        ----------
+        message : str
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.process_brief is None:
+            self.process_brief = []
+        if isinstance(message, list):
+            self.process_brief.extend(message)
+        elif isinstance(message, str):
+            self.process_brief.append(message)
+        else:
+            log.warning(f&quot;Received bad process brief message: {message!r}&quot;)</div>
+
+
+<div class="viewcode-block" id="SourceModel.clear_process_brief">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.clear_process_brief">[docs]</a>
+    def clear_process_brief(self):
+        &quot;&quot;&quot;
+        Remove all process brief information.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.process_brief = []</div>
+
+
+<div class="viewcode-block" id="SourceModel.create_from">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.create_from">[docs]</a>
+    def create_from(self, scans, assign_scans=True):
+        &quot;&quot;&quot;
+        Initialize model from scans.
+
+        Sets the model scans to those provided, and the source model for each
+        scan as this.  All integration gains are normalized to the first scan.
+        If the first scan is non-sidereal, the system will be forced to an
+        equatorial frame.
+
+        Parameters
+        ----------
+        scans : list (Scan)
+            A list of scans from which to create the model.
+        assign_scans : bool, optional
+            If `True`, assign the scans to this source model.  Otherwise,
+            there will be no hard link between the scans and source model.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.scans = scans
+
+        if self.get_first_scan().is_nonsidereal:
+            log.info(&quot;Forcing equatorial for moving object.&quot;)
+            self.configuration.parse_key_value(&#39;system&#39;, &#39;equatorial&#39;)
+
+        if assign_scans:
+            self.assign_scans(scans)</div>
+
+
+<div class="viewcode-block" id="SourceModel.assign_scans">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.assign_scans">[docs]</a>
+    def assign_scans(self, scans):
+        &quot;&quot;&quot;
+        Assign scans to the source model.
+
+        Parameters
+        ----------
+        scans : list (Scan)
+           A list of scans that should be assigned to *THIS* source model.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.scans = scans
+        jpb = self.scans[0].info.instrument.jansky_per_beam()
+        for scan in self.scans:
+            scan.set_source_model(self)
+            for integration in scan.integrations:
+                factor = integration.info.instrument.jansky_per_beam() / jpb
+                if isinstance(factor, units.Quantity):
+                    factor = factor.decompose().value
+                integration.gain *= factor</div>
+
+
+<div class="viewcode-block" id="SourceModel.assign_reduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.assign_reduction">[docs]</a>
+    def assign_reduction(self, reduction):
+        &quot;&quot;&quot;
+        Assign a reduction to the source model.
+
+        This method assigns the reduction to this source model, and the source
+        model to the reduction and also sets the info object to be equivalent
+        to the reduction info.  Any scans will be replaced by the reduction
+        scans.  The reduction configuration will also be updated by any
+        conditionals activated by the source name present in this source model.
+
+        Parameters
+        ----------
+        reduction : Reduction
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.reduction = reduction
+        self.set_info(reduction.info)
+        reduction.source = self
+        self.assign_scans(reduction.scans)
+        self.set_executor(reduction.source_executor)
+        self.set_parallel(reduction.max_jobs)
+        reduction.set_object_options(self.get_source_name())</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_average_resolution">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_average_resolution">[docs]</a>
+    def get_average_resolution(self):
+        &quot;&quot;&quot;
+        Return the average resolution.
+
+        The average resolution is given by::
+
+           r = sqrt(sum(wg^2 * integration_resolution^2) / sum(wg^2))
+
+        where the sum occurs over all integrations in all scans, w is the
+        weight of the scan belonging to each integration, and g is the gain
+        factor for each integration.  If the denominator is zero, then the
+        resolution returned by the source model instrument info is returned
+        instead.
+
+        Returns
+        -------
+        astropy.units.Quantity
+            The average resolution.
+        &quot;&quot;&quot;
+        value = 0.0 * self.info.instrument.get_size_unit() ** 2
+        weight = 0.0
+        for scan in self.scans:
+            for integration in scan.integrations:
+                if integration.info is not self.info:
+                    resolution = integration.info.instrument.resolution
+                    wg2 = scan.weight * integration.gain ** 2
+                    value += wg2 * resolution ** 2
+                    weight += wg2
+
+        if weight &gt; 0:
+            return np.sqrt(value / weight)
+        else:
+            return self.info.instrument.resolution</div>
+
+
+<div class="viewcode-block" id="SourceModel.renew">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.renew">[docs]</a>
+    def renew(self):
+        &quot;&quot;&quot;
+        Renew the source model.
+
+        Renewing the source model consists of resetting the processing and
+        clearing all content.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.reset_processing()
+        self.clear_content()</div>
+
+
+<div class="viewcode-block" id="SourceModel.reset_processing">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.reset_processing">[docs]</a>
+    def reset_processing(self):
+        &quot;&quot;&quot;
+        Reset the source processing.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.generation = 0
+        self.integration_time *= 0</div>
+
+
+<div class="viewcode-block" id="SourceModel.add_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.add_model">[docs]</a>
+    def add_model(self, source_model, weight=1.0):
+        &quot;&quot;&quot;
+        Add a source model increment onto this model.
+
+        Parameters
+        ----------
+        source_model : SourceModel
+            Another model to increment this model by.
+        weight : float, optional
+            The weight of the increment source model.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.generation = max(self.generation, source_model.generation)
+        self.integration_time += source_model.integration_time
+        self.enable_level &amp;= source_model.enable_level
+        self.enable_weighting &amp;= source_model.enable_weighting
+        self.enable_bias &amp;= source_model.enable_bias
+        self.add_model_data(source_model, weight)</div>
+
+
+<div class="viewcode-block" id="SourceModel.sync">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.sync">[docs]</a>
+    def sync(self):
+        &quot;&quot;&quot;
+        Removes the source model from the frame data and dependents.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.has_option(self.source_option(&#39;nosync&#39;)):
+            return
+        if self.has_option(self.source_option(&#39;coupling&#39;)):
+            self.add_process_brief(&#39;(coupling)&#39;)
+        self.add_process_brief(&#39;(sync)&#39;)
+
+        n_parms = self.count_points()
+        self.sync_all_integrations()
+
+        for scan in self.scans:
+            for integration in scan.integrations:
+                integration.source_generation += 1
+                integration.scan.source_points = n_parms
+
+        self.next_generation()
+        self.set_base()</div>
+
+
+<div class="viewcode-block" id="SourceModel.sync_all_integrations">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.sync_all_integrations">[docs]</a>
+    def sync_all_integrations(self):
+        &quot;&quot;&quot;
+        Synchronize all integrations with the source model.
+
+        Sync (subtract the source model) from all integrations in all scans
+        used to generate the source model.  If parallel processing is enabled,
+        this will be done in parallel using the available_reduction_jobs *
+        parallel_tasks jobs.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        scan_integration_mapping = []
+        integrations = []
+        integration_count = 0
+        for scan in self.scans:
+            scan_integrations = []
+            for integration in scan.integrations:
+                integrations.append(integration)
+                scan_integrations.append(integration_count)
+                integration_count += 1
+            scan_integration_mapping.append(scan_integrations)
+
+        # parallel integrations seems to cause problems, so
+        # ensure they are processed serially for now
+        #   max_parallel = self.reduction.available_reduction_jobs
+        #   parallel_integrations = int(np.clip(max_parallel, 1,
+        #                                       integration_count))
+        parallel_integrations = 1
+
+        if parallel_integrations &lt;= 1:
+            for integration in integrations:
+                self.sync_integration(integration)
+            return
+        else:  # pragma: no cover
+            log.debug(f&quot;Syncing {parallel_integrations} integrations &quot;
+                      f&quot;in parallel.&quot;)
+
+            pickle_list = [self] + integrations
+            pickle_directory = multiprocessing.pickle_list(pickle_list)
+            source_pickle = pickle_list[0]
+            integration_pickles = pickle_list[1:]
+            args = source_pickle, integration_pickles
+            kwargs = None
+
+            integrations = multiprocessing.multitask(
+                self.parallel_safe_sync_integration, range(integration_count),
+                args, kwargs, jobs=parallel_integrations, max_nbytes=None,
+                logger=log)
+
+            multiprocessing.unpickle_list(integrations, delete=True)
+            shutil.rmtree(pickle_directory)
+
+            for scan_number, scan in enumerate(self.scans):
+                for scan_integration_number, integration_number in enumerate(
+                        scan_integration_mapping[scan_number]):
+                    integration = integrations[integration_number]
+                    integration.scan = scan  # In case object ID changed
+                    scan.integrations[scan_integration_number] = integration</div>
+
+
+<div class="viewcode-block" id="SourceModel.parallel_safe_sync_integration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.parallel_safe_sync_integration">[docs]</a>
+    @classmethod
+    def parallel_safe_sync_integration(cls, args, integration_number
+                                       ):  # pragma: no cover
+        &quot;&quot;&quot;
+        Synchronize a single integration.
+
+        This function is safe for use with :func:`multiprocessing.multitask`.
+
+        Parameters
+        ----------
+        args : 2-tuple
+            The source pickle filename (str), and a list of integration pickle
+            filenames (list (str)).
+        integration_number : int
+            The index of the integration pickle file to sync.
+
+        Returns
+        -------
+        integration_file : str
+            The integration pickle file that was synchronized.  The original
+            file is unpickled, synced, and then pickled to the same location.
+        &quot;&quot;&quot;
+        source_pickle, integration_pickles = args
+        source, source_file = multiprocessing.unpickle_file(source_pickle)
+        integration, integration_file = multiprocessing.unpickle_file(
+            integration_pickles[integration_number])
+        source.sync_integration(integration)
+        multiprocessing.pickle_object(integration, integration_file)
+        return integration_file</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_blanking_level">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_blanking_level">[docs]</a>
+    def get_blanking_level(self):
+        &quot;&quot;&quot;
+        Return the blanking level from the configuration.
+
+        Returns
+        -------
+        float
+        &quot;&quot;&quot;
+        return self.configuration.get_float(&#39;blank&#39;, default=np.nan)</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_clipping_level">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_clipping_level">[docs]</a>
+    def get_clipping_level(self):
+        &quot;&quot;&quot;
+        Return the clipping level from the configuration.
+
+        Returns
+        -------
+        float
+        &quot;&quot;&quot;
+        return self.configuration.get_float(&#39;clip&#39;, default=np.nan)</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_point_size">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_point_size">[docs]</a>
+    def get_point_size(self):
+        &quot;&quot;&quot;
+        Return the point size of the source model.
+
+        Returns
+        -------
+        units.Quantity
+        &quot;&quot;&quot;
+        return self.info.instrument.get_point_size()</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_source_size">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_source_size">[docs]</a>
+    def get_source_size(self):
+        &quot;&quot;&quot;
+        Return the source size of the source model.
+
+        Returns
+        -------
+        units.Quantity
+        &quot;&quot;&quot;
+        return self.info.instrument.get_source_size()</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_executor">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_executor">[docs]</a>
+    def get_executor(self):
+        &quot;&quot;&quot;
+        Get the parallel process executor for source processing.
+
+        The executor is not currently used for anything - this is a
+        placeholder.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.set_executor">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.set_executor">[docs]</a>
+    def set_executor(self, executor):
+        &quot;&quot;&quot;
+        Set the parallel process executor for source processing.
+
+        The executor is not currently used for anything - this is a
+        placeholder.
+
+        Parameters
+        ----------
+        executor : object
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_parallel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_parallel">[docs]</a>
+    def get_parallel(self):
+        &quot;&quot;&quot;
+        Get the number of parallel operations for the source model.
+
+        Returns
+        -------
+        threads : int
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.set_parallel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.set_parallel">[docs]</a>
+    def set_parallel(self, threads):
+        &quot;&quot;&quot;
+        Set the number of parallel operations for the source model.
+
+        Parameters
+        ----------
+        threads : int
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.no_parallel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.no_parallel">[docs]</a>
+    def no_parallel(self):
+        &quot;&quot;&quot;
+        Sets the number of parallel operations for the source to 1 (serial).
+
+        Not implemented for the basic SourceModel.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_native_unit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_native_unit">[docs]</a>
+    def get_native_unit(self):
+        &quot;&quot;&quot;
+        Return the native unit for the source model
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        return 1 * units.Unit(
+            self.configuration.get(&#39;dataunit&#39;, default=&#39;count&#39;))</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_kelvin_unit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_kelvin_unit">[docs]</a>
+    def get_kelvin_unit(self):
+        &quot;&quot;&quot;
+        Return the kelvin unit.
+
+        Returns
+        -------
+        units.Quantity
+        &quot;&quot;&quot;
+        kelvins = self.info.instrument.kelvin()
+        if isinstance(kelvins, units.Quantity):
+            return kelvins.to(&#39;Kelvin&#39;)
+        else:  # pragma: no cover
+            return kelvins * units.Unit(&#39;Kelvin&#39;)</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_canonical_source_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_canonical_source_name">[docs]</a>
+    def get_canonical_source_name(self):
+        &quot;&quot;&quot;
+        Return the source name with bad characters replaced with &#39;_&#39;.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        bad_chars = r&#39;( |\t|\r|\*|&quot;|\?|\\|/)&#39;
+        name = re.sub(bad_chars, &#39;_&#39;, self.get_source_name())
+        name = &#39;_&#39;.join(name.split(&#39;_&#39;))
+        return name</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_default_core_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_default_core_name">[docs]</a>
+    def get_default_core_name(self):
+        &quot;&quot;&quot;
+        Return a descriptive name for the source model.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        mjds = [scan.mjd for scan in self.scans]
+        sort_idx = np.argsort(mjds)
+        first_scan = self.scans[sort_idx[0]]
+        last_scan = self.scans[sort_idx[-1]]
+        name = f&#39;{self.get_canonical_source_name()}.{first_scan.get_id()}&#39;
+        if first_scan is not last_scan:
+            if first_scan.get_id() != last_scan.get_id():
+                name += f&#39;-{last_scan.get_id()}&#39;
+        return name</div>
+
+
+<div class="viewcode-block" id="SourceModel.check_pixel_count">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.check_pixel_count">[docs]</a>
+    @staticmethod
+    def check_pixel_count(integration):
+        &quot;&quot;&quot;
+        Check if an integration has enough mapping pixels to generate a map.
+
+        Checks are performed depending on whether the following configuration
+        keywords are present for the integration::
+
+            - mappingpixels: The number of integration mapping pixels must be
+                  greater than this value.
+            - mappingfraction: The ratio of mapping pixels to observing pixels
+                  must be greater than or equal to this fraction.
+
+        Parameters
+        ----------
+        integration : Integration
+            The integration to check.
+
+        Returns
+        -------
+        valid : bool
+            `True` if the integration has enough pixels, and `False` otherwise.
+        &quot;&quot;&quot;
+        pixels = integration.channels.get_mapping_pixels(match_flag=0).size
+
+        if integration.has_option(&#39;mappingpixels&#39;):
+            # If there aren&#39;t enough good pixels in the scan, do not generate.
+            min_size = integration.configuration.get_int(
+                &#39;mappingpixels&#39;, default=np.inf)
+            if pixels &lt; min_size:
+                integration.comments.append(&#39;(!ch)&#39;)
+                return False
+
+        if integration.has_option(&#39;mappingfraction&#39;):
+            n_obs = integration.channels.get_observing_channels().size
+            mapping_fraction = integration.configuration.get_float(
+                &#39;mappingfraction&#39;, default=np.inf)
+            if pixels &lt; (mapping_fraction * n_obs):
+                integration.comments.append(&#39;(!ch%)&#39;)
+                return False
+
+        return True</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_ascii_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_ascii_header">[docs]</a>
+    def get_ascii_header(self):
+        &quot;&quot;&quot;
+        Return the header for an ASCII output file.
+
+        Returns
+        -------
+        header : str
+            A line space delimited header.
+        &quot;&quot;&quot;
+        header = [f&#39;# SOFSCAN version: &#39;
+                  f&#39;{ReductionVersion().get_full_version()}&#39;,
+                  f&#39;# Instrument: {self.info.instrument.name}&#39;,
+                  f&#39;# Object: {self.get_source_name()}&#39;]
+        if self.scans is not None and len(self.scans) &gt; 0:
+            header.append(f&#39;# Equatorial: {self.scans[0].equatorial}&#39;)
+            scan_list = &#39; &#39;.join([scan.get_id() for scan in self.scans])
+        else:
+            scan_list = &#39;&#39;
+
+        header.append(f&#39;# Scans: {scan_list}&#39;)
+        return &#39;\n&#39;.join(header)</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_table_entry">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Return the parameter value for a given name.
+
+        Parameters
+        ----------
+        name : str
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        return None</div>
+
+
+<div class="viewcode-block" id="SourceModel.parse_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.parse_header">[docs]</a>
+    def parse_header(self, header):
+        &quot;&quot;&quot;
+        Parse and apply a FITS header.
+
+        Completely creates a new Channels instance with a blank info, but
+        updated with the FITS header.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        info_class = info_class_for(header[&#39;INSTRUME&#39;])
+        self.info = info_class()
+        self.info.parse_image_header(header)</div>
+
+
+<div class="viewcode-block" id="SourceModel.edit_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Update a header with model information.
+
+        Parameters
+        ----------
+        header : astropy.fits.header.Header
+            The FITS header to update.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        header[&#39;DATE&#39;] = Time.now().to_value(&#39;isot&#39;)
+        header.comments[&#39;DATE&#39;] = &#39;File creation time.&#39;
+        header[&#39;SCANS&#39;] = self.n_scans
+        header.comments[&#39;SCANS&#39;] = (
+            &#39;The number of scans in this composite image.&#39;)
+        header[&#39;INTEGRTN&#39;] = self.integration_time.decompose().value
+        header.comments[&#39;INTEGRTN&#39;] = &#39;The total integration time in seconds.&#39;
+        if self.info is not None:
+            self.info.edit_image_header(header, scans=self.scans)
+
+        if self.reduction is not None:
+            self.reduction.edit_header(header)
+
+        if self.info is not None:
+            self.info.add_history(header, scans=self.scans)</div>
+
+
+<div class="viewcode-block" id="SourceModel.add_scan_hdus_to">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.add_scan_hdus_to">[docs]</a>
+    def add_scan_hdus_to(self, hdul):
+        &quot;&quot;&quot;
+        Add each scan HDU to an HDUL
+
+        Parameters
+        ----------
+        hdul : astropy.io.fits.HDUList
+            The FITS HDU list.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.info is None or self.scans is None:
+            return
+        if not self.configuration.get_bool(&#39;write.scandata&#39;):
+            return
+        for scan in self.scans:
+            hdul.append(scan.get_summary_hdu(configuration=self.configuration))</div>
+
+
+<div class="viewcode-block" id="SourceModel.post_process_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.post_process_scan">[docs]</a>
+    def post_process_scan(self, scan):
+        &quot;&quot;&quot;
+        Apply post processing steps to a scan.
+
+        Parameters
+        ----------
+        scan : Scan
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.suggestions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.suggestions">[docs]</a>
+    def suggestions(self):
+        &quot;&quot;&quot;
+        Write log messages with source reduction suggestions.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        scanning_problem_only = False
+        scans_with_few_pixels = 0
+        if self.scans is not None:
+            for scan in self.scans:
+                for integration in scan.integrations:
+                    if not self.check_pixel_count(integration):
+                        scans_with_few_pixels += 1
+                        break
+
+        if scans_with_few_pixels &gt; 0:
+            scanning_problem_only = self.troubleshoot_few_pixels()
+        elif not (self.is_valid() and self.generation &gt; 0):
+            log.info(self.suggest_make_valid())
+        else:
+            return
+
+        if not scanning_problem_only:
+            log.info(&quot;SUGGEST: Please consult the README and/or GLOSSARY &quot;
+                     &quot;for details.&quot;)</div>
+
+
+<div class="viewcode-block" id="SourceModel.suggest_make_valid">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.suggest_make_valid">[docs]</a>
+    @staticmethod
+    def suggest_make_valid():
+        &quot;&quot;&quot;
+        Return a message suggestion corrections to an invalid map.
+
+        Returns
+        -------
+        message : str
+        &quot;&quot;&quot;
+        msg = &quot; * Check the console output for any problems &quot; \
+              &quot;when reading scans.&quot;
+        return msg</div>
+
+
+<div class="viewcode-block" id="SourceModel.is_scanning_problem_only">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.is_scanning_problem_only">[docs]</a>
+    def is_scanning_problem_only(self):
+        &quot;&quot;&quot;
+        Return whether source model issues may be related to scanning problems.
+
+        Returns
+        -------
+        speed_problem : bool
+            `True` if scanning problems are only related to scanning speed.
+        &quot;&quot;&quot;
+        speed_problem_only = True
+        for scan in self.scans:
+            low_speed = False
+            for integration in scan.integrations:
+                if not self.check_pixel_count(integration):
+                    drift_n = (integration.filter_time_scale
+                               / integration.info.sampling_interval)
+                    if np.isfinite(drift_n) and round_values(drift_n) &lt;= 1:
+                        low_speed = True
+                    else:
+                        speed_problem_only = False
+                    if low_speed and not speed_problem_only:
+                        break
+            if low_speed:
+                log.info(f&quot;SUGGEST: Low scanning speed in {scan.get_id()}.&quot;)
+
+        return speed_problem_only</div>
+
+
+<div class="viewcode-block" id="SourceModel.troubleshoot_few_pixels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.troubleshoot_few_pixels">[docs]</a>
+    def troubleshoot_few_pixels(self):
+        &quot;&quot;&quot;
+        Generate log messages related to small numbers of pixels in the map.
+
+        Returns
+        -------
+        scanning_problem_only : bool
+            `True` if the problem relates to scanning speeds; `False` if there
+            are other issues in play.
+        &quot;&quot;&quot;
+        log.warning(
+            &quot;It seems that one or more scans contain too few valid pixels for &quot;
+            &quot;contributing to the source model. This may be just fine, and &quot;
+            &quot;probably indicates that something was sub-optimal with the &quot;
+            &quot;affected scan(s)&quot;)
+        if self.is_scanning_problem_only():
+            return True
+
+        messages = [&quot;You may try:&quot;]
+        if self.configuration.get_bool(&#39;deep&#39;):
+            messages.append(&quot; * Reduce with &#39;faint&#39; instead of &#39;deep&#39;.&quot;)
+        elif self.configuration.get_bool(&#39;faint&#39;):
+            messages.append(
+                &quot; * Reduce with default settings instead of &#39;faint&#39;.&quot;)
+        elif not self.configuration.get_bool(&#39;bright&#39;):
+            messages.append(&quot; * Reduce with &#39;bright&#39;.&quot;)
+
+        messages.extend(self.reduction.channels.troubleshoot_few_pixels())
+
+        if (self.configuration.has_option(&#39;mappingpixels&#39;)
+                or self.configuration.has_option(&#39;mappingfraction&#39;)):
+            messages.append(&quot; * Adjust &#39;mappingpixels&#39; or &quot;
+                            &quot;&#39;mappingfraction&#39; to &quot;
+                            &quot;allow source extraction with fewer pixels.&quot;)
+
+        log.info(&#39;\n&#39;.join(messages))
+        return False</div>
+
+
+<div class="viewcode-block" id="SourceModel.count_points">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.count_points">[docs]</a>
+    @abstractmethod
+    def count_points(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the number of points in the model.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_source_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_source_name">[docs]</a>
+    @abstractmethod
+    def get_source_name(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the source name for the source model.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_unit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_unit">[docs]</a>
+    @abstractmethod
+    def get_unit(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the source model unit.
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.clear_content">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.clear_content">[docs]</a>
+    @abstractmethod
+    def clear_content(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Clear the contents of the source model.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.is_valid">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.is_valid">[docs]</a>
+    @abstractmethod
+    def is_valid(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return whether the source model is valid or not.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.add_model_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.add_model_data">[docs]</a>
+    @abstractmethod
+    def add_model_data(self, source_model, weight=1.0):  # pragma: no cover
+        &quot;&quot;&quot;
+        Add an increment source model data onto the current model.
+
+        Parameters
+        ----------
+        source_model : SourceModel
+            The source model increment.
+        weight : float, optional
+            The weight of the source model increment.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.add_integration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.add_integration">[docs]</a>
+    @abstractmethod
+    def add_integration(self, integration):  # pragma: no cover
+        &quot;&quot;&quot;
+        Add an integration to the source model.
+
+        Parameters
+        ----------
+        integration : Integration
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.process">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.process">[docs]</a>
+    @abstractmethod
+    def process(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Process the source model.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.process_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.process_scan">[docs]</a>
+    @abstractmethod
+    def process_scan(self, scan):  # pragma: no cover
+        &quot;&quot;&quot;
+        Process a scan.
+
+        Parameters
+        ----------
+        scan : Scan
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.sync_integration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.sync_integration">[docs]</a>
+    @abstractmethod
+    def sync_integration(self, integration, signal_mode=None
+                         ):  # pragma: no cover
+        &quot;&quot;&quot;
+        Sync an integration.
+
+        Parameters
+        ----------
+        integration : Integration
+        signal_mode : FrameFlagTypes
+            The signal mode flag, indicating which signal should be used to
+            extract the frame source gains.  Typically, TOTAL_POWER.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.set_base">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.set_base">[docs]</a>
+    @abstractmethod
+    def set_base(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Set the base data for the source model.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.write">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.write">[docs]</a>
+    @abstractmethod
+    def write(self, path):  # pragma: no cover
+        &quot;&quot;&quot;
+        Write the source to file.
+
+        Parameters
+        ----------
+        path : str
+            The file path to write to.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="SourceModel.get_reference">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.source_model.SourceModel.html#sofia_redux.scan.source_models.source_model.SourceModel.get_reference">[docs]</a>
+    @abstractmethod
+    def get_reference(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the reference (x, y) coordinate.
+
+        Returns
+        -------
+        2-tuple
+        &quot;&quot;&quot;
+        pass</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

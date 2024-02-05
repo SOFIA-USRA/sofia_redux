@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.visualization.eye &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.visualization.eye</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import argparse
+import datetime
+import os
+import pathlib
+import logging
+from typing import List, Tuple, Union, Optional, Dict
+
+import astropy.io.fits as pf
+
+from sofia_redux.visualization import log
+from sofia_redux.visualization import signals, setup
+from sofia_redux.visualization.display import view
+from sofia_redux.visualization.models import model
+from sofia_redux.visualization.utils.logger import StreamLogger
+from sofia_redux.visualization.utils.eye_error import EyeError
+
+try:
+    from PyQt5 import QtCore, QtGui, QtWidgets
+except ImportError:
+    HAS_PYQT5 = False
+    QtCore, QtGui = None, None
+
+    # duck type parents to allow class definition
+    class QtWidgets:
+
+        class QWidget:
+            pass
+else:
+    HAS_PYQT5 = True
+
+__all__ = [&#39;Eye&#39;]
+
+
+<div class="viewcode-block" id="Eye">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye">[docs]</a>
+class Eye(object):
+    &quot;&quot;&quot;
+    Run the Eye of SOFIA.
+
+    This class provides the primary control interface to the display
+    functions provided by the Eye viewer.  It is intended to be
+    instantiated from the standalone interface
+    (`sofia_redux.visualization.controller`) or the pipeline
+    interface (`sofia_redux.visualization.redux_viewer`), but may
+    also be directly instantiated and controlled, via the API interface.
+
+    Parameters
+    ----------
+    args : argparse.Namespace, optional
+        Command-line arguments to pass to the Eye interface.  Expected
+        attributes are &#39;filenames&#39;, containing a list of input files
+        to load, &#39;log_level&#39; specifying a terminal log level (e.g. &#39;DEBUG&#39;),
+        or &#39;system_logs&#39; = True, to specify that logs should be written
+        to disk.
+    view_ : `view.View`, optional
+        A previously instantiated View object, to register with the
+        Eye controller.  If not provided, a new View instance will be
+        generated.
+    &quot;&quot;&quot;
+
+    def __init__(self, args=None, view_=None):
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for the Eye.&#39;)
+
+        # set terminal log level
+        if hasattr(args, &#39;log_level&#39;):
+            self.log_level = str(args.log_level).upper()
+        else:
+            self.log_level = &#39;CRITICAL&#39;
+        self._setup_log_terminal()
+
+        # set up log file if desired
+        if hasattr(args, &#39;system_logs&#39;) and args.system_logs:
+            self._setup_log_file()
+
+        self.models = dict()
+        self.model_index = 0
+        if view_ is None:
+            self.signals = signals.Signals()
+            self.view = view.View(self.signals)
+        else:
+            self.signals = view_.signals
+            self.view = view_
+        self.setup_eye()
+
+        if args:
+            log.debug(&#39;Applying command line arguments&#39;)
+            self._apply_args(args)
+
+    @staticmethod
+    def _setup_log_file() -&gt; None:
+        &quot;&quot;&quot;Setup the system log file handler.&quot;&quot;&quot;
+        # set overall log level to debug
+        log.setLevel(&#39;DEBUG&#39;)
+
+        # make hidden home directory if necessary
+        base_loc = os.path.expanduser(os.path.join(&#39;~&#39;, &#39;.eye_of_sofia&#39;,
+                                                   &#39;event_logs&#39;))
+        try:
+            os.makedirs(base_loc, exist_ok=True)
+        except IOError:
+            raise IOError(f&#39;Unable to create log directory at {base_loc}&#39;)
+
+        # make log file name in home directory from current time
+        template = os.path.join(
+            base_loc, &#39;eos_event_%Y-%m-%d_%H-%M-%S.log&#39;)
+        fname = datetime.datetime.now().strftime(template)
+        fhand = logging.FileHandler(fname, &#39;at&#39;)
+        fhand.setLevel(&#39;DEBUG&#39;)
+        fhand.setFormatter(logging.Formatter(
+            &quot;%(asctime)s - %(origin)s - %(levelname)s - %(message)s&quot;))
+        log.addHandler(fhand)
+        log.debug(f&#39;Event log initiated at: {fname}&#39;)
+
+    def _setup_log_terminal(self) -&gt; None:
+        &quot;&quot;&quot;Set logging level for the stream logger.&quot;&quot;&quot;
+        # terminal is typically CRITICAL only but may
+        # be overridden in arguments
+        for hand in log.handlers:
+            if isinstance(hand, StreamLogger):
+                try:
+                    hand.setLevel(self.log_level)
+                except ValueError:
+                    # Invalid log level passed -&gt; ignore
+                    pass
+
+<div class="viewcode-block" id="Eye.open_eye">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.open_eye">[docs]</a>
+    def open_eye(self) -&gt; None:
+        &quot;&quot;&quot;Open the GUI.&quot;&quot;&quot;
+        log.debug(&#39;Opening Eye&#39;)
+        self.view.open_eye()</div>
+
+
+<div class="viewcode-block" id="Eye.close">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.close">[docs]</a>
+    def close(self) -&gt; None:
+        &quot;&quot;&quot;Close the GUI.&quot;&quot;&quot;
+        self.view.close()</div>
+
+
+<div class="viewcode-block" id="Eye.reset">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.reset">[docs]</a>
+    def reset(self) -&gt; None:
+        &quot;&quot;&quot;
+        Reset to an empty view.
+
+        Data is unloaded and all viewer panes are deleted.
+        &quot;&quot;&quot;
+        self.unload()
+        self.view.reset()</div>
+
+
+<div class="viewcode-block" id="Eye.deleteLater">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.deleteLater">[docs]</a>
+    def deleteLater(self) -&gt; None:
+        &quot;&quot;&quot;Delete the view when the control is deleted.&quot;&quot;&quot;
+        self.view.deleteLater()</div>
+
+
+<div class="viewcode-block" id="Eye.setup_eye">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.setup_eye">[docs]</a>
+    def setup_eye(self) -&gt; None:
+        &quot;&quot;&quot;Setup the GUI and signal connections.&quot;&quot;&quot;
+        obj = setup.Setup(self)
+        obj.setup_all()
+        log.debug(&#39;Setup Eye&#39;)</div>
+
+
+    def _apply_args(self, args: argparse.Namespace) -&gt; None:
+        &quot;&quot;&quot;Initialize the Eye with command line arguments.&quot;&quot;&quot;
+        if hasattr(args, &#39;filenames&#39;) and args.filenames:
+            log.info(&#39;Reading in files from command line&#39;)
+            self.add_data(filename=args.filenames)
+
+<div class="viewcode-block" id="Eye.add_data">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.add_data">[docs]</a>
+    def add_data(self, filename: Optional[str] = None) -&gt; None:
+        &quot;&quot;&quot;
+        Add data.
+
+        Parameters
+        ----------
+        filename : list of str, optional
+            Absolute paths of FITS files to add to the Eye.
+            If not provided, prompt the user for the filename.
+        &quot;&quot;&quot;
+        if not filename:
+            filename = QtWidgets.QFileDialog.getOpenFileNames(
+                self.view, caption=&quot;Select Data File(s)&quot;,
+                filter=&quot;FITS files (*.fits *.txt);;&quot;
+                       &quot;All files (*)&quot;)[0]
+        if filename:
+            added = False
+            for fname in filename:
+                log.debug(f&#39;Adding data from {fname}&#39;)
+                added_id = self._add_model(filename=fname)
+                if added_id is not None:
+                    added = True
+                    self.view.add_filename(added_id, fname)
+            if added:
+                self.signals.atrophy.emit()</div>
+
+
+    def _add_model(self, filename: str = &#39;&#39;,
+                   hdul: Optional[pf.hdu.hdulist.HDUList] = None,
+                   return_filename: bool = False
+                   ) -&gt; Optional[Union[str, Tuple[str, str],
+                                       Tuple[None, str]]]:
+        &quot;&quot;&quot;
+        Create a Model from provided data and add it to the Eye.
+
+        The data can be provided by either a filename
+        or the HDUL itself, but only one can be given.
+
+        Parameters
+        ----------
+        filename : str, optional
+            Name of the file to read.
+        hdul : astropy.io.fits.HDUList, optional
+            HDU list contents of a FITS file
+
+        Returns
+        -------
+        filename : str
+            Name of the file loaded, which also serves as the
+            key to find the model in self.models.
+
+        Raises
+        ------
+        RuntimeError :
+            Raised if none or both `filename` and `hdul` are
+            provided.
+        &quot;&quot;&quot;
+        if filename and hdul is not None:
+            raise RuntimeError(&#39;Eye._add_model can only accept `filename` &#39;
+                               &#39;or `hdu`, not both&#39;)
+        if filename:
+            if os.path.isfile(filename):
+                args = {&#39;filename&#39;: filename}
+                log.debug(f&#39;Adding model from filename {filename}&#39;)
+            else:
+                log.warning(f&#39;No such file: {filename}&#39;)
+                if return_filename:
+                    return None, &#39;&#39;
+                else:
+                    return None
+        elif hdul is not None:
+            args = {&#39;hdul&#39;: hdul}
+            log.debug(&#39;Adding model from hdul&#39;)
+            try:
+                filename = hdul.filename()
+            except TypeError:
+                filename = hdul[0].header.get(&#39;FILENAME&#39;, None)
+            finally:
+                if not filename:
+                    filename = hdul[0].header.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;)
+            log.debug(f&#39;Found filename: {filename}&#39;)
+        else:
+            raise RuntimeError(&#39;Need to provide either a filename or HDUL&#39;)
+
+        if return_filename:
+            result = (None, filename)
+        else:
+            result = None
+        preexisting = any([m.filename == filename
+                           for m in self.models.values()])
+        if preexisting:
+            return result
+        else:
+            try:
+                m = model.Model.add_model(**args)
+            except FileNotFoundError:
+                log.warning(f&#39;No such file: {filename}&#39;)
+                return result
+            except (NotImplementedError, OSError,
+                    RuntimeError, KeyError) as err:
+                log.debug(f&#39;Error encountered: {str(err)}&#39;)
+                log.warning(&#39;Input data is not supported.&#39;)
+                return result
+            except EyeError as err:
+                log.warning(str(err))
+                return result
+            else:
+                log.debug(f&#39;Model index: {self.model_index}&#39;)
+                m.index = self.model_index
+                self.model_index += 1
+                self.models[m.id] = m
+            if return_filename:
+                return m.id, filename
+            else:
+                return m.id
+
+    # API
+<div class="viewcode-block" id="Eye.set_parent">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.set_parent">[docs]</a>
+    def set_parent(self, parent: QtWidgets.QWidget) -&gt; None:
+        &quot;&quot;&quot;
+        Set the parent widget for the view.
+
+        Parameters
+        ----------
+        parent : QtWidgets.QWidget
+            The parent widget.
+        &quot;&quot;&quot;
+        self.view.parent = parent</div>
+
+
+<div class="viewcode-block" id="Eye.load">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.load">[docs]</a>
+    def load(self, data_list: list) -&gt; None:
+        &quot;&quot;&quot;
+        Load a list of data files into the Eye.
+
+        Parameters
+        ----------
+        data_list : list of str or astropy.io.fits.HDUList
+            Data to load.
+        &quot;&quot;&quot;
+        log.debug(f&#39;Loading file list ({len(data_list)} items)&#39;)
+        if not isinstance(data_list, list):
+            data_list = [data_list]
+        for data in data_list:
+            if isinstance(data, (str, pathlib.Path)):
+                try:
+                    hdul = pf.open(data, memmap=False)
+                except IOError:
+                    raise FileNotFoundError(f&#39;File {data} not found&#39;)
+                log.debug(f&#39;Loading from filename {data}&#39;)
+            elif isinstance(data, pf.hdu.hdulist.HDUList):
+                hdul = data
+                log.debug(f&#39;Loading HDUList directly {data}&#39;)
+            else:
+                message = (f&#39;Eye.load can only accept filenames or &#39;
+                           f&#39;HDUList objects. Provided {type(data)}&#39;)
+                log.error(message)
+                raise TypeError(message)
+            added_id, filename = self._add_model(hdul=hdul,
+                                                 return_filename=True)
+            hdul.close()
+            if added_id is not None:
+                self.view.add_filename(added_id, filename)
+
+        self.signals.atrophy.emit()</div>
+
+
+<div class="viewcode-block" id="Eye.unload">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.unload">[docs]</a>
+    def unload(self) -&gt; None:
+        &quot;&quot;&quot;Remove all loaded data.&quot;&quot;&quot;
+        model_ids = list(self.models.keys())
+        self.remove_data(model_ids=model_ids)</div>
+
+
+<div class="viewcode-block" id="Eye.add_panes">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.add_panes">[docs]</a>
+    def add_panes(self, layout=&#39;grid&#39;, n_panes=1, kind=&#39;spectrum&#39;) -&gt; None:
+        &quot;&quot;&quot;
+        Create blank panes in the figure.
+
+        Parameters
+        ----------
+        layout : [&#39;grid&#39;, &#39;rows&#39;, &#39;columns&#39;], optional
+            Layout strategy.
+        n_panes : int, optional
+            Number of panes to create.
+        kind : [&#39;spectrum&#39;, &#39;image&#39;], optional
+            Type of pane to create. Can also be a list of length
+            `rows` * `cols` to create a mixture.
+
+        Raises
+        ------
+        ValueError :
+            If the layout to create cannot be inferred from the
+            provided arguments.
+        &quot;&quot;&quot;
+        if kind is None:
+            raise ValueError(&#39;Must specify pane type with `kind` &#39;
+                             &#39;keyword.&#39;)
+        if isinstance(kind, list):
+            if len(kind) != n_panes:
+                raise ValueError(&#39;Length of `kind` must be either one &#39;
+                                 &#39;or the number of panes being added.&#39;)
+        elif isinstance(kind, str):
+            if kind not in [&#39;spectrum&#39;, &#39;onedim&#39;,
+                            &#39;image&#39;, &#39;twodim&#39;]:
+                raise ValueError(f&#39;Invalid kind: {kind}&#39;)
+            else:
+                kind = [kind] * n_panes
+        self.view.add_panes(n_panes, kind=kind, layout=layout)</div>
+
+
+<div class="viewcode-block" id="Eye.number_panes">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.number_panes">[docs]</a>
+    def number_panes(self) -&gt; int:
+        &quot;&quot;&quot;
+        Retrieve the number of open panes.
+
+        Returns
+        -------
+        int
+            The pane count.
+        &quot;&quot;&quot;
+        return self.view.pane_count()</div>
+
+
+<div class="viewcode-block" id="Eye.get_pane_layout">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.get_pane_layout">[docs]</a>
+    def get_pane_layout(self) -&gt; Union[None, Tuple[int, int]]:
+        &quot;&quot;&quot;
+        Retrieve the current pane layout.
+
+        Returns
+        -------
+        geometry : tuple of int, or None
+            If there is an active layout, (nrow, ncol) is returned.
+            Otherwise, None.
+        &quot;&quot;&quot;
+        return self.view.pane_layout()</div>
+
+
+<div class="viewcode-block" id="Eye.assign_data">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.assign_data">[docs]</a>
+    def assign_data(self, mode: str,
+                    indices: Optional[List[int]] = None) -&gt; None:
+        &quot;&quot;&quot;
+        Assign models to panes.
+
+        Parameters
+        ----------
+        mode : [&#39;split&#39;, &#39;first&#39;, &#39;last&#39;, &#39;assigned&#39;]
+            How to assign the data. `Split` will split
+            the models equally between the panes, `first`
+            will assign all the models to the first pane,
+            `last` will assign all the models to the last
+            pane, and `assign` will set the models
+            according to the values in `indices`.
+        indices : list of int, optional
+            List of pane indices to which models should be
+            assigned. Must match the length of the current list
+            of loaded models. Must contain valid pane index values.
+
+        Raises
+        ------
+        ValueError :
+            If an invalid mode is provided, or indices do not match
+            models or panes.
+        &quot;&quot;&quot;
+        log.debug(f&#39;Assigning data to panes using {mode}&#39;)
+        possible_modes = [&#39;split&#39;, &#39;first&#39;, &#39;last&#39;, &#39;assigned&#39;]
+        if mode not in possible_modes:
+            raise ValueError(f&#39;Invalid data assignment mode {mode}. &#39;
+                             f&#39;Valid modes: {possible_modes}&#39;)
+        elif mode == &#39;assigned&#39;:
+            if not isinstance(indices, list):
+                raise ValueError(f&#39;Invalid format of `indices` &#39;
+                                 f&#39;{type(indices)}. Must be a list&#39;)
+            if len(indices) != len(self.models):
+                raise ValueError(f&#39;Length of `indices` must match number of &#39;
+                                 f&#39;models ({len(indices)} !=&#39;
+                                 f&#39; {len(self.models)})&#39;)
+            if not all([0 &lt;= i &lt; self.number_panes() for i in indices]):
+                raise ValueError(&#39;Values in `indices` must be valid values &#39;
+                                 &#39;corresponding to panes&#39;)
+        self.view.assign_models(mode, self.models, indices)</div>
+
+
+<div class="viewcode-block" id="Eye.models_per_pane">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.models_per_pane">[docs]</a>
+    def models_per_pane(self) -&gt; List[int]:
+        &quot;&quot;&quot;
+        Retrieve the number of models in all active panes.
+
+        Returns
+        -------
+        model_count : list of int
+            The model count for each pane.
+        &quot;&quot;&quot;
+        return self.view.models_per_pane()</div>
+
+
+<div class="viewcode-block" id="Eye.set_current_pane">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.set_current_pane">[docs]</a>
+    def set_current_pane(self, pane_id: int) -&gt; None:
+        &quot;&quot;&quot;
+        Set the current pane in the view.
+
+        Parameters
+        ----------
+        pane_id : int
+            Pane index to make current.
+        &quot;&quot;&quot;
+        self.view.set_current_pane(pane_id)</div>
+
+
+<div class="viewcode-block" id="Eye.set_fields">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.set_fields">[docs]</a>
+    def set_fields(self, x_field: Optional[str] = None,
+                   y_field: Optional[str] = None,
+                   z_field: Optional[str] = None,
+                   fields: Optional[str] = None,
+                   panes: Optional[Union[str, List[int]]] = &#39;all&#39;) -&gt; None:
+        &quot;&quot;&quot;
+        Set the axis fields to show for panes.
+
+        Either `fields` or `x_field`, `y_field`, and `z_field`
+        should be set.
+
+        Parameters
+        ----------
+        x_field : str, optional
+            The x field to set, if not provided in `fields`.
+        y_field : str, optional
+            The y field to set, if not provided in `fields`.
+        z_field : str, optional
+            The z field to set, if not provided in `fields`.
+        fields : dict, optional
+            Should contain keys &#39;x&#39;, &#39;y&#39;, and &#39;z&#39;, specifying
+            the field strings as values.
+        panes : str, None, or list of int, optional
+            May be set to &#39;all&#39; to apply to all panes, None
+            to apply only to the current pane, or a list of
+            pane indexes to modify.
+        &quot;&quot;&quot;
+        if fields is None:
+            fields = {&#39;x&#39;: x_field, &#39;y&#39;: y_field, &#39;z&#39;: z_field}
+        for field in fields.values():
+            if field is not None:
+                if not isinstance(field, str):
+                    raise TypeError(&#39;Fields must be strings&#39;)
+        self.view.set_fields(fields=fields, panes=panes)</div>
+
+
+<div class="viewcode-block" id="Eye.get_fields">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.get_fields">[docs]</a>
+    def get_fields(self, panes: Optional[Union[str, List[int]]] = &#39;all&#39;
+                   ) -&gt; List:
+        &quot;&quot;&quot;
+        Get the currently displayed fields for current panes.
+
+        Parameters
+        ----------
+        panes : str, None, or list of int, optional
+            May be set to &#39;all&#39; to apply to all panes, None
+            to apply only to the current pane, or a list of
+            pane indexes to modify.
+
+        Returns
+        -------
+        fields : list of list of dict
+            List of fields for each pane specified.
+        &quot;&quot;&quot;
+        return self.view.get_fields(panes)</div>
+
+
+<div class="viewcode-block" id="Eye.set_units">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.set_units">[docs]</a>
+    def set_units(self, units: Dict,
+                  panes: Optional[Union[str, List[int]]] = &#39;all&#39;) -&gt; None:
+        &quot;&quot;&quot;
+        Set new units for specified panes.
+
+        Parameters
+        ----------
+        units : dict
+            New units to apply.  Should contain &#39;x&#39;, &#39;y&#39; keys.
+        panes :  str, None, or list of int, optional
+            May be set to &#39;all&#39; to apply to all panes, None
+            to apply only to the current pane, or a list of
+            pane indexes to modify.
+        &quot;&quot;&quot;
+        if not isinstance(units, dict):
+            raise TypeError(&#39;Provided units must be dict&#39;)
+        self.view.set_units(units=units, panes=panes)</div>
+
+
+<div class="viewcode-block" id="Eye.get_model_backup">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.get_model_backup">[docs]</a>
+    def get_model_backup(self):
+        &quot;&quot;&quot;
+        Return a copy of raw loaded data.
+        &quot;&quot;&quot;
+        self.view.model_backup(self.models)</div>
+
+
+<div class="viewcode-block" id="Eye.get_units">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.get_units">[docs]</a>
+    def get_units(self, panes: Optional[Union[str, List[int]]] = &#39;all&#39;) -&gt; \
+            List:
+        &quot;&quot;&quot;
+        Get the current units for active panes.
+
+        Parameters
+        ----------
+        panes : str, None, or list of int, optional
+            May be set to &#39;all&#39; to apply to all panes, None
+            to apply only to the current pane, or a list of
+            pane indexes to modify.
+
+        Returns
+        -------
+        units : list of list of dict
+            List of units for each pane specified.
+        &quot;&quot;&quot;
+        return self.view.get_units(panes)</div>
+
+
+<div class="viewcode-block" id="Eye.set_orders">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.set_orders">[docs]</a>
+    def set_orders(self, orders: Dict) -&gt; None:
+        &quot;&quot;&quot;
+        Set orders to enable.
+
+        Parameters
+        ----------
+        orders : dict
+            Keys are model IDs, values are lists of orders to enable.
+        &quot;&quot;&quot;
+        if not isinstance(orders, dict):
+            raise TypeError(&#39;Provided orders must be dict&#39;)
+        self.view.set_orders(orders)</div>
+
+
+<div class="viewcode-block" id="Eye.get_orders">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.get_orders">[docs]</a>
+    def get_orders(self, panes: Optional[Union[str, List[int]]] = &#39;all&#39;) -&gt; \
+            Dict:
+        &quot;&quot;&quot;
+        Get enabled orders.
+
+        Parameters
+        ----------
+        panes : str, None, or list of int, optional
+            May be set to &#39;all&#39; to apply to all panes, None
+            to apply only to the current pane, or a list of
+            pane indexes to modify.
+
+        Returns
+        -------
+        orders : dict
+            Keys are model IDs, values are lists of enabled orders.
+        &quot;&quot;&quot;
+        return self.view.get_orders(panes)</div>
+
+
+<div class="viewcode-block" id="Eye.set_scale">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.set_scale">[docs]</a>
+    def set_scale(self, scales: Dict,
+                  panes: Optional[Union[str, List[int]]] = &#39;all&#39;) -&gt; None:
+        &quot;&quot;&quot;
+        Set scale setting for active panes.
+
+        Parameters
+        ----------
+        scales : dict
+            Keys are &#39;x&#39; and &#39;y&#39;, values are &#39;linear&#39; or &#39;log&#39;.
+        panes : str, None, or list of int, optional
+            May be set to &#39;all&#39; to apply to all panes, None
+            to apply only to the current pane, or a list of
+            pane indexes to modify.
+        &quot;&quot;&quot;
+        if not isinstance(scales, dict):
+            raise TypeError(&#39;Provided scales must be dict&#39;)
+        self.view.set_scales(scales=scales, panes=panes)</div>
+
+
+<div class="viewcode-block" id="Eye.get_scale">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.get_scale">[docs]</a>
+    def get_scale(self,
+                  panes: Optional[Union[str, List[int]]] = &#39;all&#39;) -&gt; List:
+        &quot;&quot;&quot;
+        Get scale setting for active panes.
+
+        Parameters
+        ----------
+        panes : str, None, or list of int, optional
+            May be set to &#39;all&#39; to apply to all panes, None
+            to apply only to the current pane, or a list of
+            pane indexes to modify.
+
+        Returns
+        -------
+        scales : list
+            Keys are &#39;x&#39; and &#39;y&#39;, values are &#39;linear&#39; or &#39;log&#39;.
+        &quot;&quot;&quot;
+        return self.view.get_scales(panes=panes)</div>
+
+
+<div class="viewcode-block" id="Eye.toggle_controls">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.toggle_controls">[docs]</a>
+    def toggle_controls(self) -&gt; None:
+        &quot;&quot;&quot;Toggle the control panel visibility.&quot;&quot;&quot;
+        self.view.toggle_controls()</div>
+
+
+<div class="viewcode-block" id="Eye.toggle_cursor">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.toggle_cursor">[docs]</a>
+    def toggle_cursor(self) -&gt; None:
+        &quot;&quot;&quot;Toggle the cursor panel visibility.&quot;&quot;&quot;
+        self.view.toggle_cursor()</div>
+
+
+<div class="viewcode-block" id="Eye.toggle_file_panel">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.toggle_file_panel">[docs]</a>
+    def toggle_file_panel(self) -&gt; None:
+        &quot;&quot;&quot;Toggle the file panel visibility.&quot;&quot;&quot;
+        self.view.toggle_file_panel()</div>
+
+
+<div class="viewcode-block" id="Eye.toggle_order_panel">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.toggle_order_panel">[docs]</a>
+    def toggle_order_panel(self) -&gt; None:
+        &quot;&quot;&quot;Toggle the order panel visibility.&quot;&quot;&quot;
+        self.view.toggle_order_panel()</div>
+
+
+<div class="viewcode-block" id="Eye.toggle_axis_panel">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.toggle_axis_panel">[docs]</a>
+    def toggle_axis_panel(self) -&gt; None:
+        &quot;&quot;&quot;Toggle the axis panel visibility.&quot;&quot;&quot;
+        self.view.toggle_axis_panel()</div>
+
+
+<div class="viewcode-block" id="Eye.toggle_plot_panel">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.toggle_plot_panel">[docs]</a>
+    def toggle_plot_panel(self) -&gt; None:
+        &quot;&quot;&quot;Toggle the plot panel visibility.&quot;&quot;&quot;
+        self.view.toggle_plot_panel()</div>
+
+
+<div class="viewcode-block" id="Eye.toggle_analysis_panel">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.toggle_analysis_panel">[docs]</a>
+    def toggle_analysis_panel(self) -&gt; None:
+        &quot;&quot;&quot;Toggle the plot panel visibility.&quot;&quot;&quot;
+        self.view.toggle_analysis_panel()</div>
+
+
+<div class="viewcode-block" id="Eye.generate">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.generate">[docs]</a>
+    def generate(self) -&gt; None:
+        &quot;&quot;&quot;Initiate or refresh the view.&quot;&quot;&quot;
+        self.signals.atrophy_bg_full.emit()
+        self.view.refresh_loop()</div>
+
+
+<div class="viewcode-block" id="Eye.save">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.save">[docs]</a>
+    def save(self, filename: str, **kwargs) -&gt; None:
+        &quot;&quot;&quot;
+        Save the current view to an image.
+
+        Parameters
+        ----------
+        filename : str
+            File path to save to.
+        kwargs : dict
+            Optional arguments to pass to `view.View.save`.
+        &quot;&quot;&quot;
+        log.debug(f&#39;Saving image to {filename}&#39;)
+        self.view.save(filename, **kwargs)</div>
+
+
+<div class="viewcode-block" id="Eye.remove_data">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.remove_data">[docs]</a>
+    def remove_data(self, model_ids: Optional[List[str]] = None) -&gt; None:
+        &quot;&quot;&quot;
+        Remove loaded data from the view.
+
+        Parameters
+        ----------
+        filenames : list of str, optional
+            If not provided, currently selected files in the file panel
+            will be removed.
+        &quot;&quot;&quot;
+        if not model_ids:
+            model_ids = self.view.current_files_selected()
+        if not model_ids:
+            return
+        if not isinstance(model_ids, list):
+            model_ids = [model_ids]
+        for model_id in model_ids:
+            try:
+                del self.models[model_id]
+            except KeyError:
+                log.warning(f&#39;File {model_id} not found&#39;)
+                continue
+            self.view.remove_data_from_all_panes(model_id)
+
+        # reset model index if count has gone to zero
+        if len(self.models) == 0:
+            self.model_index = 0
+
+        self.signals.refresh_file_table.emit()
+        self.signals.atrophy.emit()</div>
+
+
+<div class="viewcode-block" id="Eye.remove_panes">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.remove_panes">[docs]</a>
+    def remove_panes(self, panes: Optional[Union[str, List[int]]] = &#39;all&#39;
+                     ) -&gt; None:
+        &quot;&quot;&quot;
+        Remove currently displayed panes.
+
+        Parameters
+        ----------
+        panes : str, None, or list of int, optional
+            May be set to &#39;all&#39; to apply to all panes, None
+            to apply only to the current pane, or a list of
+            pane indexes to modify.
+        &quot;&quot;&quot;
+        self.view.remove_panes(panes)</div>
+
+
+<div class="viewcode-block" id="Eye.display_selected_model">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.eye.Eye.html#sofia_redux.visualization.eye.Eye.display_selected_model">[docs]</a>
+    def display_selected_model(self) -&gt; None:
+        &quot;&quot;&quot;Display a selected file in the current pane.&quot;&quot;&quot;
+        model_ids = self.view.current_files_selected()
+        if not model_ids:
+            return
+        if self.view.timer:
+            self.view.timer.stop()
+        errors = list()
+        for model_id in model_ids:
+            try:
+                self.view.display_model(self.models[model_id])
+            except KeyError:
+                # self.view.release_atrophy()
+                raise RuntimeError(f&#39;Cannot locate model {model_id}&#39;)
+            except EyeError:
+                errors.append(self.models[model_id].filename)
+        if errors:
+            if len(errors) == 1:
+                s = &#39;1 file does not match pane&#39;
+            else:
+                s = f&#39;{len(errors)} files do not match pane.&#39;
+            log.warning(s)
+        self.signals.atrophy.emit()
+        if self.view.timer:
+            self.view.timer.start()</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.gui.qad_viewer &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.gui.qad_viewer</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Redux Viewer using QAD modules for display to DS9.&quot;&quot;&quot;
+
+import os
+
+import configobj
+from astropy import log
+
+from sofia_redux.pipeline.viewer import Viewer
+from sofia_redux.pipeline.gui.widgets import GeneralRunnable
+
+try:
+    from PyQt5 import QtWidgets, QtCore
+    from sofia_redux.pipeline.gui.ui import ui_qad_settings
+except ImportError:
+    HAS_PYQT5 = False
+    QtCore = None
+
+    # duck type parents to allow class definition
+    class QtWidgets:
+        class QWidget:
+            pass
+
+    class ui_qad_settings:
+        class Ui_Form:
+            pass
+else:
+    HAS_PYQT5 = True
+
+__all__ = [&#39;QADViewerSettings&#39;, &#39;QADViewer&#39;]
+
+
+<div class="viewcode-block" id="QADViewerSettings">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings">[docs]</a>
+class QADViewerSettings(QtWidgets.QWidget, ui_qad_settings.Ui_Form):
+    &quot;&quot;&quot;
+    Settings widget for QAD Viewer.
+
+    All attributes and methods for this class are intended for internal
+    use, in response to user actions within a Qt5 application.
+    &quot;&quot;&quot;
+    def __init__(self, imviewer, parent=None):
+        &quot;&quot;&quot;
+        Start up the settings widget.
+
+        Parameters
+        ----------
+        imviewer : `sofia_redux.pipeline.gui.qad.qad_imview.QADImView`
+            Associated QAD Image Viewer.
+        parent : `QWidget`, optional
+            Parent widget.  May be any Qt Widget.
+        &quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for Redux GUI.&#39;)
+
+        # parent initialization
+        super().__init__()
+
+        self.setupUi(self)
+
+        self.imviewer = imviewer
+        self.headviewer = None
+        self.cfg_dir = None
+        self.load_worker = None
+        self.imexam_worker = None
+
+        self.dispInitial = self.imviewer.disp_parameters.copy()
+        self.photInitial = self.imviewer.phot_parameters.copy()
+        self.plotInitial = self.imviewer.plot_parameters.copy()
+
+        # set initial widget values from viewer parameters
+        self.setDispValue(self.dispInitial)
+        self.setPhotValue(self.photInitial)
+        self.setPlotValue(self.plotInitial)
+
+        # connect signals to slots
+        self.disableDS9Box.stateChanged.connect(self.getDispValue)
+        self.disableOverplotsBox.stateChanged.connect(self.getDispValue)
+        self.extensionBox.currentIndexChanged.connect(self.getDispValue)
+        self.extensionBox.lineEdit().editingFinished.connect(self.getDispValue)
+        self.lockImageBox.currentIndexChanged.connect(self.getDispValue)
+        self.lockSliceBox.currentIndexChanged.connect(self.getDispValue)
+        self.scaleBox.currentIndexChanged.connect(self.getDispValue)
+        self.colorMapBox.editingFinished.connect(self.getDispValue)
+        self.zoomBox.stateChanged.connect(self.getDispValue)
+        self.tileBox.stateChanged.connect(self.getDispValue)
+        self.snRangeBox.editingFinished.connect(self.getDispValue)
+
+        self.modelTypeBox.currentIndexChanged.connect(self.getPhotValue)
+        self.windowUnitsBox.currentIndexChanged.connect(self.getPhotValue)
+        self.fwhmUnitsBox.currentIndexChanged.connect(self.getPhotValue)
+        self.apradUnitsBox.currentIndexChanged.connect(self.getPhotValue)
+        self.windowSizeBox.editingFinished.connect(self.getPhotValue)
+        self.fwhmBox.editingFinished.connect(self.getPhotValue)
+        self.apradBox.editingFinished.connect(self.getPhotValue)
+        self.bgrinBox.editingFinished.connect(self.getPhotValue)
+        self.bgwidBox.editingFinished.connect(self.getPhotValue)
+        self.radialPlotBox.stateChanged.connect(self.getPhotValue)
+
+        self.plotWindowUnitsBox.currentIndexChanged.connect(self.getPlotValue)
+        self.shareAxesBox.currentIndexChanged.connect(self.getPlotValue)
+        self.plotWindowSizeBox.editingFinished.connect(self.getPlotValue)
+        self.plotColorBox.editingFinished.connect(self.getPlotValue)
+        self.histBinBox.editingFinished.connect(self.getPlotValue)
+        self.histLimitsBox.editingFinished.connect(self.getPlotValue)
+        self.summaryStatBox.currentIndexChanged.connect(self.getPlotValue)
+        self.p2pReferenceBox.editingFinished.connect(self.getPlotValue)
+        self.separatePlotsBox.stateChanged.connect(self.getPlotValue)
+
+        self.resetDispButton.clicked.connect(self.resetDisp)
+        self.restoreDispButton.clicked.connect(self.restoreDisp)
+        self.resetPhotButton.clicked.connect(self.resetPhot)
+        self.restorePhotButton.clicked.connect(self.restorePhot)
+        self.resetPlotButton.clicked.connect(self.resetPlot)
+        self.restorePlotButton.clicked.connect(self.restorePlot)
+
+        self.imexamButton.clicked.connect(self.onImExam)
+        self.headerButton.clicked.connect(self.onDisplayHeader)
+        self.saveButton.clicked.connect(self.onSave)
+
+<div class="viewcode-block" id="QADViewerSettings.getDispValue">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.getDispValue">[docs]</a>
+    def getDispValue(self):
+        &quot;&quot;&quot;Get current display settings from widgets.&quot;&quot;&quot;
+        parameters = self.imviewer.disp_parameters.copy()
+
+        parameters[&#39;extension&#39;] = str(self.extensionBox.currentText()).lower()
+        parameters[&#39;lock_image&#39;] = str(self.lockImageBox.currentText()).lower()
+        parameters[&#39;lock_slice&#39;] = str(self.lockSliceBox.currentText()).lower()
+        parameters[&#39;scale&#39;] = str(self.scaleBox.currentText()).lower()
+        parameters[&#39;cmap&#39;] = str(self.colorMapBox.text()).lower()
+        parameters[&#39;zoom_fit&#39;] = self.zoomBox.isChecked()
+        parameters[&#39;tile&#39;] = self.tileBox.isChecked()
+        parameters[&#39;overplots&#39;] = not self.disableOverplotsBox.isChecked()
+        parameters[&#39;ds9_viewer_pipeline&#39;] = not self.disableDS9Box.isChecked()
+        parameters[&#39;ds9_viewer&#39;] = parameters[&#39;ds9_viewer_pipeline&#39;]
+
+        try:
+            lim = str(self.snRangeBox.text()).split(&#39;,&#39;)
+            parameters[&#39;s2n_range&#39;] = [float(lim[0]), float(lim[1])]
+        except (ValueError, TypeError, AttributeError, IndexError):
+            parameters[&#39;s2n_range&#39;] = None
+
+        # attempt redisplay if any parameters have changed
+        if parameters != self.imviewer.disp_parameters:
+            self.imviewer.disp_parameters = parameters
+            self.onLoad(None)</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.getPhotValue">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.getPhotValue">[docs]</a>
+    def getPhotValue(self):
+        &quot;&quot;&quot;Get current photometry settings from widgets.&quot;&quot;&quot;
+        parameters = self.imviewer.phot_parameters
+
+        parameters[&#39;model&#39;] = \
+            str(self.modelTypeBox.currentText()).lower()
+        parameters[&#39;fwhm_units&#39;] = \
+            str(self.fwhmUnitsBox.currentText()).lower()
+        parameters[&#39;window_units&#39;] = \
+            str(self.windowUnitsBox.currentText()).lower()
+        parameters[&#39;aperture_units&#39;] = \
+            str(self.apradUnitsBox.currentText()).lower()
+        try:
+            parameters[&#39;window&#39;] = float(self.windowSizeBox.text())
+        except ValueError:
+            pass
+        try:
+            parameters[&#39;fwhm&#39;] = float(self.fwhmBox.text())
+        except ValueError:
+            pass
+        try:
+            parameters[&#39;psf_radius&#39;] = float(self.apradBox.text())
+        except ValueError:
+            parameters[&#39;psf_radius&#39;] = &#39;auto&#39;
+        bgi = self.bgrinBox.text()
+        if str(bgi).lower() == &#39;none&#39;:
+            parameters[&#39;bg_inner&#39;] = None
+        else:
+            try:
+                parameters[&#39;bg_inner&#39;] = float(bgi)
+            except ValueError:
+                parameters[&#39;bg_inner&#39;] = &#39;auto&#39;
+        bgw = self.bgwidBox.text()
+        if str(bgw).lower() == &#39;none&#39;:
+            parameters[&#39;bg_width&#39;] = None
+        else:
+            try:
+                parameters[&#39;bg_width&#39;] = float(bgw)
+            except ValueError:
+                parameters[&#39;bg_width&#39;] = &#39;auto&#39;
+
+        parameters[&#39;show_plots&#39;] = self.radialPlotBox.isChecked()
+
+        self.imviewer.phot_parameters = parameters</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.getPlotValue">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.getPlotValue">[docs]</a>
+    def getPlotValue(self):
+        &quot;&quot;&quot;Get current plot settings from widgets.&quot;&quot;&quot;
+        parameters = self.imviewer.plot_parameters
+
+        parameters[&#39;window_units&#39;] = \
+            str(self.plotWindowUnitsBox.currentText()).lower()
+
+        try:
+            parameters[&#39;window&#39;] = float(self.plotWindowSizeBox.text())
+        except ValueError:
+            parameters[&#39;window&#39;] = None
+
+        parameters[&#39;color&#39;] = str(self.plotColorBox.text()).lower()
+        parameters[&#39;share_axes&#39;] = str(self.shareAxesBox.currentText()).lower()
+        parameters[&#39;separate_plots&#39;] = self.separatePlotsBox.isChecked()
+
+        try:
+            parameters[&#39;bin&#39;] = int(self.histBinBox.text())
+        except ValueError:
+            bin_val = str(self.histBinBox.text()).lower()
+            if bin_val in [&#39;auto&#39;, &#39;fd&#39;, &#39;doane&#39;, &#39;scott&#39;, &#39;stone&#39;,
+                           &#39;rice&#39;, &#39;sturges&#39;, &#39;sqrt&#39;]:
+                parameters[&#39;bin&#39;] = bin_val
+            else:
+                parameters[&#39;bin&#39;] = &#39;fd&#39;
+
+        try:
+            lim = str(self.histLimitsBox.text()).split(&#39;,&#39;)
+            parameters[&#39;hist_limits&#39;] = [float(lim[0]), float(lim[1])]
+        except (ValueError, TypeError, AttributeError, IndexError):
+            parameters[&#39;hist_limits&#39;] = None
+
+        parameters[&#39;summary_stat&#39;] = str(
+            self.summaryStatBox.currentText()).lower()
+
+        try:
+            parameters[&#39;p2p_reference&#39;] = int(self.p2pReferenceBox.text())
+        except ValueError:
+            parameters[&#39;p2p_reference&#39;] = 1
+
+        self.imviewer.plot_parameters = parameters</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.onDisplayHeader">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.onDisplayHeader">[docs]</a>
+    def onDisplayHeader(self):
+        &quot;&quot;&quot;Display header data in a separate widget.&quot;&quot;&quot;
+        if self.headviewer is None or not self.headviewer.isVisible():
+            try:
+                from .qad import qad_headview
+            except ImportError:
+                log.error(&quot;QAD not found; Viewer will not display headers.&quot;)
+                return
+            self.headviewer = qad_headview.HeaderViewer(self)
+
+        headers = self.imviewer.headers
+        if len(headers) == 0:
+            self.setStatus(&quot;No headers to display.&quot;)
+        else:
+            title = os.path.basename(sorted(list(headers.keys()))[0])
+            if len(headers) &gt; 1:
+                title += &#39;...&#39;
+
+            # check the display settings -- if a particular extension
+            # is specified, only retrieve its header.  Otherwise,
+            # get them all
+            try:
+                exten = self.imviewer.get_extension_param()
+            except (ValueError, TypeError, IndexError,
+                    AttributeError, KeyError):
+                exten = &#39;all&#39;
+            if str(exten) != &#39;all&#39;:
+                new_headers = {}
+                for fpath in headers:
+                    try:
+                        # integer extension
+                        new_headers[fpath] = [headers[fpath][exten]]
+                    except TypeError:
+                        # string extension
+                        exten = str(exten).lower()
+                        for ext in headers[fpath]:
+                            if &#39;EXTNAME&#39; in ext and \
+                                    ext[&#39;EXTNAME&#39;].strip().lower() == exten:
+                                new_headers[fpath] = [ext]
+                                break
+                        if fpath not in new_headers:
+                            log.warning(f&#39;No extension {exten} found for &#39;
+                                        f&#39;{fpath}; displaying all headers&#39;)
+                            new_headers[fpath] = headers[fpath]
+                    except (ValueError, IndexError, TypeError, KeyError,
+                            AttributeError):
+                        # unrecognized extension
+                        log.warning(f&#39;No extension {exten} found for &#39;
+                                    f&#39;{fpath}; displaying all headers&#39;)
+                        new_headers[fpath] = headers[fpath]
+                headers = new_headers
+
+            self.headviewer.load(headers)
+            self.headviewer.show()
+            self.headviewer.raise_()
+            self.headviewer.setTitle(&quot;Header for: {}&quot;.format(title))
+            self.setStatus(&quot;FITS headers displayed.&quot;)</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.onImExam">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.onImExam">[docs]</a>
+    def onImExam(self):
+        &quot;&quot;&quot;Start imexam in a new thread.&quot;&quot;&quot;
+        self.imexamButton.setEnabled(False)
+        self.setStatus(&quot;Starting imexam in DS9; press &#39;q&#39; to quit.&quot;)
+        self.imviewer.break_loop = False
+        threadpool = QtCore.QThreadPool.globalInstance()
+        self.imexam_worker = GeneralRunnable(self.imviewer.imexam)
+        self.imexam_worker.signals.finished.connect(self.imexamFinish)
+        threadpool.start(self.imexam_worker)</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.imexamFinish">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.imexamFinish">[docs]</a>
+    def imexamFinish(self, status):
+        &quot;&quot;&quot;
+        ImExam callback.
+
+        Parameters
+        ----------
+        status : None or tuple
+            If not None, contains an error message to log.
+        &quot;&quot;&quot;
+        if status is not None:
+            # log the error
+            log.error(&quot;\n{}&quot;.format(status[2]))
+        self.imexam_worker = None
+        self.imviewer.break_loop = True
+        self.setStatus(&#39;&#39;)
+        self.imexamButton.setEnabled(True)</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.onLoad">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.onLoad">[docs]</a>
+    def onLoad(self, data, regfiles=None):
+        &quot;&quot;&quot;Start DS9 load in a new thread.&quot;&quot;&quot;
+        if self.load_worker is not None:
+            self.setStatus(&quot;Skipping display; DS9 is busy&quot;)
+            return
+        else:
+            self.setStatus(&quot;Loading QAD data.&quot;)
+        threadpool = QtCore.QThreadPool.globalInstance()
+        if data is None:
+            self.load_worker = GeneralRunnable(self.imviewer.reload)
+        else:
+            self.load_worker = GeneralRunnable(self.imviewer.load, data,
+                                               regfiles=regfiles)
+        self.load_worker.signals.finished.connect(self.loadFinish)
+        threadpool.start(self.load_worker)</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.loadFinish">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.loadFinish">[docs]</a>
+    def loadFinish(self, status):
+        &quot;&quot;&quot;
+        DS9 load callback.
+
+        Parameters
+        ----------
+        status : None or tuple
+            If not None, contains an error message to log.
+        &quot;&quot;&quot;
+        if status is not None:
+            # log the error
+            log.error(&quot;\n{}&quot;.format(status[2]))
+        self.load_worker = None
+        self.setStatus(&#39;&#39;)</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.onSave">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.onSave">[docs]</a>
+    def onSave(self):
+        &quot;&quot;&quot;Save QAD parameters.&quot;&quot;&quot;
+        if self.cfg_dir is None or not os.path.isdir(self.cfg_dir):
+            log.error(&#39;No config directory available; not saving parameters&#39;)
+            return
+
+        # display parameters
+        config = configobj.ConfigObj(self.imviewer.disp_parameters,
+                                     unrepr=True)
+        config.filename = os.path.join(self.cfg_dir, &#39;display.cfg&#39;)
+        config.write()
+
+        # photometry parameters
+        config = configobj.ConfigObj(self.imviewer.phot_parameters,
+                                     unrepr=True)
+        config.filename = os.path.join(self.cfg_dir, &#39;photometry.cfg&#39;)
+        config.write()
+
+        # plot parameters
+        config = configobj.ConfigObj(self.imviewer.plot_parameters,
+                                     unrepr=True)
+        config.filename = os.path.join(self.cfg_dir, &#39;plot.cfg&#39;)
+        config.write()
+
+        self.setStatus(&#39;Settings saved to {:s}&#39;.format(self.cfg_dir))</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.resetDisp">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.resetDisp">[docs]</a>
+    def resetDisp(self):
+        &quot;&quot;&quot;Reset display settings to initial values.&quot;&quot;&quot;
+        self.setDispValue(self.dispInitial)
+        self.getDispValue()</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.resetPhot">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.resetPhot">[docs]</a>
+    def resetPhot(self):
+        &quot;&quot;&quot;Reset photometry settings to initial values.&quot;&quot;&quot;
+        self.setPhotValue(self.photInitial)
+        self.getPhotValue()</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.resetPlot">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.resetPlot">[docs]</a>
+    def resetPlot(self):
+        &quot;&quot;&quot;Reset plot settings to initial values.&quot;&quot;&quot;
+        self.setPlotValue(self.plotInitial)
+        self.getPlotValue()</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.restoreDisp">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.restoreDisp">[docs]</a>
+    def restoreDisp(self):
+        &quot;&quot;&quot;Restore display settings to default values.&quot;&quot;&quot;
+        self.setDispValue(self.imviewer.default_parameters(&#39;display&#39;))
+        self.getDispValue()</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.restorePhot">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.restorePhot">[docs]</a>
+    def restorePhot(self):
+        &quot;&quot;&quot;Restore photometry settings to default values.&quot;&quot;&quot;
+        self.setPhotValue(self.imviewer.default_parameters(&#39;photometry&#39;))
+        self.getPhotValue()</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.restorePlot">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.restorePlot">[docs]</a>
+    def restorePlot(self):
+        &quot;&quot;&quot;Restore plot settings to default values.&quot;&quot;&quot;
+        self.setPlotValue(self.imviewer.default_parameters(&#39;plot&#39;))
+        self.getPlotValue()</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.setDispValue">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.setDispValue">[docs]</a>
+    def setDispValue(self, fromdict):
+        &quot;&quot;&quot;
+        Set widget values for display settings.
+
+        Parameters
+        ----------
+        fromdict : dict
+            Display parameter dictionary (`QADImView.disp_parameters`).
+        &quot;&quot;&quot;
+        # extension combo box
+        if &#39;extension&#39; in fromdict:
+            ext = str(fromdict[&#39;extension&#39;]).lower()
+            idx = self.extensionBox.findText(ext, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.extensionBox.setCurrentIndex(idx)
+            else:
+                # set text in last entry (extnum)
+                idx = 3
+                self.extensionBox.setCurrentIndex(idx)
+                self.extensionBox.setItemText(idx, ext.upper())
+
+        # lock type combo boxes
+        if &#39;lock_image&#39; in fromdict:
+            lock = fromdict[&#39;lock_image&#39;].lower()
+            idx = self.lockImageBox.findText(lock, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.lockImageBox.setCurrentIndex(idx)
+        if &#39;lock_slice&#39; in fromdict:
+            lock = fromdict[&#39;lock_slice&#39;].lower()
+            idx = self.lockSliceBox.findText(lock, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.lockSliceBox.setCurrentIndex(idx)
+
+        # scale combo box
+        if &#39;scale&#39; in fromdict:
+            scale = fromdict[&#39;scale&#39;].lower()
+            idx = self.scaleBox.findText(scale, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.scaleBox.setCurrentIndex(idx)
+
+        # colormap text
+        try:
+            self.colorMapBox.setText(str(fromdict[&#39;cmap&#39;]))
+        except KeyError:
+            pass
+
+        # zoom to fit check box
+        try:
+            self.zoomBox.setChecked(fromdict[&#39;zoom_fit&#39;])
+        except KeyError:
+            pass
+
+        # tile check box
+        try:
+            self.tileBox.setChecked(fromdict[&#39;tile&#39;])
+        except KeyError:
+            pass
+
+        # s2n range text
+        try:
+            str_lim = [str(f) for f in fromdict[&#39;s2n_range&#39;]]
+            self.snRangeBox.setText(&#39;,&#39;.join(str_lim))
+        except (KeyError, ValueError, TypeError, AttributeError, IndexError):
+            self.snRangeBox.setText(&#39;&#39;)
+
+        # overplots check box
+        try:
+            self.disableOverplotsBox.setChecked(not fromdict[&#39;overplots&#39;])
+        except KeyError:
+            pass
+
+        # DS9 disable check box
+        try:
+            self.disableDS9Box.setChecked(not fromdict[&#39;ds9_viewer_pipeline&#39;])
+        except KeyError:
+            pass
+
+        self.repaint()</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.setPhotValue">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.setPhotValue">[docs]</a>
+    def setPhotValue(self, fromdict):
+        &quot;&quot;&quot;
+        Set widget values for photometry settings.
+
+        Parameters
+        ----------
+        fromdict : dict
+            Photometry parameter dictionary (`QADImView.phot_parameters`).
+        &quot;&quot;&quot;
+        # model list
+        if &#39;model&#39; in fromdict:
+            mname = fromdict[&#39;model&#39;].lower()
+            idx = self.modelTypeBox.findText(mname, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.modelTypeBox.setCurrentIndex(idx)
+
+        # window text
+        try:
+            self.windowSizeBox.setText(str(fromdict[&#39;window&#39;]))
+        except KeyError:
+            pass
+
+        # window units list
+        if &#39;window_units&#39; in fromdict:
+            units = fromdict[&#39;window_units&#39;].lower()
+            idx = self.windowUnitsBox.findText(
+                units, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.windowUnitsBox.setCurrentIndex(idx)
+
+        # fwhm text
+        try:
+            self.fwhmBox.setText(str(fromdict[&#39;fwhm&#39;]))
+        except KeyError:
+            pass
+
+        # fwhm units list
+        if &#39;fwhm_units&#39; in fromdict:
+            units = fromdict[&#39;fwhm_units&#39;].lower()
+            idx = self.fwhmUnitsBox.findText(units, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.fwhmUnitsBox.setCurrentIndex(idx)
+
+        # aperture (PSF) radius text
+        try:
+            self.apradBox.setText(str(fromdict[&#39;psf_radius&#39;]))
+        except KeyError:
+            pass
+
+        # aperture units list
+        if &#39;aperture_units&#39; in fromdict:
+            units = fromdict[&#39;aperture_units&#39;].lower()
+            idx = self.apradUnitsBox.findText(units,
+                                              QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.apradUnitsBox.setCurrentIndex(idx)
+
+        # bg inner text
+        try:
+            self.bgrinBox.setText(str(fromdict[&#39;bg_inner&#39;]))
+        except KeyError:
+            pass
+
+        # bg width text
+        try:
+            self.bgwidBox.setText(str(fromdict[&#39;bg_width&#39;]))
+        except KeyError:
+            pass
+
+        # show plots check box
+        try:
+            self.radialPlotBox.setChecked(fromdict[&#39;show_plots&#39;])
+        except KeyError:
+            pass
+
+        self.repaint()</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.setPlotValue">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.setPlotValue">[docs]</a>
+    def setPlotValue(self, fromdict):
+        &quot;&quot;&quot;
+        Set widget values for plot settings.
+
+        Parameters
+        ----------
+        fromdict : dict
+            Plot parameter dictionary (`QADImView.plot_parameters`).
+        &quot;&quot;&quot;
+        # window text
+        try:
+            self.plotWindowSizeBox.setText(str(fromdict[&#39;window&#39;]))
+        except KeyError:
+            pass
+
+        # window units list
+        if &#39;window_units&#39; in fromdict:
+            units = fromdict[&#39;window_units&#39;].lower()
+            idx = self.plotWindowUnitsBox.findText(
+                units, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.plotWindowUnitsBox.setCurrentIndex(idx)
+
+        # color cycle text
+        try:
+            self.plotColorBox.setText(str(fromdict[&#39;color&#39;]))
+        except KeyError:
+            pass
+
+        # share axes list
+        if &#39;share_axes&#39; in fromdict:
+            ax = fromdict[&#39;share_axes&#39;].lower()
+            idx = self.shareAxesBox.findText(ax, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.shareAxesBox.setCurrentIndex(idx)
+
+        # separate plots check box
+        try:
+            self.separatePlotsBox.setChecked(fromdict[&#39;separate_plots&#39;])
+        except KeyError:
+            pass
+
+        # histogram binning text
+        try:
+            self.histBinBox.setText(str(fromdict[&#39;bin&#39;]))
+        except KeyError:
+            pass
+
+        # histogram limits text
+        try:
+            str_lim = [str(f) for f in fromdict[&#39;hist_limits&#39;]]
+            self.histLimitsBox.setText(&#39;,&#39;.join(str_lim))
+        except (KeyError, ValueError, TypeError, AttributeError, IndexError):
+            self.histLimitsBox.setText(&#39;&#39;)
+
+        # summary stat list
+        if &#39;summary_stat&#39; in fromdict:
+            ax = fromdict[&#39;summary_stat&#39;].lower()
+            idx = self.summaryStatBox.findText(ax, QtCore.Qt.MatchFixedString)
+            if idx != -1:
+                self.summaryStatBox.setCurrentIndex(idx)
+
+        # P2P reference frame text
+        try:
+            self.p2pReferenceBox.setText(str(fromdict[&#39;p2p_reference&#39;]))
+        except KeyError:
+            pass
+
+        self.repaint()</div>
+
+
+<div class="viewcode-block" id="QADViewerSettings.setStatus">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.html#sofia_redux.pipeline.gui.qad_viewer.QADViewerSettings.setStatus">[docs]</a>
+    def setStatus(self, msg):
+        &quot;&quot;&quot;
+        Set a status message.
+
+        Parameters
+        ----------
+        msg : str
+            Status message to display.
+        &quot;&quot;&quot;
+        self.status.setText(msg)
+        self.status.repaint()</div>
+</div>
+
+
+
+<div class="viewcode-block" id="QADViewer">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewer.html#sofia_redux.pipeline.gui.qad_viewer.QADViewer">[docs]</a>
+class QADViewer(Viewer):
+    &quot;&quot;&quot;
+    Redux Viewer interface to DS9 and the Eye of SOFIA.
+
+    Uses pyds9 to control DS9 for image and cube display,
+    and the Eye viewer for spectra.
+
+    Attributes
+    ----------
+    imviewer : `sofia_redux.pipeline.gui.qad.qad_imview.QADImView`
+        QAD Image and Spectrum Viewer.
+    settings : `QADViewerSettings`
+        Control widgets for the QADViewer.
+
+    See Also
+    --------
+    sofia_redux.pipeline.gui.qad.qad_app : standalone QAD application
+    &quot;&quot;&quot;
+    def __init__(self):
+        &quot;&quot;&quot;Initialize the QAD Viewer.&quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for Redux GUI.&#39;)
+
+        super().__init__()
+        self.name = &quot;QADViewer&quot;
+        self.embedded = True
+
+        self.imviewer = None
+        self.settings = None
+
+<div class="viewcode-block" id="QADViewer.start">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewer.html#sofia_redux.pipeline.gui.qad_viewer.QADViewer.start">[docs]</a>
+    def start(self, parent=None):
+        &quot;&quot;&quot;
+        Start up the viewer.
+
+        Parameters
+        ----------
+        parent : QtWidgets.QSplitter
+            Widget to add the viewer settings to.  May be any Qt
+            widget with an `addWidget` method.
+        &quot;&quot;&quot;
+        self.parent = parent
+
+        # import at last minute to avoid pyds9
+        # startup behavior until necessary
+        try:
+            from .qad.qad_imview import QADImView
+            self.imviewer = QADImView()
+        except ImportError:
+            log.error(&quot;QAD not found; Viewer will not display data.&quot;)
+            self.embedded = False
+            return
+        try:
+            import pyds9
+            assert pyds9
+        except ImportError:
+            log.warning(&#39;DS9 not found. Images will not display.&#39;)
+            HAS_DS9 = False
+        else:
+            HAS_DS9 = True
+
+        # read settings if available
+        cfg_dir = os.path.join(os.path.expanduser(&#39;~&#39;), &#39;.qad&#39;)
+        os.makedirs(cfg_dir, exist_ok=True)
+
+        disp_cfg = os.path.join(cfg_dir, &#39;display.cfg&#39;)
+        if os.path.isfile(disp_cfg):
+            config = configobj.ConfigObj(disp_cfg, unrepr=True)
+            self.imviewer.disp_parameters.update(config.dict())
+        phot_cfg = os.path.join(cfg_dir, &#39;photometry.cfg&#39;)
+        if os.path.isfile(phot_cfg):
+            config = configobj.ConfigObj(phot_cfg, unrepr=True)
+            self.imviewer.phot_parameters.update(config.dict())
+        plot_cfg = os.path.join(cfg_dir, &#39;plot.cfg&#39;)
+        if os.path.isfile(plot_cfg):
+            config = configobj.ConfigObj(plot_cfg, unrepr=True)
+            self.imviewer.plot_parameters.update(config.dict())
+
+        # set ds9 disable preference to pipeline version
+        # (separate from standalone preference)
+        self.imviewer.disp_parameters[&#39;ds9_viewer&#39;] = \
+            self.imviewer.disp_parameters[&#39;ds9_viewer_pipeline&#39;]
+
+        # disable EyeViewer -- it is run separately for the
+        # Redux interface
+        self.imviewer.HAS_EYE = False
+        # set initial value for ds9 check -- it will check itself as well
+        self.imviewer.HAS_DS9 = HAS_DS9
+
+        self.settings = QADViewerSettings(self.imviewer, parent=parent)
+        self.settings.cfg_dir = cfg_dir
+
+        # add widget to parent
+        parent.addWidget(self.settings)
+        log.debug(&#39;QAD Viewer started.&#39;)</div>
+
+
+<div class="viewcode-block" id="QADViewer.display">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewer.html#sofia_redux.pipeline.gui.qad_viewer.QADViewer.display">[docs]</a>
+    def display(self):
+        &quot;&quot;&quot;
+        Display data.
+
+        Data items should be set in the `display_data` attribute,
+        by the `update` method.
+
+        This method dispatches FITS files, DS9 region files, and
+        data arrays to the QAD image viewer.  Any other files are
+        ignored.
+        &quot;&quot;&quot;
+        if self.imviewer is None:
+            return
+
+        # break imexam loop on new load
+        self.imviewer.break_loop = True
+
+        imview_items = []
+        reg_files = []
+        for item in self.display_data:
+            if os.path.isfile(str(item)):
+                if item.endswith(&#39;.reg&#39;):
+                    # ds9 region files: pass to imviewer
+                    reg_files.append(item)
+                elif item.endswith(&#39;.fits&#39;):
+                    # FITS files: pass to imviewer
+                    imview_items.append(item)
+            else:
+                # probably data arrays -- pass to imviewer
+                imview_items.append(item)
+
+        # load imviewable items in a separate thread
+        if len(imview_items) &gt; 0:
+            self.settings.onLoad(imview_items, regfiles=reg_files)</div>
+
+
+<div class="viewcode-block" id="QADViewer.reset">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewer.html#sofia_redux.pipeline.gui.qad_viewer.QADViewer.reset">[docs]</a>
+    def reset(self):
+        &quot;&quot;&quot;Reset the viewer.&quot;&quot;&quot;
+        if self.imviewer is None:
+            return
+        self.imviewer.reset()</div>
+
+
+<div class="viewcode-block" id="QADViewer.close">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.qad_viewer.QADViewer.html#sofia_redux.pipeline.gui.qad_viewer.QADViewer.close">[docs]</a>
+    def close(self):
+        &quot;&quot;&quot;Close the viewer.&quot;&quot;&quot;
+        if self.imviewer is not None:
+            log.debug(&quot;Quitting DS9.&quot;)
+            self.imviewer.break_loop = True
+            self.imviewer.quit()</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

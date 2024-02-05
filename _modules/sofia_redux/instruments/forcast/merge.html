@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.merge &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.merge</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.toolkit.utilities.fits import add_history_wrap, hdinsert, kref
+
+from sofia_redux.instruments.forcast.getpar import getpar
+from sofia_redux.instruments.forcast.imgshift_header import imgshift_header
+from sofia_redux.instruments.forcast.merge_centroid import merge_centroid
+from sofia_redux.instruments.forcast.merge_correlation import merge_correlation
+from sofia_redux.instruments.forcast.merge_shift import merge_shift
+from sofia_redux.instruments.forcast.readmode import readmode
+from sofia_redux.instruments.forcast.rotate import rotate
+
+addhist = add_history_wrap(&#39;Merge&#39;)
+
+__all__ = [&#39;merge&#39;]
+
+
+<div class="viewcode-block" id="merge">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.merge.merge.html#sofia_redux.instruments.forcast.merge.merge">[docs]</a>
+def merge(data, header, variance=None, normmap=None, skip_rotation=False,
+          strip_border=True, rotation_order=1, resize=True):
+    &quot;&quot;&quot;
+    Merge positive and negative instances of the source in the images
+
+    After chop/nod subtraction, there are typically positive and
+    negative instances of the sources in the same frame, although
+    the number of images depends on the chop/nod mode.  This function
+    shifts, coadds, and normalizes these sources to provide a single
+    image of the source with increased signal-to-noise.  The method
+    for determining the shift is read from the configuration file.
+    In the configuration file, if CORMERGE is set to CENTROID, then
+    a centroiding algorithm is used to determine the shift.  If
+    CORMERGE is XCOR, a cross-correlation algorithm is used.  If
+    CORMERGE is HEADER, then header data is used to determine the
+    shift.  If CORMERGE is NOSHIFT (or the calculated shift is
+    greater than the MAXSHIFT parameter), then no shifting and
+    coadding is attempted.  IF the centroiding algorithm is selected
+    and it fails for any reason, then a header shift algorithm is
+    used instead.  After the image is merged, it is rotated by the
+    SKY_ANGL in the header and the WCS keywords are updated.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        Input data array (nrow, ncol)
+    header : astropy.io.fits.header.Header
+        Input FITS header; will be updated with a HISTORY message
+    variance : numpy.ndarray, optional
+        Variance array (nrow, ncol) to update in parallel with the
+        data array
+    normmap : numpy.ndarray, optional
+        Array (nrow, ncol) of normalization values for each pixel.
+        The normalization value corresponds to the number of
+        exposures in each pixel.
+    skip_rotation : bool, optional
+        If True, will skip rotation correction.
+    strip_border : bool, optional
+        If True, will strip off any unnecessary NaN padding at the
+        edges of the image, after rotation.
+    rotation_order : int, optional
+        Order for spline interpolation when rotating
+    resize : bool, optional
+        If True, image will be resized as necessary during merge.
+
+    Returns
+    -------
+    numpy.ndarray, np.ndarray
+        Merged array (nrow, ncol)
+        Propagated variance array (nrow, ncol)
+    &quot;&quot;&quot;
+    # sanity checks and initial values
+    if not isinstance(header, fits.header.Header):
+        header = fits.header.Header()
+        log.warning(&quot;invalid header&quot;)
+        addhist(header, &#39;Created header&#39;)
+
+    if not isinstance(data, np.ndarray) or len(data.shape) != 2:
+        addhist(header, &#39;was not applied (Invalid data)&#39;)
+        log.error(&quot;invalid data array&quot;)
+        return
+
+    # Get original CRPIX values
+    orig_crpix1 = header.get(&#39;CRPIX1&#39;, 1.0)
+    orig_crpix2 = header.get(&#39;CRPIX2&#39;, 1.0)
+
+    # Set initial normalization map
+    if isinstance(normmap, np.ndarray):
+        # normmap is not critical, so we can resize
+        if normmap.shape != data.shape:
+            normmap.resize(data.shape, refcheck=False)
+        normmap.fill(0)
+    else:
+        normmap = np.zeros_like(data)
+
+    dovar = isinstance(variance, np.ndarray) and variance.shape == data.shape
+    var = None if not dovar else variance.copy()
+    if variance is not None and not dovar:
+        addhist(header, &#39;Not propagating variance (Invalid variance)&#39;)
+        log.warning(&#39;invalid variance&#39;)
+
+    maxshift = getpar(header, &#39;MAXSHIFT&#39;, dtype=int, default=120,
+                      comment=&#39;maximum allowable merge pixel shift&#39;)
+    mode = readmode(header)
+    cormerge = getpar(header, &#39;CORMERGE&#39;, comment=&#39;merging algorithm&#39;,
+                      dtype=str, default=&#39;unknown&#39;).upper().strip()
+    slit = str(header.get(&#39;SLIT&#39;, &#39;UNKNOWN&#39;)).upper().strip()
+    imaging = slit not in [&#39;NONE&#39;, &#39;UNKNOWN&#39;]
+    if mode == &#39;C2NC4&#39; or imaging:
+        cormerge = &#39;NOSHIFT&#39;
+    addhist(header, &#39;Merging method is %s&#39; % cormerge)
+
+    def header_shift():
+        addhist(header, &#39;Shift algorithm uses headers&#39;)
+        x = imgshift_header(header, dither=False)
+        chopnod = [x[k] for k in [&#39;chopx&#39;, &#39;chopy&#39;, &#39;nodx&#39;, &#39;nody&#39;]]
+        return merge_shift(data, chopnod, header=header, variance=var,
+                           normmap=normmap, resize=resize,
+                           nmc=mode == &#39;NMC&#39;, maxshift=maxshift)
+    # Merge
+    if cormerge == &#39;HEADER&#39;:
+        merged = header_shift()
+        addhist(header, &#39;Shift algorithm uses header&#39;)
+    elif cormerge == &#39;CENTROID&#39;:
+        merged = merge_centroid(data, header, variance=var,
+                                normmap=normmap, resize=resize)
+        if merged is None:
+            log.warning(&#39;centroid failed; falling back to header shifts&#39;)
+            merged = header_shift()
+        else:
+            addhist(header, &#39;Shift algorithm uses centroid&#39;)
+    elif cormerge == &#39;XCOR&#39;:
+        addhist(header, &#39;Shift algorithm uses cross-correlation&#39;)
+        merged = merge_correlation(data, header, variance=var, resize=resize,
+                                   normmap=normmap, maxshift=maxshift)
+    elif mode == &#39;NMC&#39;:
+        addhist(header, &#39;Shift algorithm not applied for NMC mode&#39;)
+        log.info(&quot;NMC mode with no shift; dividing by two and rotating&quot;)
+        normmap[~np.isnan(data)] = 2
+        if dovar:
+            var /= 4
+        merged = data / 2, var
+    else:
+        addhist(header, &#39;Shift algorithm not applied for %s mode&#39; % mode)
+        log.info(&quot;%s mode, no shift; will rotate only&quot; % mode)
+        normmap[~np.isnan(data)] = 1
+        merged = data.copy(), var
+    if merged is None or len(merged) != 2:
+        addhist(header, &#39;Merging algorithm failed&#39;)
+        log.error(&#39;merging algorithm failed&#39;)
+        return
+
+    # Rotate and strip
+    skyangle = getpar(header, &#39;SKY_ANGL&#39;, dtype=float, default=None)
+    if skip_rotation:
+        rotangle = 0
+    else:
+        rotangle = 180 - skyangle if skyangle is not None else 0
+        addhist(header, &#39;Image rotation of %f&#39; % rotangle)
+        log.info(&quot;Image rotation of %f&quot; % rotangle)
+
+    try:
+        center = [header[&#39;CRPIX1&#39;] - 1, header[&#39;CRPIX2&#39;] - 1]
+    except (KeyError, ValueError):
+        log.warning(&#39;No CRPIX found; rotating around center of image.&#39;)
+        center = None
+
+    d0 = merged[0].copy()
+    merged = rotate(d0, rotangle, header=header, variance=merged[1],
+                    order=rotation_order, center=center,
+                    strip_border=strip_border)
+    _, mask = rotate(d0, rotangle, order=rotation_order, missing=0,
+                     variance=normmap, center=center,
+                     strip_border=strip_border)
+    # To pass back out of function
+    normmap.resize(mask.shape, refcheck=False)
+    normmap[:, :] = mask.copy()
+
+    # Update WCS
+    if &#39;CROTA2&#39; in header and &#39;CRPIX1&#39; in header and &#39;CRPIX2&#39; in header:
+        # Update the rotation angle.  At this stage it should be 0
+        if skip_rotation:
+            temp_rot = 180 - skyangle if skyangle is not None else 0
+            addhist(header, &#39;Image rotation of %.2f degrees&#39; % temp_rot)
+        else:
+            header[&#39;CROTA2&#39;] = 0.0
+            addhist(header, &#39;New CROTA2 after rotation is 0.0 degrees&#39;)
+
+        # also store the cumulative change to CRPIX
+        dcrpix1 = header.get(&#39;DCRPIX1&#39;, 0.0)
+        dcrpix2 = header.get(&#39;DCRPIX2&#39;, 0.0)
+        hdinsert(header, &#39;DCRPIX1&#39;, dcrpix1 + header[&#39;CRPIX1&#39;] - orig_crpix1,
+                 comment=&#39;Change in CRPIX before registration&#39;, refkey=kref)
+        hdinsert(header, &#39;DCRPIX2&#39;, dcrpix2 + header[&#39;CRPIX2&#39;] - orig_crpix2,
+                 comment=&#39;Change in CRPIX before registration&#39;, refkey=kref)
+    else:
+        addhist(header, &#39;CRPIX1, CRPIX2 or CROTA2 are not in header&#39;)
+
+    # Update the product type
+    hdinsert(header, &#39;PRODTYPE&#39;, &#39;MERGED&#39;,
+             comment=&#39;product type&#39;, refkey=kref)
+
+    return merged</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.fifi_ls.combine_nods &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.fifi_ls.combine_nods</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import os
+
+from astropy import log
+from astropy.io import fits
+from astropy.time import Time
+import numba as nb
+import numpy as np
+from pandas import DataFrame
+
+from sofia_redux.instruments.fifi_ls.make_header import make_header
+from sofia_redux.toolkit.interpolate \
+    import interp_1d_point_with_error as interp
+from sofia_redux.toolkit.utilities \
+    import (hdinsert, gethdul, write_hdul)
+
+
+__all__ = [&#39;classify_files&#39;, &#39;combine_extensions&#39;, &#39;combine_nods&#39;]
+
+
+def _mjd(dateobs):
+    &quot;&quot;&quot;Get the MJD from a DATE-OBS.&quot;&quot;&quot;
+    try:
+        mean_time = Time(dateobs).mjd
+    except (ValueError, AttributeError):
+        mean_time = 0
+    return mean_time
+
+
+def _read_exthdrs(hdul, key, default=0):
+    &quot;&quot;&quot;Read FIFI-LS extension headers.&quot;&quot;&quot;
+    result = []
+    if len(hdul) &lt;= 1:
+        return result
+    ngrating = hdul[0].header.get(&#39;NGRATING&#39;, 1)
+    for idx in range(ngrating):
+        name = f&#39;FLUX_G{idx}&#39;
+        header = hdul[name].header
+        result.append(header.get(key, default))
+    return np.array(result)
+
+
+def _from_hdul(hdul, key):
+    &quot;&quot;&quot;Read a header keyword from the PHU.&quot;&quot;&quot;
+    return hdul[0].header[key.upper().strip()]
+
+
+<div class="viewcode-block" id="classify_files">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.combine_nods.classify_files.html#sofia_redux.instruments.fifi_ls.combine_nods.classify_files">[docs]</a>
+def classify_files(filenames, offbeam=False):
+    &quot;&quot;&quot;
+    Extract various properties of all files for subsequent combination.
+
+    Parameters
+    ----------
+    filenames : array_like of str
+        File paths to FITS files
+    offbeam : bool, optional
+        If True, swap &#39;A&#39; nods with &#39;B&#39; nods and the following
+        associated keywords: DLAM_MAP &lt;-&gt; DLAM_OFF,
+        DBET_MAP &lt;-&gt;  DBET_OFF.
+
+    Returns
+    -------
+    pandas.DataFrame
+    &quot;&quot;&quot;
+    hduls = []
+    fname_list = []
+    for fname in filenames:
+        hdul = gethdul(fname)
+        if hdul is None:
+            log.error(&quot;Invalid HDUList: %s&quot; % fname)
+            continue
+        hduls.append(hdul)
+        if not isinstance(fname, str):
+            fname_list.append(_from_hdul(hdul, &#39;FILENAME&#39;))
+        else:
+            fname_list.append(fname)
+    filenames = fname_list
+    n = len(filenames)
+    if n == 0:
+        log.error(&quot;No good files found.&quot;)
+        return None
+
+    keywords = [&#39;nodstyle&#39;, &#39;detchan&#39;, &#39;channel&#39;, &#39;nodbeam&#39;, &#39;dlam_map&#39;,
+                &#39;dbet_map&#39;, &#39;dlam_off&#39;, &#39;dbet_off&#39;, &#39;date-obs&#39;]
+
+    init = dict((key, [_from_hdul(hdul, key) for hdul in hduls])
+                for key in keywords)
+    init[&#39;mjd&#39;] = [_mjd(dateobs) for dateobs in init[&#39;date-obs&#39;]]
+
+    init[&#39;indpos&#39;] = [_read_exthdrs(hdul, &#39;indpos&#39;, default=0)
+                      for hdul in hduls]
+    init[&#39;bglevl&#39;] = [_read_exthdrs(hdul, &#39;bglevl_a&#39;, default=0)
+                      for hdul in hduls]
+    init[&#39;asymmetric&#39;] = [x in [&#39;ASYMMETRIC&#39;, &#39;C2NC2&#39;]
+                          for x in init[&#39;nodstyle&#39;]]
+    init[&#39;tsort&#39;] = [0.0] * n
+    init[&#39;sky&#39;] = [False] * n  # calculate later
+    init[&#39;hdul&#39;] = hduls
+    init[&#39;chdul&#39;] = [None] * n
+    init[&#39;combined&#39;] = [np.full(len(x), False) for x in init[&#39;indpos&#39;]]
+    init[&#39;outfile&#39;] = [&#39;&#39;] * n
+
+    df = DataFrame(init, index=filenames)
+
+    # If any files are asymmetric, treat them all as asymmetric
+    if df[&#39;asymmetric&#39;].any() and not df[&#39;asymmetric&#39;].all():
+        log.warning(&quot;Mismatched NODSTYLE. Will attempt to combine anyway.&quot;)
+
+    # Drop any bad dates
+    bad_dates = df[df[&#39;mjd&#39;] == 0]
+    if len(bad_dates) &gt; 0:
+        for name, row in bad_dates.iterrows():
+            log.error(&#39;DATE-OBS in header is %s for %s&#39; %
+                      (row[&#39;date-obs&#39;], name))
+        df = df.drop(bad_dates.index)
+
+    # If there&#39;s a good detchan value, use it in place of channel,
+    # then set channel to either 1 (BLUE) or 0 (RED)
+    valid_detchan = (df[&#39;detchan&#39;] != 0) &amp; (df[&#39;detchan&#39;] != &#39;0&#39;)
+    df[&#39;channel&#39;] = np.where(valid_detchan, df[&#39;detchan&#39;], df[&#39;channel&#39;])
+    df[&#39;channel&#39;] = df[&#39;channel&#39;].apply(lambda x: 1 if x == &#39;BLUE&#39; else 0)
+
+    # update headers if offbeam is True
+    if offbeam:
+        # Switch A and B beams
+        df[&#39;nodbeam&#39;] = np.where(df[&#39;nodbeam&#39;] != &#39;A&#39;, &#39;A&#39;, &#39;B&#39;)
+
+        df = df.rename(index=str, columns={
+            &#39;dlam_map&#39;: &#39;dlam_off&#39;,
+            &#39;dbet_map&#39;: &#39;dbet_off&#39;,
+            &#39;dlam_off&#39;: &#39;dlam_map&#39;,
+            &#39;dbet_off&#39;: &#39;dbet_map&#39;})
+
+        for key in [&#39;dlam_map&#39;, &#39;dlam_off&#39;, &#39;dbet_map&#39;, &#39;dbet_off&#39;, &#39;nodbeam&#39;]:
+            df.apply(lambda x: hdinsert(
+                x.hdul[0].header, key.upper(), x[key]), axis=1)
+
+    # set on-source exptime to 0 for asym B beams and track as &#39;sky&#39; files
+    df[&#39;sky&#39;] = df[&#39;asymmetric&#39;] &amp; (df[&#39;nodbeam&#39;] != &#39;A&#39;)
+    for hdul in df[df[&#39;sky&#39;]][&#39;hdul&#39;].values:
+        if isinstance(hdul, fits.HDUList):
+            hdul[0].header[&#39;EXPTIME&#39;] = 0.0
+            hdul[0].header[&#39;NEXP&#39;] = 0
+
+    return df</div>
+
+
+
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def interp_b_nods(atime, btime, bdata, berr):   # pragma: no cover
+    &quot;&quot;&quot;
+    Interpolate two B nods to the A time.
+
+    Parameters
+    ----------
+    atime : array-like of float
+        The UNIX time for each A nod sample.
+    btime : array-like float
+        Before and after time for the B nods.  Expected to have two
+        elements; all `atime` values should fall between the first
+        and second values.
+    bdata : array-like of float
+        2 x nw x ns B nod data to interpolate.
+    berr : array-like of float
+        2 x nw x ns B nod errors to interpolate.
+
+    Returns
+    -------
+    bflux, bvar : array-like of float
+        nw x ns interpolated B nod flux and variance.
+    &quot;&quot;&quot;
+    nt = atime.size
+    nn, nw, ns = bdata.shape
+
+    bflux = np.empty((nt, nw, ns), dtype=nb.float64)
+    bvar = np.empty((nt, nw, ns), dtype=nb.float64)
+
+    for t in range(nt):
+        for i in range(nw):
+            for j in range(ns):
+                # flux and error at this pixel
+                bf = bdata[:, i, j]
+                be = berr[:, i, j]
+
+                # Interpolate B flux and error onto A time
+                if np.any(np.isnan(bf)) or np.any(np.isnan(be)):
+                    bflux[t, i, j] = np.nan
+                    bvar[t, i, j] = np.nan
+                else:
+                    f, e = interp(btime, bf, be, atime[t])
+                    bflux[t, i, j] = f
+                    bvar[t, i, j] = e * e
+
+    return bflux, bvar
+
+
+<div class="viewcode-block" id="combine_extensions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.combine_nods.combine_extensions.html#sofia_redux.instruments.fifi_ls.combine_nods.combine_extensions">[docs]</a>
+def combine_extensions(df, b_nod_method=&#39;nearest&#39;):
+    &quot;&quot;&quot;
+    Find a B nod for each A nod.
+
+    For asymmetric data, DLAM and DBET do not need to match,
+    B data can be used more than once, and the B needs to be
+    subtracted, rather than added (symmetric B nods are
+    multiplied by -1 in chop_subtract)
+
+    For the &#39;interpolate&#39; option for B nod combination for most data, the
+    time of interpolation is taken to be the middle of the observation,
+    as determined by the FIFISTRT and EXPTIME keywords in the primary
+    header.  For OTF data, the time is interpolated between RAMPSTRT
+    and RAMPEND times in the extension header, for each ramp.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+    b_nod_method : {&#39;nearest&#39;, &#39;average&#39;, &#39;interpolate&#39;}, optional
+        Determines the method of combining the two nearest before
+        and after B nods.
+
+    Returns
+    -------
+    list of fits.HDUList
+    &quot;&quot;&quot;
+    # check B method parameter
+    if b_nod_method not in [&#39;nearest&#39;, &#39;average&#39;, &#39;interpolate&#39;]:
+        raise ValueError(&quot;Bad b_nod_method: should be &#39;nearest&#39;, &quot;
+                         &quot;&#39;average&#39;, or &#39;interpolate&#39;.&quot;)
+    get_two = b_nod_method != &#39;nearest&#39;
+
+    df.sort_values(&#39;mjd&#39;, inplace=True)
+    blist = df[df[&#39;nodbeam&#39;] == &#39;B&#39;]
+    alist = df[df[&#39;nodbeam&#39;] == &#39;A&#39;]
+
+    # skip if no pairs available
+    if len(blist) == 0:
+        log.warning(&#39;No B nods found&#39;)
+        return df
+    elif len(alist) == 0:
+        log.error(&#39;No A nods found&#39;)
+        return df
+
+    for afile, arow in alist.iterrows():
+
+        asymmetric = arow[&#39;asymmetric&#39;]
+        bselect = blist[(blist[&#39;channel&#39;] == arow[&#39;channel&#39;])
+                        &amp; (blist[&#39;asymmetric&#39;] == asymmetric)]
+
+        if not asymmetric:
+            bselect = bselect[(bselect[&#39;dlam_map&#39;] == arow[&#39;dlam_map&#39;])
+                              &amp; (bselect[&#39;dbet_map&#39;] == arow[&#39;dbet_map&#39;])]
+
+        # find closest matching B image in time
+        if get_two and asymmetric:
+            bselect[&#39;tsort&#39;] = bselect[&#39;mjd&#39;] - arow[&#39;mjd&#39;]
+            after = (bselect[bselect[&#39;tsort&#39;] &gt; 0]).sort_values(&#39;tsort&#39;)
+            bselect = (bselect[bselect[&#39;tsort&#39;] &lt;= 0]).sort_values(
+                &#39;tsort&#39;, ascending=False)
+        else:
+            bselect[&#39;tsort&#39;] = abs(bselect[&#39;mjd&#39;] - arow[&#39;mjd&#39;])
+            bselect = bselect.sort_values(&#39;tsort&#39;)
+            after = None
+
+        primehead, combined_hdul = None, None
+        for aidx, apos in enumerate(arow[&#39;indpos&#39;]):
+            bidx, bidx2 = [], []
+            bfile, bfile2 = None, None
+            brow, brow2 = None, None
+            for bfile, brow in bselect.iterrows():
+                bidx = brow[&#39;indpos&#39;] == apos
+                if not asymmetric:
+                    bidx &amp;= ~brow[&#39;combined&#39;]
+                if np.any(bidx):
+                    break
+
+            if after is not None:
+                for bfile2, brow2 in after.iterrows():
+                    # always asymmetric
+                    bidx2 = brow2[&#39;indpos&#39;] == apos
+                    if np.any(bidx2):
+                        break
+                if not np.any(bidx) and np.any(bidx2):
+                    bidx = bidx2
+                    brow = brow2
+                    bfile = bfile2
+                    bidx2 = []
+
+            describe_a = f&quot;A {os.path.basename(arow.name)} at ext{aidx + 1} &quot; \
+                         f&quot;channel {arow[&#39;channel&#39;]} indpos {apos} &quot; \
+                         f&quot;dlam {arow[&#39;dlam_map&#39;]} dbet {arow[&#39;dbet_map&#39;]}&quot;
+            if np.any(bidx):
+                arow[&#39;combined&#39;][aidx] = True
+                a_fname = f&#39;FLUX_G{aidx}&#39;
+                a_sname = f&#39;STDDEV_G{aidx}&#39;
+                a_hdr = arow[&#39;hdul&#39;][0].header
+
+                bgidx = np.nonzero(bidx)[0][0]
+                brow[&#39;combined&#39;][bgidx] = True
+                b_background = brow[&#39;bglevl&#39;][bgidx]
+                b_fname = f&#39;FLUX_G{bgidx}&#39;
+                b_sname = f&#39;STDDEV_G{bgidx}&#39;
+                b_flux = brow[&#39;hdul&#39;][b_fname].data
+                b_var = brow[&#39;hdul&#39;][b_sname].data ** 2
+                b_hdr = brow[&#39;hdul&#39;][0].header
+
+                # check for offbeam with OTF mode: B nods
+                # can&#39;t have an extra dimension
+                if b_flux.ndim &gt; 2:
+                    msg = &#39;Offbeam option is not available for OTF mode&#39;
+                    log.error(msg)
+                    raise ValueError(msg)
+
+                combine_headers = [a_hdr, b_hdr]
+
+                # check for a second B nod: if not found, will do
+                # &#39;nearest&#39; for this A file
+                if np.any(bidx2):
+                    # add in header for combination
+                    b2_hdr = brow2[&#39;hdul&#39;][0].header
+                    combine_headers.append(b2_hdr)
+
+                    # get A and B times
+                    try:
+                        # unix time at middle of exposure
+                        atime = a_hdr[&#39;START&#39;] \
+                            + a_hdr[&#39;FIFISTRT&#39;] * a_hdr[&#39;ALPHA&#39;] \
+                            + a_hdr[&#39;EXPTIME&#39;] / 2.0
+                        btime1 = b_hdr[&#39;START&#39;] \
+                            + b_hdr[&#39;FIFISTRT&#39;] * b_hdr[&#39;ALPHA&#39;] \
+                            + b_hdr[&#39;EXPTIME&#39;] / 2.0
+                        btime2 = b2_hdr[&#39;START&#39;] \
+                            + b2_hdr[&#39;FIFISTRT&#39;] * b2_hdr[&#39;ALPHA&#39;] \
+                            + b2_hdr[&#39;EXPTIME&#39;] / 2.0
+                    except KeyError:
+                        raise ValueError(&#39;Missing START, FIFISTRT, ALPHA, &#39;
+                                         &#39;or EXPTIME keys in headers.&#39;)
+
+                    # get index for second B row
+                    bgidx2 = np.nonzero(bidx2)[0][0]
+                    brow2[&#39;combined&#39;][bgidx2] = True
+
+                    if b_nod_method == &#39;interpolate&#39;:
+                        # debug message
+                        msg = f&#39;Interpolating B {bfile} at {btime1} &#39; \
+                              f&#39;and {bfile2} at {btime2} &#39; \
+                              f&#39;to A time {atime} and subbing from &#39;
+
+                        # interpolate background to header atime
+                        b_background = \
+                            np.interp(atime, [btime1, btime2],
+                                      [b_background, brow2[&#39;bglevl&#39;][bgidx2]])
+
+                        # UNIX time is a range of values for OTF data:
+                        # retrieve from RAMPSTRT and RAMPEND keys
+                        a_hdu_hdr = arow[&#39;hdul&#39;][a_fname].header
+                        a_shape = arow[&#39;hdul&#39;][a_fname].data.shape
+                        if len(a_shape) == 3 \
+                                and &#39;RAMPSTRT&#39; in a_hdu_hdr \
+                                and &#39;RAMPEND&#39; in a_hdu_hdr:
+                            rampstart = a_hdu_hdr[&#39;RAMPSTRT&#39;]
+                            rampend = a_hdu_hdr[&#39;RAMPEND&#39;]
+                            nramp = a_shape[0]
+                            ramp_incr = (rampend - rampstart) / (nramp - 1)
+                            atime = np.full(nramp, rampstart)
+                            atime += np.arange(nramp, dtype=float) * ramp_incr
+                        else:
+                            atime = np.array([atime])
+                        btime = np.array([btime1, btime2])
+
+                        # interpolate B flux to A time
+                        b_fname = f&#39;FLUX_G{bgidx2}&#39;
+                        b_sname = f&#39;STDDEV_G{bgidx2}&#39;
+                        bdata = np.array([b_flux, brow2[&#39;hdul&#39;][b_fname].data])
+                        berr = np.array([np.sqrt(b_var),
+                                         brow2[&#39;hdul&#39;][b_sname].data])
+                        b_flux, b_var = \
+                            interp_b_nods(atime, btime, bdata, berr)
+
+                        # reshape if there was only one atime
+                        if atime.size == 1:
+                            b_flux = b_flux[0]
+                            b_var = b_var[0]
+                    else:
+                        # debug message
+                        msg = f&#39;Averaging B {bfile} and {bfile2} &#39; \
+                              f&#39;and subbing from &#39;
+
+                        # average flux
+                        b_flux += brow2[&#39;hdul&#39;][b_fname].data
+                        b_flux /= 2.
+
+                        # propagate variance
+                        b_var += brow2[&#39;hdul&#39;][b_sname].data ** 2
+                        b_var /= 4.
+
+                        # average background
+                        b_background += brow2[&#39;bglevl&#39;][bgidx2]
+                        b_background /= 2.
+
+                else:
+                    if asymmetric:
+                        msg = f&#39;Subbing B {os.path.basename(brow.name)} from &#39;
+                    else:
+                        msg = f&#39;Adding B {os.path.basename(brow.name)} to &#39;
+
+                log.debug(msg + describe_a)
+
+                # Note: in the OTF case, A data is a 3D cube with
+                # ramps x spexels x spaxels, and B data is a
+                # 2D array of spexels x spaxels.  The B data is
+                # subtracted at each ramp.
+                # For other modes, A and B are both spexels x spaxels.
+
+                flux = arow[&#39;hdul&#39;][a_fname].data
+                stddev = arow[&#39;hdul&#39;][a_sname].data ** 2 + b_var
+                if asymmetric:
+                    flux -= b_flux
+                else:
+                    flux += b_flux
+                    # divide by two for doubled source
+                    flux /= 2
+                    stddev /= 4
+                stddev = np.sqrt(stddev)
+
+                if combined_hdul is None:
+                    primehead = make_header(combine_headers)
+                    primehead[&#39;HISTORY&#39;] = &#39;Nods combined&#39;
+                    hdinsert(primehead, &#39;PRODTYPE&#39;, &#39;nod_combined&#39;)
+                    outfile, _ = os.path.splitext(os.path.basename(afile))
+                    outfile = &#39;_&#39;.join(outfile.split(&#39;_&#39;)[:-2])
+                    outfile += &#39;_NCM_%s.fits&#39; % primehead.get(&#39;FILENUM&#39;)
+                    df.loc[afile, &#39;outfile&#39;] = outfile
+                    hdinsert(primehead, &#39;FILENAME&#39;, outfile)
+                    combined_hdul = fits.HDUList(
+                        fits.PrimaryHDU(header=primehead))
+
+                exthead = arow[&#39;hdul&#39;][a_fname].header
+                hdinsert(exthead, &#39;BGLEVL_B&#39;, b_background,
+                         comment=&#39;BG level nod B (ADU/s)&#39;)
+                combined_hdul.append(fits.ImageHDU(flux, header=exthead,
+                                                   name=a_fname))
+                combined_hdul.append(fits.ImageHDU(stddev, header=exthead,
+                                                   name=a_sname))
+
+                # add in scanpos table from A nod if present
+                a_pname = f&#39;SCANPOS_G{aidx}&#39;
+                if a_pname in arow[&#39;hdul&#39;]:
+                    combined_hdul.append(arow[&#39;hdul&#39;][a_pname].copy())
+            else:
+                msg = &quot;No matching B found for &quot;
+                log.debug(msg + describe_a)
+
+        if combined_hdul is not None:
+            df.at[afile, &#39;chdul&#39;] = combined_hdul
+
+    return df</div>
+
+
+
+<div class="viewcode-block" id="combine_nods">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.combine_nods.combine_nods.html#sofia_redux.instruments.fifi_ls.combine_nods.combine_nods">[docs]</a>
+def combine_nods(filenames, offbeam=False, b_nod_method=&#39;nearest&#39;,
+                 outdir=None, write=False):
+    &quot;&quot;&quot;
+    Combine nods of ramp-fitted, chop-subtracted data.
+
+    Writes a single FITS file to disk for each A nod found.  Each
+    HDU list contains n_san binary table extensions, each containing
+    DATA and STDDEV data cubes, each 5x5x18.  The output filename is
+    created from the input filename, with the suffix &#39;CSB&#39;, &#39;RP0&#39; or
+    &#39;RP1&#39; replaced with &#39;NCM&#39;, and with input file numbers numbers
+    concatenated.  Unless specified, the output directory is the same
+    as the input files.
+
+    Input files should have been generated by `subtract_chops`, or
+    `fit_ramps` (for total power mode, which has no chops).
+
+    The procedure is:
+
+        1. Read header information from each extension in each of the
+           input files, making lists of A data and B data, with relevant
+           metadata (dither) position, date/time observed (DATE-OBS),
+           inductosyn position, channel, nod style).
+
+        2. Loop though all A data to find matching B data
+
+            a. asymmetric nod style: find closest B nod in time with the
+            same channel and inductosyn position.  Dither position does
+            not have to match, B data can be used more than once, and
+            data must be subtracted rather than added.
+
+            b. symmetric nod style: find closest B nod in time with the
+            same channel, inductosyn position, and dither position. Each
+            B nod can only be used once, since it contains a source
+            observation, and data must be added rather than subtracted.
+
+        3. After addition or subtraction, create a FITS file and write
+        results to disk.
+
+
+    Parameters
+    ----------
+    filenames : array_like of str
+        File paths to the data to be combined
+    offbeam : bool, optional
+        If True, swap &#39;A&#39; nods with &#39;B&#39; nods and the following
+        associated keywords: DLAM_MAP &lt;-&gt; DLAM_OFF,
+        DBET_MAP &lt;-&gt;  DBET_OFF. This option cannot be used with
+        OTF-mode A nods.
+    b_nod_method : {&#39;nearest&#39;, &#39;average&#39;, &#39;interpolate&#39;}, optional
+        For asymmetric, data this option controls how the nearest B nods
+        are combined. The &#39;nearest&#39; option takes only the nearest B nod
+        in time.  The &#39;average&#39; option averages the nearest before and
+        after B nods.  The &#39;interpolate&#39; option linearly interpolates the
+        nearest before and after B nods to the time of the A data.
+    outdir : str, optional
+        Directory path to write output.  If None, output files
+        will be written to the same directory as the input files.
+    write : bool, optional
+        If True, write to disk and return the path to the output
+        file.  If False, return the HDUL.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The output pandas dataframe contains a huge variety of
+        information indexed by original filename.  The combined
+        A-B FITS data are located in the &#39;chdul&#39; column.  Note that
+        only A nod files contain combined data in this &#39;chdul&#39;
+        column.  For example, in order to extract combined FITS
+        data, one could issue the command::
+
+            df = combine_nods(filenames)
+            combined_hduls = df[df[&#39;nodbeam&#39;] == &#39;A&#39;][&#39;chdul&#39;]
+
+        In order to extract rows from the dataframe that were not
+        combined issue the command::
+
+            not_combined = df[(df[&#39;nodbeam&#39;] == &#39;A&#39;) &amp; (df[&#39;chdul&#39;] == None)]
+
+        files are considered &#39;combined&#39; if at least one A extension was
+        combined for an A-nod file.  A true signifier of whether an
+        extension was combined (both A and B nod files) can be found in the
+        &#39;combined&#39; column as a list of bools, one for each extension.
+    &quot;&quot;&quot;
+    if isinstance(filenames, str):
+        filenames = [filenames]
+    if not hasattr(filenames, &#39;__len__&#39;):
+        log.error(&quot;Invalid input files type (%s)&quot; % repr(filenames))
+        return
+
+    if isinstance(outdir, str):
+        if not os.path.isdir(outdir):
+            log.error(&quot;Output directory %s does not exist&quot; % outdir)
+            return
+    df = classify_files(filenames, offbeam=offbeam)
+    if df is None:
+        log.error(&quot;Problem in file classification&quot;)
+        return
+
+    df = combine_extensions(df, b_nod_method=b_nod_method)
+
+    for filename, row in df[df[&#39;nodbeam&#39;] == &#39;A&#39;].iterrows():
+
+        if outdir is not None:
+            outdir = str(outdir)
+        else:
+            outdir = os.path.dirname(filename)
+
+        if write and row[&#39;chdul&#39;] is not None:
+            write_hdul(row[&#39;chdul&#39;], outdir=outdir, overwrite=True)
+        if row[&#39;outfile&#39;] is not None:
+            df.at[filename, &#39;outfile&#39;] = os.path.join(
+                outdir, os.path.basename(row[&#39;outfile&#39;]))
+
+    return df</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.configuration.fits &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.configuration.fits</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import configobj
+import os
+from astropy import log
+from astropy.io import fits
+
+from sofia_redux.scan.configuration.options import Options
+
+__all__ = [&#39;FitsOptions&#39;]
+
+
+<div class="viewcode-block" id="FitsOptions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.fits.FitsOptions.html#sofia_redux.scan.configuration.fits.FitsOptions">[docs]</a>
+class FitsOptions(Options):
+
+    def __init__(self, allow_error=False, verbose=True):
+        &quot;&quot;&quot;
+        Initialize the FITS options.
+
+        The FITS options is a place in the configuration where values from a
+        FITS header may be stored and acted on when necessary.
+
+        Parameters
+        ----------
+        allow_error : bool, optional
+            If `True`, allow poorly formatted options to be skipped rather than
+            raising an error.
+        verbose : bool, optional
+            If `True`, issues a warning when a poorly option is encountered.
+        &quot;&quot;&quot;
+        super().__init__(allow_error=allow_error, verbose=verbose)
+        self.enabled = False
+        self.header = None
+        self.filename = None
+        self.extension = None
+        self.preserved_cards = {}
+
+<div class="viewcode-block" id="FitsOptions.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.fits.FitsOptions.html#sofia_redux.scan.configuration.fits.FitsOptions.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the FitsOptions.
+
+        Returns
+        -------
+        FitsOptions
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+<div class="viewcode-block" id="FitsOptions.clear">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.fits.FitsOptions.html#sofia_redux.scan.configuration.fits.FitsOptions.clear">[docs]</a>
+    def clear(self):
+        &quot;&quot;&quot;
+        Clear all options.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().clear()
+        self.header = None
+        self.filename = None
+        self.extension = None
+        self.preserved_cards = {}</div>
+
+
+    def __getitem__(self, key):
+        &quot;&quot;&quot;
+        Retrieve a value from the FITS options.
+
+        Parameters
+        ----------
+        key : str
+            The FITS key to retrieve.
+
+        Raises
+        ------
+        KeyError
+            In cases where the key does not exist in the options.
+
+        Returns
+        -------
+        str or object
+        &quot;&quot;&quot;
+        key = str(key).strip()
+        if key not in self.options:
+            raise KeyError(f&quot;{key} is not a valid key.&quot;)
+        return self.get(key)
+
+    def __setitem__(self, key, value):
+        &quot;&quot;&quot;
+        Set the value for a given key in the FITS options.
+
+        Parameters
+        ----------
+        key : str
+            The key to set.
+        value : str or object
+            The value to set for `key`.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set(key, value)
+
+    def __contains__(self, key):
+        &quot;&quot;&quot;
+        Return whether the FITS options contains the given key.
+
+        Parameters
+        ----------
+        key : str
+            The FITS key to check.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return key in self.options
+
+<div class="viewcode-block" id="FitsOptions.read">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.fits.FitsOptions.html#sofia_redux.scan.configuration.fits.FitsOptions.read">[docs]</a>
+    def read(self, header, extension=0):
+        &quot;&quot;&quot;
+        Read a FITS header and apply the contents to the options.
+
+        Parameters
+        ----------
+        header : fits.Header or str or dict or configobj.ConfigObj
+            The FITS header, options, or FITS file to read.
+        extension : int, optional
+            The HDU extension to read in cases where a file path is supplied in
+            the `header` parameter.
+
+        Returns
+        -------
+        options : configobj.ConfigObj
+        &quot;&quot;&quot;
+        if not isinstance(header, (fits.header.Header, str, dict)):
+            raise ValueError(f&quot;Header must be {fits.Header}, {dict}, &quot;
+                             f&quot;or {str} (filename).&quot;)
+
+        if isinstance(header, str):
+            if not os.path.isfile(header):
+                raise ValueError(f&quot;Not a valid file: {header}&quot;)
+
+            try:
+                header = fits.getheader(header, ext=extension)
+            except Exception as err:
+                log.error(f&quot;Could not read header in extension {extension} &quot;
+                          f&quot;of file: {header}&quot;)
+                raise err
+            self.filename = header
+            self.extension = extension
+        self.header = header  # reference (not copy)
+
+        return configobj.ConfigObj(
+            dict((k, str(v)) for k, v in header.items()))  # stringify</div>
+
+
+<div class="viewcode-block" id="FitsOptions.reread">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.fits.FitsOptions.html#sofia_redux.scan.configuration.fits.FitsOptions.reread">[docs]</a>
+    def reread(self):
+        &quot;&quot;&quot;
+        Re-read the current FITS header.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.header is None:
+            return
+        options = self.read(self.header)
+        self.update_header(options)</div>
+
+
+<div class="viewcode-block" id="FitsOptions.get">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.fits.FitsOptions.html#sofia_redux.scan.configuration.fits.FitsOptions.get">[docs]</a>
+    def get(self, key, default=None, unalias=True):
+        &quot;&quot;&quot;
+        Return the option value for a given key.
+
+        Parameters
+        ----------
+        key : str
+            The FITS key value to retrieve.
+        default : str or object, optional
+            The value to return in cases where `key` does not exist in the
+            options.
+        unalias : bool, optional
+            If `True`, unalias the key before attempting to retrieve
+            it&#39;s value.
+
+        Returns
+        -------
+        value : str or object
+            The FITS header value for `key`.
+        &quot;&quot;&quot;
+        return self.options.get(str(key).strip(), default=default)</div>
+
+
+<div class="viewcode-block" id="FitsOptions.set">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.fits.FitsOptions.html#sofia_redux.scan.configuration.fits.FitsOptions.set">[docs]</a>
+    def set(self, key, value):
+        &quot;&quot;&quot;
+        Set the value for a given FITS header key.
+
+        Parameters
+        ----------
+        key : str
+            The key for which to set a value.
+        value : str or object, optional
+            The value to set.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.options[str(key).strip()] = value</div>
+
+
+<div class="viewcode-block" id="FitsOptions.update_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.fits.FitsOptions.html#sofia_redux.scan.configuration.fits.FitsOptions.update_header">[docs]</a>
+    def update_header(self, header_options, extension=0):
+        &quot;&quot;&quot;
+        Update the
+
+        Parameters
+        ----------
+        header_options : fits.Header or str or dict or configobj.ConfigObj
+            The FITS header, file path, or options with which to update the
+            FitsOptions.
+        extension : int, optional
+            The HDU extension to read in cases where a file path was passed
+            in as the argument.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.options.merge(self.read(header_options, extension=extension))</div>
+
+
+<div class="viewcode-block" id="FitsOptions.keys">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.fits.FitsOptions.html#sofia_redux.scan.configuration.fits.FitsOptions.keys">[docs]</a>
+    def keys(self):
+        &quot;&quot;&quot;
+        Return a list of all keys in the FITS options.
+
+        Returns
+        -------
+        list (str)
+        &quot;&quot;&quot;
+        return self.options.keys()</div>
+
+
+<div class="viewcode-block" id="FitsOptions.set_preserved_card">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.fits.FitsOptions.html#sofia_redux.scan.configuration.fits.FitsOptions.set_preserved_card">[docs]</a>
+    def set_preserved_card(self, key, header=None):
+        &quot;&quot;&quot;
+        Add a key to the preserved header cards.
+
+        Parameters
+        ----------
+        key : str
+            The name of the FITS options key to preserve.
+        header : fits.Header, optional
+            The header from which to extract the key value and comments.
+            If not supplied, defaults to the currently stored header.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if header is None:
+            header = self.header
+            if header is None:
+                return
+
+        if key not in header:
+            return
+        self.preserved_cards[key] = header[key], header.comments[key]</div>
+
+
+<div class="viewcode-block" id="FitsOptions.reset_preserved_cards">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.configuration.fits.FitsOptions.html#sofia_redux.scan.configuration.fits.FitsOptions.reset_preserved_cards">[docs]</a>
+    def reset_preserved_cards(self):
+        &quot;&quot;&quot;
+        Clear all preserved header cards.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.preserved_cards = {}</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

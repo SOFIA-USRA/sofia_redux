@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.exes.tortcoord &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.exes.tortcoord</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+
+__all__ = [&#39;tortcoord&#39;]
+
+
+<div class="viewcode-block" id="tortcoord">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.tortcoord.tortcoord.html#sofia_redux.instruments.exes.tortcoord.tortcoord">[docs]</a>
+def tortcoord(header, skew=False):
+    &quot;&quot;&quot;
+    Calculate undistorted image coordinates.
+
+    Use the array size and tort parameters from the FITS header and
+    calculate the x and y coordinates in the undistorted array that
+    correspond to the x and y coordinates of the raw array, using
+    knowledge of the optics of the instrument.
+
+    Parameters
+    ----------
+    header : fits.Header
+        FITS header containing distortion parameters, as produced by
+        `exes.readhdr`.
+    skew : bool, optional
+        If True, correct for echelon slit skewing.
+
+    Returns
+    -------
+    xcor, ycor : 2-tuple of numpy.ndarray
+        Both arrays are of shape (ny, nx) and of type numpy.float64
+        `xcor` is the undistorted x-coordinate array.
+        `ycor` is the undistorted y-coordinate array.
+    &quot;&quot;&quot;
+    instcfg = str(header.get(&#39;INSTCFG&#39;, &#39;NONE&#39;)).upper()
+
+    if instcfg in [&#39;HIGH_MED&#39;, &#39;HIGH_LOW&#39;]:
+        xcor, ycor = _get_cross_dispersed_coordinates(header, skew=skew)
+    else:
+        xcor, ycor = _get_coordinates(header)
+
+    xcor, ycor = _barrel_distortion(xcor, ycor, header)
+    xrot, yrot = _rotate_coordinates(xcor, ycor, header)
+    return xrot, yrot</div>
+
+
+
+def _get_coordinates(header):
+    &quot;&quot;&quot;
+    Calculate pixel coordinates.
+
+    Parameters
+    ----------
+    header : fits.Header
+
+    Returns
+    -------
+    xcor, ycor : 2-tuple of numpy.ndarray
+        The corrected x and y pixel coordinates
+    &quot;&quot;&quot;
+    nx = int(header[&#39;NSPAT&#39;])  # number of pixels in the x direction
+    ny = int(header[&#39;NSPEC&#39;])  # number of pixels in the y direction
+    slitrot = float(header[&#39;SLITROT&#39;])  # slit rotation angle
+    pixelwd = float(header[&#39;PIXELWD&#39;])  # pixel width
+    xdg = float(header[&#39;XDG&#39;])  # tort parameter ?
+    xdr = float(header[&#39;XDR&#39;])  # tort parameter ?
+    xdfl = float(header[&#39;XDFL&#39;])  # adjusted XD focal length
+
+    # # qtort/testtort version:
+    # xdskew = 2 * xdg * xdr + np.tan(slitrot + krot)
+
+    # tort version
+    xdskew = (2 * xdg * xdr) + np.tan(slitrot)
+    xdsmile = -xdr * pixelwd / xdfl
+    xdnlin = -(xdr + 1 / (2 * xdr)) * (pixelwd / xdfl) / 2
+
+    x, y, xcor, ycor = _create_pixel_array(nx, ny)
+
+    # skewing by cross-dispersion smile
+    xcor += (xdskew * ycor) + (xdsmile * (ycor ** 2))
+
+    # non-linearity of xd spectrum
+    xmid = ((nx + 1) / 2) - 1
+    xcor += xdnlin * ((xcor ** 2) - (xmid ** 2))
+
+    return xcor, ycor
+
+
+def _get_cross_dispersed_coordinates(header, skew=False):
+    &quot;&quot;&quot;
+    Calculate pixel coordinates for cross-dispersed data
+
+    Notes:
+
+        - KROT for EXES is the rotation between the chambers.
+        - Echelle dispersion is proportional to tan(beta) - sin(delta)
+          Other formulas with XDR may need to have sin(delta)
+        - XD smile was over-corrected for TEXES, but seems not to be
+          for EXES, so fudge factor is removed.
+        - Include echelon smile and slit rotation
+        - Should include the variation of HRR along an order
+
+    Parameters
+    ----------
+    header : fits.Header
+    skew : bool, optional
+        If True, correct for echelon slit skewing.
+
+    Returns
+    -------
+    xcor, ycor : 2-tuple of numpy.ndarray
+        The corrected x and y pixel coordinates
+
+    &quot;&quot;&quot;
+    nx = int(header[&#39;NSPAT&#39;])  # number of pixels in the x direction
+    ny = int(header[&#39;NSPEC&#39;])  # number of pixels in the y direction
+    slitrot = float(header[&#39;SLITROT&#39;])  # slit rotation angle
+    krot = float(header[&#39;KROT&#39;])  # k-mirror rotation angle
+    pixelwd = float(header[&#39;PIXELWD&#39;])  # pixel width
+    hrg = float(header[&#39;HRG&#39;])  # gamma (out-of-plan) angle for echelon grating
+    hrr = float(header[&#39;HRR&#39;])  # R number of echelon grating
+    xdg = float(header[&#39;XDG&#39;])  # gamma angle for XD echelon grating
+    xdr = float(header[&#39;XDR&#39;])  # tort parameter ?
+    xddelta = float(header[&#39;XDDELTA&#39;])  # tort parameter ?
+    xdfl = float(header[&#39;XDFL&#39;])  # adjusted XD focal length
+    hrfl = float(header[&#39;HRFL&#39;])  # high resolution focal length
+    xorder1 = float(header[&#39;XORDER1&#39;])  # first pixel of order 1
+    spacing = float(header[&#39;SPACING&#39;])  # order separation in pixels
+
+    hrskew = (2.0 * hrg * hrr) + np.tan(slitrot)
+
+    # include XD smile and spectrum rotation by k mirror
+    xdskew = (2.0 * xdg * xdr) + np.tan(krot)
+    xdsmile = -xdr * pixelwd / xdfl
+    xddisp = (xdfl * (xdr - xddelta)) / (hrfl * hrr)
+
+    xdnlin = -(xdr + 1 / (2 * xdr)) * (pixelwd / xdfl) / 2
+    hrnlin = -(hrr + 1 / (2 * hrr)) * (pixelwd / hrfl) / 2.
+
+    # xdskew and xddisp depend on x because xdr depends on x
+    dxdskew = (xdg + xddisp / (2 * xdr)) * (1 + xdr ** 2) * (pixelwd / xdfl)
+
+    xorder0 = xorder1 - spacing / 2
+
+    x, y, xdist, ydist = _create_pixel_array(nx, ny)
+    xmid = ((nx + 1) / 2) - 1
+    ymid = ((ny + 1) / 2) - 1
+
+    if skew:
+        # distance from order center
+        order = (x - xorder0) / spacing
+        dorder = order - np.round(order)
+
+        # slit skewing within orders by echelon smile
+        dx = spacing * dorder
+        ydist += hrskew * dx
+
+    # non-linearity of echelon spectrum
+    # (subtract ymid^2 so middle moves and ends stay put)
+    ycor = ydist + hrnlin * (ydist**2 - ymid**2)
+
+    # skewing by cross dispersion, k mirror, and cross-dispersion smile
+    # note: xd dispersion depends on linear y (wavelength)
+    xcor = (xdist + (xddisp * ydist) + (xdskew * ycor)
+            + (dxdskew * xdist * ycor) + (xdsmile * ycor**2))
+
+    # non-linearity of xd spectrum
+    xcor += xdnlin * (xcor**2 - xmid**2)
+    return xcor, ycor
+
+
+def _create_pixel_array(nx, ny):
+    &quot;&quot;&quot;
+    Make index arrays and distance from center.
+
+    Parameters
+    ----------
+    nx : int
+    ny : int
+
+    Returns
+    -------
+    x, y, xdist, ydist : 4-tuple of numpy.ndarray
+        X and y index arrays and distances from center.
+    &quot;&quot;&quot;
+    y, x = np.mgrid[:ny, :nx]
+    xmid = ((nx + 1) / 2) - 1
+    ymid = ((ny + 1) / 2) - 1
+    xdist = np.asarray(x, dtype=np.float64) - xmid
+    ydist = np.asarray(y, dtype=np.float64) - ymid
+    return x, y, xdist, ydist
+
+
+def _barrel_distortion(x, y, header):
+    &quot;&quot;&quot;
+    Correct barrel distortion.
+
+    Parameters
+    ----------
+    x : numpy.ndarray
+        x-coordinates
+    y : numpy.ndarray
+        y-coordinates
+    header : fits.Header
+        FITS header
+
+    Returns
+    -------
+    xnew, ynew : 2-tuple of numpy.ndarray
+        `x` and `y` corrected for barrel distortion.
+    &quot;&quot;&quot;
+    nx = int(header[&#39;NSPAT&#39;])  # number of pixels in the x direction
+    brl = float(header[&#39;BRL&#39;])  # Barrel tort parameters...
+    x0brl = float(header[&#39;X0BRL&#39;])
+    y0brl = float(header[&#39;Y0BRL&#39;])
+    xmid = ((nx + 1) / 2) - 1
+
+    barrel = 1 - brl * ((x - x0brl) ** 2 + (y - y0brl) ** 2) / (xmid ** 3)
+    xb = x * barrel
+    yb = y * barrel
+    return xb, yb
+
+
+def _rotate_coordinates(x, y, header):
+    &quot;&quot;&quot;
+    Rotate coordinates by detector rotation angle.
+
+    Parameters
+    ----------
+    x : numpy.ndarray
+        x-coordinates relative to center of numpy.ndarray
+    y : numpy.ndarray
+        y-coordinates relative to center of numpy.ndarray
+    header : fits.Header
+        FITS header
+
+    Returns
+    -------
+    xrot, yrot : 2-tuple of numpy.ndarray
+        `x` and `y` rotated by detector angle.
+    &quot;&quot;&quot;
+    detrot = float(header[&#39;DETROT&#39;])  # Detector rotation (tort parameter)
+    nx = int(header[&#39;NSPAT&#39;])  # number of pixels in the x direction
+    ny = int(header[&#39;NSPEC&#39;])  # number of pixels in the y direction
+    cosrot = -np.cos(detrot)
+    sinrot = -np.sin(detrot)
+    xmid = ((nx + 1) / 2) - 1
+    ymid = ((ny + 1) / 2) - 1
+
+    xrot = (x * cosrot) - (y * sinrot) + xmid
+    yrot = (y * cosrot) + (x * sinrot) + ymid
+    return xrot, yrot
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

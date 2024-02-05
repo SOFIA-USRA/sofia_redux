@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.toolkit.convolve.base &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.toolkit.convolve.base</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+from scipy.interpolate import LinearNDInterpolator, interp1d
+from scipy.spatial import Delaunay
+
+from sofia_redux.toolkit.utilities.base import Model
+from sofia_redux.toolkit.interpolate.interpolate import interp_error
+
+
+__all__ = [&#39;ConvolveBase&#39;]
+
+
+<div class="viewcode-block" id="ConvolveBase">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.convolve.base.ConvolveBase.html#sofia_redux.toolkit.convolve.base.ConvolveBase">[docs]</a>
+class ConvolveBase(Model):
+    &quot;&quot;&quot;
+    Convolution class allowing error propagation.
+    &quot;&quot;&quot;
+    def __init__(self, *args, error=1, mask=None, stats=True,
+                 robust=0.0, eps=0.01, maxiter=10, do_error=False,
+                 axes=None, ignorenans=True, **kwargs):
+
+        self.do_error = do_error
+        self._axes = axes
+        self._tri = None
+        self._result = None
+        self._interpolated_error = None
+
+        super().__init__(*args, error=error, mask=mask, covar=False,
+                         stats=stats, robust=robust, eps=eps,
+                         maxiter=maxiter, ignorenans=ignorenans,
+                         fit_kwargs=kwargs)
+
+    @property
+    def result(self):
+        return self.reshape(self._result)
+
+    @property
+    def error(self):
+        &quot;&quot;&quot;Don&#39;t create the error unless asked for or already present&quot;&quot;&quot;
+        if self._interpolated_error is None:
+            if hasattr(self._error, &#39;__len__&#39;):
+                self._interpolated_error = self._error.copy()
+            else:
+                self._interpolated_error = np.full(
+                    self.mask.shape, float(self._error))
+        return self.reshape(self._interpolated_error)
+
+    @property
+    def residuals(self):
+        if self.stats is None:
+            return
+        return self.reshape(self.stats.residuals)
+
+    @property
+    def masked(self):
+        return self.reshape(self.mask)
+
+<div class="viewcode-block" id="ConvolveBase.replace_masked_samples">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.convolve.base.ConvolveBase.html#sofia_redux.toolkit.convolve.base.ConvolveBase.replace_masked_samples">[docs]</a>
+    @staticmethod
+    def replace_masked_samples(samples, mask, get_tri=False):
+        invalid = ~mask
+        if not invalid.any():
+            result = samples[-1].copy()
+            return (result, None) if get_tri else result
+        elif not mask.any():
+            result = np.full_like(samples[-1], np.nan)
+            return (result, None) if get_tri else result
+
+        ndim = samples.shape[0] - 1
+        result = samples[-1].copy()
+        if ndim &gt; 1:
+            tri = Delaunay(samples[:-1, mask].T)
+            interpolator = LinearNDInterpolator(tri, result[mask])
+            newvals = interpolator(samples[:-1, invalid].T)
+        else:
+            tri = samples[0, mask]
+            interpolator = interp1d(samples[0, mask], result[mask],
+                                    fill_value=&#39;extrapolate&#39;)
+            newvals = interpolator(samples[0, invalid])
+
+        # keep old values if they are replaced with NaNs
+        bad = np.isnan(newvals)
+        newvals[bad] = samples[-1, invalid][bad]
+        result[invalid] = newvals
+        return (result, tri) if get_tri else result</div>
+
+
+<div class="viewcode-block" id="ConvolveBase.replace_masked_error">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.convolve.base.ConvolveBase.html#sofia_redux.toolkit.convolve.base.ConvolveBase.replace_masked_error">[docs]</a>
+    def replace_masked_error(self):
+        self._interpolated_error = None
+        if self._tri is None or not self.do_error:
+            return
+        if hasattr(self._error, &#39;__len__&#39;):
+            result = self._error.copy()
+        else:
+            result = np.full(self.mask.shape, float(self._error))
+        if self.mask.all():
+            return result
+        invalid = ~self.mask
+
+        ix = self._samples[:-1, invalid]
+        if self._ndim &gt; 1:
+            ix = ix.T
+        else:
+            ix = ix.ravel()
+
+        new_error = interp_error(
+            self._tri, self.error.ravel()[self.mask], ix)
+
+        bad = np.isnan(new_error)
+        new_error[bad] = self.error.ravel()[invalid][bad]
+        result[invalid] = new_error
+        self._interpolated_error = result</div>
+
+
+    def _convolve(self, clean_flat_array):
+        &quot;&quot;&quot;Place holder&quot;&quot;&quot;
+        self._result = clean_flat_array.ravel().copy()
+
+<div class="viewcode-block" id="ConvolveBase.initial_fit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.convolve.base.ConvolveBase.html#sofia_redux.toolkit.convolve.base.ConvolveBase.initial_fit">[docs]</a>
+    def initial_fit(self):
+        &quot;&quot;&quot;The initial fit&quot;&quot;&quot;
+        self._nparam = 0  # fitting the mask, not parameters
+        self.refit_mask(self._usermask, covar=False)</div>
+
+
+<div class="viewcode-block" id="ConvolveBase.refit_mask">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.convolve.base.ConvolveBase.html#sofia_redux.toolkit.convolve.base.ConvolveBase.refit_mask">[docs]</a>
+    def refit_mask(self, mask, covar=False):
+        self.mask = mask.ravel()
+        cleaned, self._tri = self.replace_masked_samples(
+            self._samples, self.mask, get_tri=True)
+        self.replace_masked_error()
+        self._convolve(self.reshape(cleaned, copy=False))
+        self.success = np.isfinite(self._result).any()
+        if not self.success:
+            self._interpolated_error = None
+        self._fit_statistics()</div>
+
+
+<div class="viewcode-block" id="ConvolveBase.evaluate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.convolve.base.ConvolveBase.html#sofia_redux.toolkit.convolve.base.ConvolveBase.evaluate">[docs]</a>
+    def evaluate(self, _, dovar=False):
+        return (self._result, None) if dovar else self._result</div>
+
+
+<div class="viewcode-block" id="ConvolveBase.__call__">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.convolve.base.ConvolveBase.html#sofia_redux.toolkit.convolve.base.ConvolveBase.__call__">[docs]</a>
+    def __call__(self, *independent_values, dovar=False):
+        pass</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.calibration.standard_model.derived_optics &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.calibration.standard_model.derived_optics</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Calculate properties of observations derived from the models&quot;&quot;&quot;
+
+import os
+import numpy as np
+import scipy.integrate as si
+import astropy.constants as const
+import astropy.units as u
+
+from sofia_redux.calibration.standard_model import isophotal_wavelength as iso
+from sofia_redux.calibration.standard_model import thermast
+
+
+<div class="viewcode-block" id="mean_fluxes">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.derived_optics.mean_fluxes.html#sofia_redux.calibration.standard_model.derived_optics.mean_fluxes">[docs]</a>
+def mean_fluxes(result, integrals):
+    &quot;&quot;&quot;
+    Calculate the mean flux.
+
+    Parameters
+    ----------
+    result : dict
+        Collection of calibration results.
+    integrals : dict
+        Various integrals.
+
+    Returns
+    -------
+    result : dict
+        Same as input `result` but with the mean flux in F_lambda
+        and F_nu populated.
+
+    &quot;&quot;&quot;
+    c = const.c.to(u.um / u.s).value
+    Jy2W = 1e-26  # Convert Jy to W/m2/Hz
+    f_mean = integrals[&#39;4&#39;] / integrals[&#39;1&#39;]
+    fnu_mean = f_mean * result[&#39;lambda_pivot&#39;] ** 2 / (c * Jy2W)
+    result[&#39;flux_mean&#39;], result[&#39;flux_nu_mean&#39;] = f_mean, fnu_mean
+    return result</div>
+
+
+
+<div class="viewcode-block" id="mean_pixels_in_beam">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.derived_optics.mean_pixels_in_beam.html#sofia_redux.calibration.standard_model.derived_optics.mean_pixels_in_beam">[docs]</a>
+def mean_pixels_in_beam(num_pix, total_throughput, wavelengths):
+    &quot;&quot;&quot;
+    Calculate the mean number of pixels in the beam.
+
+    Mean is weighted by the total_throughput at each wavelength.
+
+    Parameters
+    ----------
+    num_pix : ndarray
+        Number of pixels in extraction area at each wavelength.
+    total_throughput : ndarray
+        Total throughput of the telescope at each wavelength.
+    wavelengths : ndarray
+        Wavelenths to integrate over in microns.
+
+    Returns
+    -------
+    npix_mean : float
+        Throughput-weighted mean number of pixels in
+        the beam.
+
+    &quot;&quot;&quot;
+    top = si.simps(num_pix * total_throughput, wavelengths)
+    bottom = si.simps(total_throughput, wavelengths)
+    npix_mean = top / bottom
+    return npix_mean</div>
+
+
+
+<div class="viewcode-block" id="noise_equivalent_power">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.derived_optics.noise_equivalent_power.html#sofia_redux.calibration.standard_model.derived_optics.noise_equivalent_power">[docs]</a>
+def noise_equivalent_power(bg_integrand1, bg_integrand2, num_pix,
+                           wavelengths, omega_pix, telescope_area):
+    &quot;&quot;&quot;
+    Calculate the noise-equivalent power.
+
+    This is the power of the source required to general a signal
+    equivalent to the noise.
+
+    Parameters
+    ----------
+    bg_integrand1 : float
+        First background integrand.
+    bg_integrand2 : numpy.ndarray
+        Second background integrand.
+    num_pix : numpy.ndarray
+        Number of pixels in the beam as a function of wavelengths.
+    wavelengths : numpy.ndarray
+        Wavelenghts to integrate over in microns.
+    omega_pix : float
+        Pixel solid angle in steradians
+    telescope_area : float
+        Area of the telescope in microns.
+
+    Returns
+    -------
+    nep : float
+        Noise equivalent power in Watts.
+
+    &quot;&quot;&quot;
+    ergs2W = 1e-7  # Convert ergs/s to Watts
+    c = const.c.to(u.um / u.s).value
+    h = const.h.to(u.erg * u.s).value
+
+    nepterm1 = si.simps(bg_integrand1 * num_pix / wavelengths, wavelengths)
+    nepterm2 = si.simps(bg_integrand2 * num_pix / wavelengths, wavelengths)
+    nep = np.sqrt(2. * telescope_area * omega_pix * h * ergs2W * c
+                  * (nepterm1 + nepterm2))
+
+    return nep</div>
+
+
+
+<div class="viewcode-block" id="limiting_flux">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.derived_optics.limiting_flux.html#sofia_redux.calibration.standard_model.derived_optics.limiting_flux">[docs]</a>
+def limiting_flux(result, integrals, snr_ref, tref=900.):
+    &quot;&quot;&quot;
+    Calculate the minimum observable flux.
+
+    Parameters
+    ----------
+    result : dict
+        Collection of calibration results.
+    integrals : dict
+         Collection of various background integrals.
+    snr_ref : float
+        Signal-to-noise.
+    tref : float, optional
+        Reference transmission. Defaults to 900.
+
+    Returns
+    -------
+    result : dict
+        Same as input `result`, but with NEFD (noise-equivalent
+        flux density) and MDCF (limiting flux) populated.
+
+    &quot;&quot;&quot;
+    # Compute SNR and limiting flux
+    c = const.c.to(u.um / u.s).value
+    Jy2W = 1e-26  # Convert Jy to W/m2/Hz
+
+    nefd = result[&#39;nep&#39;] / (c * integrals[&#39;11&#39;])
+    nefd /= Jy2W
+
+    snr = result[&#39;flux_nu_mean&#39;] / (nefd / np.sqrt(2.))
+    flim = snr_ref * result[&#39;flux_nu_mean&#39;] * 1000. / (snr * np.sqrt(tref))
+
+    result[&#39;nefd&#39;] = nefd
+    result[&#39;mdcf&#39;] = flim
+
+    return result</div>
+
+
+
+<div class="viewcode-block" id="response">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.derived_optics.response.html#sofia_redux.calibration.standard_model.derived_optics.response">[docs]</a>
+def response(result, integrals):
+    &quot;&quot;&quot;
+    Calculate the instrument response.
+
+    Parameters
+    ----------
+    result : dict
+        Collection of calibration results.
+    integrals : dict
+         Collection of various background integrals.
+
+    Returns
+    -------
+    resp : float
+        Instrumental response in wavelength units.
+    respnu : float
+        Instrument response in frequency units.
+
+    &quot;&quot;&quot;
+    c = const.c.to(u.um / u.s).value
+    Jy2W = 1e-26  # Convert Jy to W/m2/Hz
+    resp = integrals[&#39;1&#39;]
+    respnu = resp * c * Jy2W / (result[&#39;lambda_pivot&#39;] ** 2 * 1e3)
+    return resp, respnu</div>
+
+
+
+<div class="viewcode-block" id="source_descriptions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.derived_optics.source_descriptions.html#sofia_redux.calibration.standard_model.derived_optics.source_descriptions">[docs]</a>
+def source_descriptions(result, integrals, ffrac):
+    &quot;&quot;&quot;
+    Calculate various optical properties of the source.
+
+    Parameters
+    ----------
+    result : dict
+        Collection of calibration results.
+    integrals : dict
+        Collection of various background integrals.
+    ffrac : float
+        Fraction of total flux in optimal extraction aperture.
+
+    Returns
+    -------
+    result : dict
+        Same as input `results` but with &#39;source_size&#39;
+        (size of the source in arcsec), &#39;source_fwhm&#39;
+        (FWHM of the source), and &#39;source_rate&#39; (flux
+        from source in extraction aperture) populated.
+
+    &quot;&quot;&quot;
+    srate = integrals[&#39;4&#39;]
+
+    result[&#39;source_size&#39;] = integrals[&#39;8&#39;] / integrals[&#39;4&#39;]
+    result[&#39;source_fwhm&#39;] = integrals[&#39;9&#39;] / integrals[&#39;4&#39;]
+
+    # Energy/s (Watts) from source in extraction aperture
+    result[&#39;source_rate&#39;] = srate * ffrac
+    return result</div>
+
+
+
+<div class="viewcode-block" id="color_terms">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.derived_optics.color_terms.html#sofia_redux.calibration.standard_model.derived_optics.color_terms">[docs]</a>
+def color_terms(result, fref, pl, bb, alpha=None, wref=None,
+                temp=None, model_flux_in_filter=None, wavelengths=None):
+    &quot;&quot;&quot;
+    Calculate the color terms k0 and k1.
+
+    Parameters
+    ----------
+    result : dict
+        Collection of calibration results.
+    fref : float
+        Reference flux for power law models.
+    pl : bool
+        If set, the model is based on a power law.
+    bb : bool
+        If set, the model is based on a blackbody.
+    alpha : float, optional
+        Slope used for power law if `pl` is True.
+    wref : float, optional
+        Reference wavelength for power law models if `pl` is True.
+    temp : float, optional
+        Reference temperature for blackbody models if `bb` is True.
+    model_flux_in_filter : numpy.array, optional
+        Flux in the filter of the model if `pl` and `bb` are
+        both False.
+    wavelengths : numpy.array, optional
+        Wavelenths in the filter of the model if `pl` and `bb` are
+        both False.
+
+    Returns
+    -------
+    result : dict
+        Same as input `result` with both &#39;color_term_k0&#39; and
+        &#39;color_term_k1&#39; populated.
+
+    &quot;&quot;&quot;
+
+    flam_lam0, flam_lam1 = flux_reference_wavelength(result, pl, bb, alpha,
+                                                     wref, fref, temp,
+                                                     model_flux_in_filter,
+                                                     wavelengths)
+    k0 = result[&#39;flux_mean&#39;] / flam_lam0
+    k1 = (result[&#39;flux_mean&#39;] * result[&#39;lambda_mean&#39;]
+          / (flam_lam1 * result[&#39;lambda_1&#39;]))
+
+    result[&#39;color_term_k0&#39;] = k0
+    result[&#39;color_term_k1&#39;] = k1
+
+    return result</div>
+
+
+
+<div class="viewcode-block" id="flux_reference_wavelength">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.derived_optics.flux_reference_wavelength.html#sofia_redux.calibration.standard_model.derived_optics.flux_reference_wavelength">[docs]</a>
+def flux_reference_wavelength(result, pl=False, bb=False, alpha=None,
+                              wref=None, fref=None,
+                              temp=None, model_flux_in_filter=None,
+                              wavelengths=None):
+    &quot;&quot;&quot;
+    Calculate the flux from the model at reference wavelengths.
+
+    Parameters
+    ----------
+    result : dict
+        Collection of calibration results.
+    pl : bool, optional
+        If set, the model is based on a power law. Defaults
+        to False.
+    bb : bool, optional
+        If set, the model is based on a blackbody. Defaults
+        to False.
+    alpha : float, optional
+        Slope used for power law if `pl` is True.
+    wref : float, optional
+        Reference wavelength for power law models if `pl` is True.
+    fref : float, optional
+        Reference frequency for power law models.
+    temp : float, optional
+        Reference temperature for blackbody models if `bb` is True.
+    model_flux_in_filter : numpy.array, optional
+        Flux in the filter of the model if `pl` and `bb` are
+        both False.
+    wavelengths : numpy.array, optional
+        Wavelenths in the filter of the model if `pl` and `bb` are
+        both False.
+
+    Returns
+    -------
+    flam_lam0 : float
+        Model flux at the mean wavelength.
+    flam_lam1 : float
+        Model flux at lambda 1.
+
+    &quot;&quot;&quot;
+    c = const.c.to(u.um / u.s).value
+    Jy2W = 1e-26  # Convert Jy to W/m2/Hz
+
+    if pl:
+        flam_lam0 = (fref * Jy2W * c
+                     * ((wref / result[&#39;lambda_mean&#39;]) ** alpha)
+                     / result[&#39;lambda_mean&#39;] ** 2)
+        flam_lam1 = (fref * Jy2W * c
+                     * ((wref / result[&#39;lambda_1&#39;]) ** alpha)
+                     / result[&#39;lambda_1&#39;] ** 2)
+    elif bb:
+        flam_lam0 = \
+            np.pi * thermast.planck_function(result[&#39;lambda_mean&#39;], temp)
+        flam_lam1 = \
+            np.pi * thermast.planck_function(result[&#39;lambda_1&#39;], temp)
+    else:
+        flam_lam0 = iso.interpol(model_flux_in_filter, wavelengths,
+                                 result[&#39;lambda_mean&#39;])
+        flam_lam1 = iso.interpol(model_flux_in_filter, wavelengths,
+                                 result[&#39;lambda_1&#39;])
+    return flam_lam0, flam_lam1</div>
+
+
+
+<div class="viewcode-block" id="pointing_optics_sigma">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.derived_optics.pointing_optics_sigma.html#sofia_redux.calibration.standard_model.derived_optics.pointing_optics_sigma">[docs]</a>
+def pointing_optics_sigma(iq):
+    &quot;&quot;&quot;
+    Calculate the quality of the pointing optics.
+
+    Parameters
+    ----------
+    iq : float
+        Image quality. 80% enclosed energy giam for
+        pointing + optics  in arcsec.
+
+    Returns
+    -------
+    sig_pt_opt : float
+        Radial RMS vale of a 2-D Gaussian corresponding
+        to `iq`.
+
+    &quot;&quot;&quot;
+    # d_80 = 2.54*sigma for 80% enclosed energy
+    # sig_pt_opt is the radial RMS value (not the sigma) of
+    # a 2-D Gaussian
+    d_80 = iq
+    sig_pt_opt = d_80 / 2.54
+    return sig_pt_opt</div>
+
+
+
+<div class="viewcode-block" id="source_size">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.derived_optics.source_size.html#sofia_redux.calibration.standard_model.derived_optics.source_size">[docs]</a>
+def source_size(warr, iq, theta_pix):
+    &quot;&quot;&quot;
+    Compute the source size.
+
+    Parameters
+    ----------
+    warr : numpy.array
+        Wavelengths in this filter in microns.
+    iq : float
+        Image quality d_80
+    theta_pix : numpy.array
+        Pixel size in arcsec.
+
+    Returns
+    -------
+    fwhm : numpy.array
+        FWHM of each pixel in arcsec.
+    num_pixels : numpy.array
+        Number of pixels in optimal extraction area.
+    ffrac : float
+        Fraction of total flux in optimal extraction aperture.
+
+    Notes
+    -----
+    Other variable definitions:
+    sig_d : size of diffraction limited beam in arc
+
+    &quot;&quot;&quot;
+    r2a = 206265.  # radians to arcsecs
+    Dtel = 2.50e6  # Telescope diameter in um
+
+    sig_pt_opt = pointing_optics_sigma(iq)
+
+    # Size of diffraction limited beam
+    sig_d = 0.612 * warr * r2a / Dtel
+
+    # RMS radial size
+    r_rms = np.sqrt(sig_pt_opt ** 2 + sig_d ** 2)
+    fwhm = 2. * np.sqrt(np.log(2.)) * r_rms
+
+    # Optimal extraction size
+    ext = np.pi * 1.121 ** 2 * r_rms ** 2
+
+    num_pixels = ext / theta_pix ** 2
+    ffrac = 0.715
+
+    return fwhm, num_pixels, ffrac</div>
+
+
+
+<div class="viewcode-block" id="apply_filter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.derived_optics.apply_filter.html#sofia_redux.calibration.standard_model.derived_optics.apply_filter">[docs]</a>
+def apply_filter(caldata, filter_name, atmosphere_wave,
+                 atmosphere_transmission, model_wave, model_flux):
+    &quot;&quot;&quot;
+    Only select out wavelength and fluxes in a given filter.
+
+    Parameters
+    ----------
+    caldata : str
+        Path to location of calibration data.
+    filter_name : str
+        Name of the filter to apply.
+    atmosphere_wave : numpy.array
+        Wavelengths of the atmosphere transmission model.
+    atmosphere_transmission : numpy.array
+        Transmission of the atmosphere at each wavelength
+        in `atmosphere_wave`.
+    model_wave : numpy.array
+        Wavelengths of the source model.
+    model_flux : numpy.array
+        Modeled flux emitted by source at each wavelength
+        in `model_wave`.
+
+    Returns
+    -------
+    wf : numpy.array
+        Wavelengths of the filter.
+    tf : numpy.array
+        Transmission of the filter at each wavelength
+        in `wf`.
+    taf : numpy.array
+        Atmospheric transmission at each wavelength in the filter.
+    fsi : numpy.array
+        Flux emitted by the modeled source at each wavelength
+        in the filter.
+    warr : numpy.array
+        Wavelengths in the filter that `fsi` is defined at.
+    fname : str
+        Full path of the filter.
+
+    &quot;&quot;&quot;
+    # Load filter transmission profile
+    fname = os.path.join(caldata, filter_name)
+    wf, tf = np.loadtxt(fname, skiprows=2,
+                        usecols=(0, 1), unpack=True)
+
+    a_indicies = (atmosphere_wave &gt;= min(wf)) &amp; (atmosphere_wave &lt;= max(wf))
+    s_indicies = (model_wave &gt;= min(wf)) &amp; (model_wave &lt;= max(wf))
+    if a_indicies.sum() &gt; s_indicies.sum():
+        warr = atmosphere_wave[a_indicies]
+        taf = atmosphere_transmission[a_indicies]
+        fsi = iso.interpol(model_flux, model_wave, warr)
+    else:
+        warr = model_wave[s_indicies]
+        taf = iso.interpol(atmosphere_transmission, atmosphere_wave, warr)
+        fsi = model_flux[s_indicies]
+    return wf, tf, taf, fsi, warr, fname</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

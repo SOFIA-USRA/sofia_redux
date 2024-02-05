@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.coordinate_systems.projection.gnomonic_projection &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.coordinate_systems.projection.gnomonic_projection</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units
+import numpy as np
+
+from sofia_redux.scan.coordinate_systems.projection.zenithal_projection \
+    import ZenithalProjection
+from sofia_redux.scan.coordinate_systems.spherical_coordinates \
+    import SphericalCoordinates
+
+__all__ = [&#39;GnomonicProjection&#39;]
+
+
+<div class="viewcode-block" id="GnomonicProjection">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.gnomonic_projection.GnomonicProjection.html#sofia_redux.scan.coordinate_systems.projection.gnomonic_projection.GnomonicProjection">[docs]</a>
+class GnomonicProjection(ZenithalProjection):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize a gnomonic projection.
+
+        A gnomonic projection displays all great circles as straight lines by
+        converting surface points on a sphere to a tangent plane where a ray
+        from the center of the sphere passes through the point on the sphere
+        and then onto the plane.  Distortion is extreme away from the tangent
+        point.
+
+        The forward projection is given by::
+
+            x = cot(theta)sin(phi)
+            y = -cot(theta)cos(phi)
+
+        with cot(theta) evaluating to zero at theta=90 degrees, and the inverse
+        transform (deprojection) is given by::
+
+            phi = arctan(x, -y)
+            theta = arctan(1, sqrt(x^2 + y^2))
+        &quot;&quot;&quot;
+        super().__init__()
+
+<div class="viewcode-block" id="GnomonicProjection.get_fits_id">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.gnomonic_projection.GnomonicProjection.html#sofia_redux.scan.coordinate_systems.projection.gnomonic_projection.GnomonicProjection.get_fits_id">[docs]</a>
+    @classmethod
+    def get_fits_id(cls):
+        &quot;&quot;&quot;
+        Return the FITS ID for the projection.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &quot;TAN&quot;</div>
+
+
+<div class="viewcode-block" id="GnomonicProjection.get_full_name">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.gnomonic_projection.GnomonicProjection.html#sofia_redux.scan.coordinate_systems.projection.gnomonic_projection.GnomonicProjection.get_full_name">[docs]</a>
+    @classmethod
+    def get_full_name(cls):
+        &quot;&quot;&quot;
+        Return the full name of the projection.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;Gnomonic&#39;</div>
+
+
+<div class="viewcode-block" id="GnomonicProjection.r">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.gnomonic_projection.GnomonicProjection.html#sofia_redux.scan.coordinate_systems.projection.gnomonic_projection.GnomonicProjection.r">[docs]</a>
+    @classmethod
+    def r(cls, theta):
+        &quot;&quot;&quot;
+        Return the distance of a point from the pole on the projection.
+
+        Calculates the distance of a point from the celestial pole.  Since the
+        projection defined by create circles on a sphere, this only depends on
+        the latitude (theta), and is given as::
+
+            r = cot(theta) ; |theta| &gt; 0
+            r = 0 ; theta = 90 degrees
+
+        Parameters
+        ----------
+        theta : float or numpy.ndarray or units.Quantity
+
+        Returns
+        -------
+        value : units.Quantity
+        &quot;&quot;&quot;
+        radian = units.Unit(&#39;radian&#39;)
+        if not isinstance(theta, units.Quantity):
+            theta = theta * radian
+
+        if theta.shape != ():
+            equal = SphericalCoordinates.equal_angles(theta, cls.right_angle)
+            result = np.empty(theta.shape, dtype=float) * radian
+            result[equal] = 0.0 * radian
+            result[~equal] = (1.0 / np.tan(theta[~equal])) * radian
+            return result
+        else:
+            if SphericalCoordinates.equal_angles(theta, cls.right_angle):
+                return 0.0 * radian
+
+            return (1.0 / np.tan(theta)) * radian</div>
+
+
+<div class="viewcode-block" id="GnomonicProjection.theta_of_r">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.gnomonic_projection.GnomonicProjection.html#sofia_redux.scan.coordinate_systems.projection.gnomonic_projection.GnomonicProjection.theta_of_r">[docs]</a>
+    @classmethod
+    def theta_of_r(cls, value):
+        &quot;&quot;&quot;
+        Return the latitude (theta) given a distance from the celestial pole.
+
+        Calculates the latitude of a point from the celestial pole.  Since the
+        projection defined by create circles on a sphere, this only depends on
+        the distance of the point from the celestial pole, and is given as:
+
+            theta = arctan(1, r)
+
+        Parameters
+        ----------
+        value : float or numpy.ndarray or units.Quantity
+
+        Returns
+        -------
+        theta : units.Quantity
+        &quot;&quot;&quot;
+        if isinstance(value, units.Quantity):
+            value = value.to(&#39;radian&#39;).value
+
+        return np.arctan2(1.0, value) * units.Unit(&#39;radian&#39;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

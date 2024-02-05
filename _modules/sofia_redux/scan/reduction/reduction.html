@@ -1,0 +1,1948 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.reduction.reduction &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.reduction.reduction</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units
+from astropy.io import fits
+from configobj import ConfigObj
+from copy import deepcopy
+import gc
+import json
+import numpy as np
+import os
+import platform
+import psutil
+import re
+import shutil
+import sys
+import tempfile
+import time
+
+from sofia_redux.scan.reduction.version import ReductionVersion
+from sofia_redux.scan.info.info import Info
+from sofia_redux.scan.utilities import utils
+from sofia_redux.scan.pipeline.pipeline import Pipeline
+from sofia_redux.scan.utilities.utils import insert_info_in_header
+from sofia_redux.toolkit.utilities import multiprocessing
+
+__all__ = [&#39;Reduction&#39;]
+
+
+<div class="viewcode-block" id="Reduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction">[docs]</a>
+class Reduction(ReductionVersion):
+
+    global log
+    from astropy import log
+
+    def __init__(self, instrument, configuration_file=&#39;default.cfg&#39;,
+                 configuration_path=None):
+        &quot;&quot;&quot;
+        Initialize the reduction object.
+
+        Parameters
+        ----------
+        instrument : str or None
+            The name of the instrument for which the reduction applies.
+        configuration_file : str, optional
+            An optional configuration file to use.
+        configuration_path : str, optional
+            An alternate directory path to the configuration tree to be used
+            during the reduction.  The default is
+            &lt;package&gt;/data/configurations.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.scans = []
+        self.pipeline = None
+        self.max_jobs = 1
+        self.max_cores = 1
+        self.available_reduction_jobs = 1
+        self.parallel_reductions = 1
+        self.parallel_scans = 1
+        self.parallel_tasks = 1
+        self.parallel_read = 1
+        self.source = None
+        self.source_executor = None
+        self.channels = None
+        self.sub_reductions = None
+        self.parent_reduction = None
+        self.reduction_files = None
+        self.reduction_number = 0
+        self.pickle_reduction_directory = None
+        self.pickle_pipeline_directory = None
+        self.jobs_assigned = False
+        self.read_start_time = None
+        self.read_end_time = None
+        self.reduce_start_time = None
+        self.reduce_end_time = None
+        self.stored_user_configuration = None
+
+        if instrument is None:
+            return
+
+        info = Info.instance_from_instrument_name(
+            instrument, configuration_path=configuration_path)
+        info.read_configuration(configuration_file=configuration_file,
+                                validate=True)
+        self.channels = info.get_channels_instance()
+        self.set_outpath()
+        self.channels.set_parent(self)
+        log.info(f&quot;Instrument is {self.info.get_name().upper()}&quot;)
+
+<div class="viewcode-block" id="Reduction.blank_copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.blank_copy">[docs]</a>
+    def blank_copy(self):
+        &quot;&quot;&quot;
+        Return a base copy of the reduction.
+
+        There will be no scans, source or pipelines loaded.  Only the basic
+        channel information and info/configuration will be available.
+
+        Returns
+        -------
+        Reduction
+        &quot;&quot;&quot;
+        new = Reduction(None)
+
+        if self.info is None:
+            return
+
+        new.channels = self.channels.copy()
+        new.info.unlink_configuration()
+        new.channels.set_parent(new)
+        new.max_jobs = self.max_jobs
+        new.parallel_tasks = self.parallel_tasks
+        new.parallel_scans = self.parallel_scans
+        return new</div>
+
+
+    @property
+    def configuration(self):
+        &quot;&quot;&quot;
+        Return the reduction configuration object.
+
+        Returns
+        -------
+        Configuration
+        &quot;&quot;&quot;
+        if self.info is None:
+            return None
+        return self.info.configuration
+
+    @property
+    def instrument(self):
+        &quot;&quot;&quot;
+        Return the instrument name for the reduction
+
+        Returns
+        -------
+        instrument_name : str
+        &quot;&quot;&quot;
+        if self.info is None:
+            return None
+        return self.info.instrument.name
+
+    @property
+    def size(self):
+        &quot;&quot;&quot;
+        Return the number of scans in the reduction
+
+        Returns
+        -------
+        n_scans : int
+        &quot;&quot;&quot;
+        if self.scans is None:
+            return 0
+        else:
+            return len(self.scans)
+
+    @property
+    def name(self):
+        &quot;&quot;&quot;
+        Return the name (typically instrument) of the reduction.
+
+        Returns
+        -------
+        name : str
+        &quot;&quot;&quot;
+        if self.info is None:
+            return None
+        return self.info.name
+
+    @property
+    def rounds(self):
+        &quot;&quot;&quot;
+        Return the maximum number of rounds (iterations) in the reduction.
+
+        Returns
+        -------
+        rounds : int
+        &quot;&quot;&quot;
+        if self.configuration is None:
+            return 0
+        return self.configuration.iterations.max_iteration
+
+    @rounds.setter
+    def rounds(self, value):
+        &quot;&quot;&quot;
+        Set the number of rounds in the reduction.
+
+        Parameters
+        ----------
+        value : int
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.configuration is None:
+            raise ValueError(&quot;Cannot set rounds for non-initialized &quot;
+                             &quot;configuration&quot;)
+        self.configuration.iterations.max_iteration = value
+
+    @property
+    def info(self):
+        &quot;&quot;&quot;
+        Return the info object for the reduction.
+
+        Returns
+        -------
+        Info
+        &quot;&quot;&quot;
+        if self.channels is None:
+            return None
+        return self.channels.info
+
+    @info.setter
+    def info(self, value):
+        &quot;&quot;&quot;
+        Set the info object for the reduction.
+
+        Parameters
+        ----------
+        value : Info
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.channels is None:
+            raise ValueError(&quot;Cannot set info for non-initialized channels&quot;)
+        self.channels.info = value
+
+    @property
+    def total_reductions(self):
+        &quot;&quot;&quot;
+        Return the total number of reductions to be processed.
+
+        This is of importance for polarimetry HAWC_PLUS reductions, where
+        separate source maps are generated for each sub-reduction.  Otherwise,
+        it is expected for there to only be a single reduction.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        # If there is no parent reduction, this is the reduction, or the
+        # length of the number of sub reductions.
+        if self.parent_reduction is None:
+            n_sub = 0 if self.sub_reductions is None else len(
+                self.sub_reductions)
+            return int(np.clip(n_sub, 1, None))
+        return self.parent_reduction.total_reductions
+
+    @property
+    def is_sub_reduction(self):
+        &quot;&quot;&quot;
+        Return whether this reduction is a sub-reduction of a parent reduction.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self.parent_reduction is not None
+
+    @property
+    def reduction_id(self):
+        &quot;&quot;&quot;
+        Return a unique identifier for this reduction.
+
+        Returns
+        -------
+        id : str
+        &quot;&quot;&quot;
+        self_id = f&quot;{id(self)}.{self.reduction_number}&quot;
+        if self.parent_reduction is None:
+            return self_id
+        return f&#39;{self.parent_reduction.reduction_id}-{self_id}&#39;
+
+<div class="viewcode-block" id="Reduction.iteration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.iteration">[docs]</a>
+    def iteration(self):
+        &quot;&quot;&quot;
+        Return the current iteration.
+
+        Returns
+        -------
+        iteration : int
+        &quot;&quot;&quot;
+        if self.configuration is None:
+            return 0
+        elif self.configuration.iterations is None:
+            return 0
+        return self.configuration.iterations.current_iteration</div>
+
+
+<div class="viewcode-block" id="Reduction.read_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.read_scan">[docs]</a>
+    def read_scan(self, filename, read_fully=True):
+        &quot;&quot;&quot;
+        Given a filename, read it and return a Scan instance.
+
+        Scans are initialized based on the instrument name using the default
+        configuration.  The Configuration (owned by each scan) is then updated
+        using information from the supplied file, and any necessary information
+        will be extracted.
+
+        Parameters
+        ----------
+        filename : str
+            The path to a FITS file.
+        read_fully : bool, optional
+            If `False`, do not fully read the scan (definition depends on the
+            instrument).
+
+        Returns
+        -------
+        Scan
+        &quot;&quot;&quot;
+        self.update_runtime_config()
+        log.info(f&quot;Reading scan: {filename}&quot;)
+        scan = self.channels.read_scan(filename, read_fully=read_fully)
+        return scan</div>
+
+
+<div class="viewcode-block" id="Reduction.read_scans">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.read_scans">[docs]</a>
+    def read_scans(self, filenames=None):
+        &quot;&quot;&quot;
+        Read a list of FITS files to create scans.
+
+        Parameters
+        ----------
+        filenames : list (str) or list (list (str)), optional
+            A list of scan FITS file names.  If not supplied, defaults to
+            the files stored in the `reduction_files` attribute.  If there
+            are multiple sub-reductions, filenames must be a contain a list
+            of filenames for each sub-reduction.  i.e., filenames[0] contains
+            the list of files to read for the first sub-reduction.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.read_start_time = time.time()
+        self.update_runtime_config()
+        self.scans = []
+        if filenames is not None:
+            self.assign_reduction_files(filenames)
+
+        # Update the number of files to read in parallel
+        self.update_parallel_config(reset=True)
+
+        if self.sub_reductions is not None:
+            self.read_sub_reduction_scans()
+            return
+
+        if self.reduction_files is None or len(self.reduction_files) == 0:
+            log.warning(&#39;No files to read.&#39;)
+            return
+        n_scans = len(self.reduction_files)
+        parallel_read = int(np.clip(self.parallel_read, 1, n_scans))
+
+        msg = f&quot;Reading {n_scans} files&quot;
+        if parallel_read &gt; 1:
+            msg += f&quot; in parallel using {parallel_read} jobs&quot;
+        log.debug(msg)
+        split_scans = self.configuration.get_bool(&#39;subscan.split&#39;)
+
+        args = (self.reduction_files, self.channels)
+        kwargs = None
+
+        scans = multiprocessing.multitask(
+            self.parallel_safe_read_scan, range(n_scans), args, kwargs,
+            jobs=parallel_read, logger=log)
+
+        for scan in scans:
+            if scan is None:
+                continue
+            if split_scans:
+                self.scans.extend(scan.split())
+            else:
+                self.scans.append(scan)</div>
+
+
+<div class="viewcode-block" id="Reduction.parallel_safe_read_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.parallel_safe_read_scan">[docs]</a>
+    @classmethod
+    def parallel_safe_read_scan(cls, args, file_number):
+        &quot;&quot;&quot;
+        Read a single scan.
+
+        This function is safe for :func:`multitask`.
+
+        Parameters
+        ----------
+        args : 2-tuple
+            A tuple of arguments where:
+                args[0] - list (str) of all filenames
+                args[1] - The reduction Channels object.
+        file_number : int
+            The index of the file to read in all of the supplied filenames
+            (args[0]).
+
+        Returns
+        -------
+        scan : Scan or str
+            A Scan object if no pickling is required, or a string filename
+            pointing to the pickled scan object.
+        &quot;&quot;&quot;
+        filenames, channels = args
+        filename = filenames[file_number]
+        return cls.return_scan_from_read_arguments(filename, channels)</div>
+
+
+<div class="viewcode-block" id="Reduction.return_scan_from_read_arguments">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.return_scan_from_read_arguments">[docs]</a>
+    @classmethod
+    def return_scan_from_read_arguments(cls, filename, channels):
+        &quot;&quot;&quot;
+        Create a scan given a FITS file and instrument channels.
+
+        Parameters
+        ----------
+        filename : str
+        channels : sofia_redux.scan.channels.channels.Channels
+
+        Returns
+        -------
+        scan : sofia_redux.scan.scan.Scan
+        &quot;&quot;&quot;
+        if isinstance(channels, str):
+            channels, _ = multiprocessing.unpickle_file(channels)
+
+        log.info(f&quot;Reading scan: {filename}&quot;)
+        scan = channels.read_scan(filename, read_fully=True)
+
+        if scan.size == 0:
+            log.warning(f&quot;Scan {scan.get_id()} contains no valid data. &quot;
+                        f&quot;Skipping&quot;)
+            return None
+
+        scan.validate()
+
+        if scan.size == 0:
+            log.warning(f&quot;Scan {scan.get_id()} contains no valid data. &quot;
+                        f&quot;Skipping&quot;)
+            return None
+
+        log.info(f&quot;Successfully read scan {scan.get_id()}.\n&quot;)
+
+        return scan</div>
+
+
+<div class="viewcode-block" id="Reduction.read_sub_reduction_scans">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.read_sub_reduction_scans">[docs]</a>
+    def read_sub_reduction_scans(self):
+        &quot;&quot;&quot;
+        Read scans for each sub-reduction.
+
+        Reduction files MUST have already been assigned to each sub-reduction.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.sub_reductions is None:
+            n_reductions = 0
+        else:
+            n_reductions = len(self.sub_reductions)
+
+        if n_reductions == 0:
+            raise ValueError(&quot;No sub-reductions exist.&quot;)
+
+        file_read_args = []
+        reduction_map = []
+
+        pickle_directory = tempfile.mkdtemp(prefix=&#39;sub_reduction_read&#39;)
+
+        for reduction_number, sr in enumerate(self.sub_reductions):
+            sr.read_start_time = time.time()
+            sr.update_runtime_config()
+            sr.scans = []
+            if sr.reduction_files is not None:
+                for file_no, reduction_file in enumerate(sr.reduction_files):
+                    channel_file = os.path.join(
+                        pickle_directory,
+                        f&#39;SOFSCAN_channels_{reduction_number}_{file_no}.p&#39;)
+                    channel_file = multiprocessing.pickle_object(
+                        sr.channels, channel_file)
+
+                    file_read_args.append([reduction_file, channel_file])
+                    reduction_map.append(reduction_number)
+
+        n_read = len(reduction_map)
+        parallel_jobs = int(np.clip(n_read, 1, self.parallel_read))
+        parallel = parallel_jobs &gt; 1
+
+        args = file_read_args, pickle_directory
+        kwargs = None
+
+        msg = f&quot;Reading {n_read} files from {n_reductions} sub-reductions&quot;
+        if parallel:  # pragma: no cover
+            msg += f&#39; in parallel using {parallel_jobs} processes&#39;
+        msg += &#39;.&#39;
+        log.debug(msg)
+
+        scans = multiprocessing.multitask(
+            self.parallel_safe_read_all_files, range(n_read), args, kwargs,
+            jobs=parallel_jobs, force_processes=True, max_nbytes=None,
+            logger=log)
+
+        if parallel or (
+                len(scans) &gt; 0 and any(isinstance(x, str) for x in scans)):
+            multiprocessing.unpickle_list(scans, delete=True)
+
+        try:
+            shutil.rmtree(pickle_directory)
+        except Exception as err:  # pragma: no cover
+            log.error(f&quot;Could not delete pickle directory {pickle_directory}: &quot;
+                      f&quot;{err}&quot;)
+
+        for i, scan in enumerate(scans):
+            if scan is None:
+                continue
+            sub_reduction = self.sub_reductions[reduction_map[i]]
+            scan.reduction = sub_reduction
+            if sub_reduction.configuration.get_bool(&#39;subscan.split&#39;):
+                sub_reduction.scans.extend(scan.split())
+            else:
+                sub_reduction.scans.append(scan)</div>
+
+
+<div class="viewcode-block" id="Reduction.parallel_safe_read_all_files">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.parallel_safe_read_all_files">[docs]</a>
+    @classmethod
+    def parallel_safe_read_all_files(cls, args, file_number):
+        &quot;&quot;&quot;
+        Read a single file from a list of many and return a Scan.
+
+        This function is safe for :func:`multitask`.
+
+        Parameters
+        ----------
+        args : 2-tuple
+            A tuple of arguments where:
+                args[0] - A list (list (list)) of all read arguments.
+                args[1] - pickle directory (str) in which to pickle the scan.
+        file_number : int
+            The index of the file to read in all of the supplied filenames
+            (args[0]).
+
+        Returns
+        -------
+        scan : Scan or str
+            A Scan object if no pickling is required, or a string filename
+            pointing to the pickled scan object.
+        &quot;&quot;&quot;
+        all_read_arguments, pickle_directory = args
+        read_arguments = all_read_arguments[file_number]
+        log.debug(f&quot;Reading file {file_number}&quot;)
+        scan = cls.return_scan_from_read_arguments(*read_arguments)
+
+        if pickle_directory is not None:
+            pickle_file = multiprocessing.pickle_object(
+                scan, os.path.join(pickle_directory,
+                                   f&#39;{file_number}-{id(scan)}.p&#39;))
+            del scan
+            return pickle_file
+
+        return scan</div>
+
+
+<div class="viewcode-block" id="Reduction.parallel_safe_read_sub_reduction_scans">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.parallel_safe_read_sub_reduction_scans">[docs]</a>
+    @classmethod
+    def parallel_safe_read_sub_reduction_scans(cls, args, reduction_number):
+        &quot;&quot;&quot;
+        Read all files in a single reduction to create Scan objects.
+
+        Parameters
+        ----------
+        args : 1-tuple
+            A single tuple where args[0] is a list (Reduction).
+        reduction_number : int
+            The reduction for which to read files out of all the supplied
+            reductions (args[0]).
+
+        Returns
+        -------
+        reduction : Reduction
+            A reduction where the `scans` attribute has been populated with a
+            list of read and validated Scan objects.
+        &quot;&quot;&quot;
+        sub_reductions = args[0]
+        sub_reduction = sub_reductions[reduction_number]
+
+        sub_reduction, sub_reduction_file = multiprocessing.unpickle_file(
+            sub_reduction)
+
+        reduction_files = sub_reduction.reduction_files
+        if reduction_files is None or len(reduction_files) == 0:
+            log.warning(f&quot;No reduction files exist for sub-reduction &quot;
+                        f&quot;{reduction_number}.  Sub-reduction will &quot;
+                        f&quot;be excluded.&quot;)
+            return None
+        sub_reduction.read_scans()
+
+        sub_reduction = multiprocessing.pickle_object(
+            sub_reduction, sub_reduction_file)
+
+        return sub_reduction</div>
+
+
+<div class="viewcode-block" id="Reduction.assign_reduction_files">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.assign_reduction_files">[docs]</a>
+    def assign_reduction_files(self, filenames):
+        &quot;&quot;&quot;
+        Assign reduction files to a reduction or sub-reductions.
+
+        Parameters
+        ----------
+        filenames : list (str) or list (list (str))
+            A list of files for a single reduction, or a list of files for
+            each sub-reduction.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.sub_reductions is None:
+            if isinstance(filenames, str):
+                filenames = [x for x in re.split(r&#39;[;, \t]&#39;, filenames) if
+                             x != &#39;&#39;]
+            self.reduction_files = filenames.copy()
+            return
+
+        n_groups, n_sub = len(filenames), len(self.sub_reductions)
+        if n_groups != n_sub:
+            raise ValueError(
+                f&quot;Number of file groups ({n_groups}) does not &quot;
+                f&quot;match number of sub-reductions ({n_sub}).&quot;)
+        for group, sub_reduction in zip(filenames, self.sub_reductions):
+            if isinstance(group, str):
+                group = [group]
+            sub_reduction.reduction_files = group</div>
+
+
+<div class="viewcode-block" id="Reduction.validate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.validate">[docs]</a>
+    def validate(self):
+        &quot;&quot;&quot;
+        Validate scans following a read.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        ValueError
+            If there are no scans to reduce.
+        &quot;&quot;&quot;
+        if self.sub_reductions is not None:
+            self.validate_sub_reductions()
+            return
+
+        if self.size == 0:
+            log.warning(&quot;No scans to reduce. Exiting.&quot;)
+            raise ValueError(&quot;No scans to reduce.&quot;)
+
+        self.info.validate_scans(self.scans)
+        self.scans = [scan for scan in self.scans if scan is not None]
+        if not self.is_valid():
+            if self.is_sub_reduction:
+                reduction_name = f&#39;Sub-reduction {self.reduction_number}&#39;
+            else:
+                reduction_name = &#39;Reduction&#39;
+            log.warning(f&quot;{reduction_name} contains no valid scans.&quot;)
+            return
+
+        self.set_observing_time_options()
+
+        # Make the global options derive from those of the first scan.
+        # That way any options activated conditionally for that scan become
+        # global starters as well.
+
+        self.channels = self.scans[0].channels.copy()
+        self.info.unlink_configuration()
+
+        # Keep only the non-specific global options
+        options = self.configuration.options
+        for scan in self.scans:
+            options = utils.dict_intersection(
+                options, scan.configuration.options)
+        self.configuration.options = options
+
+        # Remove empty scans
+        self.scans = [scan for scan in self.scans if scan.size &gt; 0]
+
+        # If this is a collection of reductions, the source model needs
+        # to be consistent.
+        self.read_end_time = time.time()
+
+        is_sub_reduction = self.parent_reduction is not None
+        if is_sub_reduction:
+            return
+
+        if None not in [self.read_start_time, self.read_end_time]:
+            dt = self.read_end_time - self.read_start_time
+            log.debug(f&quot;Total read time = {dt} seconds&quot;)
+
+        if not self.configuration.get_bool(&#39;lab&#39;):
+            self.init_source_model()
+
+        self.update_parallel_config(reset=True)
+        self.init_pipelines()</div>
+
+
+<div class="viewcode-block" id="Reduction.validate_scans">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.validate_scans">[docs]</a>
+    def validate_scans(self):
+        &quot;&quot;&quot;
+        Remove any invalid scans from the reduction scans.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.scans is None or len(self.scans) == 0:
+            return
+        self.scans = [x for x in self.scans if x.is_valid()]</div>
+
+
+<div class="viewcode-block" id="Reduction.is_valid">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.is_valid">[docs]</a>
+    def is_valid(self):
+        &quot;&quot;&quot;
+        Return whether the reduction contains any valid scans.
+
+        Note that this also removes any invalid integrations from all scans.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        self.validate_scans()
+        if self.scans is None or len(self.scans) == 0:
+            return False
+        return True</div>
+
+
+<div class="viewcode-block" id="Reduction.validate_sub_reductions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.validate_sub_reductions">[docs]</a>
+    def validate_sub_reductions(self):
+        &quot;&quot;&quot;
+        Validate all sub reductions, then initialize models and pipelines.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.sub_reductions is None:
+            raise ValueError(&quot;Reduction does not contain sub-reductions.&quot;)
+
+        self.sub_reductions = [sr for sr in self.sub_reductions if sr.size &gt; 0]
+        self.sub_reductions = sorted(self.sub_reductions,
+                                     key=lambda x: x.reduction_number)
+        self.update_parallel_config(reset=True)
+
+        n_sub = len(self.sub_reductions)
+        jobs = int(np.clip(n_sub, 1, self.parallel_reductions))
+
+        sub_reductions = multiprocessing.multitask(
+            self.parallel_safe_validate_sub_reductions,
+            range(n_sub), self.sub_reductions, None,
+            jobs=jobs, max_nbytes=None,
+            force_threading=True, logger=log)
+
+        sub_reductions = [x for x in sub_reductions if x.is_valid()]
+        if len(sub_reductions) == 0:
+            log.warning(&quot;There are no valid sub-reductions available.&quot;)
+            return
+
+        self.assign_sub_reductions(sub_reductions)
+
+        if not self.configuration.get_bool(&#39;lab&#39;):
+            if self.configuration.get_bool(&#39;commonwcs&#39;):
+                self.init_collective_source_model()
+            else:
+                for sub_reduction in self.sub_reductions:
+                    if sub_reduction.size &gt; 0:
+                        sub_reduction.init_source_model()
+
+        self.assign_sub_reductions(multiprocessing.multitask(
+            self.parallel_safe_init_pipelines,
+            range(n_sub), self.sub_reductions, None,
+            jobs=jobs, max_nbytes=None,
+            force_threading=True, logger=log))
+
+        self.read_end_time = time.time()
+        if None not in [self.read_start_time, self.read_end_time]:
+            dt = self.read_end_time - self.read_start_time
+            log.debug(f&quot;Total read time = {dt} seconds&quot;)</div>
+
+
+<div class="viewcode-block" id="Reduction.parallel_safe_validate_sub_reductions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.parallel_safe_validate_sub_reductions">[docs]</a>
+    @classmethod
+    def parallel_safe_validate_sub_reductions(cls, sub_reductions, index):
+        &quot;&quot;&quot;
+        Multitask safe function to validate each sub-reduction.
+
+        Parameters
+        ----------
+        sub_reductions : list (Reduction)
+            All sub-reductions to validate.
+        index : int
+            The index of the sub-reduction to validate.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        sub_reduction = sub_reductions[index]
+        sub_reduction.validate()
+        return sub_reduction</div>
+
+
+<div class="viewcode-block" id="Reduction.parallel_safe_init_pipelines">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.parallel_safe_init_pipelines">[docs]</a>
+    @classmethod
+    def parallel_safe_init_pipelines(cls, sub_reductions, index):
+        &quot;&quot;&quot;
+        Multitask safe function to initialize sub-reduction pipelines.
+
+        Parameters
+        ----------
+        sub_reductions : list (Reduction)
+            All sub-reductions to initialize.
+        index : int
+            The index of the sub-reduction to initialize.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        sub_reduction = sub_reductions[index]
+        sub_reduction.init_pipelines()
+        return sub_reduction</div>
+
+
+<div class="viewcode-block" id="Reduction.assign_sub_reductions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.assign_sub_reductions">[docs]</a>
+    def assign_sub_reductions(self, sub_reductions):
+        &quot;&quot;&quot;
+        Reassign sub-reductions to the parent (this) reduction.
+
+        This should be performed following any parallel process in order to
+        ensure that all sub-reductions reference the parent, and the parallel
+        configuration is valid.
+
+        Parameters
+        ----------
+        sub_reductions : list (Reduction)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for sub_reduction in sub_reductions:
+            sub_reduction.parent_reduction = self
+        self.update_parallel_config(reset=True)</div>
+
+
+<div class="viewcode-block" id="Reduction.set_observing_time_options">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.set_observing_time_options">[docs]</a>
+    def set_observing_time_options(self):
+        &quot;&quot;&quot;
+        Set the configuration options for the observing time.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        obstime = self.get_total_observing_time()
+        for key, options in self.configuration.conditions.options.items():
+            if key.startswith(&#39;obstime&#39;):
+                if len(key) &lt; (len(&#39;obstime&#39;) + 2):
+                    continue
+                operator = key[len(&#39;obstime&#39;)]
+                value = float(key[len(&#39;obstime&#39;) + 1:]) * units.Unit(&#39;second&#39;)
+                if operator == &#39;&lt;&#39;:
+                    if obstime &lt; value:
+                        self.apply_options_to_scans(options)
+                elif operator == &#39;&gt;&#39;:
+                    if obstime &gt; value:
+                        self.apply_options_to_scans(options)</div>
+
+
+<div class="viewcode-block" id="Reduction.apply_options_to_scans">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.apply_options_to_scans">[docs]</a>
+    def apply_options_to_scans(self, options):
+        &quot;&quot;&quot;
+        Apply configuration options to all scans.
+
+        Parameters
+        ----------
+        options : dict
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for scan in self.scans:
+            scan.configuration.apply_configuration_options(options)</div>
+
+
+<div class="viewcode-block" id="Reduction.get_total_observing_time">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.get_total_observing_time">[docs]</a>
+    def get_total_observing_time(self):
+        &quot;&quot;&quot;
+        Return the total observing time for all scans in the reduction.
+
+        Returns
+        -------
+        observing_time: astropy.units.Quantity
+            The total observing time.
+        &quot;&quot;&quot;
+        exposure = 0.0 * units.Unit(&#39;second&#39;)
+        for scan in self.scans:
+            exposure += scan.get_observing_time()
+        return exposure</div>
+
+
+<div class="viewcode-block" id="Reduction.init_source_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.init_source_model">[docs]</a>
+    def init_source_model(self):
+        &quot;&quot;&quot;
+        Initialize the source model
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.source = self.info.get_source_model_instance(
+            self.scans, reduction=self)
+
+        if self.source is None:
+            log.warning(&quot;No source model or invalid source model type.&quot;)
+            return
+
+        self.source.create_from(self.scans, assign_scans=False)
+        self.source.assign_reduction(self)</div>
+
+
+<div class="viewcode-block" id="Reduction.init_collective_source_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.init_collective_source_model">[docs]</a>
+    def init_collective_source_model(self):
+        &quot;&quot;&quot;
+        Create a source model for each sub reduction with the same WCS.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.sub_reductions is None:
+            raise ValueError(&quot;Reduction contains no sub-reductions.&quot;)
+
+        log.debug(&quot;Creating shared WCS map for all sub-reductions.&quot;)
+
+        all_scans = []
+        for sub_reduction in self.sub_reductions:
+            all_scans.extend(sub_reduction.scans)
+
+        # Derive from the first reduction settings
+        for reduction in self.sub_reductions:
+            if reduction.size &gt; 0:
+                break
+        else:
+            log.warning(&quot;No data from which to create a map&quot;)
+            return
+
+        common_map = reduction.info.get_source_model_instance(
+            all_scans, reduction=reduction)
+
+        if common_map is None:
+            log.warning(&quot;No source model or invalid source model type.&quot;)
+            return
+
+        common_map.create_from(all_scans, assign_scans=False)
+
+        for sub_reduction in self.sub_reductions:
+            if sub_reduction.size &gt; 0:
+                source = common_map.get_clean_local_copy(full=True)
+                source.assign_reduction(sub_reduction)</div>
+
+
+<div class="viewcode-block" id="Reduction.update_runtime_config">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.update_runtime_config">[docs]</a>
+    def update_runtime_config(self, reset=False):
+        &quot;&quot;&quot;
+        Update important configuration settings during prior to run.
+
+        The output path and parallel processing configuration will
+        be determined during this stage.
+
+        Parameters
+        ----------
+        reset : bool, optional
+            If `True`, re-assign the available parallel jobs to this reduction
+            and all sub-reductions if necessary.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.configuration.has_option(&#39;outpath&#39;):
+            self.set_outpath()
+        self.update_parallel_config(reset=reset)</div>
+
+
+<div class="viewcode-block" id="Reduction.set_outpath">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.set_outpath">[docs]</a>
+    def set_outpath(self):
+        &quot;&quot;&quot;
+        Set the output directory based on the configuration.
+
+        If the configuration path does not exist, it will be created if the
+        &#39;outpath.create&#39; option is set.  Otherwise, an error will be raised.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.configuration.set_outpath()
+        self.work_path = self.configuration.work_path</div>
+
+
+<div class="viewcode-block" id="Reduction.update_parallel_config">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.update_parallel_config">[docs]</a>
+    def update_parallel_config(self, reset=False):
+        &quot;&quot;&quot;
+        Update the maximum number of jobs to parallel process.
+
+        Parameters
+        ----------
+        reset : bool, optional
+            If `True`, re-assign the available parallel jobs to this reduction
+            and all sub-reductions if necessary.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.max_jobs = 1
+        self.max_cores = 1
+
+        if (self.configuration is None
+                or not self.configuration.has_option(&#39;parallel&#39;)):
+            return
+
+        total_cores = multiprocessing.get_core_number()
+        have_idle = self.configuration.has_option(&#39;parallel.idle&#39;)
+        if have_idle:
+            idle = self.configuration.get_float(&#39;parallel.idle&#39;, default=0)
+            total_cores -= int(idle * total_cores)
+            total_cores = int(np.clip(total_cores, 1, None))
+
+        if self.configuration.has_option(&#39;parallel.cores&#39;):
+            cores = self.configuration.get_float(&#39;parallel.cores&#39;)
+            self.max_cores = multiprocessing.valid_relative_jobs(cores)
+        elif have_idle:
+            self.max_cores = total_cores
+
+        if self.configuration.has_option(&#39;parallel.jobs&#39;):
+            jobs = self.configuration.get_float(&#39;parallel.jobs&#39;)
+            self.max_jobs = multiprocessing.valid_relative_jobs(jobs)
+        elif have_idle:
+            self.max_jobs = total_cores
+
+        self.max_jobs = int(np.clip(self.max_jobs, 1, total_cores))
+        self.max_cores = int(np.clip(self.max_cores, 1, total_cores))
+        self.assign_parallel_jobs(reset=reset)</div>
+
+
+<div class="viewcode-block" id="Reduction.assign_parallel_jobs">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.assign_parallel_jobs">[docs]</a>
+    def assign_parallel_jobs(self, reset=False):
+        &quot;&quot;&quot;
+        Determine the parallel jobs for the reduction.
+
+        Determines:
+            1 - The number of sub-reductions to read in parallel
+            2 - The number of scans to process in parallel
+            3 - The number of tasks (processes within scans) to run in parallel
+
+        Parameters
+        ----------
+        reset : bool, optional
+            If `True`, allow the parallel settings for sub-reductions to be
+            updated.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        # Only the parent reduction should assign parallel jobs.
+        if self.is_sub_reduction:
+            self.parent_reduction.assign_parallel_jobs()
+            return
+
+        if not reset and self.jobs_assigned:
+            return
+
+        mode = self.configuration.get_string(&#39;parallel.mode&#39;, default=&#39;hybrid&#39;)
+
+        # In the case that there are no sub-reductions
+        if self.sub_reductions is None or len(self.sub_reductions) == 0:
+            self.parallel_reductions = 1
+            n_scans = self.size
+            if self.reduction_files is None:
+                n_read = 0
+            else:
+                n_read = len(self.reduction_files)
+
+            if n_read == 0:
+                # Assume no files or scans assigned yet
+                self.parallel_read = self.max_cores
+            else:
+                self.parallel_read = int(np.clip(n_read, 1, self.max_cores))
+
+            if mode == &#39;scans&#39;:
+                self.parallel_tasks = 1
+                self.parallel_scans = int(np.clip(n_scans, 1, self.max_jobs))
+            elif mode == &#39;ops&#39;:
+                self.parallel_scans = 1
+                self.parallel_tasks = self.max_jobs
+            else:
+                self.parallel_scans = int(np.clip(n_scans, 1, self.max_jobs))
+                self.parallel_tasks = int(np.clip(
+                    self.max_jobs // self.parallel_scans, 1, self.max_jobs))
+
+            self.available_reduction_jobs = (
+                self.parallel_scans * self.parallel_tasks)
+            self.jobs_assigned = True
+            return
+
+        n_scans = np.asarray(
+            [sub_reduction.size for sub_reduction in self.sub_reductions])
+        total_scans = np.sum(n_scans)
+        n_scan_jobs = n_scans.copy()
+        n_reductions = n_scan_jobs.size
+        task_jobs = np.ones(n_reductions, dtype=int)
+
+        n_read = [0 if sr.reduction_files is None else len(sr.reduction_files)
+                  for sr in self.sub_reductions]
+        n_read = np.asarray(n_read)
+        while np.sum(n_read) &gt; self.max_cores:
+            n_read[np.argmax(n_read)] -= 1
+        n_read = np.clip(n_read, 1, None)
+
+        # The core operations
+        self.parallel_read = int(np.clip(np.sum(n_read), 1, self.max_cores))
+        self.parallel_reductions = int(np.clip(n_reductions, 1,
+                                               self.max_cores))
+
+        # The thread based operations
+        if mode == &#39;ops&#39;:
+            self.parallel_scans = 1
+            self.parallel_tasks = self.max_jobs
+            n_scan_jobs.fill(1)
+            task_jobs.fill(int(
+                np.clip(self.max_jobs // self.parallel_reductions, 1, None)))
+        else:
+            self.parallel_scans = int(np.clip(total_scans, 1, self.max_jobs))
+            while n_scan_jobs.sum() &gt; self.max_jobs:
+                n_scan_jobs[np.argmax(n_scan_jobs)] -= 1
+            n_scan_jobs = np.clip(n_scan_jobs, 1, None)
+
+        if mode == &#39;scans&#39;:
+            self.parallel_tasks = 1
+        elif mode != &#39;ops&#39;:  # hybrid
+            while np.sum(n_scan_jobs * task_jobs) &lt; self.max_jobs:
+                min_idx = np.argmin(n_scan_jobs * (task_jobs + 1))
+                task_jobs[min_idx] += 1
+                if np.sum(n_scan_jobs * task_jobs) &gt; self.max_jobs:
+                    task_jobs[min_idx] -= 1
+                    break
+            self.parallel_tasks = int(
+                np.clip(self.max_jobs // self.parallel_scans,
+                        1, self.max_jobs))
+
+        self.available_reduction_jobs = (
+            self.parallel_scans * self.parallel_tasks)
+        available_reduction_jobs = n_scan_jobs * task_jobs
+        for i, sub_reduction in enumerate(self.sub_reductions):
+            sub_reduction.parallel_reductions = 1
+            sub_reduction.parallel_scans = n_scan_jobs[i]
+            sub_reduction.parallel_tasks = task_jobs[i]
+            sub_reduction.available_reduction_jobs = \
+                available_reduction_jobs[i]
+            sub_reduction.parallel_read = n_read[i]
+            sub_reduction.jobs_assigned = True
+
+        self.jobs_assigned = True</div>
+
+
+<div class="viewcode-block" id="Reduction.init_pipelines">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.init_pipelines">[docs]</a>
+    def init_pipelines(self):
+        &quot;&quot;&quot;
+        Initialize the reduction pipeline.
+
+        The parallel pipelines defines that maximum number of pipelines that
+        should be created that may iterate in parallel.  Parallel tasks are
+        the number of cores left available to process in parallel by the
+        pipeline.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.is_sub_reduction:
+            info_str = f&#39;Sub-reduction {self.reduction_number}&#39;
+        else:
+            info_str = &#39;Reduction&#39;
+
+        n_scans = self.size
+
+        info_str += f&#39; will process {n_scans} scan{&quot;s&quot; if n_scans &gt; 1 else &quot;&quot;}&#39;
+
+        if self.available_reduction_jobs &gt; 1:
+            info_str += &quot; using &quot;
+            if self.parallel_scans &gt; 1 and self.parallel_tasks &gt; 1:
+                info_str += (f&#39;{self.parallel_scans} parallel scans X &#39;
+                             f&#39;{self.parallel_tasks} parallel tasks.&#39;)
+            elif self.parallel_scans &gt; 1:
+                info_str += f&#39;{self.parallel_scans} parallel scans.&#39;
+            else:
+                info_str += f&#39;{self.parallel_tasks} parallel tasks.&#39;
+        else:
+            info_str += &quot; serially.&quot;
+
+        log.debug(info_str)
+
+        self.pipeline = Pipeline(reduction=self)
+        self.pipeline.set_source_model(self.source)
+        for scan in self.scans:
+            self.pipeline.add_scan(scan)
+            for integration in scan.integrations:
+                integration.set_thread_count(self.parallel_tasks)</div>
+
+
+<div class="viewcode-block" id="Reduction.set_object_options">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.set_object_options">[docs]</a>
+    def set_object_options(self, source_name):
+        &quot;&quot;&quot;
+        Set the configuration options for an observing source.
+
+        Parameters
+        ----------
+        source_name : str
+            The source name.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.configuration.set_object(source_name, validate=True)</div>
+
+
+<div class="viewcode-block" id="Reduction.set_iteration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.set_iteration">[docs]</a>
+    def set_iteration(self, iteration, rounds=None, for_scans=True):
+        r&quot;&quot;&quot;
+        Set the configuration for a given iteration
+
+        Parameters
+        ----------
+        iteration : float or int or str
+            The iteration to set.  A positive integer defines the exact
+            iteration number.  A negative integer defines the iteration
+            relative to the last (e.g. -1 is the last iteration). A float
+            represents a fraction (0-&gt;1) of the number of rounds, and
+            a string may be parsed in many ways such as last, first, a float,
+            integer, or percentage (if suffixed with a %).
+        rounds : int, optional
+            The maximum number of iterations.
+        for_scans : bool, optional
+            If `True`, set the iteration for all scans as well.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if rounds is not None:
+            self.configuration.iterations.max_iteration = rounds
+            self.rounds = rounds
+
+        self.configuration.set_iteration(iteration)
+        if for_scans:
+            for scan in self.scans:
+                scan.set_iteration(iteration, rounds=rounds)</div>
+
+
+<div class="viewcode-block" id="Reduction.reduce">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.reduce">[docs]</a>
+    def reduce(self):
+        &quot;&quot;&quot;
+        Perform the reduction.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.reduce_start_time = time.time()
+        if self.sub_reductions is not None:
+            self.reduce_sub_reductions()
+            self.reduce_end_time = time.time()
+            return
+
+        if not self.is_valid():
+            log.warning(&quot;No valid scans: cannot reduce&quot;)
+            self.reduce_end_time = time.time()
+            return
+
+        log.info(f&quot;Reducing {self.size} scan(s).&quot;)
+        if self.configuration.get_bool(&#39;bright&#39;):
+            log.info(&quot;Bright source reduction.&quot;)
+        elif self.configuration.get_bool(&#39;faint&#39;):
+            log.info(&quot;Faint source reduction.&quot;)
+        elif self.configuration.get_bool(&#39;deep&#39;):
+            log.info(&quot;Deep source reduction.&quot;)
+        else:
+            log.info(&quot;Default reduction.&quot;)
+
+        if self.configuration.get_bool(&#39;extended&#39;):
+            log.info(&quot;Assuming extended source(s).&quot;)
+
+        log.info(f&quot;Assuming {self.info.instrument.get_source_size()} &quot;
+                 f&quot;sized source(s).&quot;)
+
+        if self.rounds is None or self.rounds &lt; 0:
+            raise ValueError(&quot;No rounds specified in configuration.&quot;)
+
+        for iteration in range(1, self.rounds + 1):
+            log.info(f&quot;Round {iteration}/{self.rounds}:&quot;)
+            self.set_iteration(iteration, rounds=self.rounds)
+            self.iterate()
+
+        if self.configuration.get_bool(&#39;source&#39;) and self.solve_source():
+            final_smooth = self.configuration.get_string(&#39;smooth.final&#39;)
+            if final_smooth is not None:
+                self.source.set_smoothing(
+                    self.source.get_smoothing(final_smooth))
+                self.source.smooth()
+                self.source.add_process_brief(&#39;(smooth) &#39;)
+
+        self.write_products()
+        self.reduce_end_time = time.time()
+        reduce_time = self.reduce_end_time - self.reduce_start_time
+
+        if self.is_sub_reduction:
+            reduction_string = f&#39;Sub-reduction {self.reduction_number}&#39;
+        else:
+            reduction_string = &#39;Reduction&#39;
+
+        log.info(f&quot;{reduction_string} complete! ({reduce_time:.3f} seconds)&quot;)
+
+        if not self.is_sub_reduction:
+            if None not in [self.reduce_end_time, self.read_start_time]:
+                dt = self.reduce_end_time - self.read_start_time
+                log.debug(f&quot;Total reduction time = {dt:.3f} seconds.&quot;)
+
+        if self.pipeline.pickle_directory is not None:
+            if os.path.isdir(self.pipeline.pickle_directory):
+                log.debug(f&#39;Removing temporary pickle directory: &#39;
+                          f&#39;{self.pipeline.pickle_directory}&#39;)
+                shutil.rmtree(self.pipeline.pickle_directory)</div>
+
+
+<div class="viewcode-block" id="Reduction.reduce_sub_reductions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.reduce_sub_reductions">[docs]</a>
+    def reduce_sub_reductions(self):
+        &quot;&quot;&quot;
+        Reduce all sub-reductions.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.sub_reductions is None:
+            raise RuntimeError(&quot;No sub-reductions exist.&quot;)
+
+        n_sub = len(self.sub_reductions)
+        if n_sub &lt;= 0:
+            log.warning(&quot;There are no sub-reductions to reduce.&quot;)
+            return
+
+        jobs = int(np.clip(self.parallel_reductions, 1, n_sub))
+        args = (self.sub_reductions,)
+        kwargs = None
+        msg = f&quot;Performing {n_sub} reductions&quot;
+        if jobs &gt; 1:
+            msg = f&quot;{msg} (in parallel using {jobs} jobs)&quot;
+        log.debug(msg)
+
+        use_pickle = jobs &gt; 1
+        if use_pickle:
+            self.pickle_sub_reductions()
+
+        self.sub_reductions = multiprocessing.multitask(
+            self.parallel_safe_reduce_sub_reduction, range(n_sub),
+            args, kwargs, jobs=jobs, max_nbytes=None,
+            force_processes=True, logger=log)
+
+        if use_pickle:
+            self.unpickle_sub_reductions(delete=True)
+
+        self.reduce_end_time = time.time()
+        if None not in [self.reduce_end_time, self.reduce_start_time]:
+            reduction_time = self.reduce_end_time - self.reduce_start_time
+            log.info(f&quot;Reduction complete! ({reduction_time:.3f} seconds)&quot;)</div>
+
+
+<div class="viewcode-block" id="Reduction.parallel_safe_reduce_sub_reduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.parallel_safe_reduce_sub_reduction">[docs]</a>
+    @classmethod
+    def parallel_safe_reduce_sub_reduction(cls, args, reduction_number):
+        &quot;&quot;&quot;
+        Reduce a single sub-reduction.
+
+        If the sub-reduction is a string and point to a file, it will be taken
+        to be a cloudpickle file and restored.  If the reduction was
+        successful, this file will be deleted.
+
+        Parameters
+        ----------
+        args : 1-tuple
+            A tuple containing all sub-reductions
+        reduction_number : int
+            The sub-reduction to reduce.
+
+        Returns
+        -------
+        sub_reduction : Reduction or str
+           A Reduction object if pickling is not enabled, or a path to the
+           pickle file if it is.
+        &quot;&quot;&quot;
+        sub_reductions = args[0]
+        sub_reduction = sub_reductions[reduction_number]
+        sub_reduction, reduction_file = multiprocessing.unpickle_file(
+            sub_reduction)
+
+        log.info(f&quot;Reducing sub-reduction {sub_reduction.reduction_id}&quot;)
+        sub_reduction.reduce()
+
+        sub_reduction = multiprocessing.pickle_object(
+            sub_reduction, reduction_file)
+        return sub_reduction</div>
+
+
+<div class="viewcode-block" id="Reduction.iterate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.iterate">[docs]</a>
+    def iterate(self, tasks=None):
+        &quot;&quot;&quot;
+        Perform a single iteration.
+
+        Parameters
+        ----------
+        tasks : list (str)
+            A list of tasks to perform for the iteration.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if tasks is None:
+            tasks = self.configuration.get_list(&#39;ordering&#39;)
+            tasks = [task.lower().strip() for task in tasks]
+            if &#39;source&#39; in tasks and self.solve_source():
+                source_index = tasks.index(&#39;source&#39;) + 1
+                self.iterate(tasks[:source_index])
+                tasks = tasks[source_index:]
+
+        if len(tasks) == 0:
+            return
+
+        if self.solve_source() and &#39;source&#39; in tasks:
+            if self.configuration.get_bool(&#39;source.delete_scan&#39;):
+                if self.scans is not None:
+                    for scan in self.scans:
+                        del scan.source_model
+                        scan.source_model = None
+                gc.collect()
+            self.source.renew()
+
+        self.iterate_pipeline(tasks)
+        self.summarize()
+
+        if self.solve_source() and &#39;source&#39; in tasks:
+            self.source.process()
+            self.source.sync()
+            log.info(f&quot; [Source] {&#39; &#39;.join(self.source.process_brief)}&quot;)
+            self.source.clear_process_brief()
+
+        if self.configuration.is_configured(&#39;whiten&#39;):
+            if self.configuration.is_configured(&#39;whiten.once&#39;):
+                self.configuration.purge(&#39;whiten&#39;)</div>
+
+
+<div class="viewcode-block" id="Reduction.iterate_pipeline">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.iterate_pipeline">[docs]</a>
+    def iterate_pipeline(self, tasks):
+        &quot;&quot;&quot;
+        Perform a single iteration of the pipeline.
+
+        Parameters
+        ----------
+        tasks : list (str)
+            A list of the pipeline tasks to run.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.pipeline.set_ordering(tasks)
+        self.pipeline.iterate()</div>
+
+
+<div class="viewcode-block" id="Reduction.solve_source">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.solve_source">[docs]</a>
+    def solve_source(self):
+        &quot;&quot;&quot;
+        Return whether to solve for the source.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        if self.source is None:
+            return False
+        return self.configuration.get_bool(&#39;source&#39;)</div>
+
+
+<div class="viewcode-block" id="Reduction.summarize">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.summarize">[docs]</a>
+    def summarize(self):
+        &quot;&quot;&quot;
+        Summarize (print logs) for the iteration.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for scan in self.scans:
+            for integration in scan.integrations:
+                self.summarize_integration(integration)</div>
+
+
+<div class="viewcode-block" id="Reduction.summarize_integration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.summarize_integration">[docs]</a>
+    @staticmethod
+    def summarize_integration(integration):
+        &quot;&quot;&quot;
+        Summarize (print logs) for an integration.
+
+        Parameters
+        ----------
+        integration : Integration
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if integration.comments is None:
+            comments = &#39;&#39;
+        else:
+            comments = &#39;&#39;.join(integration.comments)
+
+        log.info(f&quot;[{integration.get_display_id()}] {comments}&quot;)</div>
+
+
+<div class="viewcode-block" id="Reduction.write_products">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.write_products">[docs]</a>
+    def write_products(self):
+        &quot;&quot;&quot;
+        Write the products of the reduction to file.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.source is None:
+            return
+        self.source.suggestions()
+
+        if self.source.is_valid():
+            self.source.write(self.work_path)
+        else:
+            log.warning(&quot;The reduction did not result in a source model.&quot;)
+
+        for scan in self.scans:
+            scan.write_products()</div>
+
+
+<div class="viewcode-block" id="Reduction.add_user_configuration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.add_user_configuration">[docs]</a>
+    def add_user_configuration(self, **kwargs):
+        &quot;&quot;&quot;
+        Add command line options to the reduction.
+
+        Parameters
+        ----------
+        kwargs : dict
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if len(kwargs) == 0:
+            return
+
+        # Need to convert all values to strings for the ConfigObj
+        kwargs = self.configuration.normalize_options(kwargs)
+
+        self.stored_user_configuration = deepcopy(kwargs)
+
+        options_string = &#39;, &#39;.join([f&#39;{k}={v}&#39; for (k, v) in kwargs.items()])
+        log.info(f&quot;Applying user configuration settings: {options_string}&quot;)
+
+        new_kwargs = ConfigObj()
+        for key, value in kwargs.items():
+            if key != &#39;options&#39;:
+                new_kwargs.merge({key: value})
+            elif isinstance(value, dict):
+                for options_key, options_value in value.items():
+                    options = self.configuration.aliases.unalias_branch(
+                        {options_key: options_value})
+                    new_kwargs.merge(options)
+
+        new_kwargs = dict(new_kwargs)
+
+        self.configuration.read_configuration(new_kwargs, validate=False)
+
+        flattened = self.configuration.flatten(new_kwargs)
+
+        # Need to lock user settings
+        for key in flattened.keys():
+            if key == &#39;rounds&#39;:
+                self.configuration.lock_rounds(new_kwargs[&#39;rounds&#39;])
+            elif key in self.configuration.command_keys:
+                continue
+            elif key in self.configuration.section_keys:
+                continue
+            else:
+                value_key = f&#39;{key}.value&#39;
+                if self.configuration.exists(value_key):
+                    self.configuration.lock(value_key)
+                else:
+                    self.configuration.lock(key)
+
+        self.configuration.validate()
+        self.info.validate_configuration_registration()</div>
+
+
+<div class="viewcode-block" id="Reduction.pickle_sub_reductions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.pickle_sub_reductions">[docs]</a>
+    def pickle_sub_reductions(self):
+        &quot;&quot;&quot;
+        Convert all sub-reductions to pickle files.
+
+        All sub-reduction Reduction objects will be converted to pickle files,
+        and the `sub_reductions` attribute will contain on-disk file locations
+        for those files.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.sub_reductions is None:
+            return
+        self.pickle_reduction_directory = multiprocessing.pickle_list(
+            self.sub_reductions,
+            prefix=&#39;SOFSCAN_pickle_reduction_cache&#39;,
+            naming_attribute=&#39;reduction_id&#39;,
+            class_type=Reduction)
+        log.debug(
+            f&#39;Sub-reductions pickled to {self.pickle_reduction_directory}&#39;)</div>
+
+
+<div class="viewcode-block" id="Reduction.unpickle_sub_reductions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.unpickle_sub_reductions">[docs]</a>
+    def unpickle_sub_reductions(self, delete=True):
+        &quot;&quot;&quot;
+        Retrieve all sub-reductions from pickle files.
+
+        All sub-reduction Reduction objects will be restored from pickle files
+        whose filenames are present in the `sub_reductions` attribute.
+
+        Parameters
+        ----------
+        delete : bool, optional
+            If `True`, delete all pickle files and the pickle directory.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.sub_reductions is None:
+            return
+        multiprocessing.unpickle_list(self.sub_reductions, delete=delete)
+        if delete and os.path.isdir(self.pickle_reduction_directory):
+            shutil.rmtree(self.pickle_reduction_directory)
+            self.pickle_reduction_directory = None
+        for sub_reduction in self.sub_reductions:
+            sub_reduction.parent_reduction = self</div>
+
+
+<div class="viewcode-block" id="Reduction.edit_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit an image header with reduction information.
+
+        Parameters
+        ----------
+        header : fits.Header
+            The FITS header to edit.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.reduction_files is None:
+            reduction_files = []
+        elif isinstance(self.reduction_files, str):
+            reduction_files = [self.reduction_files]
+        else:
+            reduction_files = self.reduction_files
+
+        filename_str = []
+        for i, filename in enumerate(reduction_files):
+            if isinstance(filename, fits.HDUList):
+                test_file = filename.filename()
+                if test_file is None:
+                    filename = filename[0].header.get(
+                        &#39;FILENAME&#39;, f&#39;scan_{i + 1}.fits&#39;)
+                else:
+                    filename = test_file
+            filename_str.append(filename)
+        reduction_files = filename_str
+
+        n_files = len(reduction_files)
+
+        info = [
+            (&#39;COMMENT&#39;, &quot;&lt;------ SOFSCAN Runtime Configuration ------&gt;&quot;),
+            (&#39;SOFSCANV&#39;, ReductionVersion.get_full_version(),
+             &#39;SOFSCAN version information.&#39;),
+            (&#39;ARGS&#39;, n_files, &quot;Number of command line input files.&quot;),
+        ]
+        if n_files != 0:
+            for i, filename in enumerate(reduction_files):
+                info.append((f&#39;ARG{i + 1}&#39;, filename, &#39;Input file.&#39;))
+
+        kwargs = self.stored_user_configuration
+        if kwargs is not None and len(kwargs) &gt; 0:
+            kwargs = json.dumps(kwargs)
+            info.append((&#39;KWARGS&#39;, kwargs, &#39;User input options.&#39;))
+
+        info.extend([
+            (&#39;COMMENT&#39;, &#39;&lt;------ SOFSCAN Python &amp; OS ------&gt;&#39;),
+            (&#39;PYTHON&#39;, platform.python_version(), &#39;The Python version.&#39;),
+            (&#39;PYEXEC&#39;, sys.executable, &#39;Python executable.&#39;),
+            (&#39;PYIMPL&#39;, platform.python_implementation(),
+             &#39;The Python implementation.&#39;),
+            (&#39;OS&#39;, platform.platform(aliased=True), &#39;Operation System name.&#39;),
+            (&#39;OSVER&#39;, platform.version(), &#39;OS Version.&#39;),
+            (&#39;OSARCH&#39;, platform.machine(), &#39;OS architecture.&#39;),
+            (&#39;CPUS&#39;, multiprocessing.get_core_number(),
+             &#39;Number of CPU cores/threads available.&#39;)
+        ])
+
+        try:
+            bits = int(platform.architecture()[0].split(&#39;bit&#39;)[0])
+            info.append((&#39;DMBITS&#39;, bits, &#39;Bits in data model.&#39;))
+        except Exception as err:  # pragma: no cover
+            log.debug(f&quot;Could not determine number of bits for system: {err}&quot;)
+
+        info.extend([
+            (&#39;CPENDIAN&#39;, sys.byteorder, &#39;CPU Endianness.&#39;),
+            (&#39;MAXMEM&#39;, psutil.virtual_memory().available // (1024 * 1024),
+             &#39;MB of available memory.&#39;)])
+
+        try:
+            import locale
+            language, country = locale.getlocale()[0].split(&#39;_&#39;)
+            info.extend([
+                (&#39;COUNTRY&#39;, country, &#39;The user country.&#39;),
+                (&#39;LANGUAGE&#39;, language, &#39;The user language.&#39;)
+            ])
+        except Exception as err:  # pragma: no cover
+            log.debug(f&quot;Unable to extract locale information: {err}&quot;)
+
+        insert_info_in_header(header, info, delete_special=True)
+        self.configuration.edit_header(header)
+        ReductionVersion.add_history(header)</div>
+
+
+<div class="viewcode-block" id="Reduction.run">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.run">[docs]</a>
+    def run(self, filenames, **kwargs):
+        &quot;&quot;&quot;
+        Run the initialized reduction on a set of files.
+
+        Note that all user configuration options must have been loaded at this
+        stage.
+
+        Parameters
+        ----------
+        filenames : str or list (str)
+            The file or files to reduce.
+        kwargs : dict, optional
+            Optional configuration options to pass into the reduction.
+
+        Returns
+        -------
+        hdul : fits.HDUList
+            A list of HDU objects containing the reduced source map.
+        &quot;&quot;&quot;
+        self.add_user_configuration(**kwargs)
+        self.info.perform_reduction(self, filenames)
+        self.terminate_reduction()
+
+        if self.sub_reductions is not None:
+            hduls = [sub_reduction.source.hdul for sub_reduction in
+                     self.sub_reductions
+                     if sub_reduction.source is not None]
+            if self.source is not None:
+                hduls = [self.source.hdul] + hduls
+            return hduls
+
+        if self.source is not None:
+            return self.source.hdul
+        else:
+            return None</div>
+
+
+<div class="viewcode-block" id="Reduction.terminate_reduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.reduction.reduction.Reduction.html#sofia_redux.scan.reduction.reduction.Reduction.terminate_reduction">[docs]</a>
+    def terminate_reduction(self):
+        &quot;&quot;&quot;
+        Safely stop all relevant processes following a full reduction.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

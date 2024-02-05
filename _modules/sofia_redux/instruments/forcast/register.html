@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.register &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.register</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.toolkit.utilities.fits import add_history_wrap, kref, hdinsert
+from sofia_redux.toolkit.image.adjust import rotate, register_image
+
+from sofia_redux.instruments.forcast.getpar import getpar
+from sofia_redux.instruments.forcast.imgshift_header import imgshift_header
+from sofia_redux.instruments.forcast.peakfind import peakfind
+from sofia_redux.instruments.forcast.shift import shift
+
+addhist = add_history_wrap(&#39;Register&#39;)
+
+__all__ = [&#39;coadd_centroid&#39;, &#39;coadd_correlation&#39;, &#39;coadd_header&#39;,
+           &#39;coadd_user&#39;, &#39;register&#39;]
+
+
+def headererror(header, msg):
+    addhist(header, msg)
+    log.error(msg)
+
+
+<div class="viewcode-block" id="coadd_centroid">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.register.coadd_centroid.html#sofia_redux.instruments.forcast.register.coadd_centroid">[docs]</a>
+def coadd_centroid(data, reference, header=None, variance=None,
+                   crpix=None, border=0, rot_angle=None, missing=np.nan,
+                   shift_order=None, rotation_order=1, get_offsets=False):
+    &quot;&quot;&quot;
+    Shift an image for coadding using a centroid algorithm
+
+    Steps are:
+        1. Rotate data and variance wrt reference (if rot_angle
+           is provided)
+        2. Run peakfind on data wrt reference on 1 peak
+        3. Return rotated data (if it was rotated) should peakfind
+           fail.
+        4. Shift image by offsets calculated wrt reference using
+           peakfind.
+        5. Record the shifts in the header with the COADX0, COADY0
+           keywords.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        input image array (nrow, ncol)
+    reference : numpy.ndarray
+        input reference array to compare data to (nrow, ncol)
+    header : astropy.fits.header.Header
+        FITS header of input data
+    border : int
+        exclude `border` pixels from the outside edges when
+        attempting to find peaks in the image and reference
+    shift_order : int, optional
+        Order of interpolation for the shift.  The shift order must be
+        between 0 and 5, with a default of 3
+    rotation_order: int, optional
+        Order of interpolaton for the rotation.  The rotation order
+        must be between 0 and 5, with a default of 3
+    variance : numpy.ndarray
+        propagate provided variance if set (nrow, ncol)
+    rot_angle : float
+        Indicates that the data image is rotated wrt the reference
+        image by this amount.  The data image (and variance if supplied)
+        will be rotated clockwise by `rot_angle` degrees
+    crpix : list, optional
+        If provided, will be updated to the new [CRPIX1, CRPIX2]
+        values following the shift
+    get_offsets : bool, optional
+        Do not shift the image.  Only return the (x, y) offset
+    missing : float, optional
+        Value to represent missing data during shift
+
+    Returns
+    -------
+    2-tuple
+        numpy.ndarray : The shifted image (nrow, ncol)
+        numpy.ndarray : The shifted variance (nrow, ncol)
+    &quot;&quot;&quot;
+    if not isinstance(header, fits.header.Header):
+        header = fits.header.Header()
+        addhist(header, &#39;Created header&#39;)
+
+    var = variance.copy() if isinstance(variance, np.ndarray) else None
+
+    if not isinstance(data, np.ndarray) or len(data.shape) != 2:
+        headererror(header, &quot;Coadd not applied (invalid data)&quot;)
+        return
+
+    dovar = isinstance(var, np.ndarray) and var.shape == data.shape
+    var = None if not dovar else var
+    if variance is not None and not dovar:
+        addhist(header, &#39;Not propagating variance (Invalid variance)&#39;)
+        log.warning(&quot;invalid variance&quot;)
+
+    if not isinstance(reference, np.ndarray) or reference.shape != data.shape:
+        headererror(header, &quot;Coadd not applied (invalid reference)&quot;)
+        return
+
+    image = data.copy()
+    ref = reference.copy()
+    if border &gt; 0:
+        if border * 2 &gt;= data.shape[0] or border * 2 &gt;= data.shape[1]:
+            headererror(header, &#39;Coadd not applied (invalid border)&#39;)
+            return
+        image = image[border: -border, border: -border]
+        ref = ref[border: -border, border: -border]
+
+    rot_data = data.copy()
+    rot_var = var.copy() if dovar else None
+    if rot_angle is not None and abs(rot_angle % 360) != 0:
+        image = rotate(image, rot_angle, order=rotation_order)
+        rot_data = rotate(data, rot_angle, order=rotation_order)
+        if dovar:
+            rot_var = rotate(var, rot_angle, order=rotation_order)
+
+    fwhm = getpar(header, &#39;MFWHM&#39;, dtype=float, default=4.5,
+                  comment=&#39;fwhm for peakfind algorithm&#39;)
+
+    shift_coords = peakfind(
+        ref, image, fwhm=fwhm, npeaks=1, positive=True, refine=True,
+        coordinates=True, silent=True)
+
+    if len(shift_coords) == 0:
+        headererror(header, &#39;Coadd not applied (peakfind failed)&#39;)
+        return
+
+    offset = shift_coords[0]  # there should only be one peak
+    if get_offsets:
+        return offset
+
+    addhist(header, &#39;Used centroid registration to determine shifts&#39;)
+    addhist(header, &#39;X, Y shift of image is (%f, %f)&#39; %
+            (offset[0], offset[1]))
+    log.debug(&quot;calculated X,Y shift: (%s, %s)&quot; % (offset[0], offset[1]))
+    hdinsert(header, &#39;COADX0&#39;, offset[0], refkey=kref,
+             comment=&#39;X Shift during coadd process&#39;)
+    hdinsert(header, &#39;COADY0&#39;, offset[1], refkey=kref,
+             comment=&#39;Y shift during coadd process&#39;)
+    return shift(rot_data, offset, variance=rot_var, missing=missing,
+                 crpix=crpix, order=shift_order)</div>
+
+
+
+<div class="viewcode-block" id="coadd_correlation">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.register.coadd_correlation.html#sofia_redux.instruments.forcast.register.coadd_correlation">[docs]</a>
+def coadd_correlation(data, reference, header=None, variance=None,
+                      border=0, rot_angle=None, xydither=None, crpix=None,
+                      shift_order=None, rotation_order=1, upsample=100,
+                      get_offsets=False, missing=np.nan):
+    &quot;&quot;&quot;
+    Shift an image for coaddition using a correlation algorithm
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        Data to be shifted (nrow, ncol)
+    reference : numpy.ndarray
+        Data to be compared with (nrow, ncol)
+    header : The fits header of the new input data file, optional
+    variance : None or numpy.ndarray, optional
+        Propagate the provided variance (nrow, ncol)
+    border : int, optional
+        Remove `border` pixels from the edge of the image before
+        correlating
+    shift_order : int, optional
+        Order of interpolation for the shift.  The shift order must be
+        between 0 and 5, with a default of 3
+    rotation_order: int, optional
+        Order of interpolaton for the rotation.  The rotation order
+        must be between 0 and 5, with a default of 3
+    xydither : array_like, optional
+        Initial x,y shift estimates.  If not set, default is 0, 0
+    crpix : array-like, optional
+        If provided, will be updated to match image shift_image [x, y]
+    upsample : int, optional
+        Data will be registered to within 1 / `upsample` of a pixel
+    rot_angle : float, optional
+        Indicates that the data image is rotated wrt the reference
+        image by this amount.  The data image (and variance if supplied)
+        will be rotated clockwise by `rot_angle` degrees
+    get_offsets : bool, optional
+        Only return the (x, y) shift.  Do not shift the data.
+    missing : float, optional
+        Value to represent missing data during shift
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        The shifted image (nrow, ncol)
+        The shifted variance (nrow, ncol)
+    &quot;&quot;&quot;
+    if not isinstance(header, fits.header.Header):
+        header = fits.header.Header()
+        addhist(header, &#39;Created header&#39;)
+
+    var = variance.copy() if isinstance(variance, np.ndarray) else None
+
+    if not isinstance(data, np.ndarray) or len(data.shape) != 2:
+        headererror(header, &quot;Coadd not applied (invalid data)&quot;)
+        return
+
+    dovar = isinstance(var, np.ndarray) and var.shape == data.shape
+    var = None if not dovar else var
+    if variance is not None and not dovar:
+        addhist(header, &#39;Not propagating variance (Invalid variance)&#39;)
+        log.warning(&quot;Variance must match data: %s&quot; % type(variance))
+
+    if not isinstance(reference, np.ndarray) or reference.shape != data.shape:
+        headererror(header, &quot;Coadd not applied (invalid reference)&quot;)
+        return
+
+    image = data.copy()
+    ref = reference.copy()
+    if border &gt; 0:
+        if border * 2 &gt;= data.shape[0] or border * 2 &gt;= data.shape[1]:
+            headererror(header, &#39;Coadd not applied (invalid border)&#39;)
+            return
+        image = image[border: -border, border: -border]
+        ref = ref[border: -border, border: -border]
+
+    rot_data = data.copy()
+    rot_var = var.copy() if dovar else None
+    if rot_angle is not None and abs(rot_angle % 360) != 0:
+        image = rotate(image, rot_angle, order=rotation_order)
+        rot_data = rotate(data, rot_angle, order=rotation_order)
+        if dovar:
+            rot_var = rotate(var, rot_angle, order=rotation_order)
+
+    xyshift = abs(getpar(header, &#39;XYSHIFT&#39;, dtype=float, default=40.0,
+                         comment=&#39;maximum shift to be applied +/-&#39;))
+    offset = register_image(
+        image, ref, upsample=upsample, maxshift=xyshift, shift0=xydither)
+
+    log.debug(&quot;calculated X,Y shift: (%s, %s)&quot; % (offset[0], offset[1]))
+
+    if np.isnan(offset).any() or np.array(abs(offset) &gt; xyshift).any():
+        headererror(header, &quot;Coadd not applied (exceeded maxshift)&quot;)
+        return
+
+    if get_offsets:
+        return offset
+
+    addhist(header, &#39;Used correlation registration to determine shifts&#39;)
+    addhist(header, &#39;X, Y shift of image is (%f, %f)&#39; % (offset[0], offset[1]))
+    hdinsert(header, &#39;COADX0&#39;, offset[0], refkey=kref,
+             comment=&#39;X shift during coadd process&#39;)
+    hdinsert(header, &#39;COADY0&#39;, offset[1], refkey=kref,
+             comment=&#39;Y shift during coadd process&#39;)
+    return shift(rot_data, offset, variance=rot_var, missing=missing,
+                 crpix=crpix, order=shift_order)</div>
+
+
+
+<div class="viewcode-block" id="coadd_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.register.coadd_header.html#sofia_redux.instruments.forcast.register.coadd_header">[docs]</a>
+def coadd_header(data, header, variance=None, crpix=None, get_offsets=False,
+                 shift_order=None, missing=np.nan):
+    &quot;&quot;&quot;
+    Shift an image for coaddition using header information
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        Data to be shifted (nrow, ncol)
+    header : The fits header of the new input data file, optional
+    variance : None or numpy.ndarray, optional
+        Propagate the provided variance (nrow, ncol)
+    shift_order : int, optional
+        Order of interpolation for the shift.  The shift order must be
+        between 0 and 5, with a default of 3
+    crpix : array-like, optional
+        If provided, will be updated to match image shift_image [x, y]
+    get_offsets : bool, optional
+        Only return the (x, y) shift.  Do not shift the data.
+    missing : float, optional
+        Value to represent missing data during shift
+
+    Returns
+    -------
+    2-tuple
+        The shifted image (nrow, ncol)
+        The shifted variance (nrow, ncol)
+    &quot;&quot;&quot;
+    if not isinstance(header, fits.header.Header):
+        log.error(&quot;invalid header&quot;)
+        return
+
+    shifts = imgshift_header(header, chop=False, nod=False)
+    if &#39;ditherx&#39; in shifts and &#39;dithery&#39; in shifts:
+        offset = shifts[&#39;ditherx&#39;], shifts[&#39;dithery&#39;]
+    else:
+        headererror(header, &quot;Coadd failed (invalid header shift)&quot;)
+        return
+
+    if get_offsets:
+        return offset
+
+    addhist(header, &#39;Used header registration to determine shifts&#39;)
+    addhist(header, &#39;X, Y shift of image is (%f, %f)&#39; % (offset[0], offset[1]))
+    hdinsert(header, &#39;COADX0&#39;, offset[0], refkey=kref,
+             comment=&#39;X shift during coadd process&#39;)
+    hdinsert(header, &#39;COADY0&#39;, offset[1], refkey=kref,
+             comment=&#39;Y shift during coadd process&#39;)
+
+    return shift(data, offset, variance=variance, missing=missing,
+                 crpix=crpix, order=shift_order)</div>
+
+
+
+<div class="viewcode-block" id="coadd_user">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.register.coadd_user.html#sofia_redux.instruments.forcast.register.coadd_user">[docs]</a>
+def coadd_user(data, reference, position, header=None, variance=None,
+               crpix=None, get_offsets=False, shift_order=None,
+               missing=np.nan):
+    &quot;&quot;&quot;
+    Shift an image for coaddition using header information
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        Data to be shifted (nrow, ncol)
+    reference : array_like of float
+        2-element (x, y) reference position in pixels
+    position : array_like of float
+        2-element (x, y) user position in pixels
+    header : The fits header of the new input data file, optional
+    variance : None or numpy.ndarray, optional
+        Propagate the provided variance (nrow, ncol)
+    shift_order : int, optional
+        Order of interpolation for the shift.  The shift order must be
+        between 0 and 5, with a default of 3
+    crpix : array-like, optional
+        If provided, will be updated to match image shift_image [x, y]
+    get_offsets : bool, optional
+        Only return the (x, y) shift.  Do not shift the data.
+    missing : float, optional
+        Value to represent missing data during shift
+
+    Returns
+    -------
+    2-tuple
+        The shifted image (nrow, ncol)
+        The shifted variance (nrow, ncol)
+    &quot;&quot;&quot;
+    if not hasattr(reference, &#39;__len__&#39;) or len(reference) != 2:
+        headererror(header, &#39;Invalid user reference position&#39;)
+        return
+    elif not hasattr(position, &#39;__len__&#39;) or len(position) != 2:
+        headererror(header, &#39;Invalid user position&#39;)
+        return
+    offset = np.array(reference) - np.array(position)
+    maxshift = getpar(header, &#39;MAXREGSH&#39;, dtype=int, default=2000,
+                      update_header=False)
+    absoff = np.abs(offset)
+    if np.array(absoff &gt; maxshift).any():
+        log.warning(&#39;Shift (%f, %f) larger than %i. No shift applied&#39; %
+                    (offset[0], offset[1], maxshift))
+        offset *= 0
+
+    offset[absoff &lt; 1e-4] = 0
+    if get_offsets:
+        return offset
+
+    if header is not None:
+        addhist(header, &#39;Applied user shifts&#39;)
+        addhist(header, &#39;X, Y shift of image is (%f, %f)&#39; %
+                (offset[0], offset[1]))
+        hdinsert(header, &#39;COADX0&#39;, offset[0], refkey=kref,
+                 comment=&#39;X shift during coadd process&#39;)
+        hdinsert(header, &#39;COADY0&#39;, offset[1], refkey=kref,
+                 comment=&#39;Y shift during coadd process&#39;)
+
+    return shift(data, offset, variance=variance, missing=missing,
+                 crpix=crpix, order=shift_order)</div>
+
+
+
+<div class="viewcode-block" id="register">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.register.register.html#sofia_redux.instruments.forcast.register.register">[docs]</a>
+def register(data, header, reference=None, variance=None, crpix=None,
+             position=None, get_offsets=False, missing=np.nan,
+             algorithm=None):
+    &quot;&quot;&quot;
+    Use dither data to shift_image input image to a reference image.
+
+    This function shifts dithered observations of the same object into
+    the same pixel coordinate system, in preparation for coaddition
+    of the images.  No rotation or scaling is performed.  The method
+    for determining the shift_image is read from the configuration file.
+
+    In the configuration file, if CORCOADD is set to to CENTROID, then a
+    centroiding algorithm is used to determine the shift_image.  If CORCOADD is
+    XCOR, a cross-correlation algorithm is used.  If CORCOADD is HEADER,
+    ir no reference data is provided, then dither information from the
+    FITS header is used to determine the shift_image.  If CORCOADD is NOSHIFT,
+    then no shift_image is performed.  If the centroiding algorithm is selected
+    and it fails for any reason, then a header shift_image algorithm is used
+    instead.  If a reference source position and new source position are
+    provided in &lt;parameter: reference&gt; and &lt;parameter: position&gt;, they will
+    be used to determine the shift_image, regardless of the value of CORCOADD.
+
+    The order of the interpolation used to shift_image the data is determined
+    by the SHIFTORD keyword in the configuration file.  SHIFTORD=1 or 3 will
+    interpolate to perform sub-pixel shifts; SHIFTORD=0 will shift_image by
+    integer pixels (no interpolation).
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        The image to register (nrow, ncol)
+    header : astropy.io.fits.header.Header
+        The FITS header of the input data file
+    reference : numpy.ndarray or 2-tuple, optional
+        The reference image or data to register to.  May be an image
+        array (for centroiding or cross-correlation) or a source position
+        (x, y).  If a reference source position is provided in REFDATA,
+        a new source position must be provided in &lt;parameter: position&gt;.
+        If &lt;parameter: reference&gt; is not specified, and the algorithm is not
+        NOSHIFT, then header data will be used to register the image.
+    variance : numpy.ndarray, optional
+        Variance array (nrow, ncol) to update in parallel with the
+        data array.
+    crpix : array_like, optional
+        2-element (x, y) array to update
+    position : 2-tuple, optional
+        Position (x, y) to register to a reference position provided
+        in &lt;parameter: reference&gt;, used with the interactive USER registration
+        algorithm.
+    get_offsets : bool, optional
+        If True, only return the (x, y) shift.  Headers will still be updated
+    missing : float, optional
+        Value to represent missing data during shift
+    algorithm : str, optional
+        Algorithm to use when registering images.  Default is to read from
+        the configuration.
+
+    Returns
+    -------
+    2-tuple
+        numpy.ndarray : Registered image array (nrow, ncol)
+        numpy.ndarray : Registered variance array (nrow, ncol)
+    &quot;&quot;&quot;
+    if not isinstance(header, fits.header.Header):
+        if header is None:
+            header = fits.header.Header()
+            addhist(header, &quot;Created header&quot;)
+        else:
+            log.error(&quot;Coadd failed (invalid header)&quot;)
+            return
+
+    if not isinstance(data, np.ndarray) or len(data.shape) != 2:
+        headererror(header, &quot;Coadd failed (invalid data)&quot;)
+        return
+
+    var = variance.copy() if isinstance(variance, np.ndarray) else None
+    dovar = var is not None and var.shape == data.shape
+    if variance is not None and not dovar:
+        headererror(header, &quot;Variance not propagated (invalid variance)&quot;)
+
+    if algorithm is None:
+        algorithm = getpar(header, &#39;CORCOADD&#39;, default=&#39;HEADER&#39;)
+    if position is not None:
+        algorithm = &#39;USER&#39;
+    elif reference is None and algorithm != &#39;NOSHIFT&#39;:
+        algorithm = &#39;HEADER&#39;
+
+    if algorithm == &#39;XCOR&#39;:
+        s = imgshift_header(header, chop=False, nod=False)
+        result = coadd_correlation(
+            data, reference, header=header, variance=var, missing=missing,
+            xydither=(s[&#39;ditherx&#39;], s[&#39;dithery&#39;]), get_offsets=get_offsets,
+            crpix=crpix)
+    elif algorithm == &#39;CENTROID&#39;:
+        result = coadd_centroid(
+            data, reference, header=header, variance=var, missing=missing,
+            get_offsets=get_offsets)
+    elif algorithm == &#39;HEADER&#39;:
+        log.debug(&#39;Using header shift to register frame&#39;)
+        result = coadd_header(data, header, variance=var, missing=missing,
+                              get_offsets=get_offsets, crpix=crpix)
+    elif algorithm == &#39;USER&#39;:
+        result = coadd_user(
+            data, reference, position, header=header, missing=missing,
+            variance=var, get_offsets=get_offsets, crpix=crpix)
+    elif algorithm == &#39;NOSHIFT&#39;:
+        log.debug(&quot;No shift applied&quot;)
+        addhist(header, &quot;No shift applied&quot;)
+        if get_offsets:
+            result = (0., 0.)
+        else:
+            result = data.copy(), var
+    else:
+        headererror(header, &#39;Unknown registration algorithm: %s&#39; %
+                    repr(algorithm))
+        result = None
+
+    if result is None:
+        headererror(header, &#39;Coadd registration failed&#39;)
+    return result</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

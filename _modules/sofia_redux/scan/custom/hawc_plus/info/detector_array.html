@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.hawc_plus.info.detector_array &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.hawc_plus.info.detector_array</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units, log
+import numpy as np
+import re
+
+from sofia_redux.scan.custom.sofia.info.detector_array import (
+    SofiaDetectorArrayInfo)
+from sofia_redux.scan.utilities import utils
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+
+__all__ = [&#39;HawcPlusDetectorArrayInfo&#39;]
+
+
+<div class="viewcode-block" id="HawcPlusDetectorArrayInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.html#sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo">[docs]</a>
+class HawcPlusDetectorArrayInfo(SofiaDetectorArrayInfo):
+
+    pol_arrays = 2
+    pol_subarrays = 2
+    subarrays = pol_arrays * pol_subarrays
+    subarray_cols = 32
+    rows = 41
+    subarray_pixels = rows * subarray_cols
+    pol_cols = pol_subarrays * subarray_cols
+    pol_array_pixels = rows * pol_cols
+    pixels = pol_arrays * pol_array_pixels
+
+    DARK_SQUID_ROW = rows - 1
+    MCE_BIAS_LINES = 20
+    FITS_ROWS = 41
+    FITS_COLS = 128
+    FITS_CHANNELS = FITS_ROWS * FITS_COLS
+    JUMP_RANGE = 1 &lt;&lt; 7
+
+    R0 = 0
+    R1 = 1
+    T0 = 2
+    T1 = 3
+    R_ARRAY = 0
+    T_ARRAY = 1
+    POL_ID = (&quot;R&quot;, &quot;T&quot;)
+
+    hwp_step = 0.25 * units.Unit(&#39;degree&#39;)
+    default_boresight_index = Coordinate2D([33.5, 19.5], unit=None)
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize the HAWC+ detector array information.
+
+        Contains information specific to the HAWC+ detector array.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.dark_squid_correction = False
+        self.dark_squid_lookup = None
+        self.hwp_telescope_vertical = np.nan
+        self.subarray_gain_renorm = None
+        self.subarrays_requested = &#39;&#39;
+        self.hwp_angle = -1
+
+        self.mce_subarray = np.full(self.subarrays, -1)
+        self.has_subarray = np.full(self.subarrays, False)
+        # offsets in channels following rotation
+        self.subarray_offset = Coordinate2D(
+            np.full((2, self.subarrays), np.nan))
+
+        self.subarray_orientation = np.full(
+            self.subarrays, np.nan) * units.Unit(&#39;deg&#39;)
+        # Relative zoom of the polarization planes
+        self.pol_zoom = np.full(self.pol_arrays, np.nan)
+        self.pixel_sizes = Coordinate2D(unit=&#39;arcsec&#39;)
+
+        # Determined from configuration HDU
+        self.detector_bias = np.zeros(
+            (self.subarrays, self.MCE_BIAS_LINES), dtype=int)
+
+<div class="viewcode-block" id="HawcPlusDetectorArrayInfo.apply_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.html#sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Apply the configuration to the detector array.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().apply_configuration()
+        options = self.options
+        if options is None:
+            return
+
+        self.dark_squid_correction = self.configuration.get_bool(
+            &#39;darkcorrect&#39;)
+
+        mce_map = options.get_string(&quot;MCEMAP&quot;)
+        self.mce_subarray.fill(-1)
+        self.has_subarray.fill(False)
+        if isinstance(mce_map, str):
+            mces = [utils.get_int(x) for x in re.split(r&#39;[\t,:;]&#39;, mce_map)]
+            nmces = len(mces)
+
+            for sub in range(min([self.subarrays, nmces])):
+                mce = mces[sub]
+                if mce &gt;= 0:
+                    self.has_subarray[sub] = True
+                    self.mce_subarray[mce] = sub
+                log.debug(f&quot;Sub: {sub}, {self.has_subarray[sub]}&quot;)
+
+        self.select_subarrays()
+        self.set_hwp_header()</div>
+
+
+<div class="viewcode-block" id="HawcPlusDetectorArrayInfo.set_hwp_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.html#sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.set_hwp_header">[docs]</a>
+    def set_hwp_header(self):
+        &quot;&quot;&quot;
+        Set the HWP angle of the detector array.
+
+        Note that the angle is stored as an integer value indicating the number
+        of HWP steps.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        angle = self.configuration.get_int(&#39;hwp&#39;, default=None)
+        if angle is None:
+            return
+        self.hwp_angle = angle</div>
+
+
+<div class="viewcode-block" id="HawcPlusDetectorArrayInfo.load_detector_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.html#sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.load_detector_configuration">[docs]</a>
+    def load_detector_configuration(self):
+        &quot;&quot;&quot;
+        Apply the configuration to set various parameters for the detector.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        deg = units.Unit(&#39;deg&#39;)
+        self.subarray_orientation.fill(np.nan)
+        self.subarray_orientation[self.R0] = self.configuration.get_float(
+            &#39;rotation.R0&#39;, default=0.0) * deg
+        self.subarray_orientation[self.R1] = self.configuration.get_float(
+            &#39;rotation.R1&#39;, default=180.0) * deg
+        self.subarray_orientation[self.T0] = self.configuration.get_float(
+            &#39;rotation.T0&#39;, default=0.0) * deg
+        self.subarray_orientation[self.T1] = self.configuration.get_float(
+            &#39;rotation.T1&#39;, default=180.0) * deg
+
+        self.subarray_offset[self.R0].set(
+            self.configuration.get_float_list(
+                &#39;offset.R0&#39;, default=[np.nan, np.nan]), copy=False)
+
+        self.subarray_offset[self.R1].set(
+            self.configuration.get_float_list(
+                &#39;offset.R1&#39;, default=[67.03, -39.0]), copy=False)
+
+        self.subarray_offset[self.T0].set(
+            self.configuration.get_float_list(
+                &#39;offset.T0&#39;, default=[np.nan, np.nan]), copy=False)
+
+        self.subarray_offset[self.T1].set(
+            self.configuration.get_float_list(
+                &#39;offset.T1&#39;, default=[67.03, -39.0]), copy=False)
+
+        self.pol_zoom.fill(np.nan)
+        self.pol_zoom[self.R_ARRAY] = self.configuration.get_float(
+            &#39;zoom.R&#39;, default=1.0)
+        self.pol_zoom[self.T_ARRAY] = self.configuration.get_float(
+            &#39;zoom.T&#39;, default=1.0)
+
+        pixel_sizes = Coordinate2D(unit=&#39;arcsec&#39;)
+        pixel_sizes.set([self.pixel_size, self.pixel_size])
+
+        if &#39;pixelsize&#39; in self.configuration:
+            config_pixel_sizes = self.configuration.get_float_list(
+                &#39;pixelsize&#39;, delimiter=r&#39;[ \t,:xX]&#39;,
+                default=[self.pixel_size.value])
+
+            if len(config_pixel_sizes) &gt;= 1:
+                pixel_sizes.x = config_pixel_sizes[0]
+            if len(config_pixel_sizes) &gt;= 2:
+                pixel_sizes.y = config_pixel_sizes[1]
+            else:
+                pixel_sizes.y = pixel_sizes.x
+
+        self.pixel_size = np.sqrt(pixel_sizes.x * pixel_sizes.y)
+        self.pixel_sizes = pixel_sizes</div>
+
+
+<div class="viewcode-block" id="HawcPlusDetectorArrayInfo.set_boresight">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.html#sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.set_boresight">[docs]</a>
+    def set_boresight(self):
+        &quot;&quot;&quot;
+        Set the boresight index of the detector array.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        log.info(f&quot;Boresight pixel from FITS is {self.boresight_index}&quot;)
+
+        if &#39;pcenter&#39; in self.configuration:
+            boresight_override = self.configuration.get_float_list(
+                &#39;pcenter&#39;, default=[])
+            if len(boresight_override) == 1:
+                self.boresight_index.x = boresight_override[0]
+                self.boresight_index.y = self.boresight_index.x
+            elif len(boresight_override) == 2:
+                self.boresight_index.set(boresight_override)
+            else:
+                raise ValueError(
+                    f&quot;Boresight override in configuration is wrong length &quot;
+                    f&quot;({len(boresight_override)})&quot;)
+            log.info(f&quot;Boresight override --&gt; {self.boresight_index}&quot;)
+        elif self.boresight_index.is_nan():
+            self.boresight_index = self.default_boresight_index.copy()
+            log.warning(f&quot;Missing FITS boresight --&gt; {self.boresight_index}&quot;)</div>
+
+
+<div class="viewcode-block" id="HawcPlusDetectorArrayInfo.select_subarrays">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.html#sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.select_subarrays">[docs]</a>
+    def select_subarrays(self, specification=None):
+        &quot;&quot;&quot;
+        Select the detector subarrays to be included in the detector array.
+
+        Parameters
+        ----------
+        specification : str, optional
+            A string specifying which subarrays to select.  If not supplied,
+            will be extracted from the &#39;subarray&#39; setting in the configuration.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if specification is None:
+            specification = self.configuration.get_string(&#39;subarray&#39;)
+        if specification is None:
+            return
+
+        subarrays = re.split(r&#39;[\[\]\&#39;\&quot;,; \t]&#39;, specification)
+        subarrays = [x.upper().strip() for x in subarrays if x != &#39;&#39;]
+        if len(subarrays) == 0:
+            return
+
+        old_has_subarray = self.has_subarray.copy()
+        self.has_subarray = np.full(self.subarrays, False)
+        requested_subarrays = []
+
+        for subarray in subarrays:
+            pol = subarray[0]
+            sub = int(subarray[1:]) if len(subarray) &gt; 1 else None
+
+            if pol == &#39;R&#39;:
+                pol_array = self.R0
+            elif pol == &#39;T&#39;:
+                pol_array = self.T0
+            else:
+                log.warning(f&quot;Invalid subarray selection: {subarray}&quot;)
+                continue
+
+            if sub is None:
+                index = slice(pol_array, pol_array + self.pol_subarrays)
+                for sub_index in range(self.pol_subarrays):
+                    requested_subarrays.append(f&#39;{pol}{sub_index}&#39;)
+            else:
+                index = pol_array + sub
+                requested_subarrays.append(f&#39;{pol}{sub}&#39;)
+
+            self.has_subarray[index] = old_has_subarray[index]
+
+        self.subarrays_requested = &#39;, &#39;.join(requested_subarrays)</div>
+
+
+<div class="viewcode-block" id="HawcPlusDetectorArrayInfo.parse_configuration_hdu">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.html#sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.parse_configuration_hdu">[docs]</a>
+    def parse_configuration_hdu(self, hdu):
+        &quot;&quot;&quot;
+        Parse the data from a configuration HDU and apply to the header data.
+
+        Parameters
+        ----------
+        hdu : fits.BinTableHDU
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.detector_bias.fill(0)
+        found = 0
+        header = hdu.header
+        for sub in range(self.subarrays):
+            key = f&quot;MCE{sub}_TES_BIAS&quot;
+            bias = header.get(key, None)
+            if bias is not None:
+                bias = [utils.get_int(x) for x in re.split(r&#39;[\t,:;]&#39;, bias)]
+                if len(bias) != self.MCE_BIAS_LINES:
+                    log.warning(
+                        f&quot;Subarray {sub} requires {self.mce_subarray} bias &quot;
+                        f&quot;lines (found {len(bias)})&quot;)
+                    break
+                self.detector_bias[sub] = bias
+                found += 1
+            else:
+                if sub &lt; 3:
+                    log.warning(f&quot;Missing TES bias values for subarray {sub}&quot;)
+                break
+        log.debug(f&quot;Parsing HAWC+ TES bias. Found for {found} MCEs&quot;)</div>
+
+
+<div class="viewcode-block" id="HawcPlusDetectorArrayInfo.get_sibs_position">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.html#sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.get_sibs_position">[docs]</a>
+    def get_sibs_position(self, sub, row, col):
+        &quot;&quot;&quot;
+        Given a subarray, row, and column, return the pixel position.
+
+        The SIBS position are in tEl, tXel coordinates in units of the
+        `pixel_xy_size` attribute.
+
+        Parameters
+        ----------
+        sub : int or numpy.ndarray (int)
+            The detector subarray index.
+        row : int or float or numpy.ndarray (int or float)
+            The channel/pixel detector row.
+        col : int or float or numpy.ndarray (int or float)
+            The channel/pixel detector column.
+
+        Returns
+        -------
+        position : Coordinate2D
+            The pixel (x, y) pixel positions.
+        &quot;&quot;&quot;
+        position = Coordinate2D()
+        position.set([col, 39.0 - row])
+        position.rotate(self.subarray_orientation[sub])
+        position.add(Coordinate2D(self.subarray_offset[sub]))
+
+        # X is oriented like AZ (tXEL), whereas Y is oriented like -tEL
+        position.scale_x(self.pixel_sizes.x)
+        position.scale_y(-self.pixel_sizes.y)
+        position.scale(self.pol_zoom[sub &gt;&gt; 1])
+        return position</div>
+
+
+<div class="viewcode-block" id="HawcPlusDetectorArrayInfo.get_subarray_id">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.html#sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.get_subarray_id">[docs]</a>
+    def get_subarray_id(self, subarray):
+        &quot;&quot;&quot;
+        Return the subarray string ID.
+
+        Parameters
+        ----------
+        subarray : int
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return self.POL_ID[subarray // 2] + str(subarray % 2)</div>
+
+
+<div class="viewcode-block" id="HawcPlusDetectorArrayInfo.create_dark_squid_lookup">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.html#sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.create_dark_squid_lookup">[docs]</a>
+    def create_dark_squid_lookup(self, channels):
+        &quot;&quot;&quot;
+        Store dark squid pixels (blind channels) in a lookup array.
+
+        The lookup array is of the form lookup[sub, col] = fixed_index.
+        Invalid values are marked with values of -1 (good pixels).
+
+        Parameters
+        ----------
+        channels : HawcPlusChannels
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.dark_squid_lookup = np.full(
+            (self.subarrays, self.subarray_cols), -1)
+        blind_idx = channels.data.is_flagged(&#39;BLIND&#39;, indices=True)
+
+        self.dark_squid_lookup[channels.data.sub[blind_idx],
+                               channels.data.col[blind_idx]] = \
+            channels.data.fixed_index[blind_idx]</div>
+
+
+<div class="viewcode-block" id="HawcPlusDetectorArrayInfo.initialize_channel_data">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.html#sofia_redux.scan.custom.hawc_plus.info.detector_array.HawcPlusDetectorArrayInfo.initialize_channel_data">[docs]</a>
+    def initialize_channel_data(self, data):
+        &quot;&quot;&quot;
+        Apply this information to create and populate the channel data.
+
+        The following attributes are determined from the detector::
+
+          - col: The column on the subarray (index mod sub_cols)
+          - row: The row on the array (index div sub_cols)
+          - sub: The subarray index (index div sub_pixels)
+          - pol: The polarization index of the subarray (sub // 2)
+          - fits_row: The FITS row index (row mod detector_rows)
+          - fits_col: The FITS column index (sub * sub_cols) + col
+          - subrow: The row on the subarray (row mod detector_rows)
+          - mux: Multiplexer readout index (sub * sub_cols) + col
+          - bias_line: The SQUID detector bias index (row // 2)
+          - series_array: The second stage SQUID series array (mux // 4)
+          - fits_index: The index on the FITS file (fits_row * 128) + fits_row
+
+        Additionally, the channel string ID is set to::
+
+          &lt;SubPolID&gt;[&lt;subrow&gt;,&lt;col&gt;]
+
+        where subrow and col are described above and SubPolID may be one of
+        {R0, R1, T0, R1} where R relates to sub=0 and T relates to sub=1, and
+        the second character represents pol.
+
+        Parameters
+        ----------
+        data : HawcPlusChannelData
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        index = np.arange(self.pixels)
+        sub = index // self.subarray_pixels
+        keep = self.has_subarray[sub]
+        index = index[keep]
+
+        data.fixed_index = index
+        data.set_default_values()
+
+        data.col = index % self.subarray_cols
+        data.row = index // self.subarray_cols
+        data.sub = index // self.subarray_pixels
+        data.pol = data.sub &gt;&gt; 1
+
+        data.fits_row = data.subrow = data.row % self.rows
+        data.bias_line = np.right_shift(data.row, 1)
+
+        data.fits_col = data.mux = (data.sub * self.subarray_cols) + data.col
+        data.series_array = np.right_shift(data.mux, 2)
+
+        data.fits_index = (data.fits_row * self.FITS_COLS) + data.fits_col
+
+        data.flag = np.zeros(data.size, dtype=int)
+        blind_flag = data.flagspace.flags.BLIND.value
+        data.flag[data.subrow == self.DARK_SQUID_ROW] = blind_flag
+
+        data.channel_id = np.array(
+            [f&#39;{self.POL_ID[x[0]]}{x[1] &amp; 1}[{x[2]},{x[3]}]&#39;
+             for x in zip(data.pol, data.sub, data.subrow, data.col)])</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

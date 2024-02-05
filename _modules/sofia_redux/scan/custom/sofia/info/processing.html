@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.info.processing &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.info.processing</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import re
+import enum
+
+from sofia_redux.scan.custom.sofia.flags.quality_flags import QualityFlags
+from sofia_redux.scan.info.base import InfoBase
+from sofia_redux.scan.utilities.utils import insert_info_in_header
+
+__all__ = [&#39;SofiaProcessingInfo&#39;]
+
+
+<div class="viewcode-block" id="SofiaProcessingInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.processing.SofiaProcessingInfo.html#sofia_redux.scan.custom.sofia.info.processing.SofiaProcessingInfo">[docs]</a>
+class SofiaProcessingInfo(InfoBase):
+
+    flagspace = QualityFlags
+
+    process_level_comment = {
+        0: &quot;Unknown processing level.&quot;,
+        1: &quot;Raw engineering/diagnostic data.&quot;,
+        2: &quot;Raw uncalibrated science data.&quot;,
+        3: &quot;Corrected/reduced science data.&quot;,
+        4: &quot;Flux-calibrated science data.&quot;,
+        5: &quot;Higher order product (e.g. composites).&quot;
+    }
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize the SOFIA processing information.
+
+        Contains information on the SOFIA processing parameters such as
+        associated data, processing level, software versions, and data quality.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.associated_aors = None
+        self.associated_mission_ids = None
+        self.associated_frequencies = None
+        self.process_level = None
+        self.header_status = None
+        self.software_name = None
+        self.software_full_version = None
+        self.product_type = None
+        self.revision = None
+        self.n_spectra = -1
+        self.quality_level = self.flagspace.default_quality
+        self.quality = None
+
+    @property
+    def log_id(self):
+        &quot;&quot;&quot;
+        Return the string log ID for the info.
+
+        The log ID is used to extract certain information from table data.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;proc&#39;
+
+<div class="viewcode-block" id="SofiaProcessingInfo.apply_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.processing.SofiaProcessingInfo.html#sofia_redux.scan.custom.sofia.info.processing.SofiaProcessingInfo.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Update processing information with FITS header information.
+
+        Updates the information by taking the following keywords from the
+        FITS header::
+
+          PROCSTAT - The processing level for the data (str)
+          HEADSTAT - The header state (str)
+          DATAQUAL - The data quality level (str)
+          N_SPEC - The number of spectra included (int)
+          PIPELINE - The software that created the file (str)
+          PIPEVERS - The full software version info (str)
+          PRODTYPE - The type of product (str)
+          FILEREV - The file revision identifier (str)
+          ASSC_AOR - Any associated AOR IDs (str)
+          ASSC_MSN - Any associated missions IDs (str)
+          ASSC_FRQ - Any associated frequencies (str)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        options = self.options
+        if options is None:
+            return
+        self.process_level = options.get_string(&quot;PROCSTAT&quot;)
+        self.header_status = options.get_string(&quot;HEADSTAT&quot;)
+        self.quality = options.get_string(&quot;DATAQUAL&quot;)
+        self.n_spectra = options.get_int(&quot;N_SPEC&quot;, default=-1)
+        self.software_name = options.get_string(&quot;PIPELINE&quot;)
+        self.software_full_version = options.get_string(&quot;PIPEVERS&quot;)
+        self.product_type = options.get_string(&quot;PRODTYPE&quot;)
+        self.revision = options.get_string(&quot;FILEREV&quot;)
+
+        text = options.get_string(&quot;ASSC_AOR&quot;)
+        if isinstance(text, str):
+            self.associated_aors = [
+                str(s).strip() for s in text.split(&#39;,&#39;) if len(s) &gt; 0]
+        else:
+            self.associated_aors = None
+
+        text = options.get_string(&quot;ASSC_MSN&quot;)
+        if isinstance(text, str):
+            self.associated_mission_ids = [
+                str(s).strip() for s in re.split(r&#39;[\t,]&#39;, text) if len(s) &gt; 0]
+        else:
+            self.associated_mission_ids = None
+
+        text = options.get_string(&quot;ASSC_FRQ&quot;)
+        if isinstance(text, str):
+            self.associated_frequencies = [
+                float(s) for s in re.split(r&#39;[\t, ]&#39;, text) if len(s) &gt; 0]
+        else:
+            self.associated_frequencies = None
+
+        level = str(self.quality).strip().upper()
+        try:
+            self.quality_level = self.flagspace.convert_flag(level)
+        except AttributeError:
+            self.quality_level = self.flagspace.default_quality</div>
+
+
+<div class="viewcode-block" id="SofiaProcessingInfo.get_product_type">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.processing.SofiaProcessingInfo.html#sofia_redux.scan.custom.sofia.info.processing.SofiaProcessingInfo.get_product_type">[docs]</a>
+    @staticmethod
+    def get_product_type(dims):
+        &quot;&quot;&quot;
+        Return the processing product type for a given number of dimensions.
+
+        Parameters
+        ----------
+        dims : int
+            The number of dimensions.
+
+        Returns
+        -------
+        product_type : str
+        &quot;&quot;&quot;
+        if isinstance(dims, (int, float)):
+            if dims == 0:
+                return &quot;HEADER&quot;
+            elif dims == 1:
+                return &quot;1D&quot;
+            elif dims == 2:
+                return &quot;IMAGE&quot;
+            elif dims == 3:
+                return &quot;CUBE&quot;
+            elif dims &gt; 3:
+                return f&quot;{dims}D&quot;
+            else:
+                return &quot;UNKNOWN&quot;
+        else:
+            return &quot;UNKNOWN&quot;</div>
+
+
+<div class="viewcode-block" id="SofiaProcessingInfo.get_level_name">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.processing.SofiaProcessingInfo.html#sofia_redux.scan.custom.sofia.info.processing.SofiaProcessingInfo.get_level_name">[docs]</a>
+    @staticmethod
+    def get_level_name(level):
+        &quot;&quot;&quot;
+        Return the level name.
+
+        Parameters
+        ----------
+        level : str or int
+
+        Returns
+        -------
+        level_name : str
+        &quot;&quot;&quot;
+        return f&quot;LEVEL_{level}&quot;</div>
+
+
+<div class="viewcode-block" id="SofiaProcessingInfo.get_comment">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.processing.SofiaProcessingInfo.html#sofia_redux.scan.custom.sofia.info.processing.SofiaProcessingInfo.get_comment">[docs]</a>
+    def get_comment(self, level):
+        &quot;&quot;&quot;
+        Return the FITS header comment for a given processing level.
+
+        Parameters
+        ----------
+        level : str or int or enum
+            The processing level.
+
+        Returns
+        -------
+        comment : str
+        &quot;&quot;&quot;
+        if level is None:
+            level = 0
+        elif isinstance(level, enum.Enum):
+            level = level.value
+        elif isinstance(level, str) and level.lower().startswith(&#39;level&#39;):
+            level = int(level[-1])
+        else:
+            level = int(level)
+        if level &lt; 0 or level &gt; 4:
+            return f&quot;Invalid processing level: {level}&quot;
+        else:
+            return self.process_level_comment[level]</div>
+
+
+<div class="viewcode-block" id="SofiaProcessingInfo.get_processing">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.processing.SofiaProcessingInfo.html#sofia_redux.scan.custom.sofia.info.processing.SofiaProcessingInfo.get_processing">[docs]</a>
+    def get_processing(self, is_calibrated, dims, quality_level):
+        &quot;&quot;&quot;
+        Return an updated processing information object.
+
+        Parameters
+        ----------
+        is_calibrated : bool
+            If the data are calibrated.
+        dims : int
+            The number of dimensions in the data.
+        quality_level : enum.Enum
+            The quality level of the data as a flag.
+
+        Returns
+        -------
+        SofiaProcessingInfo
+        &quot;&quot;&quot;
+        result = SofiaProcessingInfo()
+        result.process_level = self.get_level_name(3 if is_calibrated else 2)
+        result.header_status = self.flagspace.convert_flag(&#39;MODIFIED&#39;).name
+        result.software_name = &quot;sofscan&quot;
+        # result.software_full_version = Awe.get_full_version()
+        result.product_type = f&quot;sofscan-{self.get_product_type(dims)}&quot;
+        result.quality_level = self.flagspace.convert_flag(quality_level)
+        result.quality = result.quality_level.name.lower()
+        return result</div>
+
+
+<div class="viewcode-block" id="SofiaProcessingInfo.edit_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.processing.SofiaProcessingInfo.html#sofia_redux.scan.custom.sofia.info.processing.SofiaProcessingInfo.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        info = [(&#39;COMMENT&#39;, &quot;&lt;------ SOFIA Processing Data ------&gt;&quot;)]
+        if self.process_level is not None:
+            info.append((&#39;PROCSTAT&#39;, self.process_level,
+                         self.get_comment(self.process_level)))
+
+        if self.header_status is not None:
+            info.append((&#39;HEADSTAT&#39;, self.header_status, &#39;Header state.&#39;))
+
+        if self.software_name is not None:
+            info.append((&#39;PIPELINE&#39;, self.software_name,
+                         &#39;Software that created this file.&#39;))
+
+        if self.software_full_version is not None:
+            info.append((&#39;PIPEVERS&#39;, self.software_full_version,
+                         &#39;Full software version info.&#39;))
+
+        if self.product_type is not None:
+            info.append((&#39;PRODTYPE&#39;, self.product_type, &#39;Type of product.&#39;))
+
+        if self.revision is not None:
+            info.append((&#39;FILEREV&#39;, self.revision,
+                         &#39;File revision identifier.&#39;))
+
+        if self.quality is not None:
+            info.append((&#39;DATAQUAL&#39;, self.quality, &#39;Data quality level.&#39;))
+
+        if self.n_spectra &gt; 0:
+            info.append((&#39;N_SPEC&#39;, self.n_spectra,
+                         &#39;Number of spectra included.&#39;))
+
+        if self.associated_aors is not None and len(self.associated_aors) &gt; 0:
+            info.append((&#39;ASSC_AOR&#39;, &#39;, &#39;.join(self.associated_aors),
+                         &#39;Associated AOR IDs.&#39;))
+
+        if (self.associated_mission_ids is not None
+                and len(self.associated_mission_ids) &gt; 0):
+            info.append((&#39;ASSC_MSN&#39;, &#39;, &#39;.join(self.associated_mission_ids),
+                         &#39;Associated Mission IDs.&#39;))
+
+        if (self.associated_frequencies is not None
+                and len(self.associated_frequencies) &gt; 0):
+            freqs = &#39;, &#39;.join([str(x) for x in self.associated_frequencies
+                              if x is not None])
+            info.append((&#39;ASSC_FRQ&#39;, freqs, &#39;Associated Frequencies.&#39;))
+
+        insert_info_in_header(header, info, delete_special=True)</div>
+
+
+<div class="viewcode-block" id="SofiaProcessingInfo.get_table_entry">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.processing.SofiaProcessingInfo.html#sofia_redux.scan.custom.sofia.info.processing.SofiaProcessingInfo.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Return a parameter value for the given name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the parameter to retrieve.
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        if name == &#39;q&#39;:
+            return self.quality_level
+        elif name == &#39;nspec&#39;:
+            return self.n_spectra
+        elif name == &#39;quality&#39;:
+            return self.quality
+        elif name == &#39;level&#39;:
+            return self.process_level
+        elif name == &#39;stat&#39;:
+            return self.header_status
+        elif name == &#39;product&#39;:
+            return self.product_type
+        else:
+            return super().get_table_entry(name)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.sofia.sofia_pipe &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.sofia.sofia_pipe</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Run SOFIA Redux reduction objects from the command line.&quot;&quot;&quot;
+
+import argparse
+import sys
+import warnings
+
+from astropy import log
+
+from sofia_redux.pipeline.pipe import Pipe
+from sofia_redux.pipeline.sofia.sofia_configuration import SOFIAConfiguration
+
+__all__ = [&#39;main&#39;]
+
+
+<div class="viewcode-block" id="main">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.sofia_pipe.main.html#sofia_redux.pipeline.sofia.sofia_pipe.main">[docs]</a>
+def main():
+    &quot;&quot;&quot;
+    Run Redux in batch mode.
+
+    The Redux pipeline may be started from the command line with
+    the command::
+
+        redux_pipe
+
+    Input files are specified on
+    the command line, either as a list of filenames or in an
+    input manifest.  An input manifest should be a plain text file,
+    containing a list of file paths to reduce, one per line.
+
+    Redux will determine the appropriate reduction object for the
+    input data, load all necessary pipeline steps, and run them in
+    sequence with default parameter values.  At the end of the
+    reduction, Redux will save an output manifest (containing all
+    files produced by the pipeline), an as-run input manifest
+    (containing all files actually processed by the pipeline),
+    and an as-run parameter configuration file (containing all
+    parameters used by the pipeline).
+
+    Pipeline runs may be customized with command-line options to
+    redux_pipe.
+
+    The output directory for any files produced by the pipeline
+    may be set with the &#39;-o&#39; command line option.  If the directory
+    does not exist, it will be created.
+
+    The log level for the terminal may be set with the
+    &#39;-l&#39; command line option.  To quiet all log output, specify
+    &#39;-l critical&#39;; for fully verbose log messages, specify &#39;-l debug&#39;.
+
+    Other custom values may be specified in a configuration file in
+    INI format on the command line. This file may contain:
+
+    * an output directory for the pipeline
+    * a file name for an as-run input manifest
+    * a file name for the output manifest
+    * a file name for the as-run parameter file
+    * a log file name template (may contain `time.strftime` formatting keys)
+    * the log level for the log file
+    * the format for the log file
+
+    For any file name, if it is set to a blank string, no file will be
+    produced.
+
+    In addition, configuration files may contain custom parameters
+    for any pipeline step.  These should be specified with the pipeline
+    step name as a section header (with an optional step index number),
+    then a keyword = value pair for the parameter to be modified.
+    Any parameters not specified are left at their default values.
+
+    Parameter files may be generated interactively via the Redux GUI
+    (see `sofia_redux.pipeline.sofia.redux_app`), then saved and fed to
+    redux_pipe for batch-mode processing with custom parameters.
+
+    See Also
+    --------
+    sofia_redux.pipeline.sofia.redux_app : Interactive processing
+
+    Examples
+    --------
+    The following values, if placed in a configuration file
+    (e.g. &#39;custom.cfg&#39;), would replicate the current default settings::
+
+        output_directory = .
+        input_manifest = redux_infiles.txt
+        output_manifest = outfiles.txt
+        parameter_file = redux_param.cfg
+        log_file = &quot;redux_%Y%m%d_%H%M%S.log&quot;
+        log_level = DEBUG
+        log_format = &quot;%(asctime)s - %(origin)s - %(levelname)s - %(message)s&quot;
+
+    The following additional section would set the initial &#39;save&#39;
+    parameter to True for the pipeline step named &#39;calibrate&#39;::
+
+        [calibrate]
+            save = True
+
+    To run the Redux pipeline with these settings on input files specified
+    in an input manifest called &#39;infiles.txt&#39;::
+
+        redux_pipe -c custom.cfg infiles.txt
+
+    To run the Redux pipeline with a verbose log on a set of FITS files
+    in the current directory::
+
+        redux_pipe -l debug *.fits
+
+    To run the Redux pipeline with no terminal or log window output::
+
+        redux_pipe -l critical *.fits
+
+    To redirect the output to a different directory::
+
+        redux_pipe -o output *.fits
+    &quot;&quot;&quot;
+    # suppress all runtime warnings
+    if not sys.warnoptions:
+        warnings.simplefilter(&quot;ignore&quot;)
+
+    parser = argparse.ArgumentParser(
+        description=&#39;Reduce a set of data through a SOFIA pipeline.&#39;)
+    parser.add_argument(&#39;filename&#39;, metavar=&#39;filename&#39;, nargs=&#39;+&#39;,
+                        help=&#39;Path to one or more input files.&#39;)
+    parser.add_argument(&#39;-c&#39;, &#39;--configuration&#39;, dest=&#39;config&#39;, type=str,
+                        action=&#39;store&#39;, default=None,
+                        help=&#39;Path to Redux configuration file.&#39;)
+    parser.add_argument(&#39;-o&#39;, &#39;--out&#39;, dest=&#39;outdir&#39;, type=str,
+                        action=&#39;store&#39;, default=None,
+                        help=&#39;Path to output directory.&#39;)
+    parser.add_argument(&#39;-l&#39;, &#39;--loglevel&#39;, dest=&#39;loglevel&#39;, type=str,
+                        action=&#39;store&#39;, default=&#39;INFO&#39;,
+                        help=&#39;Log level.&#39;)
+
+    args = parser.parse_args()
+
+    # format the log for pretty-printing to the terminal
+    Pipe.tidy_log(args.loglevel.upper())
+
+    # allow &quot;None&quot; to be passed for the configuration,
+    # and interpreted as None
+    if str(args.config).strip().upper() == &#39;NONE&#39;:
+        args.config = None
+
+    if args.config is not None:
+        config = SOFIAConfiguration(args.config)
+    else:
+        config = SOFIAConfiguration()
+
+    # specify an output directory if necessary
+    if args.outdir is not None:
+        config.output_directory = args.outdir
+
+    # make a new pipeline from the SOFIA configuration
+    pipe = Pipe(config)
+
+    # run the pipeline on the input files
+    pipe.run(args.filename)
+
+    # one last whitespace
+    log.info(&quot;&quot;)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

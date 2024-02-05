@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.visualization.utils.model_fit &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.visualization.utils.model_fit</h1><div class="highlight"><pre>
+<span></span>#  Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import itertools
+import uuid
+from typing import (List, Dict, Optional, Union,
+                    Any, Iterable, TypeVar, Tuple, Sequence)
+
+from astropy import modeling as am
+from matplotlib.axis import Axis
+import numpy as np
+
+from sofia_redux.visualization.utils.eye_error import EyeError
+
+__all__ = [&#39;ModelFit&#39;]
+
+
+ArrayLike = TypeVar(&#39;ArrayLike&#39;, List, Tuple, Sequence, np.ndarray)
+
+
+<div class="viewcode-block" id="ModelFit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit">[docs]</a>
+class ModelFit(object):
+    &quot;&quot;&quot;
+    Hold parameters and descriptions of generic model fits.
+
+    Parameters
+    ----------
+    params : dict, optional
+        A nested dictionary that describes a single fit to data.
+        The top level key is the `model_id` and the corresponding
+        value is a dictionary whose only key is the `order`. The
+        values of the inner dictionary are the actual parameters
+        of the fit. If not provided, an empty instance of `ModelFit`
+        with default values is returned.
+
+    Attributes
+    ----------
+    id_tag : str
+        Represents the model fit ID number.
+    model_id : uuid.UUID
+        The name of the data model the fit was made to. Typically,
+        the name of a FITS file.
+    filename : str
+        Name of the file
+    feature : str
+        Name of the model used to fit the feature.
+    background: str
+        Name of the model used to fit the background.
+        Typical examples are &#39;constant&#39; or &#39;linear&#39;.
+    fit_type : list
+        Strings describing the base model fit to the data. Typical
+        values include &#39;gauss&#39;, &#39;moffat&#39;, &#39;const&#39;, &#39;linear&#39;. Often
+        composite models are fit to data, in which case all
+        valid descriptions are included. The fit_type is used to
+        define the parameter names to include.
+    order : int
+        Order number of the `model_id` data set that the model was
+        fit to.
+    aperture : int
+        Aperture number of the `model_id` data set that the model was
+        fit to.
+    status : str
+        Status of the last attempted fit. May be &#39;pass&#39; or &#39;fail&#39;.
+    fit : am.Model
+        The actual fit to the data.
+    axis_names : list
+        Names for the fit axes, used as keys for several other attributes.
+    units : dict
+        Name of the units used for each axis.
+    limits : dict
+        The upper and lower selection bounds of the data fit.
+    fields : dict
+        Field names for each axis.
+    dataset : dict
+        Data arrays for each axis.
+    axis : ma.Axes
+        The axes object the fit has been plotted on.
+    visible : bool
+        Flag to indicate visibility of the fit plot.
+    columns : array-like
+        Column values corresponding to the x-axis data.
+    color : str
+        Color hex value for the fit plot.
+    param_names : dict
+        Names of the parameters for each type of fitted model.
+    &quot;&quot;&quot;
+
+    id_iter = itertools.count()
+    &quot;&quot;&quot;int : ID iteration value.&quot;&quot;&quot;
+
+    def __init__(self, params=None):
+        self.id_tag = f&#39;model_fit_{next(self.id_iter)}&#39;
+        self.model_id = &#39;&#39;
+        self.filename = &#39;&#39;
+        self.feature = &#39;&#39;
+        self.background = &#39;&#39;
+        self.fit_type = [&#39;gauss&#39;]
+        self.order = 0
+        self.aperture = 0
+        self.status = &#39;pass&#39;
+        self.fit = None
+        self.axis_names = [&#39;x&#39;, &#39;y&#39;]
+        self.units = dict.fromkeys(self.axis_names, &#39;&#39;)
+        self.limits = dict.fromkeys([&#39;lower&#39;, &#39;upper&#39;], None)
+        self.fields = dict.fromkeys(self.axis_names, &#39;&#39;)
+        self.dataset = dict.fromkeys(self.axis_names, None)
+        self.axis = None
+        self.visible = True
+        self.columns = None
+        self.color = None
+
+        self.param_names = {&#39;gauss&#39;: [&#39;mean&#39;, &#39;stddev&#39;, &#39;amplitude&#39;],
+                            &#39;moffat&#39;: [&#39;x_0&#39;, &#39;gamma&#39;, &#39;amplitude&#39;, &#39;alpha&#39;],
+                            &#39;linear&#39;: [&#39;intercept&#39;, &#39;slope&#39;],
+                            &#39;constant&#39;: [&#39;amplitude&#39;]}
+
+        if params:
+            self.load_parameters(params)
+
+<div class="viewcode-block" id="ModelFit.get_id">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_id">[docs]</a>
+    def get_id(self) -&gt; str:
+        &quot;&quot;&quot;Get the ID for the current fit model.&quot;&quot;&quot;
+        return self.id_tag</div>
+
+
+<div class="viewcode-block" id="ModelFit.load_parameters">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.load_parameters">[docs]</a>
+    def load_parameters(self, parameters: Dict[str, Dict]) -&gt; None:
+        &quot;&quot;&quot;
+        Parse model fit parameters.
+
+        Parameters
+        ----------
+        parameters : dict
+            A nested dictionary that describes a single fit to data.
+            The top level key is the `model_id` and the corresponding
+            value is a dictionary whose only key is the `order`. The
+            values of the inner dictionary are the actual parameters
+            of the fit. If not provided, an empty instance of `ModelFit`
+            with default values is returned.
+        &quot;&quot;&quot;
+        self.model_id = list(parameters.keys())[0]
+        self.order = int(list(list(parameters.values())[0].keys())[0])
+        params = parameters[self.model_id][self.order]
+
+        self.filename = params.get(&#39;filename&#39;, &#39;&#39;)
+        keys = [&#39;fit&#39;, &#39;axis&#39;, &#39;status&#39;]
+        for key in keys:
+            setattr(self, key, params.get(key, None))
+        self.visible = params.get(&#39;visible&#39;, True)
+
+        for axis in self.axis_names:
+            self.units[axis] = params.get(f&#39;{axis}_unit&#39;, None)
+            self.fields[axis] = params.get(f&#39;{axis}_field&#39;, None)
+        self.limits[&#39;lower&#39;] = params.get(&#39;lower_limit&#39;, None)
+        self.limits[&#39;upper&#39;] = params.get(&#39;upper_limit&#39;, None)
+
+        if isinstance(self.fit, am.CompoundModel):
+            self.fit_type = [self._determine_fit_type(fit) for
+                             fit in self.fit]
+        else:
+            self.fit_type = [self._determine_fit_type(self.fit)]</div>
+
+
+<div class="viewcode-block" id="ModelFit.set_fit_type">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_fit_type">[docs]</a>
+    def set_fit_type(self, fit_type: Optional[Union[str, List[str]]] = None,
+                     feature: Optional[str] = None,
+                     background: Optional[str] = None):
+        &quot;&quot;&quot;
+        Set the type of fit used.
+
+        Parameters
+        ----------
+        fit_type : list, optional
+            If given, `self.fits` will be set to it directly.
+            If not given, the fit type will be parsed from
+            `feature` and `background`.
+        feature : str, optional
+            Name of the model used to fit the feature.
+            Typical examples are &#39;gaussian&#39; or &#39;moffat&#39;.
+        background : str, optional
+            Name of the model used to fit the background.
+            Typical examples are &#39;constant&#39; or &#39;linear&#39;.
+
+        Raises
+        ------
+        EyeError
+            If no arguments are given.
+        &quot;&quot;&quot;
+        if fit_type:
+            if not isinstance(fit_type, list):
+                fit_type = [fit_type]
+            self.fit_type = fit_type
+        elif feature or background:
+            self.fit_type = list()
+            if feature:
+                self.fit_type.append(feature)
+                self.set_feature(feature)
+            if background:
+                self.fit_type.append(background)
+                self.set_background(background)
+        else:
+            raise EyeError(&#39;Need to provide fit type&#39;)</div>
+
+
+<div class="viewcode-block" id="ModelFit.set_feature">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_feature">[docs]</a>
+    def set_feature(self, feature: str) -&gt; None:
+        &quot;&quot;&quot;
+        Set the feature name for the model fitting.
+
+        Parameters
+        ----------
+        feature : str
+            Name of the model used to fit the feature.
+        &quot;&quot;&quot;
+        self.feature = feature</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_feature">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_feature">[docs]</a>
+    def get_feature(self) -&gt; str:
+        &quot;&quot;&quot;
+        Get the feature name for the model fitting.
+
+        Returns
+        -------
+        feature : str
+            Name of the model used to fit the feature.
+        &quot;&quot;&quot;
+        return self.feature</div>
+
+
+<div class="viewcode-block" id="ModelFit.set_background">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_background">[docs]</a>
+    def set_background(self, background: str) -&gt; None:
+        &quot;&quot;&quot;
+        Set the background name for the model fitting.
+
+        Parameters
+        ----------
+        background: str
+            Name of the model used to fit the background.
+            Typical examples are &#39;constant&#39; or &#39;linear&#39;.
+        &quot;&quot;&quot;
+        self.background = background</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_background">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_background">[docs]</a>
+    def get_background(self) -&gt; str:
+        &quot;&quot;&quot;
+        Get the background name for the model fitting
+
+        Returns
+        -------
+        background: str
+            Name of the model used to fit the background.
+            Typical examples are &#39;constant&#39; or &#39;linear&#39;.
+        &quot;&quot;&quot;
+        return self.background</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_fields">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_fields">[docs]</a>
+    def get_fields(self, axis: Optional[str] = None
+                   ) -&gt; Optional[Union[str, Dict[str, str]]]:
+        &quot;&quot;&quot;
+        Retrieve field names for a given axis.
+
+        Parameters
+        ----------
+        axis : str, optional
+            Names of the axes to be used as keys for fields.
+
+        Returns
+        -------
+        fields : str or dict
+            If an axis has been provided, the corresponding value
+            is returned. Otherwise, a dictionary containing all values
+            is returned.
+        &quot;&quot;&quot;
+        if axis is not None:
+            try:
+                return self.fields[axis]
+            except KeyError:
+                return None
+        else:
+            return self.fields</div>
+
+
+<div class="viewcode-block" id="ModelFit.set_fields">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_fields">[docs]</a>
+    def set_fields(self, fields: Dict[str, str]) -&gt; None:
+        &quot;&quot;&quot;
+        Set field names.
+
+        Parameters
+        ----------
+        fields : dict
+            Keys are axis names; values are field names.
+        &quot;&quot;&quot;
+        for key, field in fields.items():
+            self.fields[key] = field</div>
+
+
+<div class="viewcode-block" id="ModelFit.set_axis">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_axis">[docs]</a>
+    def set_axis(self, axis: Axis) -&gt; None:
+        &quot;&quot;&quot;
+        Set the fitting axis.
+
+        Parameters
+        ----------
+        axis : matplotlib.Axes
+            Assign the fitting axis
+        &quot;&quot;&quot;
+        self.axis = axis</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_axis">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_axis">[docs]</a>
+    def get_axis(self) -&gt; Axis:
+        &quot;&quot;&quot;
+        Get the fitting axis.
+
+        Returns
+        -------
+        axis : matplotlib.Axes
+            The fitting axis.
+        &quot;&quot;&quot;
+        return self.axis</div>
+
+
+<div class="viewcode-block" id="ModelFit.set_status">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_status">[docs]</a>
+    def set_status(self, status: str) -&gt; None:
+        &quot;&quot;&quot;
+        Set the last fit status.
+
+        Parameters
+        ----------
+        status : str
+            Status to set.
+        &quot;&quot;&quot;
+        self.status = status</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_status">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_status">[docs]</a>
+    def get_status(self) -&gt; str:
+        &quot;&quot;&quot;
+        Get the last fit status.
+
+        Returns
+        -------
+        str
+            Last status set.
+        &quot;&quot;&quot;
+        return self.status</div>
+
+
+<div class="viewcode-block" id="ModelFit.set_filename">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_filename">[docs]</a>
+    def set_filename(self, filename: str) -&gt; None:
+        &quot;&quot;&quot;
+        Set the filename.
+
+        Parameters
+        ----------
+        filename : str
+            Filename to set.
+        &quot;&quot;&quot;
+        self.filename = str(filename)</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_filename">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_filename">[docs]</a>
+    def get_filename(self) -&gt; str:
+        &quot;&quot;&quot;
+        Get the filename.
+
+        Returns
+        -------
+        str
+            The filename.
+        &quot;&quot;&quot;
+        return self.filename</div>
+
+
+<div class="viewcode-block" id="ModelFit.set_model_id">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_model_id">[docs]</a>
+    def set_model_id(self, model_id: uuid.UUID) -&gt; None:
+        &quot;&quot;&quot;
+        Set a model ID.
+
+        Parameters
+        ----------
+        model_id : uuid.UUID
+            Unique model ID to set.
+        &quot;&quot;&quot;
+        self.model_id = model_id</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_model_id">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_model_id">[docs]</a>
+    def get_model_id(self) -&gt; uuid.UUID:
+        &quot;&quot;&quot;
+        Get the model ID.
+
+        Returns
+        -------
+        uuid.UUID
+            The model ID.
+        &quot;&quot;&quot;
+        return self.model_id</div>
+
+
+<div class="viewcode-block" id="ModelFit.set_order">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_order">[docs]</a>
+    def set_order(self, order: int) -&gt; None:
+        &quot;&quot;&quot;
+        Set an order number.
+
+        Parameters
+        ----------
+        order : int
+            The order to set.
+        &quot;&quot;&quot;
+        self.order = order</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_order">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_order">[docs]</a>
+    def get_order(self) -&gt; int:
+        &quot;&quot;&quot;
+        Get the order number.
+
+        Returns
+        -------
+        int
+            The order number.
+        &quot;&quot;&quot;
+        return self.order</div>
+
+
+<div class="viewcode-block" id="ModelFit.set_aperture">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_aperture">[docs]</a>
+    def set_aperture(self, aperture: int) -&gt; None:
+        &quot;&quot;&quot;
+        Set an aperture number.
+
+        Parameters
+        ----------
+        aperture : int
+            The aperture number to set.
+        &quot;&quot;&quot;
+        self.aperture = aperture</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_aperture">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_aperture">[docs]</a>
+    def get_aperture(self) -&gt; int:
+        &quot;&quot;&quot;
+        Get the aperture number.
+
+        Returns
+        -------
+        int
+            The aperture number.
+        &quot;&quot;&quot;
+        return self.aperture</div>
+
+
+<div class="viewcode-block" id="ModelFit.set_columns">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_columns">[docs]</a>
+    def set_columns(self, columns: ArrayLike) -&gt; None:
+        &quot;&quot;&quot;
+        Set column data.
+
+        Parameters
+        ----------
+        columns : array-like
+            The column data to set.
+        &quot;&quot;&quot;
+        self.columns = columns</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_columns">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_columns">[docs]</a>
+    def get_columns(self) -&gt; int:
+        &quot;&quot;&quot;
+        Get the columns array.
+
+        Returns
+        -------
+        array-like
+            The column data.
+        &quot;&quot;&quot;
+        return self.columns</div>
+
+
+<div class="viewcode-block" id="ModelFit.set_dataset">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_dataset">[docs]</a>
+    def set_dataset(self, dataset: Optional[Dict[str, Iterable]] = None,
+                    x: Optional[Iterable] = None,
+                    y: Optional[Iterable] = None) -&gt; None:
+        &quot;&quot;&quot;
+        Set a data set to fit to.
+
+        Parameters
+        ----------
+        dataset : dict, optional
+            If provided, must have axis names for keys and data
+            arrays for values.
+        x : array-like, optional
+            Directly specifies the x-axis data values.
+        y : array-like, optional
+            Directly specifies the y-axis data values.
+
+        Raises
+        ------
+        EyeError
+            If all expected axes are not provided.
+        &quot;&quot;&quot;
+        if dataset is not None:
+            self.dataset = dataset
+        elif x is not None and y is not None:
+            self.dataset[&#39;x&#39;] = x
+            self.dataset[&#39;y&#39;] = y
+        else:
+            raise EyeError(&#39;Must provide all axes of dataset&#39;)</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_dataset">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_dataset">[docs]</a>
+    def get_dataset(self) -&gt; Dict[str, Optional[Iterable]]:
+        &quot;&quot;&quot;
+        Get the data set to fit to.
+
+        Returns
+        -------
+        dict
+            Keys are axis names, values are data arrays.
+        &quot;&quot;&quot;
+        return self.dataset</div>
+
+
+    @staticmethod
+    def _determine_fit_type(fit: am.Model) -&gt; str:
+        &quot;&quot;&quot;
+        Map the type of a model fit to a string description.
+
+        Parameters
+        ----------
+        fit : astropy.modeling.Model
+            A simple, non-compound, astropy model.
+
+        Returns
+        -------
+        fit_type : str
+            String description of the type of fit. If fit type
+            cannot be identified, return &#39;UNKNOWN&#39;.
+        &quot;&quot;&quot;
+        if isinstance(fit, am.models.Gaussian1D):
+            return &#39;gauss&#39;
+        elif isinstance(fit, am.models.Moffat1D):
+            return &#39;moffat&#39;
+        elif isinstance(fit, am.models.Linear1D):
+            return &#39;linear&#39;
+        elif isinstance(fit, am.models.Const1D):
+            return &#39;constant&#39;
+        else:
+            return &#39;UNKNOWN&#39;
+
+<div class="viewcode-block" id="ModelFit.set_visibility">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_visibility">[docs]</a>
+    def set_visibility(self, state: bool):
+        &quot;&quot;&quot;
+        Set the visibility of a fit.
+
+        Parameters
+        ----------
+        state : bool
+            If the fitting is going to visible or not.
+        &quot;&quot;&quot;
+        if isinstance(state, bool):
+            self.visible = state</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_visibility">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_visibility">[docs]</a>
+    def get_visibility(self) -&gt; bool:
+        &quot;&quot;&quot;
+        Get the visibility of the fitting model.
+
+        Returns
+        -------
+        visible : bool
+            True, if the fitting is going to visible otherwise False.
+        &quot;&quot;&quot;
+        return self.visible</div>
+
+
+<div class="viewcode-block" id="ModelFit.set_color">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_color">[docs]</a>
+    def set_color(self, color: str) -&gt; None:
+        &quot;&quot;&quot;
+        Set the plot color for the fit artist.
+
+        Parameters
+        ----------
+        color : str
+            The color hex value to set.
+        &quot;&quot;&quot;
+        self.color = color</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_color">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_color">[docs]</a>
+    def get_color(self) -&gt; str:
+        &quot;&quot;&quot;
+        Get the plot color for the fit artist.
+
+        Returns
+        -------
+        str
+            The plot color.
+        &quot;&quot;&quot;
+        return self.color</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_fit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_fit">[docs]</a>
+    def get_fit(self):
+        &quot;&quot;&quot;
+        Obtain a copy of a fit.
+
+        Returns
+        -------
+        fit : astropy.modeling.Model
+            A simple, non-compound, astropy model.
+            Returns None if there is no fitting model.
+        &quot;&quot;&quot;
+        if self.fit is None:
+            return None
+        else:
+            return self.fit.copy()</div>
+
+
+<div class="viewcode-block" id="ModelFit.set_fit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_fit">[docs]</a>
+    def set_fit(self, fit) -&gt; None:
+        &quot;&quot;&quot;
+        Set the fitting model to a given fit.
+
+        Parameters
+        ----------
+        fit : astropy.modeling.Model
+            A simple, non-compound, astropy model.
+        &quot;&quot;&quot;
+        self.fit = fit.copy()</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_units">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_units">[docs]</a>
+    def get_units(self, key: Optional[str] = None
+                  ) -&gt; Optional[Union[Dict[str, str], str]]:
+        &quot;&quot;&quot;
+        Obtain the units.
+
+        Parameters
+        ----------
+        key : str, optional
+            Obtain the unit for a given key (axis).
+
+        Returns
+        -------
+        units : str or Dict
+            A str if valid key is provided. For an invalid key it returns
+            None. If no key is provided, it returns a dict.
+        &quot;&quot;&quot;
+        if key:
+            try:
+                return self.units[key]
+            except KeyError:
+                return None
+        else:
+            return self.units</div>
+
+
+<div class="viewcode-block" id="ModelFit.set_units">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_units">[docs]</a>
+    def set_units(self, units: Dict[str, str]) -&gt; None:
+        &quot;&quot;&quot;
+        Set the units of the fitting model
+
+        Parameters
+        ----------
+        units : dict
+            Keys are axis names; values are corresponding units.
+        &quot;&quot;&quot;
+        self.units = units</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_limits">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_limits">[docs]</a>
+    def get_limits(self, limit: Optional[str] = None
+                   ) -&gt; Optional[Union[float, Dict[str, Optional[float]]]]:
+        &quot;&quot;&quot;
+        Obtain the limit values.
+
+        Parameters
+        ----------
+        limit : str, optional
+            May be &#39;upper&#39; or &#39;lower&#39;.
+
+        Returns
+        -------
+        float or dict
+            If a valid limit name is specified, only that value is
+            returned. If an invalid limit is specified, None is
+            returned. Otherwise, the limits dictionary is returned.
+        &quot;&quot;&quot;
+        if limit is not None:
+            try:
+                return self.limits[limit]
+            except KeyError:
+                return None
+        else:
+            return self.limits</div>
+
+
+<div class="viewcode-block" id="ModelFit.set_limits">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.set_limits">[docs]</a>
+    def set_limits(self,
+                   limits: Union[float, Dict[str, float], List[List[float]]],
+                   key: Optional[str] = None) -&gt; None:
+        &quot;&quot;&quot;
+        Set the limit values.
+
+        Parameters
+        ----------
+        limits : float, dict, or list of list
+            If key is provided, should be specified as a float.
+            Otherwise, should contain both lower and upper limits.
+            If provided as a list, it is assumed the lower limit is
+            the first element in the first list and the upper limit
+            is the second element in the first list.
+        key : str, optional
+            May be &#39;upper&#39; or &#39;lower&#39;.
+        &quot;&quot;&quot;
+        if key:
+            self.limits[key] = limits
+        elif isinstance(limits, dict):
+            self.limits = limits
+        elif isinstance(limits, list):
+            self.limits[&#39;lower&#39;] = limits[0][0]
+            self.limits[&#39;upper&#39;] = limits[1][0]</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_fit_types">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_fit_types">[docs]</a>
+    def get_fit_types(self) -&gt; List[str]:
+        &quot;&quot;&quot;
+        Get the fit type.
+
+        Returns
+        -------
+        list of str
+            Fit types as [feature, background].
+        &quot;&quot;&quot;
+        return self.fit_type</div>
+
+
+<div class="viewcode-block" id="ModelFit.parameters_as_string">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.parameters_as_string">[docs]</a>
+    def parameters_as_string(self) -&gt; Dict[str, str]:
+        &quot;&quot;&quot;
+        Format all fitting details as strings for display in table.
+
+        Returns
+        -------
+        param : dict
+            Dictionary with parameter names for keys and string
+            formatted parameter values for values.
+        &quot;&quot;&quot;
+        param = {&#39;model_id&#39;: str(self.model_id),
+                 &#39;filename&#39;: str(self.filename),
+                 &#39;order&#39;: f&#39;{self.order+1:d}&#39;,
+                 &#39;aperture&#39;: f&#39;{self.aperture+1:d}&#39;,
+                 &#39;x_field&#39;: f&quot;{self.fields[&#39;x&#39;]} [{self.units[&#39;x&#39;]}]&quot;,
+                 &#39;y_field&#39;: f&quot;{self.fields[&#39;y&#39;]} [{self.units[&#39;y&#39;]}]&quot;,
+                 &#39;lower_limit&#39;: f&quot;{self.limits[&#39;lower&#39;]:.10g}&quot;,
+                 &#39;upper_limit&#39;: f&quot;{self.limits[&#39;upper&#39;]:.10g}&quot;,
+                 &#39;type&#39;: &#39;, &#39;.join(self.fit_type),
+                 &#39;axis&#39;: self.axis,
+                 &#39;visible&#39;: self.visible,
+                 &#39;baseline&#39;: f&#39;{self.get_baseline():.10g}&#39;,
+                 &#39;mid_point&#39;: f&#39;{self.get_mid_point():.10g}&#39;,
+                 &#39;mid_point_column&#39;: f&#39;{self.get_mid_point_column():.10g}&#39;,
+                 &#39;fwhm&#39;: f&#39;{self.get_fwhm():.10g}&#39;}
+
+        if self.fit is not None:
+            for i, fit_type in enumerate(self.fit_type):
+                for name in self.param_names[fit_type]:
+                    try:
+                        value = getattr(self.fit, name).value
+                    except AttributeError:
+                        value = getattr(self.fit, f&#39;{name}_{i}&#39;).value
+                    param[name] = f&#39;{value:.10g}&#39;
+
+        return param</div>
+
+
+<div class="viewcode-block" id="ModelFit.parameters_as_dict">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.parameters_as_dict">[docs]</a>
+    def parameters_as_dict(self) -&gt; Dict[str, Any]:
+        &quot;&quot;&quot;
+        Fit parameters in dictionary form for returning to the View.
+
+        Returns
+        -------
+        param : dict
+            Keys are the names of each parameter and values are
+            the corresponding values.
+        &quot;&quot;&quot;
+        param = {&#39;model_id&#39;: self.model_id,
+                 &#39;filename&#39;: self.filename,
+                 &#39;order&#39;: self.order,
+                 &#39;aperture&#39;: self.aperture,
+                 &#39;x_field&#39;: self.fields[&#39;x&#39;],
+                 &#39;y_field&#39;: self.fields[&#39;y&#39;],
+                 &#39;x_unit&#39;: self.units[&#39;x&#39;],
+                 &#39;y_unit&#39;: self.units[&#39;y&#39;],
+                 &#39;fit&#39;: self.fit,
+                 &#39;lower_limit&#39;: self.limits[&#39;lower&#39;],
+                 &#39;upper_limit&#39;: self.limits[&#39;upper&#39;],
+                 &#39;type&#39;: self.fit_type,
+                 &#39;axis&#39;: self.axis,
+                 &#39;visible&#39;: self.visible,
+                 &#39;baseline&#39;: self.get_baseline(),
+                 &#39;mid_point&#39;: self.get_mid_point(),
+                 &#39;mid_point_column&#39;: self.get_mid_point_column(),
+                 &#39;fwhm&#39;: self.get_fwhm()}
+        for i, fit_type in enumerate(self.fit_type):
+            for name in self.param_names[fit_type]:
+                try:
+                    value = getattr(self.fit, name).value
+                except AttributeError:
+                    value = getattr(self.fit, f&#39;{name}_{i}&#39;).value
+                param[name] = value
+        return param</div>
+
+
+<div class="viewcode-block" id="ModelFit.parameters_as_list">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.parameters_as_list">[docs]</a>
+    def parameters_as_list(self) -&gt; List[Any]:
+        &quot;&quot;&quot;
+        Fit parameters in a list structure for writing to disk.
+
+        Returns
+        -------
+        params : list
+            List of all fit parameter values. Parameter names
+            are not included.
+        &quot;&quot;&quot;
+        # For selection
+        param = [self.filename, self.order, self.aperture,
+                 self.fields[&#39;x&#39;], self.fields[&#39;y&#39;],
+                 self.units[&#39;x&#39;], self.units[&#39;y&#39;]
+                 ]
+        for i, fit_type in enumerate(self.fit_type):
+            for name in self.param_names[fit_type]:
+                try:
+                    value = getattr(self.fit, name).value
+                except AttributeError:
+                    value = getattr(self.fit, f&#39;{name}_{i}&#39;).value
+                param.append(f&#39;{value:.10g}&#39;)
+
+        param.extend([f&#39;{self.get_baseline():.10g}&#39;,
+                      f&#39;{self.get_mid_point():.10g}&#39;,
+                      f&#39;{self.get_mid_point_column():.10g}&#39;,
+                      f&#39;{self.get_fwhm():.10g}&#39;,
+                      self.limits[&#39;lower&#39;], self.limits[&#39;upper&#39;],
+                      self.visible])
+        return param</div>
+
+
+<div class="viewcode-block" id="ModelFit.parameters_as_html">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.parameters_as_html">[docs]</a>
+    def parameters_as_html(self) -&gt; Dict[str, str]:
+        &quot;&quot;&quot;
+        Format all fitting details as HTML for display in text view.
+
+        Returns
+        -------
+        param : dict
+            Dictionary with parameter names for keys and string
+            formatted parameter values for values.
+        &quot;&quot;&quot;
+        param = self.parameters_as_string()
+        html = [&#39;&lt;html&gt;&#39;]
+
+        status = self.get_status()
+        if status == &#39;pass&#39;:
+            style = &#39;color: green&#39;
+        else:
+            # Fit was not successful
+            style = &#39;color: red&#39;
+        status_string = status.replace(&#39;_&#39;, &#39; &#39;).title()
+        html.append(f&#39;Last fit status: &#39;
+                    f&#39;&lt;span style=&quot;{style}&quot;&gt;{status_string}&lt;/span&gt;&#39;)
+        html.append(&#39;Parameters: &lt;pre&gt;&#39;)
+        skip = [&#39;axis&#39;, &#39;visible&#39;, &#39;model_id&#39;]
+        for par, value in param.items():
+            if par not in skip:
+                html.append(f&#39;  {par}: {value}&#39;)
+        html.append(&#39;&lt;/pre&gt;&lt;/html&gt;&#39;)
+        return &#39;&lt;br&gt;&#39;.join(html)</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_mid_point">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_mid_point">[docs]</a>
+    def get_mid_point(self) -&gt; float:
+        &quot;&quot;&quot;
+        Determine the midpoint of the feature.
+
+        Returns
+        -------
+        mid_point : float
+            Midpoint of the feature of the fit. If not
+            found, return NaN.
+        &quot;&quot;&quot;
+        if not self.fit:
+            return np.nan
+        if isinstance(self.fit, am.CompoundModel):
+            fits = self.fit
+        else:
+            fits = [self.fit]
+
+        for model in fits:
+            if isinstance(model, am.models.Gaussian1D):
+                return model.mean.value
+            elif isinstance(model, am.models.Moffat1D):
+                return model.x_0.value
+
+        # if no feature was fit, but limits are available,
+        # return the midpoint of the fit range
+        try:
+            return (self.limits[&#39;lower&#39;] + self.limits[&#39;upper&#39;]) / 2
+        except (TypeError, ValueError):
+            return np.nan</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_mid_point_column">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_mid_point_column">[docs]</a>
+    def get_mid_point_column(self) -&gt; float:
+        &quot;&quot;&quot;
+        Determine the midpoint of the feature in column number.
+
+        Returns
+        -------
+        mid_point : float
+            Midpoint of the feature of the fit in pixels. If not
+            found, return NaN.
+
+        &quot;&quot;&quot;
+        midpoint = self.get_mid_point()
+        if np.isnan(midpoint):
+            return np.nan
+        try:
+            mid_col = np.interp(midpoint, self.columns,
+                                np.arange(self.columns.size))
+        except (TypeError, ValueError, IndexError, AttributeError):
+            mid_col = np.nan
+        return mid_col</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_fwhm">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_fwhm">[docs]</a>
+    def get_fwhm(self) -&gt; float:
+        &quot;&quot;&quot;
+        Determine the FWHM of the feature.
+
+        Returns
+        -------
+        fwhm : float
+            FWHM of the feature of the fit. If not
+            found, return NaN.
+        &quot;&quot;&quot;
+        if not self.fit:
+            return np.nan
+        if isinstance(self.fit, am.CompoundModel):
+            fits = self.fit
+        else:
+            fits = [self.fit]
+        for model in fits:
+            if isinstance(model, am.models.Gaussian1D):
+                return model.fwhm
+            elif isinstance(model, am.models.Moffat1D):
+                return model.fwhm
+        return np.nan</div>
+
+
+<div class="viewcode-block" id="ModelFit.get_baseline">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.get_baseline">[docs]</a>
+    def get_baseline(self) -&gt; float:
+        &quot;&quot;&quot;
+        Determine the baseline of the feature.
+
+        Returns
+        -------
+        baseline : float
+            Baseline of the feature of the fit. If not
+            found, return NaN.
+        &quot;&quot;&quot;
+        if not self.fit:
+            return np.nan
+        midpoint = self.get_mid_point()
+        if np.isnan(midpoint):
+            return np.nan
+
+        if isinstance(self.fit, am.CompoundModel):
+            fits = self.fit
+        else:
+            fits = [self.fit]
+
+        for model in fits:
+            if isinstance(model, am.models.Linear1D):
+                return model.slope.value * midpoint \
+                    + model.intercept.value
+            elif isinstance(model, am.models.Const1D):
+                return model.amplitude.value
+
+        # if no background fit was found, model was feature only,
+        # so return 0
+        return 0.0</div>
+
+
+<div class="viewcode-block" id="ModelFit.scale_parameters">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.model_fit.ModelFit.html#sofia_redux.visualization.utils.model_fit.ModelFit.scale_parameters">[docs]</a>
+    def scale_parameters(self, x_scale: float, y_scale: float) -&gt; None:
+        &quot;&quot;&quot;
+        Scale parameters after a fit.
+
+        This is used to restore a baseline scale, after fitting
+        to normalized data.
+
+        Parameters
+        ----------
+        x_scale : float
+            Value to scale the x data.
+        y_scale : float
+            Value to scale the y data
+        &quot;&quot;&quot;
+        if not self.fit:
+            return
+        if isinstance(self.fit, am.CompoundModel):
+            fits = self.fit
+        else:
+            fits = [self.fit]
+
+        for model in fits:
+            if isinstance(model, am.models.Linear1D):
+                model.intercept *= y_scale
+                model.slope *= y_scale / x_scale
+            elif isinstance(model, am.models.Const1D):
+                model.amplitude *= y_scale
+            elif isinstance(model, am.models.Gaussian1D):
+                model.mean *= x_scale
+                model.stddev *= x_scale
+                model.amplitude *= y_scale
+            elif isinstance(model, am.models.Moffat1D):
+                model.x_0 *= x_scale
+                model.gamma *= x_scale
+                model.amplitude *= y_scale</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

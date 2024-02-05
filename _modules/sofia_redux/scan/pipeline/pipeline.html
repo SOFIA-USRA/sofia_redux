@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.pipeline.pipeline &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.pipeline.pipeline</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC
+from astropy import log
+import gc
+import numpy as np
+import os
+import cloudpickle
+import shutil
+import tempfile
+
+from sofia_redux.toolkit.utilities import multiprocessing
+
+__all__ = [&#39;Pipeline&#39;]
+
+
+<div class="viewcode-block" id="Pipeline">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.pipeline.pipeline.Pipeline.html#sofia_redux.scan.pipeline.pipeline.Pipeline">[docs]</a>
+class Pipeline(ABC):
+
+    def __init__(self, reduction):
+        &quot;&quot;&quot;
+        Initialize a reduction pipeline.
+
+        The reduction pipeline is responsible for actually performing the
+        reduction tasks at each iteration.  This generally involves
+        performing the tasks on all integrations in all scans, and updating
+        the iteration source model.
+
+        Parameters
+        ----------
+        reduction : sofia_redux.scan.reduction.reduction.Reduction
+        &quot;&quot;&quot;
+        self.reduction = reduction
+        self.scans = None
+        self.ordering = None
+        self.scan_source = None
+        self.current_task = None
+        self.last_task = None
+        self.pickle_directory = None
+        self.add_source_queue = None
+
+    @property
+    def parallel_scans(self):
+        &quot;&quot;&quot;
+        Return the maximum number of parallel scan operations.
+
+        Returns
+        -------
+        jobs : int
+        &quot;&quot;&quot;
+        if self.reduction is None or self.reduction.parallel_scans is None:
+            return 1
+        return self.reduction.parallel_scans
+
+    @property
+    def parallel_tasks(self):
+        &quot;&quot;&quot;
+        Return the maximum number of parallel tasks (in-scan) operations.
+
+        Returns
+        -------
+        jobs : int
+        &quot;&quot;&quot;
+        if self.reduction is None or self.reduction.parallel_tasks is None:
+            return 1
+        return self.reduction.parallel_tasks
+
+    @property
+    def available_jobs(self):
+        &quot;&quot;&quot;
+        Return the maximum number of jobs that may be performed in parallel.
+
+        Returns
+        -------
+        jobs : int
+        &quot;&quot;&quot;
+        return self.parallel_scans * self.parallel_tasks
+
+    @property
+    def configuration(self):
+        &quot;&quot;&quot;
+        Return the reduction configuration.
+
+        Returns
+        -------
+        Configuration
+        &quot;&quot;&quot;
+        if self.reduction is None or self.reduction.info is None:
+            return None
+        return self.reduction.info.configuration
+
+    @property
+    def pipeline_id(self):
+        &quot;&quot;&quot;
+        Return a unique identifier for the pipeline.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if self.reduction is None:
+            return f&#39;pipeline.{id(self)}&#39;
+        else:
+            return f&#39;{self.reduction.reduction_id}-pipeline.{id(self)}&#39;
+
+<div class="viewcode-block" id="Pipeline.set_source_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.pipeline.pipeline.Pipeline.html#sofia_redux.scan.pipeline.pipeline.Pipeline.set_source_model">[docs]</a>
+    def set_source_model(self, source):
+        &quot;&quot;&quot;
+        Set the source model for the pipeline.
+
+        Parameters
+        ----------
+        source : Source or None
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if source is not None:
+            self.scan_source = source.copy()
+            self.scan_source.set_parallel(self.parallel_tasks)
+        else:
+            self.scan_source = None</div>
+
+
+<div class="viewcode-block" id="Pipeline.add_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.pipeline.pipeline.Pipeline.html#sofia_redux.scan.pipeline.pipeline.Pipeline.add_scan">[docs]</a>
+    def add_scan(self, scan):
+        &quot;&quot;&quot;
+        Add a scan to the pipeline for reduction.
+
+        Parameters
+        ----------
+        scan : Scan
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.scans is None:
+            self.scans = [scan]
+        else:
+            self.scans.append(scan)</div>
+
+
+<div class="viewcode-block" id="Pipeline.set_ordering">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.pipeline.pipeline.Pipeline.html#sofia_redux.scan.pipeline.pipeline.Pipeline.set_ordering">[docs]</a>
+    def set_ordering(self, ordering):
+        &quot;&quot;&quot;
+        Set the task ordering for the pipeline.
+
+        Parameters
+        ----------
+        ordering : list (str)
+            A list of tasks to perform.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.ordering = ordering</div>
+
+
+<div class="viewcode-block" id="Pipeline.update_source">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.pipeline.pipeline.Pipeline.html#sofia_redux.scan.pipeline.pipeline.Pipeline.update_source">[docs]</a>
+    def update_source(self, scan):
+        &quot;&quot;&quot;
+        Update the reduction source model with a scan.
+
+        Parameters
+        ----------
+        scan : Scan
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.reduction is None or self.reduction.source is None:
+            return
+        self.scan_source.renew()
+        self.scan_source.set_info(scan.info)
+
+        for integration in scan.integrations:
+
+            if integration.has_option(&#39;jackknife&#39;):
+                sign = &#39;+&#39; if integration.gain &gt; 0 else &#39;-&#39;
+                integration.comments.append(sign)
+            elif integration.gain &lt; 0:
+                integration.comments.append(&#39;-&#39;)
+
+            self.scan_source.add_integration(integration)
+
+        if scan.get_source_generation() &gt; 0:
+            self.scan_source.enable_level = False
+
+        self.scan_source.process_scan(scan)
+
+        self.reduction.source.add_model(self.scan_source, weight=scan.weight)
+
+        self.scan_source.post_process_scan(scan)
+        if self.configuration.get_bool(&#39;source.delete_scan&#39;):
+            scan.source_model = None</div>
+
+
+<div class="viewcode-block" id="Pipeline.iterate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.pipeline.pipeline.Pipeline.html#sofia_redux.scan.pipeline.pipeline.Pipeline.iterate">[docs]</a>
+    def iterate(self):
+        &quot;&quot;&quot;
+        Perform an iteration.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        n_scans = len(self.scans)
+        args = self.scans, self.ordering, self.parallel_tasks
+        kwargs = None
+
+        if self.configuration.get_bool(&#39;parallel.scans&#39;):
+            scan_jobs = int(np.clip(n_scans, 1, self.parallel_scans))
+        else:
+            scan_jobs = 1
+
+        # max_bytes set to None in order to disable memory mapping
+        # Memory mapping does not allow numba to modify arrays in-place.
+        self.scans = multiprocessing.multitask(
+            self.perform_tasks_for_scans, range(n_scans), args, kwargs,
+            jobs=scan_jobs, max_nbytes=None, force_threading=True,
+            logger=log)
+
+        gc.collect()
+
+        if self.configuration.get_bool(&#39;parallel.source&#39;):
+            if (&#39;source&#39; in self.ordering
+                    and self.configuration.get_bool(&#39;source&#39;)):
+                self.update_source_parallel_scans()
+        else:
+            self.update_source_serial_scans()</div>
+
+
+<div class="viewcode-block" id="Pipeline.update_source_serial_scans">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.pipeline.pipeline.Pipeline.html#sofia_redux.scan.pipeline.pipeline.Pipeline.update_source_serial_scans">[docs]</a>
+    def update_source_serial_scans(self):
+        &quot;&quot;&quot;
+        Update the source using serial processing.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for i, scan in enumerate(self.scans):
+            if (&#39;source&#39; in self.ordering
+                    and scan.configuration.get_bool(&#39;source&#39;)):
+                self.update_source(scan)</div>
+
+
+<div class="viewcode-block" id="Pipeline.update_source_parallel_scans">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.pipeline.pipeline.Pipeline.html#sofia_redux.scan.pipeline.pipeline.Pipeline.update_source_parallel_scans">[docs]</a>
+    def update_source_parallel_scans(self):
+        &quot;&quot;&quot;
+        Update the source in parallel.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        renewed_source = self.scan_source.copy()
+        renewed_source.renew()
+        renewed_source.reduction = None
+        renewed_source.scans = None
+        renewed_source.hdul = None
+        renewed_source.info = None
+        temp_directory = tempfile.mkdtemp(&#39;_sofscan_update_source_pipeline&#39;)
+
+        n_scans = len(self.scans)
+        scan_jobs = int(np.clip(n_scans, 1, self.parallel_scans))
+        delete = self.configuration.get_bool(&#39;source.delete_scan&#39;)
+
+        for i in range(scan_jobs):
+            source_file = os.path.join(temp_directory, f&#39;renewed_source_{i}.p&#39;)
+            with open(source_file, &#39;wb&#39;) as f:
+                cloudpickle.dump(renewed_source, f)
+        del renewed_source
+
+        update_files = multiprocessing.multitask(
+            self.do_process, range(n_scans),
+            (self.scans, temp_directory, scan_jobs, delete), None,
+            jobs=scan_jobs, max_nbytes=None, force_threading=True, logger=log)
+
+        for i, filename in enumerate(update_files):
+            with open(filename, &#39;rb&#39;) as f:
+                source = cloudpickle.load(f)
+                self.reduction.source.add_model(
+                    source, weight=self.scans[i].weight)
+            del source
+            os.remove(filename)
+
+        gc.collect()
+
+        for i in range(scan_jobs):
+            source_file = os.path.join(temp_directory, f&#39;renewed_source_{i}.p&#39;)
+            if os.path.isfile(source_file):
+                os.remove(source_file)
+
+        shutil.rmtree(temp_directory)</div>
+
+
+<div class="viewcode-block" id="Pipeline.do_process">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.pipeline.pipeline.Pipeline.html#sofia_redux.scan.pipeline.pipeline.Pipeline.do_process">[docs]</a>
+    @classmethod
+    def do_process(cls, args, block):
+        &quot;&quot;&quot;
+        Multiprocessing safe implementation for source processing of scans.
+
+        Parameters
+        ----------
+        args : 4-tuple
+            args[0] = scans (list (Scan))
+            args[1] = temporary directory name (str)
+            args[2] = number of parallel jobs (int)
+            args[3] = Whether to clear certain data from the scan (bool)
+        block : int
+            The index of the scan to process.
+
+        Returns
+        -------
+        scan_pickle_file : str
+            The filename pointing to the processed scan saved as a pickle file.
+        &quot;&quot;&quot;
+        scans, temp_directory, scan_jobs, delete = args
+        scan = scans[block]
+
+        source_file = os.path.join(
+            temp_directory, f&#39;renewed_source_{block % scan_jobs}.p&#39;)
+
+        with open(source_file, &#39;rb&#39;) as f:
+            source = cloudpickle.load(f)
+
+        source.set_info(scan.info)
+        source.scans = [scan]
+
+        for integration in scan.integrations:
+            if integration.has_option(&#39;jackknife&#39;):
+                sign = &#39;+&#39; if integration.gain &gt; 0 else &#39;-&#39;
+                integration.comments.append(sign)
+            elif integration.gain &lt; 0:
+                integration.comments.append(&#39;-&#39;)
+            source.add_integration(integration)
+            del integration
+
+        if scan.get_source_generation() &gt; 0:
+            source.enable_level = False
+
+        source.process_scan(scan)
+
+        # Now need to save for later
+        update_file = os.path.join(temp_directory, f&#39;source_update_{block}.p&#39;)
+        source.info = None
+        source.reduction = None
+        source.scans = None
+        with open(update_file, &#39;wb&#39;) as f:
+            cloudpickle.dump(source, f)
+        source.set_info(scan.info)
+        source.scans = [scan]
+
+        source.process_scan(scan)
+        source.post_process_scan(scan)
+
+        if delete:
+            scan.source_model = None
+            for integration in scan.integrations:
+                integration.frames.map_index = None
+
+        # Remove all references
+        scan.info.set_parent(scan)
+        source.info = None
+        source.scans = None
+        del source
+        del scan
+        return update_file</div>
+
+
+<div class="viewcode-block" id="Pipeline.perform_tasks_for_scans">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.pipeline.pipeline.Pipeline.html#sofia_redux.scan.pipeline.pipeline.Pipeline.perform_tasks_for_scans">[docs]</a>
+    @classmethod
+    def perform_tasks_for_scans(cls, args, block):
+        &quot;&quot;&quot;
+        Perform a single iteration of all tasks for all scans for the
+        pipeline.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        scans, ordering, parallel_tasks = args
+        scan = scans[block]
+        for integration in scan.integrations:
+            integration.next_iteration()
+            integration.set_thread_count(parallel_tasks)
+
+        for task in ordering:
+            if scan.has_option(task):
+                log.debug(f&quot;Performing task: {task}&quot;)
+                scan.perform(task)
+
+        return scan</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

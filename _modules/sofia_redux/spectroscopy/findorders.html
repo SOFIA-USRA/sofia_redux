@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.findorders &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.findorders</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+from sofia_redux.toolkit.fitting.polynomial import polyfitnd
+from sofia_redux.toolkit.convolve.filter import sobel
+from sofia_redux.toolkit.interpolate import tabinv
+from sofia_redux.toolkit.utilities.func import nantrim
+import warnings
+
+__all__ = [&#39;findorders&#39;]
+
+
+<div class="viewcode-block" id="findorders">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.findorders.findorders.html#sofia_redux.spectroscopy.findorders.findorders">[docs]</a>
+def findorders(image, guesspos, sranges=None, step=5, slith_range=None,
+               degree=4, frac=0.8, comwin=5, ybuffer=3):
+    &quot;&quot;&quot;
+    Determines the position of the order(s) in a spectral image
+
+    Parameters
+    ----------
+    image : array_like of float
+        (nrow, ncol) array from which to find edge coefficients and xranges
+        for each order.  Flat field image oriented so that the dispersion
+        axis is roughly aligned with the rows.
+    guesspos : array_like of float
+        (norders, 2) array giving the (x, y) (col, row) estimate for the
+        center of each order.  For example, guesspos[5, 1] gives the
+        center y-position estimate for the 6th order.  The positions should
+        be near the center of the order and be located in a region of large
+        flux away from bad pixels.
+    sranges : array_like of int, optional
+        (norders, 2) array giving the (start, stop) columns for each order.
+        If None is supplied, sranges is calculated via `nantrim` over the
+        full x-range of the image.
+    step : int, optional
+        Step size in the dispersion (column or x) direction.
+    slith_range : array_like of float, optional
+        (2,) array giving the range of possible slit height in pixels. i.e.
+        (minimum height, maximum height).  This is used to make sure the
+        routine doesn&#39;t include bad pixels in the fit.
+    degree : int, optional
+        Polynomial fit degree for the edges of the orders.
+    frac : float, optional
+        The fraction of the flux of the center of the slit used to identify
+        the location of the edge of the order.
+    comwin : int, optional
+        The Center-Of-Mass window giving the number of pixels that should be
+        used to determine an edge position along each column (y-direction).
+    ybuffer : int, optional
+        Buffer in pixels around the edge of the image.  Anything inside the
+        buffer is marked as being &quot;off&quot; the image.
+
+    Returns
+    -------
+    edgecoeffs, xranges : 2-tuple of numpy.ndarray
+        edgecoeffs (norders, 2, degree+1) contains the lower and upper edge
+        polynomial coefficients for each order.  For example, the coefficients
+        for the fifth order top edge are found at edgecoeffs[4, 1] while the
+        bottom edge coefficients are at edgecoeffs[4, 0].  xranges (norders, 2)
+        give the x-ranges for each order where the slit is fully on the image,
+        much like `sranges`.
+    &quot;&quot;&quot;
+    halfwin = comwin // 2
+    window = np.array([-halfwin, halfwin + 1])[None]
+    guesspos = np.asarray(guesspos, dtype=float)
+    if guesspos.ndim == 1:
+        guesspos = np.array([guesspos])
+    if guesspos.shape[1] != 2:
+        raise ValueError(&quot;guesspos must have 2 elements per order&quot;)
+    norders = guesspos.shape[0]
+
+    image = np.asarray(image, dtype=float)
+    if image.ndim != 2:
+        raise ValueError(&quot;image must be 2 dimensional&quot;)
+    shape = image.shape
+
+    if sranges is None:
+        sranges = image.copy()
+        sranges[sranges == 0] = np.nan
+        sranges = nantrim(sranges, 2)
+        sranges = np.any(sranges, axis=0)
+        xlims = np.argmax(sranges), shape[1] - np.argmax(sranges[::-1])
+        sranges = np.empty((norders, 2), dtype=int)
+        sranges[:, 0] = xlims[0]
+        sranges[:, 1] = xlims[1] - 1
+    else:
+        sranges = np.asarray(sranges, dtype=int)
+        if sranges.ndim == 1:
+            sranges = np.array([sranges])
+
+    if sranges.shape[0] != norders:
+        raise ValueError(
+            &quot;number of orders in sranges does not match guesspos&quot;)
+    elif sranges.shape[1] != 2:
+        raise ValueError(
+            &quot;sranges must have 2 elements per order&quot;)
+
+    rows = np.arange(shape[0])
+    maxrow = shape[0] - 1
+    ylimit = shape[0] - ybuffer
+    edgecoeffs = np.full((norders, 2, degree + 1), np.nan)
+    xranges = np.zeros((norders, 2), dtype=int)
+
+    # scale, and roberts the image
+    rimage = sobel(image * 1000 / np.nanmax(image))
+    increment = np.array([-1, 1])
+    do_height_check = slith_range is not None
+
+    for i in range(norders):
+        start, stop = sranges[i]
+        starts = start + step - 1
+        stops = stop - step + 1
+        scols = np.arange(int((stops - starts) / step) + 1) * step + starts
+        fcols = image[:, scols]
+        rcols = rimage[:, scols]
+        nscols = scols.size
+        edges = np.full((2, nscols), np.nan)
+        cen = np.full(nscols, np.nan)
+
+        # Set up array to store the position of the center of the order
+        # once the edges are found
+        gidx = int(np.round(tabinv(scols, guesspos[i, 0])))
+        cen[(gidx - degree): (gidx + degree + 1)] = guesspos[i, 1]
+        fit_order = np.clip(degree - 2, 1, None)
+
+        center_model = polyfitnd(scols, cen, fit_order, model=True)
+        offset = np.zeros(2, dtype=int)
+        botleft = topleft = 0
+        botright = topright = shape[1] - 1
+
+        while True:
+
+            idx = np.unique(gidx + offset)
+            idx = idx[(idx &gt;= 0) &amp; (idx &lt; nscols)]
+            if idx.size == 0:
+                break
+
+            is_left = (idx &lt;= gidx)
+            dobot = (is_left &amp; (idx &gt;= botleft)) \
+                | (~is_left &amp; (idx &lt;= botright))
+            dotop = (is_left &amp; (idx &gt;= topleft)) \
+                | (~is_left &amp; (idx &lt;= topright))
+
+            if not dobot.any() and not dotop.any():
+                break
+
+            yguesses = np.round(center_model(scols.take(idx)))
+            yguesses = np.clip(yguesses, 0, maxrow).astype(int)
+            zguesses = fcols[np.round(yguesses).astype(int), idx]
+            with warnings.catch_warnings():
+                warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+                zthresh = \
+                    np.take(fcols, idx, axis=1) &lt;= (frac * zguesses[None])
+            ztop = (rows[:, None] &gt; yguesses[None]) &amp; zthresh
+            topidx = np.argmax(ztop, axis=0)
+            zbot = (rows[:, None] &lt; yguesses[None]) &amp; zthresh
+            botidx = ztop.shape[0] - 1 - np.argmax(zbot[::-1], axis=0)
+
+            botidx = np.clip(botidx[:, None] + window, 0, shape[0])
+            topidx = np.clip(topidx[:, None] + window, 0, shape[0])
+            zbot = np.any(zbot, axis=0)
+            ztop = np.any(ztop, axis=0)
+
+            for j, col in enumerate(idx):
+                cy0 = cy1 = np.nan
+                if zbot[j] and dobot[j]:
+                    y = rows[botidx[j, 0]:botidx[j, 1]]
+                    z = rcols[botidx[j, 0]:botidx[j, 1], col]
+                    cy0 = np.nansum(y * z) / np.nansum(z)
+
+                if ztop[j] and dotop[j]:
+                    y = rows[topidx[j, 0]:topidx[j, 1]]
+                    z = rcols[topidx[j, 0]:topidx[j, 1], col]
+                    cy1 = np.nansum(y * z) / np.nansum(z)
+
+                # Check the slit height is reasonable
+                if dotop[j] and dobot[j] and (
+                        np.isfinite(cy0) and np.isfinite(cy1)):
+                    dy = abs(cy1 - cy0)
+                    if not do_height_check or ([0] &lt;= dy &lt;= slith_range[1]):
+                        edges[:, col] = cy0, cy1
+                        cen[col] = (cy0 + cy1) / 2
+                    else:
+                        continue  # pragma: no cover
+                else:
+                    cen[col] = yguesses[j]
+
+                if not (ybuffer &lt; cy0 &lt; ylimit):
+                    if is_left[j]:
+                        botleft = col
+                    else:
+                        botright = col
+
+                if not (ybuffer &lt; cy1 &lt; ylimit):
+                    if is_left[j]:
+                        topleft = col
+                    else:
+                        topright = col
+
+            center_model.refit_data(cen)
+            offset += increment
+
+        x = np.arange(start, stop + 1)
+        in_slit = np.full(x.size, True)
+        for j, edge in enumerate(edges):
+            edge_model = polyfitnd(scols, edge, degree, robust=3, model=True)
+            edgecoeffs[i, j] = edge_model.coefficients
+            if np.isnan(edgecoeffs[i, j]).any():
+                in_slit = False
+            else:
+                fit = edge_model(x)
+                in_slit &amp;= (fit &gt; 0) &amp; (fit &lt; maxrow)
+
+        x = x[in_slit]
+        if x.size != 0:
+            xranges[i] = x.min(), x.max()
+
+    return edgecoeffs, xranges</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

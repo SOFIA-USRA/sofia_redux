@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.sofia.forcast_slitcorr_reduction &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.sofia.forcast_slitcorr_reduction</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;FORCAST Grism Calibration Reduction pipeline steps&quot;&quot;&quot;
+
+import os
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+from scipy.ndimage import uniform_filter1d
+
+from sofia_redux.pipeline.sofia.sofia_exception import SOFIAImportError
+try:
+    import sofia_redux.instruments.forcast
+    assert sofia_redux.instruments.forcast
+except ImportError:
+    raise SOFIAImportError(&#39;FORCAST modules not installed&#39;)
+
+from sofia_redux.pipeline.gui.matplotlib_viewer import MatplotlibViewer
+from sofia_redux.pipeline.gui.qad_viewer import QADViewer
+from sofia_redux.pipeline.sofia.forcast_reduction import FORCASTReduction
+from sofia_redux.pipeline.sofia.forcast_spectroscopy_reduction \
+    import FORCASTSpectroscopyReduction
+from sofia_redux.pipeline.sofia.parameters.forcast_slitcorr_parameters \
+    import FORCASTSlitcorrParameters
+from sofia_redux.pipeline.sofia.sofia_utilities import parse_apertures
+from sofia_redux.spectroscopy.extspec import extspec
+from sofia_redux.toolkit.utilities.fits import hdinsert
+from sofia_redux.toolkit.fitting.polynomial import polyfitnd
+from sofia_redux.toolkit.interpolate import tabinv
+
+__all__ = [&#39;FORCASTSlitcorrReduction&#39;]
+
+
+def _err_func(var, weights):
+    var[weights &lt; 1] = np.nan
+    count = np.sum(~np.isnan(var))
+    return np.sqrt(np.nansum(var)) / count
+
+
+def _med_func(flux, weights):
+    flux[weights &lt; 1] = np.nan
+    return np.nanmedian(flux)
+
+
+<div class="viewcode-block" id="FORCASTSlitcorrReduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_slitcorr_reduction.FORCASTSlitcorrReduction.html#sofia_redux.pipeline.sofia.forcast_slitcorr_reduction.FORCASTSlitcorrReduction">[docs]</a>
+class FORCASTSlitcorrReduction(FORCASTSpectroscopyReduction):
+    r&quot;&quot;&quot;
+    FORCAST spesctroscopic slit correction reduction steps.
+
+    This reduction object defines specialized reduction steps
+    for generating slit correction calibration data from spectroscopic
+    input files.  It is selected by the SOFIA chooser only if a top-level
+    configuration flag is supplied (slitcorr=True).  The final
+    output product from this reduction is a FITS file (\*SCR\*.fits)
+    with PRODTYPE = &#39;slit_correction&#39;.  This file can be supplied to the
+    standard spectroscopic pipeline, at the make_profiles step,
+    to specify a new slit response correction.
+    &quot;&quot;&quot;
+    def __init__(self):
+        &quot;&quot;&quot;Initialize the reduction object.&quot;&quot;&quot;
+        super().__init__()
+
+        # descriptive attributes specific to calibration
+        self.name = &#39;Slit correction&#39;
+
+        # product type definitions for spectral steps
+        self.prodtype_map.update(
+            {&#39;rectify&#39;: &#39;test_rectified_image&#39;,
+             &#39;make_profiles&#39;: &#39;rectified_image&#39;,
+             &#39;extract_median_spectra&#39;: &#39;median_spectra&#39;,
+             &#39;normalize&#39;: &#39;normalized_image&#39;,
+             &#39;make_slitcorr&#39;: &#39;slit_correction&#39;})
+        self.prodnames.update(
+            {&#39;rectified_image&#39;: &#39;RIM&#39;,
+             &#39;median_spectra&#39;: &#39;MSM&#39;,
+             &#39;normalized_image&#39;: &#39;NIM&#39;,
+             &#39;slit_correction&#39;: &#39;SCR&#39;})
+
+        # invert the map for quick lookup of step from type
+        self.step_map = {v: k for k, v in self.prodtype_map.items()}
+
+        # default recipe and step names
+        self.recipe = [&#39;checkhead&#39;, &#39;clean&#39;, &#39;droop&#39;, &#39;nonlin&#39;,
+                       &#39;stack&#39;, &#39;stack_dithers&#39;, &#39;make_profiles&#39;,
+                       &#39;locate_apertures&#39;, &#39;extract_median_spectra&#39;,
+                       &#39;normalize&#39;, &#39;make_slitcorr&#39;]
+        self.processing_steps.update(
+            {&#39;make_profiles&#39;: &#39;Make Profiles&#39;,
+             &#39;extract_median_spectra&#39;: &#39;Extract Median Spectra&#39;,
+             &#39;normalize&#39;: &#39;Normalize Response&#39;,
+             &#39;make_slitcorr&#39;: &#39;Make Slit Correction&#39;})
+
+<div class="viewcode-block" id="FORCASTSlitcorrReduction.load">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_slitcorr_reduction.FORCASTSlitcorrReduction.html#sofia_redux.pipeline.sofia.forcast_slitcorr_reduction.FORCASTSlitcorrReduction.load">[docs]</a>
+    def load(self, data, param_class=None):
+        &quot;&quot;&quot;Call parent load, with slitcorr parameters.&quot;&quot;&quot;
+        FORCASTReduction.load(self, data,
+                              param_class=FORCASTSlitcorrParameters)</div>
+
+
+<div class="viewcode-block" id="FORCASTSlitcorrReduction.register_viewers">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_slitcorr_reduction.FORCASTSlitcorrReduction.html#sofia_redux.pipeline.sofia.forcast_slitcorr_reduction.FORCASTSlitcorrReduction.register_viewers">[docs]</a>
+    def register_viewers(self):
+        &quot;&quot;&quot;Return new viewers.&quot;&quot;&quot;
+        prof = MatplotlibViewer()
+        prof.name = &#39;ProfileViewer&#39;
+        prof.title = &#39;Spatial Profiles&#39;
+        prof.layout = &#39;rows&#39;
+
+        # using matplotlib viewer instead of Eye,
+        # for line overlay purposes
+        spec = MatplotlibViewer()
+        spec.name = &#39;SpectralViewer&#39;
+        spec.title = &#39;Spectra&#39;
+        spec.layout = &#39;rows&#39;
+
+        viewers = [QADViewer(), prof, spec]
+
+        return viewers</div>
+
+
+<div class="viewcode-block" id="FORCASTSlitcorrReduction.set_display_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_slitcorr_reduction.FORCASTSlitcorrReduction.html#sofia_redux.pipeline.sofia.forcast_slitcorr_reduction.FORCASTSlitcorrReduction.set_display_data">[docs]</a>
+    def set_display_data(self, raw=False, filenames=None, regions=None,
+                         specviewer=&#39;matplotlib&#39;):
+        &quot;&quot;&quot;
+        Store display data for custom viewers.
+
+        Parameters
+        ----------
+        raw : bool
+            If True, display data is taken from self.rawfiles.
+            If False, display data is taken from self.input
+        filenames : list of str, optional
+            If provided and `raw` is False, file names will be
+            passed to QADViewer instead of self.input.
+        regions : list of str, optional
+            File names of DS9 region files to pass to QADViewer.
+        residuals : list of array-like, optional
+            Fit residual data to pass to ResidualViewer, nplot x 3.
+            The arrays should be x value, y value, residuals.
+        &quot;&quot;&quot;
+        super().set_display_data(raw=raw, filenames=filenames,
+                                 regions=regions, specviewer=specviewer)</div>
+
+
+<div class="viewcode-block" id="FORCASTSlitcorrReduction.extract_median_spectra">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_slitcorr_reduction.FORCASTSlitcorrReduction.html#sofia_redux.pipeline.sofia.forcast_slitcorr_reduction.FORCASTSlitcorrReduction.extract_median_spectra">[docs]</a>
+    def extract_median_spectra(self):
+        &quot;&quot;&quot;Extract median spectra at regular positions.&quot;&quot;&quot;
+        param = self.get_parameter_set()
+
+        results = []
+        for i, hdul in enumerate(self.input):
+            log.info(&#39;&#39;)
+            log.info(hdul[0].header[&#39;FILENAME&#39;])
+
+            # flux to extract
+            header = hdul[0].header
+            image = hdul[&#39;FLUX&#39;].data
+            var = hdul[&#39;ERROR&#39;].data ** 2
+            mask = (hdul[&#39;BADMASK&#39;].data &lt; 1)
+            wave = hdul[&#39;WAVEPOS&#39;].data
+            space = hdul[&#39;SLITPOS&#39;].data
+            profile = hdul[&#39;SPATIAL_PROFILE&#39;].data
+            spatmap = {1: hdul[&#39;SPATIAL_MAP&#39;].data}
+
+            appos = np.array(parse_apertures(header[&#39;APPOSO01&#39;], 1)[0])
+            num_aps = appos.size
+            aprad = image.shape[0] // num_aps // 2
+
+            # make aperture mask with no overlap
+            apmask = np.zeros_like(image)
+            test = aprad * 2
+            for j in range(num_aps):
+                # get the aperture position in pixels
+                appix = int(np.round(tabinv(space, appos[j])))
+
+                # check that we are not overwriting the last aperture
+                if not np.all(apmask[appix - aprad:appix + aprad, :]) == 0:
+                    raise ValueError(&#39;Too many apertures&#39;)
+
+                # set the aperture
+                apmask[appix - aprad:appix + aprad, :] = j + 1
+
+                # check that the new aperture has the right size
+                if (not np.sum(apmask == j + 1)
+                        == wave.size * test):  # pragma: no cover
+                    raise ValueError(&#39;Too many apertures&#39;)
+
+            rectimg = {1: {&#39;image&#39;: image.copy(), &#39;variance&#39;: var.copy(),
+                           &#39;mask&#39;: mask.copy(), &#39;wave&#39;: wave,
+                           &#39;spatial&#39;: space, &#39;header&#39;: header,
+                           &#39;apmask&#39;: apmask, &#39;apsign&#39;: None}}
+
+            # extract all spectra at once
+            spectra = extspec(rectimg,
+                              profile=profile, spatial_map=spatmap,
+                              optimal=False, fix_bad=True,
+                              sub_background=False,
+                              sum_function=_med_func,
+                              error_function=_err_func)[1]
+
+            # update flux and error planes -- they may have had
+            # bad pixels corrected in the extraction process
+            hdul[&#39;FLUX&#39;].data = rectimg[1][&#39;image&#39;]
+            hdul[&#39;ERROR&#39;].data = np.sqrt(rectimg[1][&#39;variance&#39;])
+
+            # attach spectral flux and error to output file:
+            # shape is n_ap x n_wave
+            exthead = fits.Header()
+            for key in self.wcs_keys:
+                if key in header and not key.endswith(&#39;A&#39;) and &#39;2&#39; not in key:
+                    hdinsert(exthead, key, header[key], header.comments[key])
+            hdul.append(fits.ImageHDU(spectra[:, 1, :], exthead,
+                                      name=&#39;SPECTRAL_FLUX&#39;))
+            hdul.append(fits.ImageHDU(spectra[:, 2, :], exthead,
+                                      name=&#39;SPECTRAL_ERROR&#39;))
+            hdinsert(hdul[&#39;SPECTRAL_FLUX&#39;].header, &#39;BUNIT&#39;,
+                     header.get(&#39;BUNIT&#39;, &#39;UNKNOWN&#39;), &#39;Data units&#39;)
+            hdinsert(hdul[&#39;SPECTRAL_ERROR&#39;].header, &#39;BUNIT&#39;,
+                     header.get(&#39;BUNIT&#39;, &#39;UNKNOWN&#39;), &#39;Data units&#39;)
+
+            # update output name
+            outname = self.update_output(hdul, self.filenum[i],
+                                         self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(hdul, outname)
+
+            if param.get_value(&#39;save_1d&#39;):
+                log.info(&#39;&#39;)
+                log.info(&#39;Saving 1D spectra:&#39;)
+                spec = self._make_1d(hdul)
+                specname = outname.replace(&#39;MSM&#39;, &#39;MSP&#39;)
+                spec[0].header[&#39;FILENAME&#39;] = os.path.basename(specname)
+                spec[0].header[&#39;PRODTYPE&#39;] = &#39;spectra_1d&#39;
+                self.write_output(spec, specname)
+
+            results.append(hdul)
+
+        log.info(&#39;&#39;)
+        self.input = results
+        self.set_display_data()</div>
+
+
+<div class="viewcode-block" id="FORCASTSlitcorrReduction.normalize">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_slitcorr_reduction.FORCASTSlitcorrReduction.html#sofia_redux.pipeline.sofia.forcast_slitcorr_reduction.FORCASTSlitcorrReduction.normalize">[docs]</a>
+    def normalize(self):
+        &quot;&quot;&quot;Normalize by central median spectrum.&quot;&quot;&quot;
+        param = self.get_parameter_set()
+
+        results = []
+        for i, hdul in enumerate(self.input):
+            log.info(&#39;&#39;)
+            log.info(hdul[0].header[&#39;FILENAME&#39;])
+
+            # retrieve data from input
+            flux = hdul[&#39;FLUX&#39;].data
+            err = hdul[&#39;ERROR&#39;].data
+            spec_flux = hdul[&#39;SPECTRAL_FLUX&#39;].data
+            spec_err = hdul[&#39;SPECTRAL_ERROR&#39;].data
+
+            # normalize to center spectrum
+            nspec = spec_flux.shape[0]
+            reference = spec_flux[nspec // 2]
+            hdul[&#39;FLUX&#39;].data = flux / reference
+            hdul[&#39;ERROR&#39;].data = err / reference
+            hdul[&#39;SPECTRAL_FLUX&#39;].data = spec_flux / reference
+            hdul[&#39;SPECTRAL_ERROR&#39;].data = spec_err / reference
+
+            # update bunit
+            hdul[&#39;FLUX&#39;].header[&#39;BUNIT&#39;] = &#39;&#39;
+            hdul[&#39;ERROR&#39;].header[&#39;BUNIT&#39;] = &#39;&#39;
+            hdul[&#39;SPECTRAL_FLUX&#39;].header[&#39;BUNIT&#39;] = &#39;&#39;
+            hdul[&#39;SPECTRAL_ERROR&#39;].header[&#39;BUNIT&#39;] = &#39;&#39;
+
+            # update output name
+            outname = self.update_output(hdul, self.filenum[i],
+                                         self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(hdul, outname)
+
+            if param.get_value(&#39;save_1d&#39;):
+                log.info(&#39;&#39;)
+                log.info(&#39;Saving 1D spectra:&#39;)
+                spec = self._make_1d(hdul)
+                specname = outname.replace(&#39;NIM&#39;, &#39;NMS&#39;)
+                spec[0].header[&#39;FILENAME&#39;] = os.path.basename(specname)
+                spec[0].header[&#39;PRODTYPE&#39;] = &#39;spectra_1d&#39;
+                self.write_output(spec, specname)
+
+            results.append(hdul)
+
+        log.info(&#39;&#39;)
+        self.input = results
+        self.set_display_data()</div>
+
+
+<div class="viewcode-block" id="FORCASTSlitcorrReduction.make_slitcorr">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.forcast_slitcorr_reduction.FORCASTSlitcorrReduction.html#sofia_redux.pipeline.sofia.forcast_slitcorr_reduction.FORCASTSlitcorrReduction.make_slitcorr">[docs]</a>
+    def make_slitcorr(self):
+        &quot;&quot;&quot;Fit and smooth normalized data.&quot;&quot;&quot;
+        param = self.get_parameter_set()
+        method = param.get_value(&#39;method&#39;)
+        weighted = param.get_value(&#39;weighted&#39;)
+        x_order = param.get_value(&#39;x_fit_order&#39;)
+        y_order = param.get_value(&#39;y_fit_order&#39;)
+        y_order_1d = param.get_value(&#39;y_fit_order_1d&#39;)
+        x_width = param.get_value(&#39;x_width&#39;)
+
+        results = []
+        for i, hdul in enumerate(self.input):
+            log.info(&#39;&#39;)
+            log.info(hdul[0].header[&#39;FILENAME&#39;])
+
+            # retrieve data from input
+            header = hdul[0].header
+            flux = hdul[&#39;FLUX&#39;].data
+            spec_flux = hdul[&#39;SPECTRAL_FLUX&#39;].data
+            spec_err = hdul[&#39;SPECTRAL_ERROR&#39;].data
+            appos = np.array(parse_apertures(header[&#39;APPOSO01&#39;], 1)[0])
+            wave = hdul[&#39;WAVEPOS&#39;].data
+            space = hdul[&#39;SLITPOS&#39;].data
+
+            # fit to normalized median spectra
+            error = None
+            if str(method).lower() == &#39;1d&#39;:
+                sfit = np.full_like(flux, np.nan)
+                chisq = []
+                for j, xval in enumerate(wave):
+                    if weighted:
+                        error = spec_err[:, j]
+                    sfit_model = polyfitnd(appos, spec_flux[:, j],
+                                           y_order_1d, error=error,
+                                           robust=5.0, model=True)
+                    sfit_col = sfit_model(space)
+                    sfit[:, j] = sfit_col
+                    chisq.append(sfit_model.stats.rchi2)
+
+                # boxcar smooth in the x direction
+                sfit = uniform_filter1d(sfit, x_width, axis=1)
+
+                log.info(f&#39;Mean reduced chi^2: {np.mean(chisq)}&#39;)
+                log.info(&#39;&#39;)
+
+            else:
+                if weighted:
+                    error = spec_err
+
+                ypos = np.tile(np.expand_dims(appos, 1), (1, wave.size))
+                xpos = np.tile(np.expand_dims(wave, 0), (appos.size, 1))
+                sfit_model = polyfitnd(ypos, xpos, spec_flux,
+                                       [y_order, x_order], error=error,
+                                       robust=5.0, model=True)
+                log.info(sfit_model)
+
+                # expand to full array
+                ypos = np.tile(np.expand_dims(space, 1), (1, wave.size))
+                xpos = np.tile(np.expand_dims(wave, 0), (space.size, 1))
+                sfit = sfit_model(ypos, xpos)
+
+            # delete aperture info from header
+            del header[&#39;APPOSO01&#39;]
+
+            # save fit as slit correction image
+            hdul = fits.HDUList(fits.PrimaryHDU(header=header, data=sfit))
+            hdinsert(hdul[0].header, &#39;SCXDEG&#39;, x_order,
+                     comment=&#39;X polynomial degree for slit correction&#39;)
+            hdinsert(hdul[0].header, &#39;SCYDEG&#39;, y_order,
+                     comment=&#39;Y polynomial degree for slit correction&#39;)
+            hdinsert(hdul[0].header, &#39;SCCOEFF&#39;,
+                     &#39;,&#39;.join(str(c) for c in sfit_model.coefficients),
+                     comment=&#39;Slit correction fit coeff&#39;)
+
+            # update output name
+            outname = self.update_output(hdul, self.filenum[i],
+                                         self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(hdul, outname)
+
+            results.append(hdul)
+
+        log.info(&#39;&#39;)
+        self.input = results
+        self.set_display_data()</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.example.frames.frames &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.example.frames.frames</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+
+from sofia_redux.scan.custom.example.flags.frame_flags import ExampleFrameFlags
+from sofia_redux.scan.frames.horizontal_frames import HorizontalFrames
+
+__all__ = [&#39;ExampleFrames&#39;]
+
+
+<div class="viewcode-block" id="ExampleFrames">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.example.frames.frames.ExampleFrames.html#sofia_redux.scan.custom.example.frames.frames.ExampleFrames">[docs]</a>
+class ExampleFrames(HorizontalFrames):
+
+    flagspace = ExampleFrameFlags
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize frames for the example instrument.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.default_info = None
+
+<div class="viewcode-block" id="ExampleFrames.copy">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.example.frames.frames.ExampleFrames.html#sofia_redux.scan.custom.example.frames.frames.ExampleFrames.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the frames for the example instrument.
+
+        Returns
+        -------
+        ExampleFrames
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+    @property
+    def info(self):
+        &quot;&quot;&quot;
+        Return the scan info object.
+
+        Returns
+        -------
+        ExampleInfo
+        &quot;&quot;&quot;
+        info = super().info
+        if info is not None:
+            return info
+        return self.default_info
+
+    @property
+    def site(self):
+        &quot;&quot;&quot;
+        Return the site coordinates of the associated scan.
+
+        Returns
+        -------
+        GeodeticCoordinates
+        &quot;&quot;&quot;
+        return self.info.astrometry.site
+
+<div class="viewcode-block" id="ExampleFrames.read_hdu">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.example.frames.frames.ExampleFrames.html#sofia_redux.scan.custom.example.frames.frames.ExampleFrames.read_hdu">[docs]</a>
+    def read_hdu(self, hdu):
+        &quot;&quot;&quot;
+        Read a single data HDU.
+
+        Parameters
+        ----------
+        hdu : astropy.io.fits.hdu.table.BinTableHDU
+            A data HDU containing &quot;timestream&quot; data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        table = hdu.data
+
+        if &#39;DAC&#39; in table.columns.names:
+            log.debug(&quot;Reading data from HDU&quot;)
+            data = table[&#39;DAC&#39;]
+            n_records, n_rows, n_cols = data.shape
+            log.debug(f&quot;FITS HDU has {n_records} &quot;
+                      f&quot;({n_rows} x {n_cols}) arrays.&quot;)
+
+            row, col = self.channels.data.row, self.channels.data.col
+            self.data[:] = data[:, row, col]
+            log.debug(&#39;Done.&#39;)
+        else:
+            log.debug(&quot;No DAC column found in Data HDU.&quot;)
+
+        self.info.set_frames_coordinates(self, table)
+        self.chopper_position.zero()
+        self.valid[:] = True</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

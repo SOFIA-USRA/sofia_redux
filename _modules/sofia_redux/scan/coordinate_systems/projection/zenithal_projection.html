@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.coordinate_systems.projection.zenithal_projection &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.coordinate_systems.projection.zenithal_projection</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import abstractmethod
+from astropy import units
+import numpy as np
+
+from sofia_redux.scan.coordinate_systems.projection.spherical_projection \
+    import SphericalProjection
+from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
+    SphericalCoordinates
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+
+__all__ = [&#39;ZenithalProjection&#39;]
+
+
+<div class="viewcode-block" id="ZenithalProjection">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.zenithal_projection.ZenithalProjection.html#sofia_redux.scan.coordinate_systems.projection.zenithal_projection.ZenithalProjection">[docs]</a>
+class ZenithalProjection(SphericalProjection):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialization for the abstract zenithal projection.
+
+        A zenithal projection (azimuthal projection) is one in which the
+        surface of projection is a plane.  A native coordinate system is
+        defined such that the polar axis is orthogonal to the plane of
+        projection.  Meridians are projected as equispaced rays from a
+        central point, and parallels are concentric circles centered on
+        that same point.
+
+        By default, the native pole is set to (0, 90) degrees LON/LAT.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.native_reference.set_native(
+            [0.0 * units.Unit(&#39;degree&#39;), self.right_angle])
+
+<div class="viewcode-block" id="ZenithalProjection.calculate_celestial_pole">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.zenithal_projection.ZenithalProjection.html#sofia_redux.scan.coordinate_systems.projection.zenithal_projection.ZenithalProjection.calculate_celestial_pole">[docs]</a>
+    def calculate_celestial_pole(self):
+        &quot;&quot;&quot;
+        Calculate the celestial pole.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_celestial_pole(self.reference)</div>
+
+
+<div class="viewcode-block" id="ZenithalProjection.get_phi_theta">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.zenithal_projection.ZenithalProjection.html#sofia_redux.scan.coordinate_systems.projection.zenithal_projection.ZenithalProjection.get_phi_theta">[docs]</a>
+    def get_phi_theta(self, offsets, phi_theta=None):
+        &quot;&quot;&quot;
+        Return the phi (longitude) and theta (latitude) coordinates.
+
+        The phi and theta coordinates refer to the inverse projection
+        (deprojection) of projected offsets about the native pole.  phi is
+        the deprojected longitude, and theta is the deprojected latitude of
+        the offsets.  For a zenithal projection these are given as:
+
+            phi = arctan(x, -y)
+            theta = angle_from_radius_function(sqrt(x^2 + y^2))
+
+        where `angle_from_radius_function` depends on the exact zenithal
+        projection model.
+
+        Parameters
+        ----------
+        offsets : Coordinate2D
+        phi_theta : SphericalCoordinates, optional
+            An optional output coordinate system in which to place the results.
+
+        Returns
+        -------
+        coordinates : SphericalCoordinates
+        &quot;&quot;&quot;
+        if phi_theta is None:
+            phi_theta = SphericalCoordinates(unit=&#39;degree&#39;)
+
+        x, y = self.offset_to_xy_radians(offsets)
+        x, y = x.value, y.value
+
+        phi = np.arctan2(x, -y) * units.Unit(&#39;radian&#39;)
+        theta = self.theta_of_r(np.hypot(x, y))
+        phi_theta.set_native([phi, theta])
+        return phi_theta</div>
+
+
+<div class="viewcode-block" id="ZenithalProjection.get_offsets">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.zenithal_projection.ZenithalProjection.html#sofia_redux.scan.coordinate_systems.projection.zenithal_projection.ZenithalProjection.get_offsets">[docs]</a>
+    def get_offsets(self, theta, phi, offsets=None):
+        &quot;&quot;&quot;
+        Get the offsets given theta and phi.
+
+        Takes the theta (latitude) and phi (longitude) coordinates about the
+        celestial pole and converts them to offsets from a reference position.
+        For a zenithal projection, this is given by:
+
+            r = radius_from_angle_function(theta)
+            x = r * sin(phi)
+            y = -r * cos(phi)
+
+        where `radius_from_angle_function` depends on the zenithal projection
+        model.
+
+        Parameters
+        ----------
+        theta : units.Quantity
+            The theta angle.
+        phi : units.Quantity
+            The phi angle.
+        offsets : Coordinate2D, optional
+            An optional coordinate system in which to place the results.
+
+        Returns
+        -------
+        offsets : Coordinate2D
+        &quot;&quot;&quot;
+        if offsets is None:
+            offsets = Coordinate2D(unit=&#39;degree&#39;)
+
+        # From Calabretta and Greisen 2002
+        r = self.r(theta)
+        x = r * np.sin(phi)
+        y = -r * np.cos(phi)
+
+        offsets.set([x, y])
+        return offsets</div>
+
+
+<div class="viewcode-block" id="ZenithalProjection.r">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.zenithal_projection.ZenithalProjection.html#sofia_redux.scan.coordinate_systems.projection.zenithal_projection.ZenithalProjection.r">[docs]</a>
+    @abstractmethod
+    def r(self, theta):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the radius of a point from the center of the projection.
+
+        Parameters
+        ----------
+        theta : float or numpy.ndarray or units.Quantity
+            The latitude angle.
+
+        Returns
+        -------
+        r : units.Quantity
+            The distance of the point from the central point.
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="ZenithalProjection.theta_of_r">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.zenithal_projection.ZenithalProjection.html#sofia_redux.scan.coordinate_systems.projection.zenithal_projection.ZenithalProjection.theta_of_r">[docs]</a>
+    @abstractmethod
+    def theta_of_r(self, r):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return theta (latitude) given a radius from the central point.
+
+        Parameters
+        ----------
+        r : float or numpy.ndarray or units.Quantity
+            The distance of the point from the central point.
+
+        Returns
+        -------
+        theta : units.Quantity
+        &quot;&quot;&quot;
+        pass</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

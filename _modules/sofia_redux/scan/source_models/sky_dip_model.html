@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.source_models.sky_dip_model &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.source_models.sky_dip_model</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC
+from astropy import log, units
+from copy import deepcopy
+import numpy as np
+from scipy.optimize import curve_fit, OptimizeWarning
+import warnings
+
+from sofia_redux.scan.configuration.configuration import Configuration
+from sofia_redux.scan.utilities.range import Range
+
+__all__ = [&#39;SkyDipModel&#39;]
+
+
+<div class="viewcode-block" id="SkyDipModel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.html#sofia_redux.scan.source_models.sky_dip_model.SkyDipModel">[docs]</a>
+class SkyDipModel(ABC):
+
+    default_initial_guess = {
+        &#39;tsky&#39;: 273.0,  # Kelvin
+        &#39;offset&#39;: np.nan,
+        &#39;kelvin&#39;: np.nan,  # Kelvin
+        &#39;tau&#39;: 1.0
+    }
+    default_bounds = {
+        &#39;tsky&#39;: [0.0, np.inf],
+        &#39;offset&#39;: [-np.inf, np.inf],
+        &#39;kelvin&#39;: [0.0, np.inf],
+        &#39;tau&#39;: [0.0, 10.0]
+    }
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize a sky dip model.
+
+        The skydip model is used to fit elevation vs. data to determine the
+        best fit parameters and error estimates.
+        &quot;&quot;&quot;
+        self.configuration = None
+        self.initial_guess = self.default_initial_guess.copy()
+        self.bounds = self.default_bounds.copy()
+        self.fit_for = None
+        self.has_converged = False
+        self.data_unit = units.Unit(&quot;count&quot;)
+        self.use_points = 0
+        self.uniform_weights = False
+        self.el_range = Range()
+        self.parameters = None
+        self.errors = None
+        self.rms = np.nan
+        self.fitted_values = None
+        self.elevation = None
+        self.data = None
+        self.sigma = None
+        self.p_opt = None
+        self.p_cov = None
+
+<div class="viewcode-block" id="SkyDipModel.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.html#sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the skydip model.
+
+        Returns
+        -------
+        SkyDipModel
+        &quot;&quot;&quot;
+        return deepcopy(self)</div>
+
+
+<div class="viewcode-block" id="SkyDipModel.set_configuration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.html#sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.set_configuration">[docs]</a>
+    def set_configuration(self, configuration):
+        &quot;&quot;&quot;
+        Set the sky dip model configuration
+
+        Parameters
+        ----------
+        configuration : Configuration
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not isinstance(configuration, Configuration):
+            raise ValueError(f&quot;Configuration must be {Configuration} &quot;
+                             f&quot;instance. Received {configuration}.&quot;)
+        self.configuration = configuration
+        if self.configuration.is_configured(&#39;skydip.elrange&#39;):
+            self.el_range = self.configuration.get_range(
+                &#39;skydip.elrange&#39;, is_positive=True)
+            self.el_range.scale(units.Unit(&#39;degree&#39;))
+
+        self.uniform_weights = self.configuration.get_bool(&#39;skydip.uniform&#39;)
+        self.fit_for = []
+        if self.configuration.is_configured(&#39;skydip.fit&#39;):
+            names = self.configuration.get_string_list(&#39;skydip.fit&#39;)
+            names = [x.strip().lower() for x in names]
+            for name in names:
+                if name in [&#39;tau&#39;, &#39;offset&#39;, &#39;kelvin&#39;, &#39;tsky&#39;]:
+                    self.fit_for.append(name)
+                elif name == &#39;data2k&#39;:
+                    self.fit_for.append(&#39;kelvin&#39;)
+        else:
+            self.fit_for.extend([&#39;tau&#39;, &#39;offset&#39;, &#39;kelvin&#39;])
+        self.fit_for = list(np.unique(self.fit_for))</div>
+
+
+<div class="viewcode-block" id="SkyDipModel.init_parameters">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.html#sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.init_parameters">[docs]</a>
+    def init_parameters(self, skydip):
+        &quot;&quot;&quot;
+        Initialize the fitting parameters.
+
+        The initial fitting parameters are determined by the following logic::
+
+          - tsky: The &#39;skydip.tsky&#39; configuration value, or the skydip model
+            tamb attribute if it has a non-zero weight.  Otherwise the default
+            is 273 Kelvins.
+          - offset: If the current initial value is non-finite, is taken to be
+            the midpoint of the skydip model signal range.  If this cannot be
+            determined, defaults to zero.
+          - kelvin: If the current initial value is non-finite, is taken to
+            be the span of the skydip model signal range divided by the tsky
+            value (above).  If this cannot be determined, defaults to one.
+          - tau: If the initial value for kelvin (above) is finite, tau is
+            determined as -log(1-x) where x = s / (am * tsky * kelvin) and
+            s is the span of the signal range, am is the span of the air mass
+            range, and the other parameters are described above.  If x is
+            negative, tau is set to 0.1, or 1 if x &gt; 1.
+
+        Parameters
+        ----------
+        skydip : sofia_redux.scan.source_models.sky_dip.SkyDip
+            The SkyDip model to fit.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.configuration.is_configured(&#39;skydip.tsky&#39;):
+            self.initial_guess[&#39;tsky&#39;] = self.configuration.get_float(
+                &#39;skydip.tsky&#39;)
+        elif skydip.tamb_weight &gt; 0:
+            temp = skydip.tamb
+            if isinstance(temp, units.Quantity):
+                temp = temp.to(&#39;Kelvin&#39;, equivalencies=units.temperature()
+                               ).value
+            self.initial_guess[&#39;tsky&#39;] = temp
+
+        signal_range = skydip.get_signal_range()
+        if not np.isfinite(self.initial_guess[&#39;offset&#39;]):
+            offset = signal_range.midpoint
+            if np.isnan(offset):
+                offset = 0.0
+            self.initial_guess[&#39;offset&#39;] = offset
+
+        tsky = self.initial_guess[&#39;tsky&#39;]
+
+        if not np.isfinite(self.initial_guess[&#39;kelvin&#39;]):
+            kelvin = signal_range.span / tsky
+            if not np.isfinite(kelvin):
+                kelvin = 1.0
+            self.initial_guess[&#39;kelvin&#39;] = kelvin
+            if &#39;kelvin&#39; not in self.fit_for:
+                self.fit_for.append(&#39;kelvin&#39;)
+        else:
+            kelvin = self.initial_guess[&#39;kelvin&#39;]
+            am_range = skydip.get_air_mass_range()
+            x = signal_range.span / (am_range.span * tsky * kelvin)
+            if isinstance(x, units.Quantity):
+                x = x.value
+            if x &lt; 0:
+                tau = 0.1
+            elif x &gt;= 1:
+                tau = 1.0
+            else:
+                tau = -np.log(1 - x)
+            self.initial_guess[&#39;tau&#39;] = tau
+
+        for key, value in self.initial_guess.items():
+            if isinstance(value, units.Quantity):
+                self.initial_guess[key] = value.value</div>
+
+
+<div class="viewcode-block" id="SkyDipModel.fit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.html#sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.fit">[docs]</a>
+    def fit(self, skydip):
+        &quot;&quot;&quot;
+        Fit the skydip model.
+
+        Parameters
+        ----------
+        skydip : sofia_redux.scan.source_models.sky_dip.SkyDip
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        parameter_order = [&#39;tau&#39;, &#39;offset&#39;, &#39;kelvin&#39;, &#39;tsky&#39;]
+        self.parameters = {}
+        self.errors = {}
+        self.p_opt = None
+        self.p_cov = None
+        self.fitted_values = None
+        self.data = None
+        self.sigma = None
+        self.elevation = None
+
+        log.debug(&quot;Initial skydip values:&quot;)
+        log.debug(f&quot;    Tsky = {self.initial_guess[&#39;tsky&#39;]}&quot;)
+        log.debug(f&quot;    offset = {self.initial_guess[&#39;offset&#39;]}&quot;)
+        log.debug(f&quot;    kelvin = {self.initial_guess[&#39;kelvin&#39;]}&quot;)
+        log.debug(f&quot;    tau = {self.initial_guess[&#39;tau&#39;]}&quot;)
+
+        if self.el_range is not None:
+            from_bin = max(0, skydip.get_bin(self.el_range.min))
+            to_bin = min(skydip.data.size, skydip.get_bin(self.el_range.max))
+        else:
+            from_bin = 0
+            to_bin = skydip.data.size
+
+        self.init_parameters(skydip)
+
+        data = skydip.data[from_bin:to_bin]
+        weight = skydip.weight[from_bin:to_bin]
+        valid = weight &gt; 0
+        data = data[valid]
+        weight = weight[valid]
+
+        if self.uniform_weights:
+            sigma = None
+        else:
+            sigma = 1 / weight
+
+        elevation = skydip.get_elevation(
+            np.nonzero(valid)[0]).to(&#39;radian&#39;).value
+
+        self.use_points = data.size
+
+        p0 = []
+        lower_bounds = np.zeros(4, dtype=float)
+        upper_bounds = np.zeros(4, dtype=float)
+
+        for i, parameter in enumerate(parameter_order):
+            value = self.initial_guess[parameter]
+            p0.append(value)
+            if parameter in self.fit_for:
+                lower_bounds[i] = self.bounds[parameter][0]
+                upper_bounds[i] = self.bounds[parameter][1]
+            else:  # An attempt to fix parameters with curve_fit
+                eps = abs(value - np.nextafter(value, 1))
+                lower_bounds[i] = value - eps
+                upper_bounds[i] = value + eps
+
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, OptimizeWarning)
+            p_opt, p_cov = curve_fit(self.value_at, elevation, data,
+                                     p0=p0, sigma=sigma,
+                                     bounds=(lower_bounds, upper_bounds))
+        self.p_opt = p_opt
+        self.p_cov = p_cov
+        self.data = data
+        self.elevation = elevation
+        self.sigma = sigma
+
+        self.has_converged = np.isfinite(p_opt).all()
+        if not self.has_converged:  # pragma: no cover
+            log.warning(&quot;Skydip fit did not converge!&quot;)
+        errors = np.sqrt(np.diag(p_cov))
+
+        for i, parameter in enumerate(parameter_order):
+            self.parameters[parameter] = p_opt[i]
+            self.errors[parameter] = errors[i]
+
+        self.fitted_values = self.fit_elevation(elevation)
+        fit_weights = None if sigma is None else weight ** 2
+
+        t_obs_rms = np.sqrt(np.average((data - self.fitted_values) ** 2,
+                                       weights=fit_weights))
+        self.rms = t_obs_rms / self.parameters[&#39;kelvin&#39;]</div>
+
+
+<div class="viewcode-block" id="SkyDipModel.fit_elevation">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.html#sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.fit_elevation">[docs]</a>
+    def fit_elevation(self, elevation):
+        &quot;&quot;&quot;
+        Returns a fit to elevation with the model.
+
+        The return value Tobs is given as:
+
+        fit = offset + (t_obs * kelvin)
+        t_obs = t_sky * (-(exp(-tau / sin(el) - 1))
+
+        where t_sky is the sky temperature, kelvin is the conversion factor
+        from instrument units to kelvin, offset is the signal offset, and
+        el is the elevation.
+
+        Parameters
+        ----------
+        elevation : units.Quantity or float or numpy.ndarray (float)
+            The elevations to fit.  If floats are provided, they should be
+            in radians.
+
+        Returns
+        -------
+        fit : float or numpy.ndarray
+            The fit to the elevation in Kelvins
+        &quot;&quot;&quot;
+        if self.p_opt is None:
+            result = elevation * np.nan
+        else:
+            result = self.value_at(elevation, *self.p_opt)
+        if isinstance(result, units.Quantity):
+            result = result.value
+        return result</div>
+
+
+<div class="viewcode-block" id="SkyDipModel.value_at">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.html#sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.value_at">[docs]</a>
+    @staticmethod
+    def value_at(elevation, tau, offset, kelvin, tsky):
+        &quot;&quot;&quot;
+        Return the result of the fitted value.
+
+        The returned value is given as::
+
+          data = offset - ((exp(-tau / sin(elevation)) - 1) * tsky * kelvin)
+
+        Parameters
+        ----------
+        elevation : float or units.Quantity
+            The elevation in radians (float) or as an angle quantity.
+        tau : float
+            The tau value.
+        offset : float
+            The offset in kelvins.
+        kelvin : float
+            The kelvin scaling factor.
+        tsky : float
+            The sky temperature in kelvin.
+
+        Returns
+        -------
+        value : float or units.Quantity
+            The fitted value.  If any quantities are passed in, the result
+            will also be a quantity.
+        &quot;&quot;&quot;
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            eps = -(np.exp(-tau / np.sin(elevation)) - 1)
+        t_obs = eps * tsky
+        return offset + (t_obs * kelvin)</div>
+
+
+<div class="viewcode-block" id="SkyDipModel.get_parameter_string">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.html#sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.get_parameter_string">[docs]</a>
+    def get_parameter_string(self, parameter):
+        &quot;&quot;&quot;
+        Return a string representation of a given parameter.
+
+        Parameters
+        ----------
+        parameter : str
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if not self.has_converged or self.parameters is None:
+            return None
+        if parameter not in self.parameters:
+            return None
+
+        fmt = self.get_parameter_format(parameter)
+        unit = self.get_parameter_unit(parameter)
+        value = fmt % self.parameters[parameter]
+
+        error = self.errors[parameter]
+        if np.isfinite(error):
+            error = fmt % error
+        else:
+            error = None
+
+        s = f&quot;{parameter} = {value}&quot;
+        if error is not None:
+            s += f&#39; +/- {error}&#39;
+        if unit is not None:
+            s += f&#39; {unit}&#39;
+
+        return s</div>
+
+
+<div class="viewcode-block" id="SkyDipModel.get_parameter_format">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.html#sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.get_parameter_format">[docs]</a>
+    @classmethod
+    def get_parameter_format(cls, parameter_name):
+        &quot;&quot;&quot;
+        Return the string format for a given parameter.
+
+        Parameters
+        ----------
+        parameter_name : str
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        formats = {
+            &#39;tau&#39;: &#39;%.3f&#39;,
+            &#39;tsky&#39;: &#39;%.1f&#39;,
+            &#39;kelvin&#39;: &#39;%.3e&#39;
+        }
+        return formats.get(parameter_name, &#39;%.3e&#39;)</div>
+
+
+<div class="viewcode-block" id="SkyDipModel.get_parameter_unit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.html#sofia_redux.scan.source_models.sky_dip_model.SkyDipModel.get_parameter_unit">[docs]</a>
+    def get_parameter_unit(self, parameter_name):
+        &quot;&quot;&quot;
+        Return the parameter unit for the given parameter.
+
+        Parameters
+        ----------
+        parameter_name : str
+
+        Returns
+        -------
+        units.Unit or None
+        &quot;&quot;&quot;
+        parameter_units = {
+            &#39;tsky&#39;: units.Unit(&quot;Kelvin&quot;),
+            &#39;kelvin&#39;: self.data_unit
+        }
+        return parameter_units.get(parameter_name)</div>
+
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the sky dip fit.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if not self.has_converged or self.parameters is None:
+            log.warning(&quot;The fit has not converged. Try again!&quot;)
+            return &#39;&#39;
+
+        result = []
+        for parameter in self.parameters.keys():
+            if parameter in self.fit_for:
+                parameter_string = self.get_parameter_string(parameter)
+                if parameter_string is not None:
+                    result.append(parameter_string)
+
+        rms = self.get_parameter_format(&#39;kelvin&#39;) % self.rms
+        result.append(f&quot;[{rms} K rms]&quot;)
+        return &#39;\n&#39;.join(result)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

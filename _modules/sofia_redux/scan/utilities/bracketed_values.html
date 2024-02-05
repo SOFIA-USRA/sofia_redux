@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.utilities.bracketed_values &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.utilities.bracketed_values</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+from abc import ABC
+from astropy import units
+
+__all__ = [&#39;BracketedValues&#39;]
+
+
+<div class="viewcode-block" id="BracketedValues">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.bracketed_values.BracketedValues.html#sofia_redux.scan.utilities.bracketed_values.BracketedValues">[docs]</a>
+class BracketedValues(ABC):
+
+    def __init__(self, start=np.nan, end=np.nan, unit=None):
+        &quot;&quot;&quot;
+        Initialize a BracketedValues object.
+
+        The bracketed values class is used to represent a range, and
+        may perform operations with other BracketedValues objects.
+
+        Parameters
+        ----------
+        start : int or float or units.Quantity, optional
+            The starting value of the range.
+        end : int or float or units.Quantity, optional
+            The ending value of the range.
+        unit : units.Unit or str, optional
+            The unit of the range.
+        &quot;&quot;&quot;
+        if unit is None:
+            if isinstance(start, units.Quantity):
+                unit = start.unit
+            elif isinstance(end, units.Quantity):
+                unit = end.unit
+        else:
+            unit = units.Unit(unit)
+
+        self.unit = unit
+        if self.unit is not None:
+            if not isinstance(start, units.Quantity):
+                start = start * self.unit
+            else:
+                start = start.to(self.unit)
+            if not isinstance(end, units.Quantity):
+                end = end * self.unit
+            else:
+                end = end.to(self.unit)
+
+        self.start = start
+        self.end = end
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the bracket.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if self.unit is None:
+            return f&quot;({self.start} --&gt; {self.end})&quot;
+        return f&quot;({self.start.value} --&gt; {self.end.value} {self.unit})&quot;
+
+    def __repr__(self):
+        &quot;&quot;&quot;
+        Return the canonical string representation of the object, and values.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return f&#39;{object.__repr__(self)} {str(self)}&#39;
+
+    @property
+    def midpoint(self):
+        &quot;&quot;&quot;
+        Return the midpoints of the bracket.
+
+        The midpoint is the mean of the start and end points of the bracket.
+
+        Returns
+        -------
+        float or units.Quantity
+        &quot;&quot;&quot;
+        if np.isnan(self.start):
+            return self.end
+        elif np.isnan(self.end):
+            return self.start
+        return 0.5 * (self.start + self.end)
+
+<div class="viewcode-block" id="BracketedValues.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.bracketed_values.BracketedValues.html#sofia_redux.scan.utilities.bracketed_values.BracketedValues.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the bracket.
+
+        Returns
+        -------
+        BracketedValues
+        &quot;&quot;&quot;
+        return BracketedValues(self.start, self.end)</div>
+
+
+<div class="viewcode-block" id="BracketedValues.merge">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.utilities.bracketed_values.BracketedValues.html#sofia_redux.scan.utilities.bracketed_values.BracketedValues.merge">[docs]</a>
+    def merge(self, other):
+        &quot;&quot;&quot;
+        Combine with another bracket.
+
+        The resulting (start, end) points of the bracket will be
+        (min[self.start, other.start], max[self.end, other.end]).
+
+        Parameters
+        ----------
+        other : BracketedValues
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if other.start &lt; self.start:
+            if self.unit is None:
+                self.start = other.start
+            else:
+                self.start = other.start.to(self.unit)
+        if other.end &gt; self.end:
+            if self.unit is None:
+                self.end = other.end
+            else:
+                self.end = other.end.to(self.unit)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

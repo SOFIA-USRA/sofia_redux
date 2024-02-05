@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.info.aircraft &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.info.aircraft</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from sofia_redux.scan.info.base import InfoBase
+from sofia_redux.scan.utilities.bracketed_values import BracketedValues
+import numpy as np
+from astropy import units
+from astropy.units import imperial
+
+from sofia_redux.scan.utilities.utils import to_header_float
+from sofia_redux.scan.utilities.utils import insert_info_in_header
+
+__all__ = [&#39;SofiaAircraftInfo&#39;]
+
+assert imperial
+
+
+<div class="viewcode-block" id="SofiaAircraftInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.aircraft.SofiaAircraftInfo.html#sofia_redux.scan.custom.sofia.info.aircraft.SofiaAircraftInfo">[docs]</a>
+class SofiaAircraftInfo(InfoBase):
+
+    units.imperial.enable()
+    knots = units.Unit(&#39;kn&#39;)
+    ft = units.Unit(&#39;ft&#39;)
+    kft = 1000 * ft
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize the SOFIA aircraft information.
+
+        Contains information on SOFIA location and flight path.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.altitude = BracketedValues(unit=self.kft)
+        self.latitude = BracketedValues(unit=&#39;degree&#39;)
+        self.longitude = BracketedValues(unit=&#39;degree&#39;)
+        self.air_speed = np.nan * self.knots
+        self.ground_speed = np.nan * self.knots
+        self.heading = np.nan * units.Unit(&#39;degree&#39;)
+        self.track_ang = np.nan * units.Unit(&#39;degree&#39;)
+
+    @property
+    def log_id(self):
+        &quot;&quot;&quot;
+        Return the string log ID for the info.
+
+        The log ID is used to extract certain information from table data.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;ac&#39;
+
+<div class="viewcode-block" id="SofiaAircraftInfo.apply_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.aircraft.SofiaAircraftInfo.html#sofia_redux.scan.custom.sofia.info.aircraft.SofiaAircraftInfo.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Update aircraft information with the FITS header configuration data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.options is None:
+            return
+        options = self.options
+        self.latitude.start = options.get_dms_angle(&quot;LAT_STA&quot;)
+        self.latitude.end = options.get_dms_angle(&quot;LAT_END&quot;)
+        self.longitude.start = options.get_dms_angle(&quot;LON_STA&quot;)
+        self.longitude.end = options.get_dms_angle(&quot;LON_END&quot;)
+        self.heading = options.get_dms_angle(&quot;HEADING&quot;)
+        self.track_ang = options.get_dms_angle(&quot;TRACKANG&quot;)
+        self.air_speed = options.get_float(&quot;AIRSPEED&quot;) * self.knots
+        self.ground_speed = options.get_float(&quot;GRDSPEED&quot;) * self.knots
+        self.altitude.start = options.get_float(&quot;ALTI_STA&quot;) * self.ft
+        self.altitude.end = options.get_float(&quot;ALTI_END&quot;) * self.ft</div>
+
+
+<div class="viewcode-block" id="SofiaAircraftInfo.edit_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.aircraft.SofiaAircraftInfo.html#sofia_redux.scan.custom.sofia.info.aircraft.SofiaAircraftInfo.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        info = [
+            (&#39;COMMENT&#39;, &quot;&lt;------ SOFIA Aircraft Data ------&gt;&quot;),
+            (&#39;LON_STA&#39;, to_header_float(self.longitude.start, &#39;deg&#39;),
+             &#39;(deg) Longitude at start of observation.&#39;),
+            (&#39;LON_END&#39;, to_header_float(self.longitude.end, &#39;deg&#39;),
+             &#39;(deg) Longitude at end of observation.&#39;),
+            (&#39;LAT_STA&#39;, to_header_float(self.latitude.start, &#39;deg&#39;),
+             &#39;(deg) Latitude at start of observation.&#39;),
+            (&#39;LAT_END&#39;, to_header_float(self.latitude.end, &#39;deg&#39;),
+             &#39;(deg) Latitude at end of observation.&#39;),
+            (&#39;ALTI_STA&#39;, to_header_float(self.altitude.start, self.ft),
+             &#39;(ft) Altitude at start of observation.&#39;),
+            (&#39;ALTI_END&#39;, to_header_float(self.altitude.end, self.ft),
+             &#39;(ft) Altitude at end of observation.&#39;),
+            (&#39;AIRSPEED&#39;, to_header_float(self.air_speed, self.knots),
+             &#39;(kn) Airspeed at start of observation.&#39;),
+            (&#39;GRDSPEED&#39;, to_header_float(self.ground_speed, self.knots),
+             &#39;(kn) Ground speed at start of observation.&#39;),
+            (&#39;HEADING&#39;, to_header_float(self.heading, &#39;deg&#39;),
+             &#39;(deg) True aircraft heading at start.&#39;),
+            (&#39;TRACKANG&#39;, to_header_float(self.track_ang, &#39;deg&#39;),
+             &#39;(deg) Aircraft tracking angle at start.&#39;)
+        ]
+        insert_info_in_header(header, info, delete_special=True)</div>
+
+
+<div class="viewcode-block" id="SofiaAircraftInfo.get_table_entry">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.aircraft.SofiaAircraftInfo.html#sofia_redux.scan.custom.sofia.info.aircraft.SofiaAircraftInfo.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Given a name, return the parameter stored in the information object.
+
+        Note that names do not exactly match to attribute names.
+
+        Parameters
+        ----------
+        name : str
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        if name == &#39;alt&#39;:
+            return self.altitude.midpoint.to(&#39;meter&#39;)
+        elif name == &#39;altkft&#39;:
+            return self.altitude.midpoint.to(self.kft)
+        elif name == &#39;lon&#39;:
+            return self.longitude.midpoint
+        elif name == &#39;lat&#39;:
+            return self.latitude.midpoint
+        elif name == &#39;lond&#39;:
+            return self.longitude.midpoint.to(&#39;degree&#39;)
+        elif name == &#39;latd&#39;:
+            return self.latitude.midpoint.to(&#39;degree&#39;)
+        elif name == &#39;airspeed&#39;:
+            return self.air_speed.to(&#39;km/h&#39;)
+        elif name == &#39;gndspeed&#39;:
+            return self.ground_speed.to(&#39;km/h&#39;)
+        elif name == &#39;dir&#39;:
+            return self.heading.to(&#39;degree&#39;)
+        elif name == &#39;trkangle&#39;:
+            return self.track_ang.to(&#39;degree&#39;)
+        else:
+            return super().get_table_entry(name)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

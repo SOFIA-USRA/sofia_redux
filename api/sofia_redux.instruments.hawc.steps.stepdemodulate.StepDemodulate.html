@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>StepDemodulate &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../_static/plot_directive.css" />
+    
+    <script src="../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../_static/doctools.js?v=888ff710"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../_static/copybutton.js"></script>
+    <link rel="icon" href="../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="StepDmdCut" href="sofia_redux.instruments.hawc.steps.stepdmdcut.StepDmdCut.html" />
+    <link rel="prev" title="StepCombine" href="sofia_redux.instruments.hawc.steps.stepcombine.StepCombine.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li class="right">
+	<a href="sofia_redux.instruments.hawc.steps.stepdmdcut.StepDmdCut.html" title="StepDmdCut">
+	  next &raquo;
+	</a>
+      </li>
+      <li class="right">
+	<a href="sofia_redux.instruments.hawc.steps.stepcombine.StepCombine.html" title="StepCombine">
+	  &laquo; previous
+	</a>
+	 |
+      </li>
+      <li>
+	<a href="../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../sofia_redux/index.html" >SOFIA Redux</a> &#187;</li>
+      <li><a href="../manuals/hawc/developers/developers.html" accesskey="U">HAWC+ DRP Developer’s Manual</a> &#187;</li>
+      
+      <li>StepDemodulate</li> 
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="stepdemodulate">
+<h1>StepDemodulate<a class="headerlink" href="#stepdemodulate" title="Link to this heading">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sofia_redux.instruments.hawc.steps.stepdemodulate.</span></span><span class="sig-name descname"><span class="pre">StepDemodulate</span></span><a class="reference internal" href="../_modules/sofia_redux/instruments/hawc/steps/stepdemodulate.html#StepDemodulate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="sofia_redux.instruments.hawc.stepparent.StepParent.html#sofia_redux.instruments.hawc.stepparent.StepParent" title="sofia_redux.instruments.hawc.stepparent.StepParent"><code class="xref py py-class docutils literal notranslate"><span class="pre">StepParent</span></code></a></p>
+<p>Demodulate chops for chopped and nodded data.</p>
+<p>This step subtracts low chops from high chops by weighting
+all chopped data with a sine wave, then summing. A phase correction
+is computed from the real and imaginary parts of the chop offset
+and is applied after the demodulation. Incomplete first
+and last chops are excluded. Data exceeding defined tolerances,
+and data for which the HWP was moving, are flagged for later
+removal in the Chop Mask column. Variances on the flux are also
+computed during demodulation, and propagated throughout all pipeline
+steps.</p>
+<p>The input data expected is a DataFits containing one table with
+columns for R Array, T array, Chop Offset (arcsec), Nod Offset (arcsec),
+HWP Angle (degrees), Azimuth (degrees), Elevation (degrees),
+Azimuth Error (arcsec), Elevation Error (arcsec), and Array VPA
+(degrees). In addition, the Primary HDU header must contain the
+following keywords: NHWP, SMPLFREQ, CHPFREQ, NODDING, NODPATT.</p>
+<p>This input is typically produced by the
+<code class="xref py py-obj docutils literal notranslate"><span class="pre">sofia_redux.instruments.hawc.steps.StepPrepare</span></code> pipeline step,
+from raw HAWC data.</p>
+<p>This step outputs one table containing the demodulated data. The
+columns are the same as for input data, with some additional columns.
+Each row in the table corresponds to the value for that demodulated
+chop cycle.</p>
+<p>The additional columns are:</p>
+<ul class="simple">
+<li><p>Samples: number of raw samples that make up a chop cycle</p></li>
+<li><p>R array VAR: variance on the demodulated data for the R array</p></li>
+<li><p>T array VAR: variance on the demodulated data for the T array</p></li>
+<li><p>R array Imag: imaginary part of the demodulated data for the R array</p></li>
+<li><p>T array Imag: imaginary part the demodulated data for the T array</p></li>
+<li><p>R array Imag VAR: variance on the imaginary part of the
+demodulated data for the R array</p></li>
+<li><p>T array Imag VAR: variance on the imaginary part of the
+demodulated data for the T array</p></li>
+<li><p>Nod Index : integer-valued (0, 1, 2 for L, R, L)</p></li>
+<li><p>HWP Index : integer-valued (0, 1, 2, 3)</p></li>
+<li><p>Chop Mask : integer-valued, with bits for each flag type</p></li>
+</ul>
+<p>The flag bits for the Chop Mask column are:</p>
+<ul class="simple">
+<li><p>bit 0: incomplete chop</p></li>
+<li><p>bit 1: check on azelstate</p></li>
+<li><p>bit 2: HWP moving</p></li>
+<li><p>bit 3: check on nodstate</p></li>
+<li><p>bit 4: spare</p></li>
+<li><p>bit 5: spare</p></li>
+<li><p>bit 6: LOS rewind</p></li>
+<li><p>bit 7: tracking errors too high</p></li>
+<li><p>bit 8: CentroidExpMsec below threshold</p></li>
+<li><p>bit 9: extra samples before and after tracking tolerance violation</p></li>
+</ul>
+<p>The EXPTIME keyword in the primary header is updated to account only
+for the on-source time, rejecting samples that
+were excluded by the algorithm (when the HWP or telescope are
+moving). If chopping on-chip (header keyword CHPONFPA = True), then
+EXPTIME is multiplied by 2.</p>
+<p>The Configuration HDU present in raw data will be propagated to
+the demodulated file, but will not be carried along in subsequent
+steps.</p>
+<p>Depending on results from tracking tolerance, the keyword
+“TRCKSTAT” will be added to the header with one of the following
+values: ‘NONE - TrackErrAoi3 and 4 not found’, ‘GOOD - less than 1/3
+of samples removed’, ‘BAD - more than 1/3 of samples removed’, or
+‘NONE - tracking tolerance is deactivated’.</p>
+<p class="rubric">Methods Summary</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.avgdemodsin" title="sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.avgdemodsin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">avgdemodsin</span></code></a>(choptag, phasetag, chopsamp, ...)</p></td>
+<td><p>Average data with sine-wave demodulation.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.make_chop_phase_tags" title="sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.make_chop_phase_tags"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_chop_phase_tags</span></code></a>(chopstate, chopsamp, ...)</p></td>
+<td><p>Create the choptag and phasetag arrays from chopstate.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.makedemod" title="sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.makedemod"><code class="xref py py-obj docutils literal notranslate"><span class="pre">makedemod</span></code></a>(nchop)</p></td>
+<td><p>Construct arrays to hold demodulated data.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.read_beam" title="sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.read_beam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_beam</span></code></a>()</p></td>
+<td><p>Read the beam size for the observed filter.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.readdata" title="sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.readdata"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readdata</span></code></a>()</p></td>
+<td><p>Read raw data into memory.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.run" title="sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.run"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run</span></code></a>()</p></td>
+<td><p>Run the data reduction algorithm.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.setup" title="sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.setup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup</span></code></a>()</p></td>
+<td><p>Set parameters and metadata for the pipeline step.</p></td>
+</tr>
+</tbody>
+</table>
+<p class="rubric">Methods Documentation</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.avgdemodsin">
+<span class="sig-name descname"><span class="pre">avgdemodsin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">choptag</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phasetag</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chopsamp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nchop</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_sigma</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sofia_redux/instruments/hawc/steps/stepdemodulate.html#StepDemodulate.avgdemodsin"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.avgdemodsin" title="Link to this definition">¶</a></dt>
+<dd><p>Average data with sine-wave demodulation.</p>
+<p>Demodulated data is stored in self.pdemod.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>choptag</strong><span class="classifier">array-like</span></dt><dd><p>Array values specifying which chop each sample belongs to.</p>
+</dd>
+<dt><strong>phasetag</strong><span class="classifier">array-like</span></dt><dd><p>Array of values specifying sample number in
+current nod and hwp angle.</p>
+</dd>
+<dt><strong>chopsamp</strong><span class="classifier">array-like</span></dt><dd><p>Number of samples per chop cycle.</p>
+</dd>
+<dt><strong>nchop</strong><span class="classifier">int</span></dt><dd><p>Number of chops.</p>
+</dd>
+<dt><strong>data_sigma</strong><span class="classifier">float</span></dt><dd><p>Value for sigma-clipping of detector data, used in determining
+variance values for the demodulated flux.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.make_chop_phase_tags">
+<span class="sig-name descname"><span class="pre">make_chop_phase_tags</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chopstate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chopsamp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hwpstate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodstate</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sofia_redux/instruments/hawc/steps/stepdemodulate.html#StepDemodulate.make_chop_phase_tags"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.make_chop_phase_tags" title="Link to this definition">¶</a></dt>
+<dd><p>Create the choptag and phasetag arrays from chopstate.</p>
+<p>This function is intended for sine-wave demodulation and the
+outputs are to be used by avgdemodsin.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>chopstate: array-like</strong></dt><dd><p>Array of -1, 0, +1 derived from chop signal.</p>
+</dd>
+<dt><strong>chopsamp: int</strong></dt><dd><p>Number of samples per chop.</p>
+</dd>
+<dt><strong>hwpstate: array-like</strong></dt><dd><p>Array of 0 (HWP moving), 1 (HWP stable) from HWP Angle.</p>
+</dd>
+<dt><strong>nodstate: array-like</strong></dt><dd><p>Array of -1, 0, +1 derived from Nod Offset signal.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>nchops: int</dt><dd><p>Number of chops.</p>
+</dd>
+<dt>choptag: array-like</dt><dd><p>Array of chop tags which number the chops.</p>
+</dd>
+<dt>phasetag: array-like</dt><dd><p>Array of integer phase, numbering samples within a chop.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.makedemod">
+<span class="sig-name descname"><span class="pre">makedemod</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nchop</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sofia_redux/instruments/hawc/steps/stepdemodulate.html#StepDemodulate.makedemod"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.makedemod" title="Link to this definition">¶</a></dt>
+<dd><p>Construct arrays to hold demodulated data.</p>
+<p>Arrays are stored in self.pdemod, a dictionary with keys
+as specified by self.column_names.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>nchop</strong><span class="classifier">int</span></dt><dd><p>Number of chop cycles.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.read_beam">
+<span class="sig-name descname"><span class="pre">read_beam</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sofia_redux/instruments/hawc/steps/stepdemodulate.html#StepDemodulate.read_beam"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.read_beam" title="Link to this definition">¶</a></dt>
+<dd><p>Read the beam size for the observed filter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>beam</strong><span class="classifier">float</span></dt><dd><p>The beam size.</p>
+</dd>
+<dt><strong>waveband</strong><span class="classifier">str</span></dt><dd><p>The filter band name.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.readdata">
+<span class="sig-name descname"><span class="pre">readdata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sofia_redux/instruments/hawc/steps/stepdemodulate.html#StepDemodulate.readdata"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.readdata" title="Link to this definition">¶</a></dt>
+<dd><p>Read raw data into memory.</p>
+<p>Data is stored in the self.praw dictionary, with keys set
+by self.column_names.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sofia_redux/instruments/hawc/steps/stepdemodulate.html#StepDemodulate.run"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.run" title="Link to this definition">¶</a></dt>
+<dd><p>Run the data reduction algorithm.</p>
+<p>This step is run as a single-in single-out (SISO) step:
+self.datain should be a DataFits object, and output will also
+be a single DataFits, stored in self.dataout.</p>
+<p>The process is:</p>
+<ol class="arabic simple">
+<li><p>Read data and tag chop, nod, and HWP state for all
+samples.</p></li>
+<li><p>Convolve data with a box filter.</p></li>
+<li><p>Flag data for bad tracking states.</p></li>
+<li><p>Weight the chop data with a sine wave and average to
+demodulate the chops. Compute the variance across samples
+at the same time.</p></li>
+<li><p>Apply a phase correction to every pixel to correct for
+readout delays.</p></li>
+<li><p>Compute the magnitude of the demodulated signal (from
+real, imaginary, or absolute value).</p></li>
+<li><p>Store demodulated data in a new DataFits.</p></li>
+</ol>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sofia_redux/instruments/hawc/steps/stepdemodulate.html#StepDemodulate.setup"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.setup" title="Link to this definition">¶</a></dt>
+<dd><p>Set parameters and metadata for the pipeline step.</p>
+<p>Output files have PRODTYPE = ‘demodulate’, and are named with
+the step abbreviation ‘DMD’.</p>
+<p>Parameters defined for this step are:</p>
+<dl class="simple">
+<dt>chop_tol<span class="classifier">float</span></dt><dd><p>Chop tolerance in arcsec. Used in determining high/low state.</p>
+</dd>
+<dt>nod_tol<span class="classifier">float</span></dt><dd><p>Nod tolerance in arcsec. Used in determining high/low state.</p>
+</dd>
+<dt>hwp_tol<span class="classifier">float</span></dt><dd><p>HWP tolerance in degrees. Used in determining angle
+and moving state.</p>
+</dd>
+<dt>az_tol<span class="classifier">float</span></dt><dd><p>Azimuth error tolerance in arcsec.</p>
+</dd>
+<dt>el_tol<span class="classifier">float</span></dt><dd><p>Elevation error tolerance in arcsec.</p>
+</dd>
+<dt>track_tol<span class="classifier">float or str</span></dt><dd><p>Tracking error tolerance in arcsec, as recorded by AOI 3
+or AOI 4. Set negative to turn off flagging for tracking
+errors. Set to the string ‘beam’ to use a default beam-size
+value appropriate to the observed filter band. Set to
+‘centroidexp’ to use the the CentroidExpMsec column to
+flag bad data instead of TrackErrAoi3 and TrackErrAoi4.</p>
+</dd>
+<dt>track_extra<span class="classifier">list of float</span></dt><dd><p>Extra samples removed (in seconds) before and
+after samples flagged by track_tol. Set to [0, 0] to
+disable.</p>
+</dd>
+<dt>chopphase<span class="classifier">bool</span></dt><dd><p>If not set, chop phases are not corrected.</p>
+</dd>
+<dt>checkhwp<span class="classifier">bool</span></dt><dd><p>If set, the NHWP keyword is not corrected from the number
+of angles actually found in the data, and a warning is
+issued. If not set, NHWP is corrected to the actual number
+of HWP angles.</p>
+</dd>
+<dt>phasefile<span class="classifier">str or float</span></dt><dd><p>If a string, this should be set to a path to a file containing
+phase corrections for each pixel. If a float, then the value
+assigned is applied as the phase correction to every pixel. The
+value should be the phase delay in seconds.</p>
+</dd>
+<dt>phaseoffset<span class="classifier">float</span></dt><dd><p>Phase offset to apply in addition to the per-pixel offsets
+assigned by the phasefile. This is specified in degrees, and
+may be determined from the plots produced by the
+StepDmdPlot pipeline step for CALMODE = INT_CAL files. Not
+applied if the phasefile parameter is not a file.</p>
+</dd>
+<dt>l0method<span class="classifier">{‘RE’, ‘IM’, ‘ABS’}</span></dt><dd><p>Method to normalize data: real component only, imaginary
+component only, or absolute value.</p>
+</dd>
+<dt>boxfilter<span class="classifier">float</span></dt><dd><p>Time constant for a box filter to convolve with the data
+before demodulation. Set to -1 to use 1/CHPFREQ. Set to
+0 to disable.</p>
+</dd>
+<dt>chopavg<span class="classifier">bool</span></dt><dd><p>If set, R and T arrays before demodulation will be averaged
+over the chop period and stored in ‘R array AVG’ and
+‘T array AVG’ columns in the output table.</p>
+</dd>
+<dt>tracksampcut<span class="classifier">float</span></dt><dd><p>If the fraction of all samples removed due to tracking
+is larger than this number, then tracking status
+(TRCKSTAT) is set to BAD.</p>
+</dd>
+<dt>data_sigma<span class="classifier">float</span></dt><dd><p>Value for sigma-clipping of detector data, used in determining
+variance values for the demodulated flux.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+<ul>
+<li><a class="reference internal" href="#">StepDemodulate</a><ul>
+<li><a class="reference internal" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate"><code class="docutils literal notranslate"><span class="pre">StepDemodulate</span></code></a><ul>
+<li><a class="reference internal" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.avgdemodsin"><code class="docutils literal notranslate"><span class="pre">StepDemodulate.avgdemodsin()</span></code></a></li>
+<li><a class="reference internal" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.make_chop_phase_tags"><code class="docutils literal notranslate"><span class="pre">StepDemodulate.make_chop_phase_tags()</span></code></a></li>
+<li><a class="reference internal" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.makedemod"><code class="docutils literal notranslate"><span class="pre">StepDemodulate.makedemod()</span></code></a></li>
+<li><a class="reference internal" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.read_beam"><code class="docutils literal notranslate"><span class="pre">StepDemodulate.read_beam()</span></code></a></li>
+<li><a class="reference internal" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.readdata"><code class="docutils literal notranslate"><span class="pre">StepDemodulate.readdata()</span></code></a></li>
+<li><a class="reference internal" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.run"><code class="docutils literal notranslate"><span class="pre">StepDemodulate.run()</span></code></a></li>
+<li><a class="reference internal" href="#sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.setup"><code class="docutils literal notranslate"><span class="pre">StepDemodulate.setup()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right">
+    <a href="../_sources/api/sofia_redux.instruments.hawc.steps.stepdemodulate.StepDemodulate.rst.txt"
+       rel="nofollow">Page Source</a> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.coordinate_systems.precessing_coordinates &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.coordinate_systems.precessing_coordinates</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import abstractmethod
+from astropy.time import Time
+import numpy as np
+import warnings
+
+from sofia_redux.scan.coordinate_systems.epoch.epoch import (
+    B1950, J2000, Epoch, JulianEpoch, BesselianEpoch)
+from sofia_redux.scan.coordinate_systems.celestial_coordinates import \
+    CelestialCoordinates
+
+__all__ = [&#39;PrecessingCoordinates&#39;]
+
+
+<div class="viewcode-block" id="PrecessingCoordinates">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.html#sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates">[docs]</a>
+class PrecessingCoordinates(CelestialCoordinates):
+
+    def __init__(self, coordinates=None, unit=&#39;degree&#39;,
+                 copy=True, epoch=J2000):
+        &quot;&quot;&quot;
+        Initialize a PrecessingCoordinates object.
+
+        The precessing coordinates extend celestial coordinates by adding an
+        epoch (time) to the coordinate set.  In addition to the functionality
+        provided by celestial coordinates, the coordinate set may be precessed
+        to a new epoch if desired.
+
+        Parameters
+        ----------
+        coordinates : list or tuple or array-like or units.Quantity, optional
+            The coordinates used to populate the object during initialization.
+            The first (0) value or index should represent longitudinal
+            coordinates, and the second should represent latitude.
+        unit : units.Unit or str, optional
+            The angular unit for the spherical coordinates.  The default is
+            &#39;degree&#39;.
+        copy : bool, optional
+            Whether to explicitly perform a copy operation on the input
+            coordinates when storing them into these coordinates.  Note that it
+            is extremely unlikely for the original coordinates to be passed in
+            as a reference due to the significant checks performed on them.
+        epoch : Epoch or str or int or float or Time or fits.Header, optional
+            Information from which to set the epoch for these coordinates.
+        &quot;&quot;&quot;
+
+        self.epoch = None
+        self.set_epoch(epoch)
+        super().__init__(coordinates=coordinates, unit=unit, copy=copy)
+
+<div class="viewcode-block" id="PrecessingCoordinates.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.html#sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the PrecessingCoordinates.
+
+        Returns
+        -------
+        PrecessingCoordinates
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+<div class="viewcode-block" id="PrecessingCoordinates.empty_copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.html#sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.empty_copy">[docs]</a>
+    def empty_copy(self):
+        &quot;&quot;&quot;
+        Return an unpopulated instance of the coordinates.
+
+        Returns
+        -------
+        PrecessingCoordinates
+        &quot;&quot;&quot;
+        new = super().empty_copy()
+        if self.epoch.singular:
+            new.epoch = self.epoch
+        elif isinstance(self.epoch, BesselianEpoch):
+            new.epoch = B1950
+        else:
+            new.epoch = J2000
+        return new</div>
+
+
+<div class="viewcode-block" id="PrecessingCoordinates.precess_to_epoch">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.html#sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.precess_to_epoch">[docs]</a>
+    @abstractmethod
+    def precess_to_epoch(self, new_epoch):  # pragma: no cover
+        &quot;&quot;&quot;
+        Precess from one epoch to another.
+
+        Parameters
+        ----------
+        new_epoch : Epoch
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+    def __eq__(self, other):
+        &quot;&quot;&quot;
+        Test if these precessing coordinates are equal to another.
+
+        Parameters
+        ----------
+        other : PrecessingCoordinates
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        if not super().__eq__(other):
+            return False
+        return self.epoch == other.epoch
+
+    def __getitem__(self, indices):
+        &quot;&quot;&quot;
+        Return a section of the coordinates
+
+        Parameters
+        ----------
+        indices : int or numpy.ndarray or slice
+
+        Returns
+        -------
+        PrecessingCoordinates
+        &quot;&quot;&quot;
+        return super().__getitem__(indices)
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Create a string representation of the equatorial coordinates.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if self.coordinates is None:
+            return f&#39;Empty coordinates ({self.epoch})&#39;
+
+        if self.singular:
+            return f&#39;LON={self.longitude} LAT={self.latitude} ({self.epoch})&#39;
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+                return (f&#39;LON={np.nanmin(self.longitude)}-&gt;&#39;
+                        f&#39;{np.nanmax(self.longitude)} &#39;
+                        f&#39;DEC={np.nanmin(self.latitude)}-&gt;&#39;
+                        f&#39;{np.nanmax(self.latitude)} ({self.epoch})&#39;)
+
+    @property
+    def empty_copy_skip_attributes(self):
+        &quot;&quot;&quot;
+        Return attributes that are set to None on an empty copy.
+
+        Returns
+        -------
+        attributes : set (str)
+        &quot;&quot;&quot;
+        skip = super().empty_copy_skip_attributes
+        skip.add(&#39;epoch&#39;)
+        return skip
+
+<div class="viewcode-block" id="PrecessingCoordinates.copy_coordinates">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.html#sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.copy_coordinates">[docs]</a>
+    def copy_coordinates(self, coordinates):
+        &quot;&quot;&quot;
+        Copy the contents of another coordinate system.
+
+        Parameters
+        ----------
+        coordinates : SphericalCoordinates
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().copy_coordinates(coordinates)
+        if isinstance(coordinates, PrecessingCoordinates):
+            if coordinates.epoch is not None:
+                self.epoch = coordinates.epoch.copy()
+            else:
+                self.epoch = None
+        else:
+            self.epoch = None</div>
+
+
+<div class="viewcode-block" id="PrecessingCoordinates.set_epoch">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.html#sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.set_epoch">[docs]</a>
+    def set_epoch(self, epoch):
+        &quot;&quot;&quot;
+        Set the epoch for the precessing coordinates.
+
+        Parameters
+        ----------
+        epoch : Epoch or str or int or float or Time or fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.epoch = Epoch.get_epoch(epoch)</div>
+
+
+<div class="viewcode-block" id="PrecessingCoordinates.precess">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.html#sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.precess">[docs]</a>
+    def precess(self, new_epoch):
+        &quot;&quot;&quot;
+        Precess the coordinates to a new epoch.
+
+        Parameters
+        ----------
+        new_epoch : Epoch
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.epoch == new_epoch:
+            return
+        if self.epoch is None:
+            raise ValueError(&quot;Undefined from epoch.&quot;)
+        elif new_epoch is None:
+            raise ValueError(&quot;Undefined to epoch.&quot;)
+        self.precess_to_epoch(new_epoch)</div>
+
+
+<div class="viewcode-block" id="PrecessingCoordinates.edit_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.html#sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.edit_header">[docs]</a>
+    def edit_header(self, header, key_stem, alt=&#39;&#39;):
+        &quot;&quot;&quot;
+        Edit the header with precessing coordinate information.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The header to modify.
+        key_stem : str
+            The name of the header key to update.
+        alt : str, optional
+            The alternative coordinate system.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().edit_header(header, key_stem, alt=alt)
+        header[f&#39;RADESYS{alt}&#39;] = (&#39;FK5&#39; if self.epoch.is_julian else &#39;FK4&#39;,
+                                   &#39;Reference convention.&#39;)
+        self.epoch.edit_header(header, alt=alt)</div>
+
+
+<div class="viewcode-block" id="PrecessingCoordinates.parse_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.html#sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.parse_header">[docs]</a>
+    def parse_header(self, header, key_stem, alt=&#39;&#39;, default=None):
+        &quot;&quot;&quot;
+        Set the coordinate from the header.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The FITS header to read.
+        key_stem : str
+        alt : str, optional
+            The alternate coordinate system.
+        default : astropy.units.Quantity (numpy.ndarray)
+            The (x, y) default coordinate.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().parse_header(header, key_stem, alt=alt, default=default)
+        if &#39;RADESYS&#39; in header:
+            system = header[&#39;RADESYS&#39;]
+        elif f&#39;EQUINOX{alt}&#39; in header:
+            equinox = header[f&#39;EQUINOX{alt}&#39;]
+            if isinstance(equinox, str):
+                if equinox[0].isalpha():
+                    system = &#39;FK4&#39; if equinox[0].lower() == &#39;b&#39; else &#39;FK5&#39;
+                else:
+                    system = &#39;FK4&#39; if float(equinox) &lt; 1984 else &#39;FK5&#39;
+            else:
+                system = &#39;FK4&#39; if header[f&#39;EQUINOX{alt}&#39;] &lt; 1984 else &#39;FK5&#39;
+        else:
+            system = &#39;FK5&#39;
+        system = system.strip().upper()
+
+        if system in [&#39;FK4&#39;, &#39;FK4-NO-E&#39;]:
+            self.epoch = BesselianEpoch(header)
+        else:
+            self.epoch = JulianEpoch(header)</div>
+
+
+<div class="viewcode-block" id="PrecessingCoordinates.convert">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.html#sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.convert">[docs]</a>
+    def convert(self, from_coordinates, to_coordinates):
+        &quot;&quot;&quot;
+        Convert one type of coordinates to another.
+
+        The `to_coordinates` will be updated in-place.
+
+        Parameters
+        ----------
+        from_coordinates : CelestialCoordinates or PrecessingCoordinates
+        to_coordinates : CelestialCoordinates or PrecessingCoordinates
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if isinstance(to_coordinates, PrecessingCoordinates):
+            to_epoch = to_coordinates.epoch
+        else:
+            to_epoch = None
+        if isinstance(from_coordinates, PrecessingCoordinates):
+            from_epoch = from_coordinates.epoch
+        else:
+            from_epoch = None
+
+        super().convert(from_coordinates, to_coordinates)
+        if to_epoch is not None and from_epoch is not None:
+            to_coordinates.epoch = from_epoch
+            to_coordinates.precess(to_epoch)
+            to_coordinates.epoch = to_epoch</div>
+
+
+        # TODO: This was the original, but did not work there either
+        # super().convert(from_coordinates, to_coordinates)
+        # if from_coordinates.__class__ == to_coordinates.__class__:
+        #     if isinstance(to_coordinates, PrecessingCoordinates):
+        #         to_coordinates.precess(to_coordinates.epoch)
+
+<div class="viewcode-block" id="PrecessingCoordinates.get_indices">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.html#sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.get_indices">[docs]</a>
+    def get_indices(self, indices):
+        &quot;&quot;&quot;
+        Return selected data for given indices.
+
+        Parameters
+        ----------
+        indices : slice or list or int or numpy.ndarray (int)
+            The indices to extract.
+
+        Returns
+        -------
+        FlaggedData
+        &quot;&quot;&quot;
+        new = super().get_indices(indices)
+        if new.coordinates is None:
+            return new
+
+        if not self.epoch.singular:
+            new.epoch = self.epoch[indices]
+
+        return new</div>
+
+
+<div class="viewcode-block" id="PrecessingCoordinates.insert_blanks">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.html#sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.insert_blanks">[docs]</a>
+    def insert_blanks(self, insert_indices):
+        &quot;&quot;&quot;
+        Insert blank (NaN) values at the requested indices.
+
+        Follows the logic of :func:`numpy.insert`.
+
+        Parameters
+        ----------
+        insert_indices : numpy.ndarray (int)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().insert_blanks(insert_indices)
+        if self.epoch.singular:
+            return
+
+        old_time = self.epoch.equinox
+        times = old_time.jyear
+
+        new_time_values = np.insert(times, insert_indices, 0.0)
+        new_time = old_time.__class__(new_time_values, format=old_time.format,
+                                      scale=old_time.scale)
+        self.epoch.equinox = new_time</div>
+
+
+<div class="viewcode-block" id="PrecessingCoordinates.precession_required">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.html#sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.precession_required">[docs]</a>
+    @staticmethod
+    def precession_required(epoch1, epoch2):
+        &quot;&quot;&quot;
+        Determine if precession is required when converting between epochs.
+
+        Parameters
+        ----------
+        epoch1 : Epoch or None
+            The epoch to convert from.
+        epoch2 : Epoch or None
+            The epoch to convert to.
+
+        Returns
+        -------
+        precess, epoch1, epoch2 : bool, Epoch, Epoch
+            Whether precession is required, and the epochs to convert between.
+        &quot;&quot;&quot;
+        if epoch1 is None and epoch2 is None:
+            return False, epoch1, epoch2
+
+        if epoch1 is None:
+            if epoch2.singular:
+                return False, epoch2.copy(), epoch2
+            return True, epoch2.get_epoch(epoch2.default_epoch), epoch2
+
+        if epoch2 is None:
+            if epoch1.singular:
+                return False, epoch1, epoch1.copy()
+            return True, epoch1, epoch1.get_epoch(epoch1.default_epoch)
+
+        if epoch1.singular and epoch2.singular:
+            return epoch1 != epoch2, epoch1, epoch2
+
+        return True, epoch1, epoch2</div>
+
+
+<div class="viewcode-block" id="PrecessingCoordinates.merge">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.html#sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.merge">[docs]</a>
+    def merge(self, other):
+        &quot;&quot;&quot;
+        Append other coordinates to the end of these.
+
+        The other coordinates will be precessed to this epoch if possible.  If
+        this epoch contains more than one equinox, no precession is performed
+        and the final equinox will contain those of the other equinox, expanded
+        and appended as necessary.
+
+        Parameters
+        ----------
+        other : PrecessingCoordinates
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        e1 = self.epoch
+        e2 = other.epoch if isinstance(other, PrecessingCoordinates) else None
+        precess, e1, e2 = self.precession_required(e1, e2)
+
+        self.epoch = e1  # Update the epoch if required
+        if not precess:
+            super().merge(other)
+            return
+
+        if e1.singular:  # Precess epoch 2 onto epoch 1
+            precessed = self.copy()
+            self.convert(other, precessed)
+            super().merge(precessed)
+            return
+
+        # If epoch 1 is an array and epoch 2 is not
+        if e2.singular:
+            # Need to convert all epoch2 times to an array.
+            e2 = e2.copy()
+            e2.equinox = Time(np.full(other.size, e2.equinox.value),
+                              scale=e2.equinox.scale,
+                              format=e2.equinox.format)
+
+        size_1 = self.size
+        size_2 = other.size
+        super().merge(other)
+
+        new_time_values = np.empty(size_1 + size_2, dtype=float)
+
+        t_format = &#39;byear&#39; if isinstance(e1, BesselianEpoch) else &#39;jyear&#39;
+        new_time_values[:size_1] = getattr(e1.equinox, t_format)
+        new_time_values[size_1:] = getattr(e2.equinox, t_format)
+        self.epoch.equinox = Time(new_time_values, scale=e1.equinox.scale,
+                                  format=t_format)</div>
+
+
+<div class="viewcode-block" id="PrecessingCoordinates.paste">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.html#sofia_redux.scan.coordinate_systems.precessing_coordinates.PrecessingCoordinates.paste">[docs]</a>
+    def paste(self, other, indices):
+        &quot;&quot;&quot;
+        Paste new coordinate values at the given indices.
+
+        Parameters
+        ----------
+        other : PrecessingCoordinates
+        indices : numpy.ndarray (int)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        e1 = self.epoch
+        e2 = other.epoch if isinstance(other, PrecessingCoordinates) else None
+        precess, e1, e2 = self.precession_required(e1, e2)
+        self.epoch = e1  # Update the epoch if required
+
+        if not precess:
+            super().paste(other, indices)
+            return
+
+        if e1.singular:  # Precess epoch 2 onto epoch 1
+            precessed = self.copy()
+            self.convert(other, precessed)
+            super().paste(precessed, indices)
+            return
+
+        super().paste(other, indices)
+        e1.equinox[indices] = e2.equinox</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

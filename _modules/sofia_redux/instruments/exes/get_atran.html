@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.exes.get_atran &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.exes.get_atran</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import glob
+import os
+import re
+
+from astropy import log, units
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.instruments import exes
+from sofia_redux.toolkit.utilities.fits import goodfile, gethdul, hdinsert
+from sofia_redux.spectroscopy.smoothres import smoothres
+
+__all__ = [&#39;clear_atran_cache&#39;, &#39;get_atran_from_cache&#39;,
+           &#39;store_atran_in_cache&#39;, &#39;get_atran&#39;]
+
+__atran_cache = {}
+
+
+<div class="viewcode-block" id="clear_atran_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.get_atran.clear_atran_cache.html#sofia_redux.instruments.exes.get_atran.clear_atran_cache">[docs]</a>
+def clear_atran_cache():
+    &quot;&quot;&quot;
+    Clear all data from the atran cache.
+    &quot;&quot;&quot;
+    global __atran_cache
+    __atran_cache = {}</div>
+
+
+
+<div class="viewcode-block" id="get_atran_from_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.get_atran.get_atran_from_cache.html#sofia_redux.instruments.exes.get_atran.get_atran_from_cache">[docs]</a>
+def get_atran_from_cache(atranfile, resolution):
+    &quot;&quot;&quot;
+    Retrieves atmospheric transmission data from the atran cache.
+
+    Checks to see if the file still exists, can be read, and has not
+    been altered since last time.  If the file has changed, it will be
+    deleted from the cache so that it can be re-read.
+
+    Parameters
+    ----------
+    atranfile : str
+        File path to the atran file
+    resolution : float
+        Spectral resolution used for smoothing.
+
+    Returns
+    -------
+    tuple
+        filename : str
+            Used to update ATRNFILE in FITS headers.
+        wave : numpy.ndarray
+            (nwave,) array of wavelengths.
+        unsmoothed : numpy.ndarray
+            2D array containing the atran data from file
+        smoothed : numpy.ndarray
+            (nwave,) array containing the smoothed atran data
+    &quot;&quot;&quot;
+    global __atran_cache
+
+    key = atranfile, int(resolution)
+
+    if key not in __atran_cache:
+        return
+
+    if not goodfile(atranfile):
+        try:
+            del __atran_cache[key]
+        except KeyError:   # pragma: no cover
+            # could happen in race conditions, working in parallel
+            pass
+        return
+
+    modtime = str(os.path.getmtime(atranfile))
+    if modtime not in __atran_cache.get(key, {}):
+        return
+
+    log.debug(f&#39;Retrieving atmospheric transmission data from cache &#39;
+              f&#39;({key[0]}, resolution {key[1]})&#39;)
+    return __atran_cache.get(key, {}).get(modtime)</div>
+
+
+
+<div class="viewcode-block" id="store_atran_in_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.get_atran.store_atran_in_cache.html#sofia_redux.instruments.exes.get_atran.store_atran_in_cache">[docs]</a>
+def store_atran_in_cache(atranfile, resolution, filename,
+                         unsmoothed, wave, smoothed):
+    &quot;&quot;&quot;
+    Store atmospheric transmission data in the atran cache.
+
+    Parameters
+    ----------
+    atranfile : str
+        File path to the atran file
+    resolution : float
+        Spectral resolution used for smoothing.
+    filename : str
+        Used to update ATRNFILE in FITS headers.
+    unsmoothed : numpy.ndarray
+        2D array containing the raw data from file
+    wave : numpy.ndarray
+        (nwave,) array of wavelengths.
+    smoothed : numpy.ndarray
+        (nwave,) array containing the smoothed atran data
+
+    &quot;&quot;&quot;
+    global __atran_cache
+    key = atranfile, int(resolution)
+    log.debug(f&#39;Storing atmospheric transmission data in cache &#39;
+              f&#39;({key[0]}, resolution {key[1]})&#39;)
+    __atran_cache[key] = {}
+    modtime = str(os.path.getmtime(atranfile))
+    __atran_cache[key][modtime] = (
+        filename, unsmoothed, wave, smoothed)</div>
+
+
+
+<div class="viewcode-block" id="get_atran">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.get_atran.get_atran.html#sofia_redux.instruments.exes.get_atran.get_atran">[docs]</a>
+def get_atran(header, resolution, filename=None,
+              get_unsmoothed=False, atran_dir=None):
+    &quot;&quot;&quot;
+    Retrieve reference atmospheric transmission data.
+
+    PSG model files in the data/transmission directory should be named
+    according to the altitude, ZA, and wavelengths for which they
+    were generated, as:
+
+        psg_[alt]K_[za]deg_[wmin]-[wmax]um.fits
+
+    For example, the file generated for altitude of 41,000 feet,
+    ZA of 45 degrees, and wavelengths between 5 and 28 microns
+    should be named:
+
+        psg_41K_45deg_5-28um.fits
+
+    Model files are expected to be FITS images containing two
+    rows. The first is wavenumber values in cm-1; the second is the
+    fractional atmospheric transmission expected at that wavenumber.
+
+    The procedure is:
+
+        1. Identify model file by ZA and Altitude, unless override is
+           provided.
+        2. Read transmission data from file and smooth to expected
+           spectral resolution.
+        3. Return transmission array.
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+        ATRNFILE keyword is written to the provided FITS header,
+        containing the name of the model file used.
+    resolution : float
+        Spectral resolution to which transmission data should be smoothed.
+    filename : str, optional
+        Atmospheric transmission file to be used.  If not provided,
+        a default file will be retrieved from the data/transmission
+        directory.  The file with the closest matching ZA and
+        Altitude to the input data will be used.  If an override file
+        is provided, it should be a FITS image file containing
+        wavenumber and transmission data without smoothing.
+    get_unsmoothed : bool, optional
+        If True, return the unsmoothed atran data with original
+        wavenumber array in addition to the smoothed array.
+    atran_dir : str, optional
+        Path to a directory containing model reference FITS files.
+        If not provided, the default set of files packaged with the
+        pipeline will be used.
+
+    Returns
+    -------
+    atran : numpy.ndarray
+        A (2, nw) array containing wavenumber and transmission data.
+    unsmoothed : numpy.ndarray, optional
+        An array containing wavenumber, unsmoothed
+        transmission data, and any additional raw data rows,
+        returned only if get_unsmoothed is set.
+    &quot;&quot;&quot;
+    if filename is not None:
+        if not goodfile(filename, verbose=True):
+            log.warning(f&#39;File {filename} not found; &#39;
+                        f&#39;retrieving default&#39;)
+            filename = None
+    if filename is None:
+        if not isinstance(header, fits.header.Header):
+            log.error(&quot;Invalid header&quot;)
+            return
+        za_start = float(header.get(&#39;ZA_START&#39;, 0))
+        za_end = float(header.get(&#39;ZA_END&#39;, 0))
+        if za_start &gt; 0 &gt;= za_end:
+            za = za_start
+        elif za_end &gt; 0 &gt;= za_start:
+            za = za_end
+        else:
+            za = 0.5 * (za_start + za_end)
+
+        alt_start = float(header.get(&#39;ALTI_STA&#39;, 0))
+        alt_end = float(header.get(&#39;ALTI_END&#39;, 0))
+        if alt_start &gt; 0 &gt;= alt_end:
+            alt = alt_start
+        elif alt_end &gt; 0 &gt;= alt_start:
+            alt = alt_end
+        else:
+            alt = 0.5 * (alt_start + alt_end)
+        alt /= 1000
+
+        log.info(f&#39;Alt, ZA: {alt:.2f} {za:.2f}&#39;)
+        true_value = [alt, za]
+
+        if atran_dir is not None:
+            if not os.path.isdir(str(atran_dir)):
+                log.warning(f&#39;Cannot find transmission directory: {atran_dir}&#39;)
+                log.warning(&#39;Using default model set.&#39;)
+                atran_dir = None
+        if atran_dir is None:
+            atran_dir = os.path.join(os.path.dirname(exes.__file__),
+                                     &#39;data&#39;, &#39;transmission&#39;)
+
+        atran_files = glob.glob(os.path.join(atran_dir, &#39;psg*fits&#39;))
+        regex1 = re.compile(r&#39;^psg_([0-9]+)K_([0-9]+)deg_5-28um\.fits$&#39;)
+
+        # set up some values for tracking best match
+        overall_val = np.inf
+        best_file = None
+
+        for f in atran_files:
+            # check for filename match
+            match = regex1.match(os.path.basename(f))
+            if match is not None:
+                match_val = 0
+                for i in range(2):
+                    # file alt or za
+                    file_val = float(match.group(i + 1))
+                    # check difference from true value
+                    if true_value[i] != 0:
+                        d_val = abs(file_val
+                                    - true_value[i]) / true_value[i]
+                    else:
+                        d_val = abs(file_val - true_value[i])
+                    match_val += d_val
+                if match_val &lt; overall_val:
+                    overall_val = match_val
+                    best_file = f
+
+        log.info(&#39;Using nearest Alt/ZA&#39;)
+        filename = best_file
+
+    if filename is None:
+        log.debug(&#39;No PSG file found&#39;)
+        return
+
+    # Read the model data from cache if possible
+    log.info(f&#39;Using PSG file: {filename}&#39;)
+    atrandata = get_atran_from_cache(filename, resolution)
+    if atrandata is not None:
+        atranfile, unsmoothed, wave, smoothed = atrandata
+    else:
+        hdul = gethdul(filename, verbose=True)
+        if hdul is None or hdul[0].data is None:
+            log.error(f&#39;Invalid data in model file {filename}&#39;)
+            return
+        unsmoothed = hdul[0].data
+        hdul.close()
+
+        atranfile = os.path.basename(filename)
+        wave = unsmoothed[0]
+
+        # convert wavenumber to wavelength
+        awave = (unsmoothed[0] * units.kayser).to(
+            units.um, equivalencies=units.spectral()).value
+
+        # flip for monotonic increasing values
+        awave = np.flip(awave)
+
+        # smooth every row in the input model
+        smoothed = unsmoothed.copy()
+        for i in range(1, unsmoothed.shape[0]):
+
+            trans = np.flip(unsmoothed[i])
+
+            # smooth to constant resolution
+            smooth_trans = smoothres(awave, trans, resolution)
+
+            # flip back to match wavenumber
+            smoothed[i] = np.flip(smooth_trans)
+
+        store_atran_in_cache(filename, resolution, atranfile,
+                             unsmoothed, wave, smoothed)
+
+    hdinsert(header, &#39;ATRNFILE&#39;, atranfile)
+    if not get_unsmoothed:
+        return smoothed
+    else:
+        return smoothed, unsmoothed</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

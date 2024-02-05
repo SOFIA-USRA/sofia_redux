@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.coordinate_systems.epoch.epoch &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.coordinate_systems.epoch.epoch</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC
+from astropy import log
+from astropy.io import fits
+from astropy.time import Time
+from astropy.coordinates import BaseCoordinateFrame
+from copy import deepcopy
+import numpy as np
+
+__all__ = [&#39;Epoch&#39;, &#39;JulianEpoch&#39;, &#39;BesselianEpoch&#39;, &#39;J2000&#39;,
+           &#39;B1900&#39;, &#39;B1950&#39;]
+
+
+<div class="viewcode-block" id="Epoch">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch">[docs]</a>
+class Epoch(ABC):
+
+    default_epoch = &#39;J2000&#39;
+    default_format = &#39;jyear&#39;
+
+    def __init__(self, equinox=None, immutable=False):
+        &quot;&quot;&quot;
+        Initialize an astronomical epoch.
+
+        An epoch defines a time or set of times when an observation occurred.
+        This is important when converting between an apparent equinox (time at
+        when a celestial object was observed) and a standard equinox such as
+        J2000.0 (January 1, 2000 at 12:00 TT).  The equinox if defined as the
+        two places on the celestial sphere at which the ecliptic intersects
+        with the celestial equator.  The Sun&#39;s ascending node is used as this
+        origin for celestial coordinate systems, but moves westward wrt the
+        celestial sphere due to perturbing forces.  An epoch defines the date
+        for which the position of a celestial object applies.  Therefore,
+        astronomical coordinates require both the date of the equinox and the
+        epoch.
+
+        The current standard for the equinox and epoch is J2000.0 with &quot;J&quot;
+        signifying the Julian epoch.  Before 1984, the standard was
+        B1950.0 with &quot;B&quot; signifying the Besselian epoch.
+
+        Parameters
+        ----------
+        equinox : parameter, optional
+            The given equinox can be a string, int, float, Time, Header,
+            FK4, FK5, or Epoch, or numpy.ndarray or list
+        immutable : bool, optional
+            If `True`, the equinox will be fixed and cannot be altered by
+            standard methods.
+        &quot;&quot;&quot;
+        self.equinox = self.get_equinox(equinox)
+        self.immutable = immutable
+
+<div class="viewcode-block" id="Epoch.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the Epoch.
+
+        Returns
+        -------
+        Epoch
+        &quot;&quot;&quot;
+        return deepcopy(self)</div>
+
+
+<div class="viewcode-block" id="Epoch.empty_copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.empty_copy">[docs]</a>
+    def empty_copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the epoch without times.
+
+        Returns
+        -------
+        Epoch
+        &quot;&quot;&quot;
+        new = self.__class__()
+        new.immutable = self.immutable
+        new.equinox = None
+        return new</div>
+
+
+    def __eq__(self, other):
+        &quot;&quot;&quot;
+        Return whether this epoch is equal to another.
+
+        Parameters
+        ----------
+        other : Epoch
+
+        Returns
+        -------
+        equal : bool
+        &quot;&quot;&quot;
+        if not isinstance(other, Epoch):
+            return False
+        if self is other:
+            return True
+        if self.__class__ != other.__class__:
+            return False
+        if self.singular is not other.singular:
+            return False
+        if self.singular:
+            return self.year == other.year
+        elif self.shape != other.shape:
+            return False
+        else:
+            return np.all(self.year == other.year)
+
+    def __getitem__(self, indices):
+        &quot;&quot;&quot;
+        Return an epoch for the given indices.
+
+        Parameters
+        ----------
+        indices : int or numpy.ndarray (int) or slice
+
+        Returns
+        -------
+        Epoch
+        &quot;&quot;&quot;
+        return self.get_indices(indices)
+
+    @property
+    def singular(self):
+        &quot;&quot;&quot;
+        Return `True` if the epoch represents a single time.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self.equinox.shape == ()
+
+    @property
+    def ndim(self):
+        &quot;&quot;&quot;
+        Return the number of dimensions of the time.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        return self.equinox.ndim
+
+    @property
+    def shape(self):
+        &quot;&quot;&quot;
+        Return the shape of the time array.
+
+        Returns
+        -------
+        tuple (int)
+        &quot;&quot;&quot;
+        if self.equinox is None:
+            return ()
+        return self.equinox.shape
+
+    @property
+    def size(self):
+        &quot;&quot;&quot;
+        Return the number of time measurements.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        return self.equinox.size
+
+    @property
+    def year(self):
+        &quot;&quot;&quot;
+        Return the equinox year.
+
+        Returns
+        -------
+        float or numpy.ndarray (float)
+        &quot;&quot;&quot;
+        return self.julian_year
+
+    @year.setter
+    def year(self, value):
+        &quot;&quot;&quot;
+        Set the year values
+
+        Parameters
+        ----------
+        value : float or numpy.ndarray (float)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_year(value)
+
+    @property
+    def julian_year(self):
+        &quot;&quot;&quot;
+        Return the Julian year.
+
+        Returns
+        -------
+        float or numpy.ndarray
+        &quot;&quot;&quot;
+        return self.equinox.jyear
+
+    @property
+    def besselian_year(self):
+        &quot;&quot;&quot;
+        Return the Julian year.
+
+        Returns
+        -------
+        float or numpy.ndarray
+        &quot;&quot;&quot;
+        return self.equinox.byear
+
+    @property
+    def mjd(self):
+        &quot;&quot;&quot;
+        Return the equinox MJD.
+
+        Returns
+        -------
+        float or numpy.ndarray (float)
+        &quot;&quot;&quot;
+        return self.equinox.mjd
+
+    @mjd.setter
+    def mjd(self, value):
+        &quot;&quot;&quot;
+        Set the equinox MJD.
+
+        Parameters
+        ----------
+        value : float or numpy.ndarray
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_mjd(value)
+
+    @property
+    def is_julian(self):
+        &quot;&quot;&quot;
+        Return whether the epoch if Julian (True) or Besselian (False).
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self.equinox.format[0].lower() == &#39;j&#39;
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the epoch.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if self.singular:
+            return f&#39;{self.year}&#39;
+        else:
+            return (f&#39;MJD {round(self.mjd.min(), 8)} -&gt; &#39;
+                    f&#39;{round(self.mjd.max(), 8)}&#39;)
+
+<div class="viewcode-block" id="Epoch.get_equinox">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.get_equinox">[docs]</a>
+    @classmethod
+    def get_equinox(cls, equinox=None):
+        &quot;&quot;&quot;
+        Return an astropy equinox frame from the given input.
+
+        Parameters
+        ----------
+        equinox : parameter
+            The given equinox can be a string, int, float, Time, Header,
+            FK4, FK5, or Epoch, or numpy.ndarray or list
+
+        Returns
+        -------
+        equinox : astropy.units.Time
+        &quot;&quot;&quot;
+        if equinox is None:
+            return cls.get_equinox(cls.default_epoch)
+        elif isinstance(equinox, (Epoch, BaseCoordinateFrame)):
+            return equinox.equinox
+        elif isinstance(equinox, Time):
+            return equinox
+        elif isinstance(equinox, fits.Header):
+            return cls.get_equinox_from_header(equinox)
+
+        if isinstance(equinox, str):
+            equinox = str(equinox.strip().upper())
+            if equinox[0].isalpha():
+                return Time(equinox)
+            else:
+                equinox = float(equinox)  # Allow error
+
+        if isinstance(equinox, (int, float)):
+            if equinox &lt; 1984:  # Assume year
+                return Time(f&#39;B{equinox}&#39;)
+            else:
+                return Time(f&#39;J{equinox}&#39;)
+
+        if isinstance(equinox, (list, np.ndarray)):
+            return Time(equinox, format=cls.default_format)
+
+        try:  # pragma: no cover
+            return Time(equinox)  # See if it works by chance
+        except (ValueError, TypeError) as err:  # pragma: no cover
+            log.warning(f&quot;Could not parse {equinox} as equinox.&quot;)
+            raise err</div>
+
+
+<div class="viewcode-block" id="Epoch.get_epoch">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.get_epoch">[docs]</a>
+    @classmethod
+    def get_epoch(cls, epoch):
+        &quot;&quot;&quot;
+        Return an epoch for a given input.
+
+        Parameters
+        ----------
+        epoch : thing
+            The str, int, float, Time, Epoch for which to get the epoch.
+
+        Returns
+        -------
+        JulianEpoch or BesselianEpoch
+        &quot;&quot;&quot;
+        if not isinstance(epoch, Epoch):
+            epoch = cls(equinox=epoch)
+
+        if epoch.is_julian:
+            return epoch.get_julian_epoch()
+        else:
+            return epoch.get_besselian_epoch()</div>
+
+
+<div class="viewcode-block" id="Epoch.get_equinox_from_header">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.get_equinox_from_header">[docs]</a>
+    @classmethod
+    def get_equinox_from_header(cls, header, alt=&#39;&#39;):
+        &quot;&quot;&quot;
+        Return an equinox from a FITS header.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The header to read.
+        alt : str, optional
+            The optional alternate system.
+
+        Returns
+        -------
+        equinox : astropy.units.Time
+        &quot;&quot;&quot;
+        return cls.get_equinox(header.get(f&#39;EQUINOX{alt}&#39;))</div>
+
+
+<div class="viewcode-block" id="Epoch.edit_header">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.edit_header">[docs]</a>
+    def edit_header(self, header, alt=&#39;&#39;):
+        &quot;&quot;&quot;
+        Edit a FITS header with the epoch data.
+
+        Parameters
+        ----------
+        header : fits.header.Header
+        alt : str, optional
+            The optional alternate system.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.singular:
+            return  # Can only do this for a single value
+        header[f&#39;EQUINOX{alt}&#39;] = (
+            self.year, &#39;The epoch of the quoted coordinates&#39;)</div>
+
+
+<div class="viewcode-block" id="Epoch.set_year">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.set_year">[docs]</a>
+    def set_year(self, year):
+        &quot;&quot;&quot;
+        Set the year values.
+
+        Parameters
+        ----------
+        year : int or float or numpy.ndarray or Time
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.immutable:
+            raise ValueError(&quot;Cannot alter immutable epochs.&quot;)
+
+        if isinstance(year, Time):
+            self.equinox[...] = year
+        else:
+            self.equinox[...] = Time(year, format=self.default_format)</div>
+
+
+<div class="viewcode-block" id="Epoch.set_mjd">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.set_mjd">[docs]</a>
+    def set_mjd(self, mjd):
+        &quot;&quot;&quot;
+        Set the MJD for the epoch.
+
+        Parameters
+        ----------
+        mjd : int or float or Time or numpy.ndarray
+           Note that if a int or float value is provided, those MJD values
+           will be assumed to be in UTC scale.  If necessary, conversion to
+           TT (Terrestrial Time) will occur if the current equinox is also in
+           TT (default).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.immutable:
+            raise ValueError(&quot;Cannot alter immutable epochs.&quot;)
+
+        if isinstance(mjd, Time):
+            self.equinox[...] = mjd
+        else:
+            self.equinox[...] = Time(mjd, format=&#39;mjd&#39;)</div>
+
+
+<div class="viewcode-block" id="Epoch.get_julian_epoch">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.get_julian_epoch">[docs]</a>
+    def get_julian_epoch(self):
+        &quot;&quot;&quot;
+        Get a Julian representation of the epoch.
+
+        Returns
+        -------
+        JulianEpoch
+        &quot;&quot;&quot;
+        return JulianEpoch(equinox=self.julian_year, immutable=self.immutable)</div>
+
+
+<div class="viewcode-block" id="Epoch.get_besselian_epoch">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.get_besselian_epoch">[docs]</a>
+    def get_besselian_epoch(self):
+        &quot;&quot;&quot;
+        Get a Besselian representation of the epoch.
+
+        Returns
+        -------
+        BesselianEpoch
+        &quot;&quot;&quot;
+        return BesselianEpoch(equinox=self.besselian_year,
+                              immutable=self.immutable)</div>
+
+
+<div class="viewcode-block" id="Epoch.get_indices">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.Epoch.get_indices">[docs]</a>
+    def get_indices(self, indices):
+        &quot;&quot;&quot;
+        Return selected times for given indices.
+
+        Parameters
+        ----------
+        indices : slice or list or int or numpy.ndarray (int) or None
+            The indices to extract.  If `None`, an empty copy of the epoch will
+            be returned
+
+        Returns
+        -------
+        Epoch
+        &quot;&quot;&quot;
+        if self.singular:
+            raise KeyError(&quot;Cannot retrieve indices for singular epochs.&quot;)
+
+        new = self.empty_copy()
+        if indices is None:
+            return new
+
+        if isinstance(indices, np.ndarray) and indices.shape == ():
+            indices = int(indices)
+
+        new.equinox = self.equinox[indices]
+        return new</div>
+</div>
+
+
+
+<div class="viewcode-block" id="JulianEpoch">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.JulianEpoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.JulianEpoch">[docs]</a>
+class JulianEpoch(Epoch):
+
+    default_epoch = &#39;J2000&#39;
+    default_format = &#39;jyear&#39;
+
+    def __init__(self, equinox=None, immutable=False):
+        &quot;&quot;&quot;
+        Initialize a Julian epoch.
+
+        The JulianEpoch is an extension of the Epoch class which will always
+        set and return Julian years when necessary.  The epoch and equinox will
+        default to J2000 unless explicitly defined.
+
+        Parameters
+        ----------
+        equinox : parameter, optional
+            The given equinox can be a string, int, float, Time, Header,
+            FK4, FK5, or Epoch, or numpy.ndarray or list
+        immutable : bool, optional
+            If `True`, the equinox will be fixed and cannot be altered by
+            standard methods.
+        &quot;&quot;&quot;
+        super().__init__(equinox=equinox, immutable=immutable)
+
+<div class="viewcode-block" id="JulianEpoch.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.JulianEpoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.JulianEpoch.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the JulianEpoch.
+
+        Returns
+        -------
+        JulianEpoch
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+    @property
+    def year(self):
+        &quot;&quot;&quot;
+        Return the Julian year.
+
+        Returns
+        -------
+        float or numpy.ndarray (float)
+        &quot;&quot;&quot;
+        return self.julian_year
+
+    @year.setter
+    def year(self, value):
+        &quot;&quot;&quot;
+        Set the year values
+
+        Parameters
+        ----------
+        value : float or numpy.ndarray (float)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_year(value)
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the Julian epoch.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if self.singular:
+            return f&#39;J{self.year}&#39;
+        else:
+            return (f&#39;Julian MJD {round(self.mjd.min(), 8)} -&gt; &#39;
+                    f&#39;{round(self.mjd.max(), 8)}&#39;)
+
+<div class="viewcode-block" id="JulianEpoch.get_equinox">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.JulianEpoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.JulianEpoch.get_equinox">[docs]</a>
+    @classmethod
+    def get_equinox(cls, equinox=None):
+        &quot;&quot;&quot;
+        Return an astropy equinox frame from the given input.
+
+        Parameters
+        ----------
+        equinox : parameter
+            The given equinox can be a string, int, float, Time, Header,
+            FK4, FK5, or Epoch, or numpy.ndarray or list
+
+        Returns
+        -------
+        equinox : astropy.units.Time
+        &quot;&quot;&quot;
+        if isinstance(equinox, (int, float)):
+            return Time(f&#39;J{equinox}&#39;)
+        return super().get_equinox(equinox=equinox)</div>
+
+
+<div class="viewcode-block" id="JulianEpoch.get_indices">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.JulianEpoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.JulianEpoch.get_indices">[docs]</a>
+    def get_indices(self, indices):
+        &quot;&quot;&quot;
+        Return selected epoch for given indices.
+
+        Parameters
+        ----------
+        indices : slice or list or int or numpy.ndarray (int)
+            The indices to extract.
+
+        Returns
+        -------
+        JulianEpoch
+        &quot;&quot;&quot;
+        return super().get_indices(indices)</div>
+</div>
+
+
+
+<div class="viewcode-block" id="BesselianEpoch">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.BesselianEpoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.BesselianEpoch">[docs]</a>
+class BesselianEpoch(Epoch):
+    default_epoch = &#39;B1950&#39;
+    default_format = &#39;byear&#39;
+
+    def __init__(self, equinox=None, immutable=False):
+        &quot;&quot;&quot;
+        Initialize a Besselian epoch.
+
+        The BesselianEpoch is an extension of the Epoch class which will always
+        set and return Besselian years when necessary.  The epoch and equinox
+        will default to B1950 unless explicitly defined.
+
+        Parameters
+        ----------
+        equinox : parameter, optional
+            The given equinox can be a string, int, float, Time, Header,
+            FK4, FK5, or Epoch, or numpy.ndarray or list
+        immutable : bool, optional
+            If `True`, the equinox will be fixed and cannot be altered by
+            standard methods.
+        &quot;&quot;&quot;
+        super().__init__(equinox=equinox, immutable=immutable)
+
+<div class="viewcode-block" id="BesselianEpoch.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.BesselianEpoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.BesselianEpoch.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the BesselianEpoch.
+
+        Returns
+        -------
+        BesselianEpoch
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+    @property
+    def year(self):
+        &quot;&quot;&quot;
+        Return the Besselian year.
+
+        Returns
+        -------
+        float or numpy.ndarray (float)
+        &quot;&quot;&quot;
+        return self.besselian_year
+
+    @year.setter
+    def year(self, value):
+        &quot;&quot;&quot;
+        Set the year values
+
+        Parameters
+        ----------
+        value : float or numpy.ndarray (float)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_year(value)
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the Besselian epoch.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if self.singular:
+            return f&#39;B{self.year}&#39;
+        else:
+            return (f&#39;Besselian MJD {round(self.mjd.min(), 8)} -&gt; &#39;
+                    f&#39;{round(self.mjd.max(), 8)}&#39;)
+
+<div class="viewcode-block" id="BesselianEpoch.get_equinox">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.BesselianEpoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.BesselianEpoch.get_equinox">[docs]</a>
+    @classmethod
+    def get_equinox(cls, equinox=None):
+        &quot;&quot;&quot;
+        Return an astropy equinox frame from the given input.
+
+        Parameters
+        ----------
+        equinox : parameter
+            The given equinox can be a string, int, float, Time, Header,
+            FK4, FK5, or Epoch, or numpy.ndarray or list
+
+        Returns
+        -------
+        equinox : astropy.units.Time
+        &quot;&quot;&quot;
+        if isinstance(equinox, (int, float)):
+            return Time(f&#39;B{equinox}&#39;)
+        return super().get_equinox(equinox=equinox)</div>
+
+
+<div class="viewcode-block" id="BesselianEpoch.get_indices">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.epoch.epoch.BesselianEpoch.html#sofia_redux.scan.coordinate_systems.epoch.epoch.BesselianEpoch.get_indices">[docs]</a>
+    def get_indices(self, indices):
+        &quot;&quot;&quot;
+        Return selected epoch for given indices.
+
+        Parameters
+        ----------
+        indices : slice or list or int or numpy.ndarray (int)
+            The indices to extract.
+
+        Returns
+        -------
+        BesselianEpoch
+        &quot;&quot;&quot;
+        return super().get_indices(indices)</div>
+</div>
+
+
+
+J2000 = JulianEpoch(equinox=&#39;J2000&#39;, immutable=True)
+B1900 = BesselianEpoch(equinox=&#39;B1900&#39;, immutable=True)
+B1950 = BesselianEpoch(equinox=&#39;B1950&#39;, immutable=True)
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

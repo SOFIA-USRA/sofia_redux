@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.exes.submean &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.exes.submean</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.instruments.exes import utils
+
+__all__ = [&#39;submean&#39;]
+
+
+<div class="viewcode-block" id="submean">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.submean.submean.html#sofia_redux.instruments.exes.submean.submean">[docs]</a>
+def submean(data, header, flat, illum, order_mask):
+    &quot;&quot;&quot;
+    Subtract residual sky background from nod-on-slit data by
+    removing the mean value at each wavelength.
+
+    For each input frame, the mean value at each spectral column is
+    calculated, using the flat to weight the values, then is subtracted
+    from the data in the column.  Input data is assumed to be distortion
+    corrected and rotated to align the spectral axis with the x-axis.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        3D data cube [nframe, nspec, nspat]
+    header : fits.Header
+        FITS header associated with the data.
+    flat : numpy.ndarray
+        2D processed flat [nspec, nspat], as produced by `exes.makeflat`.
+    illum : numpy.ndarray
+        2D array [nspec, nspat] indicating illuminated regions of
+        the frame. 1=illuminated, 0=unilluminated, -1=pixel that
+        does not correspond to any region in the raw frame.
+    order_mask : numpy.ndarray
+        2D array [nspat,nspec] indicating the order number for every
+        pixel in the image. For pixels outsize illuminated orders,
+        the value in the order_mask is NaN.
+
+    Returns
+    -------
+    corrected: numpy.ndarray
+         Returns the corrected 3D data cube [nspat,nspec,nframe].
+    &quot;&quot;&quot;
+
+    nx = header.get(&#39;NSPAT&#39;)
+    ny = header.get(&#39;NSPEC&#39;)
+
+    try:
+        nz = utils.check_data_dimensions(data=data, nx=nx, ny=ny)
+    except RuntimeError:
+        log.error(f&#39;Data has wrong dimensions {data.shape}. &#39;
+                  f&#39;Not applying flat&#39;)
+        return data
+
+    if illum is None:
+        illum = np.ones((ny, nx))
+    else:
+        if illum.ndim != 2 or illum.shape != (ny, nx):
+            log.error(f&#39;Illum array has wrong dimensions &#39;
+                      f&#39;{illum.shape}. Not correcting background.&#39;)
+            return data
+
+    # Get good data from flat/illumination mask
+    good = (illum == 1) &amp; (flat &gt; 0)
+
+    # Loop over frames
+    log.info(&#39;Subtracting mean from each spectral point&#39;)
+    corrected = data.copy()
+    for i in range(nz):
+        d = data[i]
+
+        frame_good = good &amp; ~np.isnan(d)
+        avg = _multi_order_avg(d, flat, frame_good, order_mask)
+
+        # Note:
+        # We are not propagating variance, assumption is that there
+        # is no error in the average value
+        corrected[i] = data[i] - avg
+
+    return corrected</div>
+
+
+
+def _multi_order_avg(data, flat, good, order_mask):
+
+    # make flat weights without dividing by zero
+    # note: flat is inverted, so high value = low illumination
+    # and should be low weight
+    weight_frame = flat.copy()
+    weight_frame[~good] = 1.
+    weight_frame = 1 / weight_frame ** 2
+    weight_frame[~good] = 0.
+
+    # do a weighted average over y in each order
+    avg = np.zeros_like(data)
+    n_order = np.nanmax(order_mask)
+    for j in range(n_order):
+        order_idx = (order_mask == j + 1)
+        idx = good &amp; order_idx
+        if idx.sum() == 0:
+            continue
+
+        masked_data = np.ma.MaskedArray(data, mask=~idx)
+        row = np.ma.average(masked_data, weights=weight_frame, axis=0)
+        row = np.ma.filled(row, fill_value=0)
+
+        avg_order = np.zeros_like(data)
+        avg_order[:] = row
+        avg[order_idx] = avg_order[order_idx]
+
+    return avg
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

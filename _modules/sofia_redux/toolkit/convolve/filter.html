@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.toolkit.convolve.filter &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.toolkit.convolve.filter</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import warnings
+
+import bottleneck as bn
+import numpy as np
+from scipy.ndimage import convolve1d, correlate1d
+from scipy.signal import savgol_filter, savgol_coeffs
+
+from sofia_redux.toolkit.utilities.func import to_array_shape
+
+
+__all__ = [&#39;savgol&#39;, &#39;savgol_windows&#39;, &#39;sobel&#39;]
+
+
+<div class="viewcode-block" id="savgol">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.convolve.filter.savgol.html#sofia_redux.toolkit.convolve.filter.savgol">[docs]</a>
+def savgol(data, window, order=2, axes=None, check=True,
+           is_error=False, scale=False, **kwargs):
+    &quot;&quot;&quot;
+    Apply Savitzky-Golay filter to an array of arbitrary features
+
+    Parameters
+    ----------
+    data : array_like (shape)
+        Data to be filtered.  shape must have ndim elements.
+    window : float or array_like of float (ndim,)
+        The width of the filtering window in units of data spacing
+        in each dimension.
+    order : int or array_like of int (ndim,), optional
+        The order of polynomial used to fit in each dimension.
+    axes : array_like of int, optional
+        The order in which to apply the filtering.  i.e. filter along
+        dimension 0, then dimension 1 etc., or alternatively, just
+        filter along select features.
+    check : bool, optional
+        If True, skip all checks on data validity and just solve.
+        Note that if this is the case, both window and order should
+        be supplied as (ndim,) arrays.
+    is_error : bool, optional
+        If True, assumes input data are error values and propagates
+        accordingly
+    scale : bool, optional
+        If True, scale window to the average spacing between samples
+        over each dimension.  Note that this replaces &quot;width&quot; in the
+        old IDL version.  This option should not be used if working in
+        multiple non-orthogonal features, as average spacing per
+        dimension is taken as the average separation between ordered
+        dimensional coordinates.
+    kwargs : dict, optional
+        Optional keywords to pass into scipy.signal.savgol_filter
+
+    Returns
+    -------
+    filtered_data : numpy.ndarray
+        The output type is of the same type and shape as &quot;data&quot;, so be
+        careful if using unsigned integers with kernels containing negative
+        values.
+    &quot;&quot;&quot;
+    if check:
+        order, window = savgol_windows(
+            order, window, data, scale=scale)
+
+    have_nans = np.isnan(data).any()
+    c_kwargs, s_kwargs = {}, {}
+    for key in [&#39;deriv&#39;, &#39;delta&#39;]:
+        if key in kwargs:
+            s_kwargs[key] = kwargs[key]
+    for key in [&#39;mode&#39;, &#39;cval&#39;]:
+        if key in kwargs:
+            c_kwargs[key] = kwargs[key]
+    if have_nans:
+        mode = c_kwargs.get(&#39;mode&#39;)
+        if mode is None or mode == &#39;interp&#39;:
+            c_kwargs[&#39;mode&#39;] = &#39;nearest&#39;
+
+    if axes is None:
+        axes = np.arange(data.ndim)
+    result = data ** 2 if is_error else data
+
+    for axis in axes:
+        if not have_nans and not is_error:
+            result = savgol_filter(
+                result, window[axis], order[axis], axis=axis, **kwargs)
+        else:
+            coeffs = savgol_coeffs(window[axis], order[axis], **s_kwargs)
+            if is_error:
+                coeffs **= 2
+            result = convolve1d(result, coeffs, axis=axis, **c_kwargs)
+
+    return np.sqrt(result) if is_error else result</div>
+
+
+
+<div class="viewcode-block" id="savgol_windows">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.convolve.filter.savgol_windows.html#sofia_redux.toolkit.convolve.filter.savgol_windows">[docs]</a>
+def savgol_windows(order, window, *samples, scale=False):
+    &quot;&quot;&quot;
+    Creates the correct windows for given order and samples
+
+    Also, performs error checks on samples.  Note that the order of
+    samples is the same as the order of the features in the
+    data values (samples[-1]).  For example, if working in two
+    features samples[0] should be the y-coordinates and
+    samples[1] should be the x-coordinates while samples[2]
+    should have shape (len(samples[0]), len(samples[1])
+
+    Parameters
+    ----------
+    order : int or array_like of int
+        The order of the polynomial used to fit the windows. order
+        must be less than &quot;window&quot;.
+    window : float or array_like of float
+        The length of the Savitzky-Golay filter window.  Will be converted
+        to a positive odd integer between order and less than the
+        number of samples in that dimension.
+    samples : (ndim+1)-tuple of array_like
+        samples[-1] is a data array of ndim features.  samples[:ndim]
+        give the coordinates of each dimension (1d-arrays).
+    scale : bool, optional
+        If True, scale window to the average spacing between samples
+        over each dimension.  This option should be used with
+        caution if working in multiple features that are not
+        orthogonal to one another as the average spacing for each
+        dimension is calculated by first ordering all unique
+        coordinates.
+
+    Returns
+    -------
+    orders, windows : numpy.ndarray, numpy.ndarray
+        Both orders and windows are expanded to (ndim).  These values
+        are suitable for passing into &quot;savgol&quot;.
+    &quot;&quot;&quot;
+    values = np.asarray(samples[-1])
+    shape = values.shape
+    ndim = len(samples) - 1
+    if ndim == 0:
+        scale = False
+        ndim = values.ndim
+        samples = tuple(np.arange(n, dtype=float) for n in values.shape)
+    elif values.ndim != ndim:
+        raise ValueError(&quot;samples[-1] must have len(samples)-1 features&quot;)
+
+    windows = to_array_shape(window, ndim, dtype=float)
+    orders = to_array_shape(order, ndim, dtype=int)
+
+    if scale:
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            for dimi, win in enumerate(windows):
+                ordered = np.unique(samples[dimi])
+                deltas = ordered[1:] - ordered[:-1]
+                windows[dimi] /= bn.nanmean(deltas)
+
+    # must be a positive odd integer &gt;= order &lt; nsamples
+    for dimi, (w, o) in enumerate(zip(windows, orders)):
+        w = np.clip(abs(w), o, shape[dimi] - 1)
+        windows[dimi] = w
+
+    windows = np.asarray(windows, dtype=int)
+    windows[windows % 2 == 0] += 1
+
+    return orders, windows</div>
+
+
+
+<div class="viewcode-block" id="sobel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.convolve.filter.sobel.html#sofia_redux.toolkit.convolve.filter.sobel">[docs]</a>
+def sobel(input_array, kderiv=(-1, 0, 1), kperp=(1, 2, 1), pnorm=1, doabs=True,
+          axis=None, mode=&#39;reflect&#39;, cval=0.0, origin=0):
+    &quot;&quot;&quot;
+    Edge enhancement Sobel filter for n-dimensional images.
+
+    Applies a Sobel filter over each dimension and returns the p-norm
+    (default=1).  When calculating G_i for dimension i, the
+    convolution kernel will be formed from a convolution of `kaxis` along
+    dimension i, and `kother` along all remaining dimensions.
+
+    Parameters
+    ----------
+    input_array : array_like of (int or float)
+        (shape) in n-features
+    kderiv : array, optional
+        The kernel operator in the derivate direction.
+    kperp : array, optional
+        The kernel operator perpendicular to the derivative direction.
+    pnorm : int or float, optional
+        If axis is `None`, &#39;p&#39; value of the p-norm applied to the addition
+        of convolution results over each axis.
+    doabs : bool, optional
+        If True, and `axis=None`, the absolute value of the result for each
+        axis will be taken when calculating the p-norm for the final result.
+    axis : int, optional
+        If provided, the sobel filter will only be applied over this axis.
+        Otherwise, the results for each axis will be combined according to
+        `pnorm` and `doabs`.
+    mode : {&#39;reflect&#39;, &#39;constant&#39;, &#39;nearest&#39;, &#39;mirror&#39;, &#39;wrap&#39;}, optional
+        The `mode` parameter determines how the input array is extended
+        beyond its boundaries. Default is &#39;reflect&#39;. Behavior for each valid
+        value is as follows:
+
+        &#39;reflect&#39; (`d c b a | a b c d | d c b a`)
+            The input is extended by reflecting about the edge of the last
+            pixel.
+
+        &#39;constant&#39; (`k k k k | a b c d | k k k k`)
+            The input is extended by filling all values beyond the edge with
+            the same constant value, defined by the `cval` parameter.
+
+        &#39;nearest&#39; (`a a a a | a b c d | d d d d`)
+            The input is extended by replicating the last pixel.
+
+        &#39;mirror&#39; (`d c b | a b c d | c b a`)
+            The input is extended by reflecting about the center of the last
+            pixel.
+
+        &#39;wrap&#39; (`a b c d | a b c d | a b c d`)
+            The input is extended by wrapping around to the opposite edge.
+    cval : scalar, optional
+        Value to fill past edges of input if `mode` is &#39;constant&#39;. Default
+        is 0.0.
+    origin : int, optional
+        Controls the placement of the filter on the input array&#39;s pixels.
+        A value of 0 (the default) centers the filter over the pixel, with
+        positive values shifting the filter to the left, and negative ones
+        to the right.
+
+    Returns
+    -------
+    edges : numpy.ndarray
+        (shape) of the same type as `image`.
+    &quot;&quot;&quot;
+    input_array = np.asarray(input_array)
+    if pnorm == 0:
+        raise ValueError(&quot;pnorm must not equal zero&quot;)
+
+    if axis is not None:
+        result = input_array.copy()
+        for dimi in range(input_array.ndim):
+            kernel = kderiv if dimi == axis else kperp
+            correlate1d(result, kernel, axis=dimi, output=result,
+                        mode=mode, cval=cval, origin=origin)
+    else:
+        result = np.zeros_like(input_array)
+        for one_axis in range(input_array.ndim):
+            output = np.copy(input_array)
+            for dimi in range(input_array.ndim):
+                kernel = kderiv if dimi == one_axis else kperp
+                correlate1d(output, kernel, axis=dimi, output=output,
+                            mode=mode, cval=cval, origin=origin)
+            if doabs:
+                output = abs(output)
+
+            if pnorm == 1:
+                result += output
+            else:
+                result += output ** pnorm
+
+        if pnorm != 1:
+            result = result ** (1.0 / pnorm)
+
+    return result</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

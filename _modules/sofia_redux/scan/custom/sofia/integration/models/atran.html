@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.integration.models.atran &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.integration.models.atran</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC
+
+from astropy import units
+from astropy.units import imperial
+import numpy as np
+
+from sofia_redux.scan.utilities.utils import get_float_list
+
+
+__all__ = [&#39;AtranModel&#39;]
+
+assert imperial
+
+
+<div class="viewcode-block" id="AtranModel">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.sofia.integration.models.atran.AtranModel.html#sofia_redux.scan.custom.sofia.integration.models.atran.AtranModel">[docs]</a>
+class AtranModel(ABC):
+
+    units.imperial.enable()
+    kft = 1000.0 * units.Unit(&#39;ft&#39;)
+    reference_airmass = np.sqrt(2)  # 45 degrees elevation
+    reference_altitude = 41 * kft
+
+    def __init__(self, options):
+        &quot;&quot;&quot;
+        Initialize the ATRAN model for SOFIA.
+
+        The ATRAN model is used to derive the relative transmission correction
+        factor for a given altitude above the Earth&#39;s surface, observing a
+        source at a given elevation.  This can be used to determine the
+        atmospheric opacity.  Please see
+        :func:`AtranModel.get_relative_transmission` and
+        :func:`AtranModel.get_zenith_tau` for further details.
+
+        The options should contain the following keywords::
+
+          - amcoeffs: The polynomial coefficients defining the air mass
+          factor as a function of elevation from the reference air mass.
+          - altcoeffs : The polynomial coefficients defining the altitude
+          factor as a function of altitude from the reference altitude.
+          - reference : The reference transmission factor.
+
+        Parameters
+        ----------
+        options : dict
+        &quot;&quot;&quot;
+        self.am_coeffs = None
+        self.alt_coeffs = None
+        self.reference_transmission = 1.0
+        self.poly_am = None
+        self.poly_alt = None
+        self.configure_options(options)
+
+<div class="viewcode-block" id="AtranModel.configure_options">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.sofia.integration.models.atran.AtranModel.html#sofia_redux.scan.custom.sofia.integration.models.atran.AtranModel.configure_options">[docs]</a>
+    def configure_options(self, options):
+        &quot;&quot;&quot;
+        Parse the options into the model.
+
+        Parameters
+        ----------
+        options : dict
+            The options must contain the following keys: amcoeffs, altcoeffs,
+            and reference.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not isinstance(options, dict):
+            raise ValueError(f&quot;Options must be a {dict}.  Received {options}.&quot;)
+
+        am_coeffs = get_float_list(options.get(&#39;amcoeffs&#39;))
+        if am_coeffs is None:
+            raise ValueError(&quot;Undefined option: &#39;atran.amcoeffs&#39;&quot;)
+        alt_coeffs = get_float_list(options.get(&#39;altcoeffs&#39;))
+        if alt_coeffs is None:
+            raise ValueError(&quot;Undefined option: &#39;atran.altcoeffs&#39;&quot;)
+        reference = options.get(&#39;reference&#39;)
+        if reference is None:
+            raise ValueError(&quot;Undefined option: &#39;atran.reference&#39;&quot;)
+
+        self.am_coeffs = np.array([float(x) for x in am_coeffs])
+        self.poly_am = np.poly1d(self.am_coeffs[::-1])
+        self.alt_coeffs = np.array([float(x) for x in alt_coeffs])
+        self.poly_alt = np.poly1d(self.alt_coeffs[::-1])
+        self.reference_transmission = float(reference)</div>
+
+
+<div class="viewcode-block" id="AtranModel.get_relative_transmission">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.sofia.integration.models.atran.AtranModel.html#sofia_redux.scan.custom.sofia.integration.models.atran.AtranModel.get_relative_transmission">[docs]</a>
+    def get_relative_transmission(self, altitude, elevation):
+        &quot;&quot;&quot;
+        Model the relative transmission at the given altitude and elevation.
+
+        The relative transmission (c) is given as::
+
+            c = altitude_factor * air_mass_factor
+
+        where::
+
+            delta_alt = altitude - reference_altitude
+            air_mass = 1 / sin(elevation)
+            delta_atm = air_mass - reference_air_mass
+
+            altitude_factor = sum_i(alt_coeff[i] * delta_alt^i)
+            air_mass_factor = sum_i(atm_coeff[i] * delta_atm^i)
+
+        The reference air mass is generally taken to be sqrt(2), equivalent to
+        an elevation of 45 degrees, and the reference altitude for SOFIA is
+        41,000 ft.
+
+        Parameters
+        ----------
+        altitude : float or units.Quantity
+            The altitude above the Earth&#39;s surface.  If a float value is
+            provided, it is assumed to be in kilo-feet (1000 feet).
+        elevation : float or units.Quantity
+            The elevation of the observed source.  If a float value is
+            provided, it is assumed to be in degrees.
+
+        Returns
+        -------
+        relative_transmission : float
+        &quot;&quot;&quot;
+        if not isinstance(elevation, units.Quantity):
+            elevation = elevation * units.Unit(&#39;degree&#39;)
+
+        if isinstance(altitude, units.Quantity):
+            # kft is not a thing, but we want this in imperial units for later
+            altitude = altitude.to(units.Unit(&#39;ft&#39;))
+        else:
+            altitude = altitude * self.kft
+
+        air_mass = 1.0 / np.sin(elevation)
+        if isinstance(air_mass, units.Quantity):
+            air_mass = air_mass.value
+
+        delta_air_mass = air_mass - self.reference_airmass
+        air_mass_factor = self.poly_am(delta_air_mass)
+
+        delta_altitude = (altitude - self.reference_altitude) / self.kft
+        delta_altitude = delta_altitude.decompose().value
+        altitude_factor = self.poly_alt(delta_altitude)
+
+        return air_mass_factor * altitude_factor</div>
+
+
+<div class="viewcode-block" id="AtranModel.get_zenith_tau">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.sofia.integration.models.atran.AtranModel.html#sofia_redux.scan.custom.sofia.integration.models.atran.AtranModel.get_zenith_tau">[docs]</a>
+    def get_zenith_tau(self, altitude, elevation):
+        &quot;&quot;&quot;
+        Model the atmospheric opacity for a given altitude and elevation.
+
+        The opacity (tau) can be estimated as::
+
+            zenith_tau = -log(ref * c) * sin(elevation)
+
+        This may be rewritten as::
+
+            transmission = exp(-zenith_tau * air_mass)
+
+        where ref is the reference transmission of this model, and c is the
+        relative transmission returned by
+        :func:`AtranModel.get_relative_transmission`.
+
+        Parameters
+        ----------
+        altitude : float or units.Quantity
+            The altitude above the Earth&#39;s surface.  If a float value is
+            provided, it is assumed to be in kilo-feet (1000 feet).
+        elevation : float or units.Quantity
+            The elevation of the observed source.  If a float value is
+            provided, it is assumed to be in degrees.
+
+        Returns
+        -------
+        tau : float
+        &quot;&quot;&quot;
+        if not isinstance(elevation, units.Quantity):
+            elevation = elevation * units.Unit(&#39;degree&#39;)
+
+        sin_elevation = np.sin(elevation).value
+        c = self.get_relative_transmission(altitude, elevation)
+        tau = -np.log(self.reference_transmission * c) * sin_elevation
+        return tau</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

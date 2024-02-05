@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.fifi_ls.combine_grating_scans &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.fifi_ls.combine_grating_scans</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import os
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.toolkit.utilities \
+    import (gethdul, write_hdul, hdinsert, multitask)
+
+__all__ = [&#39;get_lambda_overlap&#39;, &#39;combine_extensions&#39;,
+           &#39;combine_grating_scans&#39;, &#39;wrap_combine_grating_scans&#39;]
+
+
+<div class="viewcode-block" id="get_lambda_overlap">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.combine_grating_scans.get_lambda_overlap.html#sofia_redux.instruments.fifi_ls.combine_grating_scans.get_lambda_overlap">[docs]</a>
+def get_lambda_overlap(hdul):
+    &quot;&quot;&quot;
+    Get overlapping wavelengths for all extensions.
+
+    Parameters
+    ----------
+    hdul : fits.HDUList
+
+    Returns
+    -------
+    2-tuple
+        overlap minimum, overlap maximum
+    &quot;&quot;&quot;
+    overlap_min, overlap_max = [], []
+    ng = hdul[0].header.get(&#39;NGRATING&#39;, 1)
+
+    for idx in range(ng):
+        name = f&#39;LAMBDA_G{idx}&#39;
+        w = hdul[name].data
+        overlap_min.append(w.min())
+        overlap_max.append(w.max())
+    overlap_min = max(overlap_min)
+    overlap_max = min(overlap_max)
+    return overlap_min, overlap_max</div>
+
+
+
+<div class="viewcode-block" id="combine_extensions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.combine_grating_scans.combine_extensions.html#sofia_redux.instruments.fifi_ls.combine_grating_scans.combine_extensions">[docs]</a>
+def combine_extensions(hdul, correct_bias=False):
+    &quot;&quot;&quot;
+    Combine all extensions into a single extension.
+
+    Parameters
+    ----------
+    hdul : fits.HDUList
+    correct_bias : bool, optional
+        If True, additive offset between separate grating scans will
+        be removed, using overlapping wavelength regions to determine
+        the value of the bias.
+
+    Returns
+    -------
+    fits.HDUList
+    &quot;&quot;&quot;
+    # get number of grating scans
+    ng = hdul[0].header.get(&#39;NGRATING&#39;, 1)
+
+    # check data dimensions for first flux extension
+    nd = hdul[&#39;FLUX_G0&#39;].data.ndim
+    if nd &gt; 2 and ng &gt; 1:
+        msg = &#39;Grating scans are not supported in OTF mode.&#39;
+        log.error(msg)
+        return
+
+    # for single grating scan, just grab data from input
+    if ng == 1:
+        fluxes = hdul[&#39;FLUX_G0&#39;].data
+        stddevs = hdul[&#39;STDDEV_G0&#39;].data
+        lambdas = hdul[&#39;LAMBDA_G0&#39;].data
+
+        # expand x and y values to match data shape
+        xes = np.zeros_like(fluxes)
+        yes = np.zeros_like(fluxes)
+        ras = np.zeros_like(fluxes)
+        decs = np.zeros_like(fluxes)
+        xes[..., :] = hdul[&#39;XS_G0&#39;].data[..., :]
+        yes[..., :] = hdul[&#39;YS_G0&#39;].data[..., :]
+        ras[..., :] = hdul[&#39;RA_G0&#39;].data[..., :]
+        decs[..., :] = hdul[&#39;DEC_G0&#39;].data[..., :]
+
+        exthdr = hdul[&#39;FLUX_G0&#39;].header
+        mean_bg = [exthdr.get(&#39;BGLEVL_A&#39;, 0),
+                   exthdr.get(&#39;BGLEVL_B&#39;, 0)]
+    else:
+        lambdas = np.zeros((16 * ng, 25))
+        fluxes = np.zeros_like(lambdas)
+        stddevs = np.zeros_like(lambdas)
+        xes = np.zeros_like(lambdas)
+        yes = np.zeros_like(lambdas)
+        ras = np.zeros_like(lambdas)
+        decs = np.zeros_like(lambdas)
+        mval = np.full((ng, 25), np.nan)
+        bgval = np.zeros((ng, 2))
+        overlap_min, overlap_max = 0, 0
+        if correct_bias:
+            overlap_min, overlap_max = get_lambda_overlap(hdul)
+            if overlap_min &gt;= overlap_max:
+                log.info(&quot;No overlapping wavelengths; &quot;
+                         &quot;not correcting bias offset&quot;)
+                correct_bias = False
+
+        for idx in range(ng):
+            name = f&#39;FLUX_G{idx}&#39;
+            widx = np.arange(16 * idx, 16 * (idx + 1))
+            data = hdul[name].data
+            stddev = hdul[name.replace(&#39;FLUX&#39;, &#39;STDDEV&#39;)].data
+            w = hdul[name.replace(&#39;FLUX&#39;, &#39;LAMBDA&#39;)].data
+
+            # Read the raw background levels from the extension headers
+            # for averaging
+            exthdr = hdul[name].header
+            bgval[idx, :] = np.array(
+                [exthdr.get(&#39;BGLEVL_A&#39;, 0),
+                 exthdr.get(&#39;BGLEVL_B&#39;, 0)])
+            lambdas[widx, :] = w
+            fluxes[widx, :] = data
+            stddevs[widx, :] = stddev
+            xes[widx, :] = hdul[name.replace(&#39;FLUX&#39;, &#39;XS&#39;)].data
+            yes[widx, :] = hdul[name.replace(&#39;FLUX&#39;, &#39;YS&#39;)].data
+            ras[widx, :] = hdul[name.replace(&#39;FLUX&#39;, &#39;RA&#39;)].data
+            decs[widx, :] = hdul[name.replace(&#39;FLUX&#39;, &#39;DEC&#39;)].data
+
+            # If correcting bias, get the mean value of all overlapping
+            # data for this extension
+            if correct_bias:
+                midx = (w[:, 0] &gt;= overlap_min) &amp; (w[:, 0] &lt;= overlap_max)
+                if midx.sum() &gt; 3:
+                    mval[idx, :] = np.nanmean(data[midx, :], axis=0)
+                else:
+                    mval[idx, :] = np.nan
+
+        if correct_bias:
+            # Fix bias offset for each grating position at each spaxel
+            mlevel = np.resize(np.nanmean(mval, axis=0), (ng, 25))
+            diff = mlevel - mval
+            diff[np.isnan(diff)] = 0
+
+            for idx in range(ng):
+                widx = np.arange(idx * 16, (idx + 1) * 16)
+                fluxes[widx, :] = fluxes[widx, :] + diff[idx, :]
+
+        # sort by wavelength
+        sortidx = lambdas.argsort(axis=0)
+        static_inds = np.indices(lambdas.shape)
+        lambdas = lambdas[sortidx, static_inds[1]]
+        fluxes = fluxes[sortidx, static_inds[1]]
+        stddevs = stddevs[sortidx, static_inds[1]]
+        xes = xes[sortidx, static_inds[1]]
+        yes = yes[sortidx, static_inds[1]]
+        ras = ras[sortidx, static_inds[1]]
+        decs = decs[sortidx, static_inds[1]]
+
+        mean_bg = np.nanmean(bgval, axis=0)
+
+    # Update header with combined values
+
+    result = fits.HDUList(fits.PrimaryHDU(header=hdul[0].header))
+    primehead = result[0].header
+
+    hdinsert(primehead, &#39;BGLEVL_A&#39;, mean_bg[0],
+             comment=&#39;Background level in A nod (ADU/s/spaxel)&#39;)
+    hdinsert(primehead, &#39;BGLEVL_B&#39;, mean_bg[1],
+             comment=&#39;Background level in B nod (ADU/s/spaxel)&#39;)
+    hdinsert(primehead, &#39;PRODTYPE&#39;, &#39;scan_combined&#39;)
+    outname = os.path.basename(hdul[0].header.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;))
+    outname = outname.replace(&#39;FLF&#39;, &#39;SCM&#39;).replace(&#39;XYC&#39;, &#39;SCM&#39;)
+    hdinsert(primehead, &#39;FILENAME&#39;, outname)
+    primehead[&#39;HISTORY&#39;] = &quot;Grating scans combined into single extension&quot;
+
+    exthdr = fits.Header()
+    exthdr[&#39;BUNIT&#39;] = (&#39;adu/(Hz s)&#39;, &#39;Data units&#39;)
+    result.append(fits.ImageHDU(fluxes, header=exthdr, name=&#39;FLUX&#39;))
+    result.append(fits.ImageHDU(stddevs, header=exthdr, name=&#39;STDDEV&#39;))
+    exthdr[&#39;BUNIT&#39;] = &#39;um&#39;
+    result.append(fits.ImageHDU(lambdas, header=exthdr, name=&#39;LAMBDA&#39;))
+    exthdr[&#39;BUNIT&#39;] = &#39;arcsec&#39;
+    result.append(fits.ImageHDU(xes, header=exthdr, name=&#39;XS&#39;))
+    result.append(fits.ImageHDU(yes, header=exthdr, name=&#39;YS&#39;))
+    exthdr[&#39;BUNIT&#39;] = &#39;hourangle&#39;
+    result.append(fits.ImageHDU(ras, header=exthdr, name=&#39;RA&#39;))
+    exthdr[&#39;BUNIT&#39;] = &#39;degree&#39;
+    result.append(fits.ImageHDU(decs, header=exthdr, name=&#39;DEC&#39;))
+    return result</div>
+
+
+
+<div class="viewcode-block" id="combine_grating_scans">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.combine_grating_scans.combine_grating_scans.html#sofia_redux.instruments.fifi_ls.combine_grating_scans.combine_grating_scans">[docs]</a>
+def combine_grating_scans(filename, correct_bias=False,
+                          write=False, outdir=None):
+    &quot;&quot;&quot;
+    Combine separate grating positions in FIFI-LS data.
+
+    Combines separate grating positions in FIFI-LS data into a
+    single extension.  Will produce an unevenly spaced wavelength
+    grid if multiple grating (inductosyn) extensions exist in the
+    input file.
+
+    The procedure is:
+
+    1. Read the wavelength values for all grating scans to determine
+       overlapping wavelength regions.
+    2. Loop over the grating scan extensions, reading the flux from
+       each. Calculate the mean value of any overlapping wavelength
+       regions. Store all data in an unsorted cube.
+    3. Loop over the spaxels in the cube, correcting the flux to the
+       mean value of all overlap regions, then sorting the data by
+       its associated wavelength value.
+    4. Create FITS file and (optionally) write results to disk.
+
+    The output FITS file contains FLUX, STDDEV, LAMBDA, XS, YS, RA, and DEC
+    data arrays.  For most data, all arrays have dimension 25 x nw, where nw
+    is the combined number of wavelength samples across all input grating
+    scans.
+
+    For OTF data, only one grating scan is expected or allowed, so nw
+    is always 16. Output cubes for FLUX, STDDEV, XS, YS, RA, and DEC are
+    25 x 16 x n_ramp.  The LAMBDA array is 25 x 16.
+
+    Parameters
+    ----------
+    filename : str
+        Path to the file to be combined
+    correct_bias : bool, optional
+        If True, additive offset between separate grating scans will
+        be removed, using overlapping wavelength regions to determine
+        the value of the bias.
+    outdir : str, optional
+        Directory path to write output.  If None, output files
+        will be written to the same directory as the input files.
+    write : bool, optional
+        If True, write to disk and return the path to the output
+        file.  If False, return the HDUL.  The output filename is
+        created from the input filename, with the suffix &#39;XYC&#39; or
+        &#39;FLF&#39; replaced with &#39;SCM&#39;.
+
+    Returns
+    -------
+    fits.HDUList or str
+        Either the HDU (if write is False) or the filename of the output file
+        (if write is True)
+    &quot;&quot;&quot;
+    if isinstance(outdir, str):
+        if not os.path.isdir(outdir):
+            log.error(&quot;Output directory %s does not exist&quot; % outdir)
+            return
+
+    hdul = gethdul(filename, verbose=True)
+    if hdul is None:
+        return
+    if not isinstance(filename, str):
+        filename = hdul[0].header[&#39;FILENAME&#39;]
+    if not isinstance(outdir, str):
+        outdir = os.path.dirname(filename)
+
+    result = combine_extensions(hdul, correct_bias=correct_bias)
+    if result is None:
+        log.error(&#39;Combination failed&#39;)
+        return
+
+    if not write:
+        return result
+    else:
+        return write_hdul(result, outdir=outdir, overwrite=True)</div>
+
+
+
+def combine_scans_wrap_helper(_, kwargs, filename):
+    return combine_grating_scans(filename, **kwargs)
+
+
+<div class="viewcode-block" id="wrap_combine_grating_scans">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.combine_grating_scans.wrap_combine_grating_scans.html#sofia_redux.instruments.fifi_ls.combine_grating_scans.wrap_combine_grating_scans">[docs]</a>
+def wrap_combine_grating_scans(files, outdir=None, correct_bias=True,
+                               allow_errors=False, write=False,
+                               jobs=None):
+    &quot;&quot;&quot;
+    Wrapper for combine_grating_scans over multiple files.
+
+    See `combine_grating_scans` for full description of reduction on a
+    single file.
+
+    Parameters
+    ----------
+    files : array_like of str
+        paths to files to be scan-combined
+    outdir : str, optional
+        Directory path to write output.  If None, output files
+        will be written to the same directory as the input files.
+    correct_bias : bool, optional
+        If True, additive offset between separate grating scans will
+        be removed, using overlapping wavelength regions to determine
+        the value of the bias.
+    allow_errors : bool, optional
+        If True, return all created files on error.  Otherwise, return None
+    write : bool, optional
+        If True, write the output to disk and return the filename instead
+        of the HDU.
+    jobs : int, optional
+        Specifies the maximum number of concurrently running jobs.
+        Values of 0 or 1 will result in serial processing.  A negative
+        value sets jobs to `n_cpus + 1 + jobs` such that -1 would use
+        all cpus, and -2 would use all but one cpu.
+
+    Returns
+    -------
+    tuple of str
+        output filenames written to disk
+    &quot;&quot;&quot;
+    if isinstance(files, str):
+        files = [files]
+    if not hasattr(files, &#39;__len__&#39;):
+        log.error(&quot;Invalid input files type (%s)&quot; % repr(files))
+        return
+
+    kwargs = {&#39;outdir&#39;: outdir, &#39;write&#39;: write, &#39;correct_bias&#39;: correct_bias}
+
+    output = multitask(combine_scans_wrap_helper, files, None, kwargs,
+                       jobs=jobs)
+
+    failure = False
+    result = []
+    for x in output:
+        if x is None:
+            failure = True
+        else:
+            result.append(x)
+    if failure:
+        if len(result) &gt; 0:
+            if not allow_errors:
+                log.error(&quot;Errors were encountered but the following &quot;
+                          &quot;files were created:\n%s&quot; % &#39;\n&#39;.join(result))
+                return
+
+    return tuple(result)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.source_models.astro_data_2d &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.source_models.astro_data_2d</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import abstractmethod
+from astropy import log
+import os
+import numpy as np
+
+from sofia_redux.scan.source_models.astro_model_2d import AstroModel2D
+from sofia_redux.scan.utilities.range import Range
+from sofia_redux.scan.flags.array_flags import ArrayFlags
+
+__all__ = [&#39;AstroData2D&#39;]
+
+
+<div class="viewcode-block" id="AstroData2D">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D">[docs]</a>
+class AstroData2D(AstroModel2D):
+
+    FLAG_MASK = ArrayFlags.flags.MASK
+
+    def __init__(self, info, reduction=None):
+        &quot;&quot;&quot;
+        Initialize an astronomical 2D model of the source data.
+
+        The AstroData2D is an abstract class that extends the
+        :class:`AstroModel2D` to operate on the
+        :class:`sofia_redux.scan.source_models.map.observation_2d.Observaton2D`
+        class.
+
+        Parameters
+        ----------
+        info : sofia_redux.scan.info.info.Info
+            The Info object which should belong to this source model.
+        reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
+            The reduction for which this source model should be applied.
+        &quot;&quot;&quot;
+        super().__init__(info=info, reduction=reduction)
+
+<div class="viewcode-block" id="AstroData2D.create_from">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.create_from">[docs]</a>
+    def create_from(self, scans, assign_scans=True):
+        &quot;&quot;&quot;
+        Initialize model from scans.
+
+        Sets the model scans to those provided, and the source model for each
+        scan as this.  All integration gains are normalized to the first scan.
+        If the first scan is non-sidereal, the system will be forced to an
+        equatorial frame.
+
+        Parameters
+        ----------
+        scans : list (sofia_redux.scan.scan.scan.Scan)
+            A list of scans from which to create the model.
+        assign_scans : bool, optional
+            If `True`, assign the scans to this source model.  Otherwise,
+            there will be no hard link between the scans and source model.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().create_from(scans, assign_scans=assign_scans)
+        if self.has_option(&#39;unit&#39;):
+            self.get_data().set_unit(self.configuration.get_string(&#39;unit&#39;))</div>
+
+
+    @property
+    def flagspace(self):
+        &quot;&quot;&quot;
+        Return the flagspace for this source model.
+
+        Returns
+        -------
+        ArrayFlags
+        &quot;&quot;&quot;
+        return ArrayFlags
+
+    @property
+    def mask_flag(self):
+        &quot;&quot;&quot;
+        Return the masking flag for this source model.
+
+        Returns
+        -------
+        flag : enum.Enum
+        &quot;&quot;&quot;
+        return self.flagspace.convert_flag(self.FLAG_MASK)
+
+<div class="viewcode-block" id="AstroData2D.get_weights">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.get_weights">[docs]</a>
+    def get_weights(self):
+        &quot;&quot;&quot;
+        Return the weight map for the source model.
+
+        Returns
+        -------
+        weight_map : sofia_redux.scan.source_models.maps.weight_map.WeightMap
+        &quot;&quot;&quot;
+        return self.get_data().get_weights()</div>
+
+
+<div class="viewcode-block" id="AstroData2D.get_noise">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.get_noise">[docs]</a>
+    def get_noise(self):
+        &quot;&quot;&quot;
+        Return the noise map for the source model.
+
+        Returns
+        -------
+        noise_map : sofia_redux.scan.source_models.maps.noise_map.NoiseMap
+        &quot;&quot;&quot;
+        return self.get_data().get_noise()</div>
+
+
+<div class="viewcode-block" id="AstroData2D.get_significance">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.get_significance">[docs]</a>
+    def get_significance(self):
+        &quot;&quot;&quot;
+        Return the data significance map (signal-to-noise).
+
+        Returns
+        -------
+        sofia_redux.scan.source_models.maps.significance_map.SignificanceMap
+        &quot;&quot;&quot;
+        return self.get_data().get_significance()</div>
+
+
+<div class="viewcode-block" id="AstroData2D.get_exposures">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.get_exposures">[docs]</a>
+    def get_exposures(self):
+        &quot;&quot;&quot;
+        Return the exposure map for the source model.
+
+        Returns
+        -------
+        sofia_redux.scan.source_models.maps.exposure_map.ExposureMap
+        &quot;&quot;&quot;
+        return self.get_data().get_exposures()</div>
+
+
+<div class="viewcode-block" id="AstroData2D.end_accumulation">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.end_accumulation">[docs]</a>
+    def end_accumulation(self):
+        &quot;&quot;&quot;
+        End map accumulation (typically scale by inverse weights).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.get_data().end_accumulation()</div>
+
+
+<div class="viewcode-block" id="AstroData2D.get_executor">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.get_executor">[docs]</a>
+    def get_executor(self):
+        &quot;&quot;&quot;
+        Return the source map parallel executor.
+
+        The executor is not currently implemented in any way.
+
+        Returns
+        -------
+        executor : object
+        &quot;&quot;&quot;
+        return self.get_data().executor</div>
+
+
+<div class="viewcode-block" id="AstroData2D.set_executor">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.set_executor">[docs]</a>
+    def set_executor(self, executor):
+        &quot;&quot;&quot;
+        Set the parallel executor for the source.
+
+        The executor is not currently implemented in any way.
+
+        Parameters
+        ----------
+        executor : object
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.get_data().set_executor(executor)</div>
+
+
+<div class="viewcode-block" id="AstroData2D.get_parallel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.get_parallel">[docs]</a>
+    def get_parallel(self):
+        &quot;&quot;&quot;
+        Get the number of parallel operations for the source model.
+
+        Returns
+        -------
+        threads : int
+        &quot;&quot;&quot;
+        return self.get_data().parallelism</div>
+
+
+<div class="viewcode-block" id="AstroData2D.set_parallel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.set_parallel">[docs]</a>
+    def set_parallel(self, threads):
+        &quot;&quot;&quot;
+        Set the number of parallel operations for the source model.
+
+        Parameters
+        ----------
+        threads : int
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.get_data().set_parallel(threads)</div>
+
+
+<div class="viewcode-block" id="AstroData2D.no_parallel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.no_parallel">[docs]</a>
+    def no_parallel(self):
+        &quot;&quot;&quot;
+        Disable parallel processing for the model.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.get_data().set_parallel(0)</div>
+
+
+<div class="viewcode-block" id="AstroData2D.clear_content">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.clear_content">[docs]</a>
+    def clear_content(self):
+        &quot;&quot;&quot;
+        Clear the data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.get_data().clear()</div>
+
+
+<div class="viewcode-block" id="AstroData2D.is_empty">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.is_empty">[docs]</a>
+    def is_empty(self):
+        &quot;&quot;&quot;
+        Return whether source map is empty.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self.get_data().count_points() == 0</div>
+
+
+<div class="viewcode-block" id="AstroData2D.count_points">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.count_points">[docs]</a>
+    def count_points(self):
+        &quot;&quot;&quot;
+        Return the number of points in the source map.
+
+        Returns
+        -------
+        points : int
+        &quot;&quot;&quot;
+        return self.get_data().count_points()</div>
+
+
+<div class="viewcode-block" id="AstroData2D.get_chi2">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.get_chi2">[docs]</a>
+    def get_chi2(self, robust=False):
+        &quot;&quot;&quot;
+        Get the Chi-squared statistic.
+
+        Parameters
+        ----------
+        robust : bool, optional
+            If `True`, use the robust (median) method for determining variance.
+            Otherwise, use a weighted mean.
+
+        Returns
+        -------
+        chi2 : float
+        &quot;&quot;&quot;
+        return self.get_significance().variance(robust=robust)</div>
+
+
+<div class="viewcode-block" id="AstroData2D.smooth">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.smooth">[docs]</a>
+    def smooth(self):
+        &quot;&quot;&quot;
+        Smooth the source model.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.smooth_to(self.smoothing)</div>
+
+
+<div class="viewcode-block" id="AstroData2D.filter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.filter">[docs]</a>
+    def filter(self, allow_blanking=False):
+        &quot;&quot;&quot;
+        Apply filtering to the source.
+
+        Parameters
+        ----------
+        allow_blanking : bool, optional
+            If `True`, allow the blanking value to be determined from the
+            &#39;source.filter.blank&#39; configuration value.  Otherwise, the filter
+            blanking value will be set to NaN.  The filter blanking level
+            defines the range of values prior to filter smoothing that are
+            permitted during the convolution.  Any values &gt; filter_level, or
+            values &lt; filter_level will be marked as invalid and not included.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if (not self.configuration.get_bool(&#39;source.filter&#39;)
+                or self.get_source_size() &lt;= 0):
+            self.reset_filtering()
+            return
+
+        if allow_blanking:
+            filter_blanking = self.configuration.get_float(
+                &#39;source.filter.blank&#39;, default=np.nan)
+        else:
+            filter_blanking = np.nan
+
+        filter_fwhm = self.get_filter_scale()
+        use_fft = self.configuration.get_string(&#39;source.filter.type&#39;) == &#39;fft&#39;
+        self.filter_source(
+            filter_fwhm=filter_fwhm,
+            filter_blanking=filter_blanking,
+            use_fft=use_fft)</div>
+
+
+<div class="viewcode-block" id="AstroData2D.get_filter_scale">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.get_filter_scale">[docs]</a>
+    def get_filter_scale(self):
+        &quot;&quot;&quot;
+        Return the filter scale.
+
+        Returns
+        -------
+        filter_fwhm : astropy.units.Quantity
+            The FWHM of the filter scale.
+        &quot;&quot;&quot;
+        directive = self.configuration.get_string(&#39;source.filter.fwhm&#39;,
+                                                  default=&#39;auto&#39;)
+        try:
+            fwhm = float(directive) * self.info.instrument.get_size_unit()
+        except ValueError:
+            fwhm = 5 * self.get_source_size()
+
+        return fwhm</div>
+
+
+<div class="viewcode-block" id="AstroData2D.process_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.process_scan">[docs]</a>
+    def process_scan(self, scan):
+        &quot;&quot;&quot;
+        Process a scan.
+
+        Parameters
+        ----------
+        scan : sofia_redux.scan.scan.scan.Scan
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        data = self.get_data()
+        self.end_accumulation()
+        self.add_base()
+
+        if self.enable_level:
+            self.level(robust=True)
+
+        if self.configuration.get_bool(&#39;source.despike&#39;):
+            despike_level = self.configuration.get_float(
+                &#39;source.despike.level&#39;, default=10)
+            data.despike(despike_level)
+
+        self.filter(allow_blanking=False)
+
+        scan.weight = 1.0
+        if self.configuration.get_bool(&#39;weighting.scans&#39;):
+            method = self.configuration.get_string(
+                &#39;weighting.scans.method&#39;, default=&#39;rms&#39;)
+            scan.weight = 1.0 / self.get_chi2(robust=(method == &#39;robust&#39;))
+            if not np.isfinite(scan.weight):
+                scan.weight = 0.0
+
+        if self.configuration.get_bool(&#39;scanmaps&#39;):
+            file_name = os.path.join(self.reduction.work_path,
+                                     f&#39;scan-{scan.mjd}-{scan.get_id()}.fits&#39;)
+            self.write_fits(file_name)</div>
+
+
+<div class="viewcode-block" id="AstroData2D.level">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.level">[docs]</a>
+    def level(self, robust=False):
+        &quot;&quot;&quot;
+        Level the source model data.
+
+        Parameters
+        ----------
+        robust : bool, optional
+            If `True`, use the robust (weighted median) method to level data.
+            Otherwise, use a weighted mean.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.get_data().level(robust=robust)</div>
+
+
+<div class="viewcode-block" id="AstroData2D.process">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.process">[docs]</a>
+    def process(self):
+        &quot;&quot;&quot;
+        Process the source model.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.end_accumulation()
+        self.next_generation()  # increment the map generation
+        self.info.instrument.resolution = self.get_average_resolution()
+
+        if self.enable_level:
+            self.add_process_brief(&#39;{level} &#39;)
+
+        if self.configuration.get_bool(&#39;source.despike&#39;):
+            self.add_process_brief(&#39;{despike} &#39;)
+
+        if (self.configuration.get_bool(&#39;source.filter&#39;)
+                and self.get_source_size() &gt; 0):
+            self.add_process_brief(&#39;{filter} &#39;)
+
+        if (self.enable_weighting
+                and self.configuration.get_bool(&#39;weighting.scans&#39;)):
+            for scan in self.scans:
+                if scan.weight != 0:
+                    message = f&#39;{{{1.0 / scan.weight:.2f}x}}&#39;
+                else:
+                    message = &quot;{inf}&quot;
+                self.add_process_brief(message)
+
+        if self.has_option(&#39;source.redundancy&#39;):
+            self.add_process_brief(&#39;(check) &#39;)
+            redundancy = self.configuration.get_int(&#39;source.redundancy&#39;)
+            min_integration_time = (
+                self.info.instrument.integration_time * redundancy)
+            exposures = self.get_exposures()
+            min_integration_time = min_integration_time.to(&#39;second&#39;).value
+            exposures.restrict_range(Range(min_val=min_integration_time))
+
+        smooth = self.configuration.get_string(
+            &#39;smooth&#39;, default=&#39;None&#39;).lower().strip()
+        if smooth != &#39;none&#39; and not self.configuration.get_bool(
+                &#39;smooth.external&#39;):
+            self.add_process_brief(&#39;(smooth) &#39;)
+            self.smooth()
+
+        # Apply the filtering to the final map, to reflect the correct blanking
+        # level
+        if self.configuration.get_bool(&#39;source.filter&#39;):
+            self.add_process_brief(&#39;(filter) &#39;)
+            self.filter(allow_blanking=True)
+            self.filter_beam_correct()
+
+        # Noise and exposure clip after smoothing for evened-out coverage.
+        if self.has_option(&#39;exposureclip&#39;):
+            self.add_process_brief(&#39;(exposureclip) &#39;)
+            clip_level = self.configuration.get_float(&#39;exposureclip&#39;)
+            exposures = self.get_exposures()
+            min_clip = clip_level * exposures.select(fraction=0.95)
+            exposures.restrict_range(Range(min_val=min_clip))
+
+        if self.has_option(&#39;noiseclip&#39;):
+            self.add_process_brief(&#39;(noiseclip) &#39;)
+            rms = self.get_noise()
+            clip_level = self.configuration.get_float(&#39;noiseclip&#39;)
+            max_clip = clip_level * rms.select(fraction=0.05)
+            rms.restrict_range(Range(min_val=0, max_val=max_clip))
+
+        if self.enable_bias and self.has_option(&#39;clip&#39;):
+            clip_level = self.configuration.get_float(&#39;clip&#39;)
+            self.add_process_brief(f&#39;(clip:{clip_level}) &#39;)
+            sign = self.configuration.get_sign(&#39;source.sign&#39;, default=0)
+            s2n_reject = Range(-clip_level, clip_level)
+            if sign &gt; 0:
+                s2n_reject.min = -np.inf
+            elif sign &lt; 0:
+                s2n_reject.max = np.inf
+            self.get_significance().discard_range(s2n_reject)
+
+        if self.configuration.get_bool(&#39;source.mem&#39;):
+            self.add_process_brief(&#39;(MEM) &#39;)
+            multiplier = self.configuration.get_float(
+                &#39;source.mem.lambda&#39;, default=0.1)
+            self.mem_correct(lg_multiplier=multiplier)
+
+        if self.configuration.get_bool(&#39;source.intermediates&#39;):
+            file_name = os.path.join(self.reduction.work_path,
+                                     &#39;intermediate.fits&#39;)
+            self.write_fits(file_name)
+
+        # Coupled with blanking
+        if not self.configuration.get_bool(&#39;source.nosync&#39;):
+            if self.enable_bias and self.has_option(&#39;blank&#39;):
+                blanking_level = self.get_blanking_level()
+                self.add_process_brief(f&#39;blank:{blanking_level}) &#39;)
+                self.update_mask(blanking_level=blanking_level,
+                                 min_neighbors=2)
+            else:
+                self.update_mask(blanking_level=np.nan, min_neighbors=2)</div>
+
+
+<div class="viewcode-block" id="AstroData2D.process_final">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.process_final">[docs]</a>
+    def process_final(self):
+        &quot;&quot;&quot;
+        Runs any final processing steps.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.get_data().clear_history()</div>
+
+
+<div class="viewcode-block" id="AstroData2D.write_fits">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.write_fits">[docs]</a>
+    def write_fits(self, filename):
+        &quot;&quot;&quot;
+        Write the results to a FITS file.
+
+        Parameters
+        ----------
+        filename : str
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        hdu_list = self.get_data().create_fits()
+        for hdu in hdu_list:
+            self.edit_header(hdu.header)
+            hdu.header[&#39;FILENAME&#39;] = filename, &#39;Name at creation&#39;
+
+        self.add_scan_hdus_to(hdu_list)
+        self.hdul = hdu_list
+        if not self.configuration.get_bool(&#39;write.source&#39;):
+            return
+
+        log.info(f&#39;Writing to {filename}&#39;)
+        hdu_list.writeto(filename, overwrite=True)
+        hdu_list.close()</div>
+
+
+<div class="viewcode-block" id="AstroData2D.get_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.get_data">[docs]</a>
+    @abstractmethod
+    def get_data(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the data for the source model.
+
+        Returns
+        -------
+        data : sofia_redux.scan.source_models.maps.observation_2d.Observation2D
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="AstroData2D.add_base">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.add_base">[docs]</a>
+    @abstractmethod
+    def add_base(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Add a base to the source model data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="AstroData2D.smooth_to">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.smooth_to">[docs]</a>
+    @abstractmethod
+    def smooth_to(self, fwhm):  # pragma: no cover
+        &quot;&quot;&quot;
+        Smooth the map using a Gaussian kernel of a given FWHM.
+
+        Parameters
+        ----------
+        fwhm : astropy.units.Quantity
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="AstroData2D.filter_source">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.filter_source">[docs]</a>
+    @abstractmethod
+    def filter_source(self, filter_fwhm, filter_blanking=None, use_fft=False
+                      ):  # pragma: no cover
+        &quot;&quot;&quot;
+        Filter (smooth) the source above a given FWHM.
+
+        Parameters
+        ----------
+        filter_fwhm : astropy.units.Quantity
+            The filter FWHM scale to filter above.
+        filter_blanking : float, optional
+        use_fft : bool, optional
+            If `True`, use FFT filtering.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="AstroData2D.set_filtering">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.set_filtering">[docs]</a>
+    @abstractmethod
+    def set_filtering(self, fwhm):  # pragma: no cover
+        &quot;&quot;&quot;
+        Set the filtering FWHM.
+
+        Parameters
+        ----------
+        fwhm : astropy.units.Quantity
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="AstroData2D.reset_filtering">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.reset_filtering">[docs]</a>
+    @abstractmethod
+    def reset_filtering(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Reset the source filtering parameters.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="AstroData2D.filter_beam_correct">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.filter_beam_correct">[docs]</a>
+    @abstractmethod
+    def filter_beam_correct(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Apply the filter beam correction.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="AstroData2D.mem_correct">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.mem_correct">[docs]</a>
+    @abstractmethod
+    def mem_correct(self, lg_multiplier):  # pragma: no cover
+        &quot;&quot;&quot;
+        Apply maximum entropy correction to the map.
+
+        Parameters
+        ----------
+        lg_multiplier : float
+           The Lagrange multiplier (lambda).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="AstroData2D.update_mask">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_data_2d.AstroData2D.html#sofia_redux.scan.source_models.astro_data_2d.AstroData2D.update_mask">[docs]</a>
+    @abstractmethod
+    def update_mask(self, blanking_level=np.nan, min_neighbors=None
+                    ):  # pragma: no cover
+        &quot;&quot;&quot;
+        Update the map mask based on significance levels and valid neighbors.
+
+        If a blanking level is supplied, significance values above or equal to
+        the blanking level will be masked.
+
+
+        Parameters
+        ----------
+        blanking_level : float, optional
+            The significance level used to mark the map.  If not supplied,
+            significance is irrelevant.  See above for more details.
+        min_neighbors : int, optional
+            The minimum number of neighbors including the pixel itself.
+            Therefore, the default of 2 excludes single pixels as this would
+            require a single valid pixel and one valid neighbor.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

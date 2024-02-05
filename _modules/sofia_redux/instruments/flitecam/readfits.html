@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.flitecam.readfits &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.flitecam.readfits</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+from astropy.io import fits
+from astropy.wcs import WCS, SingularMatrixError
+import numpy as np
+
+from sofia_redux.toolkit.utilities.fits import hdinsert, robust_read
+
+__all__ = [&#39;readfits&#39;]
+
+
+<div class="viewcode-block" id="readfits">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.flitecam.readfits.readfits.html#sofia_redux.instruments.flitecam.readfits.readfits">[docs]</a>
+def readfits(filename):
+    &quot;&quot;&quot;
+    Return the data array from the input file.
+
+    Reads a specified raw FLITECAM FITS file and returns a
+    new HDUList with the flux image in the primary extension
+    with EXTNAME = FLUX.
+
+    Raw FLITECAM data frequently has problems with WCS definition.
+    This algorithm attempts to correct the most common WCS problems
+    and return standardized WCS definition.  However, some raw
+    files may be unfixable; in that case, an error is raised and
+    the file must be manually fixed before proceeding.
+
+    Parameters
+    ----------
+    filename : str
+        File path of the file to be read.
+
+    Returns
+    -------
+    astropy.io.fits.HDUList
+        Output HDUList.
+
+    Raises
+    ------
+    ValueError
+        If the FITS header is unreadable.
+    &quot;&quot;&quot;
+    data, header = robust_read(filename)
+    if header is None:
+        header = fits.header.Header()
+    hdinsert(header, &#39;EXTNAME&#39;, &#39;FLUX&#39;, comment=&#39;Extension name&#39;)
+
+    if data is None:
+        log.warning(f&quot;Error loading file {filename}&quot;)
+        return
+
+    # add a BUNIT: digital number
+    # (will be modified to ct/s in the lincor module)
+    hdinsert(header, &#39;BUNIT&#39;, &#39;ct&#39;, &#39;Data units&#39;)
+
+    # fix a couple known bad old WCS keywords
+    try:
+        header[&#39;RADESYS&#39;] = header[&#39;RADECSYS&#39;]
+    except KeyError:
+        pass
+    bad_keys = [&#39;XPIXELSZ&#39;, &#39;YPIXELSZ&#39;, &#39;RADECSYS&#39;]
+    for bad_key in bad_keys:
+        try:
+            del header[bad_key]
+        except KeyError:
+            pass
+
+    # replace CD matrix with CDELT/CROTA
+    try:
+        hwcs = WCS(header)
+    except SingularMatrixError as werr:
+        log.debug(f&#39;Error from astropy.wcs: {werr}&#39;)
+        err = &#39;FITS header is unreadable. Data reduction &#39; \
+              &#39;cannot continue.&#39;
+        log.error(err)
+        raise ValueError(err) from None
+
+    try:
+        pixscal = np.sqrt(np.linalg.det(hwcs.wcs.cd))
+    except AttributeError as werr:
+        log.debug(f&#39;Error from astropy.wcs: {werr}&#39;)
+        err = &#39;FITS header is unreadable. Data reduction &#39; \
+              &#39;cannot continue.&#39;
+        log.error(err)
+        raise ValueError(err) from None
+
+    pc = hwcs.wcs.cd / pixscal
+    angle = (360 - np.rad2deg(np.arccos(pc[0][0]))) % 360
+    cd_keys = [&#39;CD1_1&#39;, &#39;CD1_2&#39;, &#39;CD2_1&#39;, &#39;CD2_2&#39;]
+    for key in cd_keys:
+        del header[key]
+
+    # make an astropy standard WCS
+    header[&#39;CDELT1&#39;] = pixscal
+    header[&#39;CDELT2&#39;] = pixscal
+    header[&#39;CROTA2&#39;] = angle
+    hwcs = WCS(header)
+
+    # remove all old WCS keys
+    wcs_keys = [&#39;CTYPE1&#39;, &#39;CTYPE2&#39;, &#39;CUNIT1&#39;, &#39;CUNIT2&#39;,
+                &#39;CRPIX1&#39;, &#39;CRPIX2&#39;, &#39;CRVAL1&#39;, &#39;CRVAL2&#39;,
+                &#39;CDELT1&#39;, &#39;CDELT2&#39;, &#39;CROTA2&#39;, &#39;CUNIT1&#39;,
+                &#39;CUNIT2&#39;, &#39;WCSNAME&#39;, &#39;WCSAXES&#39;,
+                &#39;PC1_1&#39;, &#39;PC1_2&#39;, &#39;PC2_1&#39;, &#39;PC2_2&#39;,
+                &#39;RADECSYS&#39;, &#39;RADESYS&#39;]
+
+    # add in standard keys
+    for key in wcs_keys:
+        if key in header:
+            del header[key]
+    hwcs_header = hwcs.to_header()
+    for key in hwcs_header:
+        hdinsert(header, key, hwcs_header[key], hwcs_header.comments[key])
+
+    # if necessary, replace astropy standard PC matrix
+    # with CROTA2 for compatibility with other SOFIA WCS
+    # standards
+    pc_keys = [&#39;PC1_1&#39;, &#39;PC1_2&#39;, &#39;PC2_1&#39;, &#39;PC2_2&#39;]
+    for key in pc_keys:
+        if key in header:  # pragma: no cover
+            del header[key]
+    hdinsert(header, &#39;CROTA2&#39;, angle, &#39;Coordinate system rotation angle&#39;)
+
+    primary = fits.PrimaryHDU(data=data, header=header)
+    hdul = fits.HDUList([primary])
+
+    return hdul</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

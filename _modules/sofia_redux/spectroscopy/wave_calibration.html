@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.wave_calibration &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.wave_calibration</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+import pandas
+from sofia_redux.toolkit.utilities.fits import gethdul
+from sofia_redux.toolkit.utilities.func import goodfile
+from scipy.interpolate import interp1d
+
+__all__ = [&#39;BaseWavecal&#39;, &#39;Wavecal&#39;, &#39;Wavecal1D&#39;, &#39;Wavecal1DXD&#39;,
+           &#39;Wavecal2D&#39;, &#39;Wavecal2DXD&#39;, &#39;readwavecalinfo&#39;, &#39;LineInfo&#39;]
+
+
+<div class="viewcode-block" id="BaseWavecal">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.wave_calibration.BaseWavecal.html#sofia_redux.spectroscopy.wave_calibration.BaseWavecal">[docs]</a>
+class BaseWavecal:
+
+    registry = {}
+
+<div class="viewcode-block" id="BaseWavecal.register">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.wave_calibration.BaseWavecal.html#sofia_redux.spectroscopy.wave_calibration.BaseWavecal.register">[docs]</a>
+    @classmethod
+    def register(cls, caltype):
+        def decorator(subclass):
+            cls.registry[caltype] = subclass
+            return subclass
+        return decorator</div>
+
+
+<div class="viewcode-block" id="BaseWavecal.create">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.wave_calibration.BaseWavecal.html#sofia_redux.spectroscopy.wave_calibration.BaseWavecal.create">[docs]</a>
+    @classmethod
+    def create(cls, caltype, data, header):
+        if caltype not in cls.registry:
+            raise ValueError(&quot;Invalid wave calibration type: %s&quot; % caltype)
+        return cls.registry[caltype](data, header)</div>
+</div>
+
+
+
+<div class="viewcode-block" id="Wavecal">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.wave_calibration.Wavecal.html#sofia_redux.spectroscopy.wave_calibration.Wavecal">[docs]</a>
+class Wavecal(BaseWavecal):
+
+    def __init__(self, data, header):
+        &quot;&quot;&quot;
+        Initializes basic class
+
+        Parameters
+        ----------
+        data : numpy.ndarray of float
+        header : astropy.io.fits.header.Header
+        &quot;&quot;&quot;
+        self.data = None
+        self.header = None
+        self.norders = None
+        self.naps = None
+        self.orders = None
+        self.xranges = None
+        self.extap = None
+        self.linelist = None
+        self.xcorordr = None
+        self.xcorspec = None
+        self.dispdeg = None
+        self.p2wcoeffs = None
+        self.wcaltype = None
+        self.lines = LineInfo()
+        self.xd = None
+        self._load_data(data, header)
+        self._get_spectrum()
+
+    def _load_data(self, data, header):
+        &quot;&quot;&quot;
+        Loads common attributes common to all classes
+
+        Parameters
+        ----------
+        data : numpy.ndarray of float
+        header : astropy.io.fits.header.Header
+        &quot;&quot;&quot;
+        naps = int(header[&#39;NAPS&#39;])
+        norders = int(header[&#39;NORDERS&#39;])
+        orders = np.asarray(
+            [int(x) for x in str(header[&#39;ORDERS&#39;]).split(&#39;,&#39;)])
+        # Get extraction ranges
+        xranges = np.zeros((norders, 2), dtype=np.int64)
+        for orderi, order in enumerate(orders[:norders]):
+            name = &#39;OR%s_XR&#39; % str(order).zfill(3)
+            xranges[orderi] = [
+                int(xr) for xr in header[name].split(&#39;,&#39;)]
+        wrange = np.array(
+            [np.nanmin(data[:, 0]), np.nanmax(data[:, 0])])
+        extap = float(header[&#39;extap&#39;])
+        self.data = data.copy()
+        self.header = header.copy()
+        self.naps = naps
+        self.norders = norders
+        self.orders = orders
+        self.xranges = xranges
+        self.wrange = wrange
+        self.extap = extap
+        self.dispdeg = int(self.header[&#39;DISPDEG&#39;])
+        ncoeffs = (self.dispdeg + 1)
+        p2wcoeffs = np.empty(ncoeffs)
+        for i in range(ncoeffs):
+            name = &#39;P2W_C%s&#39; % str(i).zfill(2)
+            p2wcoeffs[i] = self.header[name]
+        self.p2wcoeffs = p2wcoeffs
+        self.wcaltype = header[&#39;WCALTYPE&#39;].strip().upper()
+        self.linelist = header[&#39;LINELIST&#39;].strip()
+
+    def _get_spectrum(self):
+        &quot;&quot;&quot;Get the spectrum in relation to the x-correlation order&quot;&quot;&quot;
+        self.xcorordr = int(self.header[&#39;XCORORDR&#39;])
+        xcor_idx = self.orders == self.xcorordr
+        if not xcor_idx.any():
+            raise ValueError(&#39;X-correlation order %i not found in orders&#39; %
+                             self.xcorordr)
+        xcor_idx = np.argwhere(xcor_idx)[0, 0]
+        xcorspec = self.data[xcor_idx].copy()
+        npix = int(np.ptp(self.xranges[xcor_idx])) + 1
+        xcorspec[0] = np.arange(npix, dtype=float) + self.xranges[xcor_idx, 0]
+        self.xcorspec = xcorspec
+
+<div class="viewcode-block" id="Wavecal.load_lines">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.wave_calibration.Wavecal.html#sofia_redux.spectroscopy.wave_calibration.Wavecal.load_lines">[docs]</a>
+    def load_lines(self, filename):
+        self.lines.readlinelist(filename)</div>
+
+
+<div class="viewcode-block" id="Wavecal.guess_lines">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.wave_calibration.Wavecal.html#sofia_redux.spectroscopy.wave_calibration.Wavecal.guess_lines">[docs]</a>
+    def guess_lines(self):
+        if self.lines.table is None:
+            raise ValueError(&quot;Line list not loaded&quot;)
+        self.lines.xguess(self.data[:, 0], self.xranges, self.orders)</div>
+</div>
+
+
+
+<div class="viewcode-block" id="Wavecal1D">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.wave_calibration.Wavecal1D.html#sofia_redux.spectroscopy.wave_calibration.Wavecal1D">[docs]</a>
+@BaseWavecal.register(&#39;1D&#39;)
+class Wavecal1D(Wavecal):
+    def __init__(self, data, header):
+        super().__init__(data, header)
+        self.rms = header[&#39;FITRMS&#39;]</div>
+
+
+
+<div class="viewcode-block" id="Wavecal1DXD">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.wave_calibration.Wavecal1DXD.html#sofia_redux.spectroscopy.wave_calibration.Wavecal1DXD">[docs]</a>
+@BaseWavecal.register(&#39;1DXD&#39;)
+class Wavecal1DXD(Wavecal):
+    def __init__(self, data, header):
+        super().__init__(data, header)</div>
+
+
+
+<div class="viewcode-block" id="Wavecal2D">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.wave_calibration.Wavecal2D.html#sofia_redux.spectroscopy.wave_calibration.Wavecal2D">[docs]</a>
+@BaseWavecal.register(&#39;2D&#39;)
+class Wavecal2D(Wavecal):
+    def __init__(self, data, header):
+        super().__init__(data, header)
+        self.rms = header[&#39;FITRMS&#39;]
+        self.linedeg = int(header[&#39;LINEDEG&#39;])
+        self.fndystep = int(header[&#39;FNDYSTEP&#39;])
+        self.fndysum = int(header[&#39;FNDYSUM&#39;])
+        self.genystep = int(header[&#39;GENYSTEP&#39;])
+        self.c1xdeg = int(header[&#39;C1XDEG&#39;])
+        if self.linedeg == 2:
+            self.c2xdeg = int(header[&#39;C2XDEG&#39;])</div>
+
+
+
+<div class="viewcode-block" id="Wavecal2DXD">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.wave_calibration.Wavecal2DXD.html#sofia_redux.spectroscopy.wave_calibration.Wavecal2DXD">[docs]</a>
+@BaseWavecal.register(&#39;2DXD&#39;)
+class Wavecal2DXD(Wavecal):
+    def __init__(self, data, header):
+        super().__init__(data, header)
+        self.linedeg = int(header[&#39;LINEDEG&#39;])
+        self.fndystep = int(header[&#39;FNDYSTEP&#39;])
+        self.fndysum = int(header[&#39;FNDYSUM&#39;])
+        self.genystep = int(header[&#39;GENYSTEP&#39;])
+        self.c1xdeg = int(header[&#39;C1XDEG&#39;])
+        self.c1ydeg = int(header[&#39;C1XDEG&#39;])
+        if self.linedeg == 2:
+            self.c2xdeg = int(header[&#39;C2XDEG&#39;])
+            self.c2ydeg = int(header[&#39;C2YDEG&#39;])</div>
+
+
+
+<div class="viewcode-block" id="readwavecalinfo">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.wave_calibration.readwavecalinfo.html#sofia_redux.spectroscopy.wave_calibration.readwavecalinfo">[docs]</a>
+def readwavecalinfo(filename):
+    &quot;&quot;&quot;
+    Retrieve wave calibration
+
+    Parameters
+    ----------
+    filename : str
+
+    Returns
+    -------
+    Wavecal
+        A subclass of `Wavecal` depending on the data contents.
+        one of {`Wavecal1D`, `Wavecal1DXD`, `Wavecal2D`, `Wavecal2DXD`}.
+    &quot;&quot;&quot;
+    hdul = gethdul(filename, verbose=True)
+    if hdul is None:
+        raise ValueError(&quot;Could not load file: %s&quot; % filename)
+    data = hdul[0].data
+    if data is None:
+        raise ValueError(&quot;No data present in primary HDU of %s&quot; % filename)
+    header = hdul[0].header
+    wcaltype = header[&#39;WCALTYPE&#39;].strip().upper()
+    return BaseWavecal.create(wcaltype, data, header)</div>
+
+
+
+<div class="viewcode-block" id="LineInfo">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.wave_calibration.LineInfo.html#sofia_redux.spectroscopy.wave_calibration.LineInfo">[docs]</a>
+class LineInfo:
+
+    def __init__(self):
+        self.table = None
+        self.nlines = None
+        self._offset = 0.0
+
+    @property
+    def offset(self):
+        return self._offset
+
+    @offset.setter
+    def offset(self, value):
+        xcolumns = [&#39;xguess&#39;]
+        if self.table is None or &#39;xwindow&#39; not in self.table:
+            return
+        value = float(value)
+        previous = self._offset
+        if previous != 0 or value != 0:
+            for column in xcolumns:
+                if column in self.table:
+                    self.table[column] = self.table[column].apply(
+                        lambda x: x - previous + value)
+            self._offset = value
+
+<div class="viewcode-block" id="LineInfo.readlinelist">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.wave_calibration.LineInfo.html#sofia_redux.spectroscopy.wave_calibration.LineInfo.readlinelist">[docs]</a>
+    def readlinelist(self, filename):
+        &quot;&quot;&quot;
+        Read a Spextool line list
+
+        Parameters
+        ----------
+        filename : str
+            A Spextool line nlist with | delimited columns of the order
+            number, wavelengths, ids, fit windows, fit types, and number
+            of fit terms.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Columns are:
+                order : int
+                    Order number
+                wavelength : float
+                    Wavelength in microns
+                species : str
+                    Line IDs
+                window : float
+                    Fit window in microns
+                type : str
+                    Fitting model. &#39;G&#39; = Gaussian, &#39;L&#39; = Lorentzian
+                nterms : int
+                    Number of terms in the fit.
+                    3=basic, 4=basic+constant, 5=basic+line
+        &quot;&quot;&quot;
+        if not goodfile(filename, verbose=True):
+            raise ValueError(&quot;Unable to load: %s&quot; % filename)
+        self.table = pandas.read_csv(
+            filename, comment=&#39;#&#39;, delimiter=&#39;|&#39;,
+            names=[&#39;order&#39;, &#39;wavelength&#39;, &#39;species&#39;,
+                   &#39;window&#39;, &#39;type&#39;, &#39;nterms&#39;],
+            converters={&#39;order&#39;: int,
+                        &#39;wavelength&#39;: float,
+                        &#39;species&#39;: str.strip,
+                        &#39;window&#39;: lambda w: float(w) / 1e4,
+                        &#39;type&#39;: str.strip,
+                        &#39;nterms&#39;: int})</div>
+
+
+<div class="viewcode-block" id="LineInfo.xguess">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.wave_calibration.LineInfo.html#sofia_redux.spectroscopy.wave_calibration.LineInfo.xguess">[docs]</a>
+    def xguess(self, wavelength, xranges, orders):
+        &quot;&quot;&quot;
+        Determine guess positions for lines of a given order
+
+        Updates the table with:
+            xguess -&gt; x positions of lines in xspec (float)
+            xwindow -&gt; The fit window in units of pixels (int)
+
+        Parameters
+        ----------
+        wavelength : numpy.ndarray
+            (norders, nwave) of float array of wavelengths in microns for
+            each order.
+        xranges : numpy.ndarray
+            (norders, 2) of int array of column numbers where the orders
+            are completely on the array.  xranges[:, 0] = lower limit,
+            and xranges[:, 1] = upper limit.
+        orders : numpy.ndarray
+            (norders,) array of int giving the order numbers.
+        &quot;&quot;&quot;
+        if self.table is None:
+            raise ValueError(&#39;Line list not loaded.&#39;)
+
+        self.table[&#39;xguess&#39;] = np.nan
+        self.table[&#39;xwindow&#39;] = 0
+
+        if orders.shape[0] != wavelength.shape[0]:
+            raise ValueError(&quot;Orders and wavelength axis 0 size mismatch&quot;)
+        if orders.shape[0] != xranges.shape[0]:
+            raise ValueError(&quot;Orders and xranges axis 0 size mismatch&quot;)
+        xx = np.arange(wavelength.shape[1])
+
+        for wave, xrange, order in zip(wavelength, xranges, orders):
+            mask = np.isfinite(wave)
+            w, x = wave[mask], xx[mask] + xrange[0]
+            fx = interp1d(w, x, kind=&#39;linear&#39;, fill_value=&#39;extrapolate&#39;)
+            idx = self.table.order == order
+            xout = self.table[idx].wavelength.values
+            dw = self.table[idx].window.values / 2
+            self.table.loc[idx, &#39;xguess&#39;] = fx(xout)
+            self.table.loc[idx, &#39;xwindow&#39;] = np.round(
+                np.ptp(fx([xout - dw, xout + dw]), axis=0)).astype(int)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

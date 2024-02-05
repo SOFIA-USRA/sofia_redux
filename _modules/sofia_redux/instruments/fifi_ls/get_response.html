@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.fifi_ls.get_response &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.fifi_ls.get_response</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import os
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+import pandas
+
+from sofia_redux.instruments import fifi_ls
+from sofia_redux.toolkit.utilities import goodfile, hdinsert, gethdul
+
+__all__ = [&#39;clear_response_cache&#39;, &#39;get_response_from_cache&#39;,
+           &#39;store_response_in_cache&#39;, &#39;get_response&#39;]
+
+__response_cache = {}
+
+
+<div class="viewcode-block" id="clear_response_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.get_response.clear_response_cache.html#sofia_redux.instruments.fifi_ls.get_response.clear_response_cache">[docs]</a>
+def clear_response_cache():
+    &quot;&quot;&quot;
+    Clear all data from the response cache.
+    &quot;&quot;&quot;
+    global __response_cache
+    __response_cache = {}</div>
+
+
+
+<div class="viewcode-block" id="get_response_from_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.get_response.get_response_from_cache.html#sofia_redux.instruments.fifi_ls.get_response.get_response_from_cache">[docs]</a>
+def get_response_from_cache(responsefile):
+    &quot;&quot;&quot;
+    Retrieves response data from the response cache.
+
+    Checks to see if the file still exists, can be read, and has not
+    been altered since last time.  If the file has changed, it will be
+    deleted from the cache so that it can be re-read.
+
+    Parameters
+    ----------
+    responsefile : str
+        File path to the response file
+
+    Returns
+    -------
+    response : numpy.ndarray
+    &quot;&quot;&quot;
+    global __response_cache
+
+    if responsefile not in __response_cache:
+        return
+
+    if not goodfile(responsefile):
+        try:
+            del __response_cache[responsefile]
+        except KeyError:   # pragma: no cover
+            pass
+        return
+
+    modtime = str(os.path.getmtime(responsefile))
+    if modtime not in __response_cache.get(responsefile, {}):
+        return
+
+    log.debug(&quot;Retrieving data from response file (%s) in cache&quot; %
+              responsefile)
+    return __response_cache.get(responsefile, {}).get(modtime)</div>
+
+
+
+<div class="viewcode-block" id="store_response_in_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.get_response.store_response_in_cache.html#sofia_redux.instruments.fifi_ls.get_response.store_response_in_cache">[docs]</a>
+def store_response_in_cache(responsefile, response):
+    &quot;&quot;&quot;
+    Store response data in the response cache
+
+    Parameters
+    ----------
+    responsefile : str
+        File path to the response file
+    response : numpy.ndarray
+        Response data.
+    &quot;&quot;&quot;
+    global __response_cache
+    log.debug(&quot;Storing data from flats (%s) in cache&quot; % responsefile)
+    __response_cache[responsefile] = {}
+    modtime = str(os.path.getmtime(responsefile))
+    __response_cache[responsefile][modtime] = response</div>
+
+
+
+<div class="viewcode-block" id="get_response">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.get_response.get_response.html#sofia_redux.instruments.fifi_ls.get_response.get_response">[docs]</a>
+def get_response(header, filename=None):
+    &quot;&quot;&quot;
+    Retrieve instrumental response data.
+
+    Reponse files are identified by a configuration file called
+    response_default.txt in the data/response_files directory.  This
+    file must contain 4 columns: end date (YYYYMMDD), channel (b1,
+    b2, or r), dichroic (105 or 130), and filepath (relative to the
+    data directory).
+
+    The procedure is:
+        1. Identify response file, unless override is provided.
+        2. Read response data from file.
+        3. Return response array.
+
+    Parameters
+    ----------
+    header : fits.Header
+        FITS header for input data to match.  The header will be updated
+        with the RSPNFILE keyword containing the name of the response
+        file used.
+    filename : str, optional
+        Response file to be used.  If not provided, a default file will
+        be retrieved from the data/response files directory, matching
+        the date, channel, and dichroic of the input header.  If an
+        override file is provided, it should be a FITS image file
+        containing wavelength, response, and error on the response in
+        an array of three rows in the primary extension.
+
+    Returns
+    -------
+    numpy.ndarray
+        (3, nw) array where [0, :] = wavelength, [1, :] = response data,
+        and [2, :] = error.
+    &quot;&quot;&quot;
+    if not isinstance(header, fits.Header):
+        log.error(&quot;Invalid header&quot;)
+        return
+    if filename is not None:
+        if not goodfile(filename, verbose=True):
+            log.error(&#39;Could not find file: {}.  &#39;
+                      &#39;Using default.&#39;.format(filename))
+            filename = None
+    if filename is None:
+        datapath = os.path.join(os.path.dirname(fifi_ls.__file__), &#39;data&#39;)
+        default_file = os.path.join(
+            datapath, &#39;response_files&#39;, &#39;response_default.txt&#39;)
+        if not goodfile(default_file, verbose=True):
+            log.error(&#39;Cannot read response default file&#39;)
+            return
+        required_keywords = [&#39;CHANNEL&#39;, &#39;G_ORD_B&#39;, &#39;DICHROIC&#39;]
+        for key in required_keywords:
+            if key not in header:
+                log.error(&quot;Header missing %s keyword&quot; % key)
+                return
+
+        obsdate = header.get(&#39;DATE-OBS&#39;, &#39;9999-99-99&#39;)
+        try:
+            obsdate = int(&#39;&#39;.join([x for x in obsdate[:10].split(&#39;-&#39;)]))
+        except (TypeError, ValueError):
+            obsdate = 99999999
+        channel = str(header[&#39;CHANNEL&#39;]).upper().strip()
+        dichroic = str(header[&#39;DICHROIC&#39;])
+        b_order = str(header[&#39;G_ORD_B&#39;])
+
+        # also check for the order filter for blue
+        # This keyword is only present from 10/2019 on.
+        # If not present, or it&#39;s a bad value, assume the value
+        # matches the order
+        if &#39;G_FLT_B&#39; in header:
+            b_filter = str(header[&#39;G_FLT_B&#39;]).upper().strip()
+            if b_filter not in [&#39;1&#39;, &#39;2&#39;]:
+                b_filter = b_order
+        else:
+            b_filter = b_order
+
+        if channel == &#39;BLUE&#39;:
+            if b_order in [&#39;1&#39;, &#39;2&#39;]:
+                if b_filter == b_order:
+                    chan = &#39;b%s&#39; % b_order
+                else:
+                    chan = &#39;b%s%s&#39; % (b_order, b_filter)
+            else:
+                log.error(&quot;Invalid blue grating order&quot;)
+                return
+        else:
+            chan = &#39;r&#39;
+
+        try:
+            df = pandas.read_csv(
+                default_file, comment=&#39;#&#39;, delim_whitespace=True,
+                names=[&#39;date&#39;, &#39;chan&#39;, &#39;dichroic&#39;, &#39;filename&#39;])
+            df = df.sort_values(&#39;date&#39;)
+            rows = df[(df[&#39;date&#39;] &gt;= obsdate)
+                      &amp; (df[&#39;chan&#39;] == chan)
+                      &amp; (df[&#39;dichroic&#39;].apply(str) == dichroic)]
+        except (ValueError, TypeError):
+            log.error(&#39;Cannot read response default file&#39;)
+            return
+        if len(rows) == 0:
+            log.error(&quot;Unable to find response file for %s, %s, %s&quot; %
+                      (obsdate, chan, dichroic))
+            return
+        filename = os.path.join(datapath, rows.iloc[0][&#39;filename&#39;])
+
+    response = get_response_from_cache(filename)
+    if response is not None:
+        hdinsert(header, &#39;RSPNFILE&#39;, os.path.basename(filename))
+        return response
+
+    hdul = gethdul(filename, verbose=True)
+    if hdul is None or hdul[0].data is None:
+        log.error(&quot;Invalid data in response file %s&quot; % filename)
+        return
+
+    response = np.asarray(hdul[0].data, dtype=float)
+    hdinsert(header, &#39;RSPNFILE&#39;, os.path.basename(filename))
+    store_response_in_cache(filename, response)
+
+    return response</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

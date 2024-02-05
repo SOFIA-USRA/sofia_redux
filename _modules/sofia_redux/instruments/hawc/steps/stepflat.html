@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepflat &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepflat</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Flat fielding pipeline step.&quot;&quot;&quot;
+
+import os
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.instruments.hawc.datafits import DataFits
+from sofia_redux.instruments.hawc.steploadaux import StepLoadAux
+
+__all__ = [&#39;StepFlat&#39;]
+
+
+<div class="viewcode-block" id="StepFlat">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepflat.StepFlat.html#sofia_redux.instruments.hawc.steps.stepflat.StepFlat">[docs]</a>
+class StepFlat(StepLoadAux):
+    r&quot;&quot;&quot;
+    Correct for flat response for chop/nod data.
+
+    This pipeline step corrects the flux data for instrumental
+    response, using a flat file made from a reference sky calibration
+    and an internal calibrator file.  Flats are made by
+    `sofia_redux.instruments.hawc.steps.StepMkflat`.  Input for this step
+    is the demodulated data, produced by
+    `sofia_redux.instruments.hawc.steps.StepDemodulate` and
+    `sofia_redux.instruments.hawc.steps.StepDmdCut`.
+
+    In the output from this step, the R array and T array columns
+    of the input demodulated data and their corresponding variances are
+    converted to images and their columns removed from the table. In
+    addition, separate bad pixel masks for the R and T array are
+    copied from the flat file and appended to the output object.
+    Pixels with a value of zero in the mask are good, any other value
+    is bad.
+
+    Notes
+    -----
+    For the data :math:`d` and flat image :math:`f` with variances
+    :math:`\sigma^2` and :math:`\sigma_f^2` respectively, the
+    correction is applied as
+
+      .. math:: d&#39; = f d
+
+    and propagated to the variance as
+
+      .. math:: \sigma&#39;^2 = f^2 \sigma^2  + d^2 \sigma_f^2 .
+
+
+    &quot;&quot;&quot;
+    def __init__(self):
+        # call superclass constructor (calls setup)
+        super().__init__()
+
+        # list of data and flats
+        # used in run() for every new input data file
+        self.datalist = []
+
+        # list containing arrays with flat values
+        self.flats = []
+
+        # Pipedata object containing the flat file
+        self.flatdata = DataFits()
+
+        # flat file info and header keywords to fit
+        # name of selected flat file
+        self.flatfile = &#39;&#39;
+
+        # FITS keywords that have to fit
+        self.fitkeys = []
+
+        # values of the keywords (from the first data file)
+        self.keyvalues = []
+
+<div class="viewcode-block" id="StepFlat.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepflat.StepFlat.html#sofia_redux.instruments.hawc.steps.stepflat.StepFlat.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;flat&#39;, and are named with
+        the step abbreviation &#39;FLA&#39;.
+
+        Parameters defined for this step are:
+
+        labmode : bool
+            If True, flat correction will be skipped.
+        flatfile : str
+            File name glob to match flat files.  Default is
+            &#39;flats/*OFT*.fits&#39; to match flat files in a folder
+            named flats, in the same directory as the input file.
+        flatfitkeys : list of str
+            Keys that need to match between flat and data file.
+        bkupflat : str
+            File name glob to match a set of backup files.  These
+            are used only if the files specified by flatfile are
+            not found.
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;flat&#39;
+        self.description = &#39;Flat Correct&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;fla&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+
+        self.paramlist.append([&#39;labmode&#39;, False,
+                               &#39;If labmode = True, will skip flat correction&#39;])
+
+        # Get parameters for StepLoadAux, replace auxfile with flatfile
+        self.loadauxsetup(&#39;flat&#39;)</div>
+
+
+<div class="viewcode-block" id="StepFlat.loadauxname">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepflat.StepFlat.html#sofia_redux.instruments.hawc.steps.stepflat.StepFlat.loadauxname">[docs]</a>
+    def loadauxname(self, auxpar=&#39;&#39;, data=None, multi=False):
+        &quot;&quot;&quot;
+        Search for files matching auxfile.
+
+        Overrides the default function in order to make flat path
+        relative to data output directory if necessary.
+
+        Parameters
+        ----------
+        auxpar : str, optional
+            A name for the aux file parameter to use. This
+            allows loadauxfiles to be used multiple times
+            in a given pipe step (for example for darks and
+            flats). Default value is self.auxpar which is set
+            by loadauxsetup().
+        data : DataFits or DataText, optional
+            A data object to match the auxiliary file to.
+            If no data is specified, self.datain is used (for
+            Multi Input steps self.datain[0]).
+        multi : bool, optional
+            If set, a list of file names is returned instead of a single
+            file name.
+
+        Returns
+        -------
+        str or list of str
+            The matching auxiliary file(s).
+        &quot;&quot;&quot;
+        # override loadauxname to make flat path relative to
+        # data output directory if necessary
+
+        # Set auxpar
+        if len(auxpar) == 0:
+            auxpar = self.auxpar
+
+        # Get parameters
+        auxfile = os.path.expandvars(self.getarg(auxpar + &#39;file&#39;))
+        if not os.path.isabs(auxfile):
+            # if input folder is not an absolute path, make it
+            # relative to the data location
+            auxfile = os.path.join(
+                os.path.dirname(self.datain.filename),
+                auxfile)
+        return self._loadauxnamefile(auxfile, auxpar, data, multi)</div>
+
+
+<div class="viewcode-block" id="StepFlat.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepflat.StepFlat.html#sofia_redux.instruments.hawc.steps.stepflat.StepFlat.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        Because this step is single-in, single-out (SISO),
+        self.datain must be a DataFits object.  The output
+        is also a DataFits object, stored in self.dataout.
+
+        The process is:
+
+        1. Read data from the flat file.
+        2. Apply the flat to the R and T arrays.
+        3. Propagate the variance on the flux.
+        4. Store the data as images in the output object.
+        &quot;&quot;&quot;
+        # Load flat files
+        self.loadflat()
+
+        # Copy datain to dataout
+        self.dataout = self.datain.copy()
+
+        # Apply Flatfield to each item in data list
+        datalist = [&#39;R array&#39;, &#39;T array&#39;]
+        for dataind in range(len(datalist)):
+            dataitem = datalist[dataind]
+
+            # Get dataitem from self.table columns
+            image = self.datain.table[dataitem]
+            flatimage = self.flats[2 * dataind]
+
+            var = self.datain.table[dataitem + &#39; VAR&#39;]
+            flatvar = self.flats[2 * dataind + 1]
+
+            # Flatfield
+            image, var = self.flatfield(image, var, flatimage, flatvar)
+
+            # Store image in dataout
+            self.dataout.imageset(image, dataitem)
+            self.dataout.imageset(var, dataitem + &#39; VAR&#39;)
+
+            # Remove table column from dataout
+            self.dataout.tabledelcol(dataitem)
+            self.dataout.tabledelcol(dataitem + &#39; VAR&#39;)
+
+        # Add additional image frames from flat file
+        addfromfile = [&#39;R BAD PIXEL MASK&#39;, &#39;T BAD PIXEL MASK&#39;]
+        for dataitem in addfromfile:
+            self.dataout.imageset(
+                self.flatdata.imageget(dataitem),
+                imagename=dataitem,
+                imageheader=self.flatdata.getheader(dataitem))
+
+        # Remove the instrumental configuration HDU
+        if &#39;CONFIGURATION&#39; in self.dataout.imgnames:
+            self.dataout.imagedel(&#39;CONFIGURATION&#39;)
+
+        # Update DATATYPE
+        self.dataout.setheadval(&#39;DATATYPE&#39;, &#39;IMAGE&#39;)
+
+        # Add flat file to History
+        flatbasename = self.flatdata.filename.split(
+            str(self.dataout.data_path))[-1]
+        self.dataout.setheadval(&#39;HISTORY&#39;, &#39;FLAT: %s&#39; % flatbasename)
+
+        # Update PROCSTAT to level 2
+        self.dataout.setheadval(&#39;PROCSTAT&#39;, &#39;LEVEL_2&#39;)</div>
+
+
+<div class="viewcode-block" id="StepFlat.loadflat">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepflat.StepFlat.html#sofia_redux.instruments.hawc.steps.stepflat.StepFlat.loadflat">[docs]</a>
+    def loadflat(self):
+        &quot;&quot;&quot;
+        Load the flat images.
+
+        The data is stored in self.flats.
+        &quot;&quot;&quot;
+        if self.getarg(&#39;labmode&#39;):
+            df = DataFits()
+            df.filename = &#39;Lab flat (no correction)&#39;
+            tabshape = self.datain.table[&#39;R Array&#39;].shape
+            imshape = (tabshape[1], tabshape[2])
+            df.imageset(np.full(imshape, 1.0),
+                        imagename=&#39;R Array&#39;)
+            df.imageset(np.full(imshape, 1.0),
+                        imagename=&#39;T Array&#39;)
+            df.imageset(np.full(imshape, 0.0),
+                        imagename=&#39;R Var&#39;)
+            df.imageset(np.full(imshape, 0.0),
+                        imagename=&#39;T Var&#39;)
+            df.imageset(np.full(imshape, 0, dtype=int),
+                        imagename=&#39;R BAD PIXEL MASK&#39;)
+            df.imageset(np.full(imshape, 0, dtype=int),
+                        imagename=&#39;T BAD PIXEL MASK&#39;)
+            self.flatdata = df
+        else:
+            # Search for flat and load it into data object
+            self.flatdata = self.loadauxfile()
+
+        # find flat field data arrays and store them
+        self.flats = []
+
+        # Loop through datalist items:
+        # expect 2 images -- R array, T array, followed by R Var, T Var
+        for dataind in range(2):
+            # data
+            self.flats.append(self.flatdata.imgdata[dataind])
+            # variance
+            self.flats.append(self.flatdata.imgdata[dataind + 2])</div>
+
+
+<div class="viewcode-block" id="StepFlat.flatfield">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepflat.StepFlat.html#sofia_redux.instruments.hawc.steps.stepflat.StepFlat.flatfield">[docs]</a>
+    def flatfield(self, imgin, varin, flat, flatvar):
+        &quot;&quot;&quot;
+        Flat field an array.
+
+        The flux image is multiplied by the flat data.
+
+        Parameters
+        ----------
+        imgin : array-like
+            Input flux array.
+        varin : array-like
+            Input variance array.
+        flat : array-like
+            Flat array matching imgin.
+        flatvar : array-like
+            Variance array matching imgin.
+
+        Returns
+        -------
+        imgout : array-like
+            Flat fielded image.
+        varout : array-like
+            Updated variance.
+        &quot;&quot;&quot;
+        # Check flatfield dimension
+        self.checksize(imgin.shape, flat.shape)
+
+        # Apply flatfield
+        imgout = imgin * flat
+        varout = (varin * flat**2) + (flatvar * imgin**2)
+
+        return imgout, varout</div>
+
+
+<div class="viewcode-block" id="StepFlat.checksize">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepflat.StepFlat.html#sofia_redux.instruments.hawc.steps.stepflat.StepFlat.checksize">[docs]</a>
+    def checksize(self, datashape, flatshape):
+        &quot;&quot;&quot;
+        Validate data and flux shapes.
+
+        Parameters
+        ----------
+        datashape : tuple
+            Data shape.
+        flatshape : tuple
+            Flat image shape.
+
+        Raises
+        ------
+        ValueError
+            If the flat does not match the data.
+
+        &quot;&quot;&quot;
+        if len(datashape) &gt;= len(flatshape):
+            # Data has &gt;= dimensions than flat -&gt; compare
+            begind = len(datashape) - len(flatshape)
+            if datashape[begind:] != flatshape:
+                msg = &#39;Flat does not fit data in file %s&#39; % \
+                      self.datain.filename
+                log.error(&#39;FlatField: %s&#39; % msg)
+                raise ValueError(msg)
+        else:
+            # More dimensions in flat data -&gt; report error
+            msg = &#39;Flat does not fit data in file %s&#39; % \
+                  self.datain.filename
+            log.error(&#39;LoadFlat: %s&#39; % msg)
+            raise ValueError(msg)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

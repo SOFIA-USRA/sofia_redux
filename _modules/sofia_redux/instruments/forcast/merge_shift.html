@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.merge_shift &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.merge_shift</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.toolkit.utilities.fits import add_history_wrap, hdinsert, kref
+
+from sofia_redux.instruments.forcast.getpar import getpar
+from sofia_redux.instruments.forcast.shift import shift
+
+addhist = add_history_wrap(&#39;Merge&#39;)
+
+__all__ = [&#39;merge_shift&#39;]
+
+
+<div class="viewcode-block" id="merge_shift">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.merge_shift.merge_shift.html#sofia_redux.instruments.forcast.merge_shift.merge_shift">[docs]</a>
+def merge_shift(data, chopnod, header=None, variance=None, nmc=False,
+                maxshift=999999999., normmap=None, resize=True):
+    &quot;&quot;&quot;
+    Merge an image by shifting the input data by the input values
+
+    Add each frame of the data to a 2-d summation frame in a manner
+    appropriate to the current reduction scheme.  Finally, average
+    by the number of frames.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        Data to be merged i.e. frame with target images (nrow, ncol)
+    chopnod : array-like
+        Chop/Nod shifts [chopx, chopy, nodx, nody]
+    header : astropy.io.fits.header.Header, optional
+        FITS header to update
+    variance : numpy.ndarray, optional
+        Propagate provided variance (nrow, ncol)
+    nmc : bool, optional
+        Set to True if NMC image
+    maxshift : float, optional
+        Will not merge if nod or chop distance is greater than
+        maxshift.
+    normmap : numpy.ndarray, optional
+        Array to hold the normalization map
+    resize : bool, optional
+        If True, resize the output result to accomodate shifting
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        - The merged image (nrow, ncol) i.e. frame with images of
+          the object at chop and nod positions merged.
+        - The propagated variance image (nrow, ncol)
+    &quot;&quot;&quot;
+    if not isinstance(header, fits.header.Header):
+        header = fits.header.Header()
+        addhist(header, &#39;Created header&#39;)
+
+    var = variance.copy() if isinstance(variance, np.ndarray) else None
+    if not isinstance(data, np.ndarray) or len(data.shape) != 2:
+        addhist(header, &quot;chop positions not applied (invalid data)&quot;)
+        log.error(&quot;invalid data&quot;)
+        return
+    elif np.isnan(data).all():
+        addhist(header, &quot;chop positions not applied (invalid data)&quot;)
+        log.error(&quot;data are all NaN&quot;)
+        return
+
+    dovar = isinstance(var, np.ndarray) and var.shape == data.shape
+    var = None if not dovar else var
+    if variance is not None and not dovar:
+        addhist(header, &#39;Not propagating variance (Invalid variance)&#39;)
+        log.warning(&quot;invalid variance&quot;)
+
+    if not hasattr(chopnod, &#39;__len__&#39;) or len(chopnod) != 4 or \
+            np.isnan(chopnod).any():
+        addhist(header, &quot;chop positions not applied (invalid chopnod)&quot;)
+        log.error(&quot;invalid chop nod&quot;)
+        return
+
+    if isinstance(normmap, np.ndarray):
+        # normmap is not critical, so we can resize
+        if normmap.shape != data.shape:
+            normmap.resize(data.shape, refcheck=False)
+        normmap.fill(0)
+    else:
+        normmap = np.zeros_like(data)
+
+    chopnod = np.array(chopnod)
+    chopdist = np.sqrt((chopnod[:2] ** 2).sum())
+    merged = data.copy()
+    # Replace NaNs wih zeroes for adding
+    nanidx = np.isnan(merged)
+    merged[nanidx] = 0
+    normmap[merged != 0] = 1
+    if dovar:
+        var[nanidx] = 0
+
+    # order=0 results in nearest-neighbor interpolation
+    order = getpar(header, &#39;SHIFTORD&#39;, dtype=int, default=0,
+                   comment=&#39;interpolate order for coadd/merge&#39;)
+    addhist(header, &#39;Shift interpolation order is %i&#39; % order)
+
+    # Shift by chop
+    if chopdist &gt; maxshift:
+        merged = data.copy()
+        if nmc:
+            # Still need to divide the central source by 2 for NMC
+            merged /= 2
+            normmap[merged != 0] += 1
+            if dovar:
+                var /= 4
+        addhist(header, &#39;chop positions was not applied &#39;
+                        &#39;(chop greater than %f)&#39; % maxshift)
+        return merged, var
+
+    addhist(header, &#39;X, Y chop shifts are %f,%f&#39; %
+            (chopnod[0], chopnod[1]))
+    hdinsert(header, &#39;MRGDX0&#39;, chopnod[0], refkey=kref,
+             comment=&#39;X shift during merge process&#39;)
+    hdinsert(header, &#39;MRGDY0&#39;, chopnod[1], refkey=kref,
+             comment=&#39;Y shift during merge process&#39;)
+
+    merged0 = merged.copy()
+    normmap0 = normmap.copy()
+    var0 = var.copy() if dovar else None
+    if resize:
+        log.info(&quot;Resizing for chop shifts&quot;)
+        addhist(header, &#39;Resizing for chop shifts&#39;)
+        merged, _ = shift(merged0, chopnod[:2], order=order, header=header,
+                          missing=0, resize=True, no_shift=True)
+        normmap.resize(merged.shape, refcheck=False)
+        normmap[:, :], var = shift(normmap0, chopnod[:2], order=0,
+                                   variance=var0, missing=0, resize=True,
+                                   no_shift=True)
+
+    chop_data, _ = shift(merged0, chopnod[:2], order=order, missing=0,
+                         resize=resize)
+    chop_mask, chop_var = shift(normmap0, chopnod[:2], order=0,
+                                variance=var0, resize=resize, missing=0)
+
+    if not nmc:
+        # the nodding shift is cumulative to the chop shift
+        merged -= chop_data
+        normmap += chop_mask
+        if dovar:
+            var += chop_var
+
+    # Shift by nod
+    noddist = np.sqrt((chopnod[2:] ** 2).sum())
+    nod = nmc or (noddist &lt;= maxshift and noddist != 0)
+    nod_data = np.zeros_like(merged)
+    nod_mask = np.zeros_like(normmap)
+    nod_var = np.zeros_like(var) if dovar else None
+    if not nod:
+        addhist(header, &#39;nod positions was not applied &#39;
+                        &#39;(nod greater than %f)&#39; % maxshift)
+    else:
+        addhist(header, &#39;X, Y nod shifts are %f,%f&#39; %
+                (chopnod[2], chopnod[3]))
+        hdinsert(header, &#39;MRGDX1&#39;, chopnod[2], refkey=kref,
+                 comment=&#39;X shift during merge process&#39;)
+        hdinsert(header, &#39;MRGDY1&#39;, chopnod[3], refkey=kref,
+                 comment=&#39;Y shift during merge process&#39;)
+        merged0 = merged.copy()
+        normmap0 = normmap.copy()
+        var0 = var.copy() if dovar else None
+        if resize:
+            log.info(&quot;Resizing for nod shifts&quot;)
+            addhist(header, &#39;Resizing for nod shifts&#39;)
+            merged, _ = shift(merged0, chopnod[2:], order=order, header=header,
+                              missing=0, resize=True, no_shift=True)
+            normmap.resize(merged.shape, refcheck=False)
+            normmap[:, :], var = shift(normmap0, chopnod[2:], order=0,
+                                       variance=var0, missing=0, resize=True,
+                                       no_shift=True)
+            chop_data, _ = shift(chop_data, chopnod[2:], order=order,
+                                 missing=0, resize=True, no_shift=True)
+            chop_mask, chop_var = shift(chop_mask, chopnod[2:], order=0,
+                                        variance=chop_var, missing=0,
+                                        resize=True, no_shift=True)
+
+        nod_data, _ = shift(merged0, chopnod[2:], order=order, missing=0,
+                            resize=resize)
+        nod_mask, nod_var = shift(normmap0, chopnod[2:], order=0,
+                                  variance=var0, resize=resize, missing=0)
+
+    if not nmc:
+        # the shifting has been cumulative
+        # i.e. result = (data - chop(data)) - nod(data - chop(data))
+        merged -= nod_data
+        normmap += nod_mask
+        if dovar:
+            var += nod_var
+    else:
+        # the shifting was not cumulative i.e.
+        # i.e. result = data - chop(data) - nod(data)
+        normmap += chop_mask + nod_mask
+        merged -= chop_data + nod_data
+        if dovar:
+            var += chop_var + nod_var
+
+    # Normalize by merge mask
+    idx = normmap != 0
+    if nmc:
+        # Add one extra source for NMC
+        normmap[idx] += 1
+
+    merged[idx] /= normmap[idx]
+    if dovar:
+        var[idx] /= normmap[idx] ** 2
+
+    # Put NaNs back in
+    zi = normmap == 0
+    merged[zi] = np.nan
+    if dovar:
+        var[var == 0] = np.nan
+
+    return merged, var</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

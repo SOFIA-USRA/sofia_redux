@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.info.instrument &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.info.instrument</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+from astropy import units, constants
+
+from sofia_redux.scan.info.camera.instrument import CameraInstrumentInfo
+from sofia_redux.scan.utilities.utils import (
+    to_header_float, insert_info_in_header)
+
+__all__ = [&#39;SofiaInstrumentInfo&#39;]
+
+
+<div class="viewcode-block" id="SofiaInstrumentInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.instrument.SofiaInstrumentInfo.html#sofia_redux.scan.custom.sofia.info.instrument.SofiaInstrumentInfo">[docs]</a>
+class SofiaInstrumentInfo(CameraInstrumentInfo):
+
+    telescope_diameter = 2.5 * units.Unit(&#39;m&#39;)
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize the SOFIA instrument information.
+
+        Contains information on the SOFIA instrument parameters.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.set_mount(&quot;NASMYTH_COROTATING&quot;)
+        self.instrument_name = None
+        self.data_type = None
+        self.instrument_config = None
+        self.instrument_mode = None
+        self.mccs_mode = None
+        self.spectral_element_1 = None
+        self.spectral_element_2 = None
+        self.slit_id = None
+        self.detector_channel = None
+        self.spectral_resolution = np.nan
+        self.exposure_time = np.nan * units.Unit(&#39;s&#39;)
+        self.total_integration_time = np.nan * units.Unit(&#39;s&#39;)
+        self.wavelength = np.nan * units.Unit(&#39;um&#39;)
+
+<div class="viewcode-block" id="SofiaInstrumentInfo.apply_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.instrument.SofiaInstrumentInfo.html#sofia_redux.scan.custom.sofia.info.instrument.SofiaInstrumentInfo.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Update SOFIA instrument information with FITS header information.
+
+        Updates the chopping information by taking the following keywords from
+        the FITS header::
+
+          INSTRUME - The name of the instrument (str)
+          DATATYPE - The data type (str)
+          INSTCFG - The instrument configuration (str)
+          INSTMODE - The instrument observing mode (str)
+          MCCSMODE - The MCCS mode (str)
+          SPECTEL1 - The first spectral element (str)
+          SPECTEL2 - The second spectral element (str)
+          SLIT - The instrument slit ID (str)
+          DETCHAN - The detector channel ID (str)
+          RESOLUN - The spectral resolution (float)
+          EXPTIME - The total effective on-source time (seconds)
+          TOTINT - The total integration time (seconds)
+          WAVECENT - The wavelength at the passband center (mircometers)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        options = self.options
+        if options is None:
+            return
+        self.instrument_name = options.get_string(&quot;INSTRUME&quot;)
+        self.data_type = options.get_string(&quot;DATATYPE&quot;)
+        self.instrument_config = options.get_string(&quot;INSTCFG&quot;)
+        self.instrument_mode = options.get_string(&quot;INSTMODE&quot;)
+        self.mccs_mode = options.get_string(&quot;MCCSMODE&quot;)
+        self.spectral_element_1 = options.get_string(&quot;SPECTEL1&quot;)
+        self.spectral_element_2 = options.get_string(&quot;SPECTEL2&quot;)
+        self.slit_id = options.get_string(&quot;SLIT&quot;)
+        self.detector_channel = options.get_string(&quot;DETCHAN&quot;)
+        self.spectral_resolution = options.get_float(&quot;RESOLUN&quot;)
+        self.exposure_time = options.get_float(&quot;EXPTIME&quot;) * units.Unit(&#39;s&#39;)
+        self.total_integration_time = options.get_float(&quot;TOTINT&quot;
+                                                        ) * units.Unit(&#39;s&#39;)
+        self.wavelength = options.get_float(&quot;WAVECENT&quot;) * units.Unit(&#39;um&#39;)
+
+        if &#39;aperture&#39; in self.configuration:
+            d = self.configuration[&#39;aperture&#39;] * units.Unit(&#39;m&#39;)
+        else:
+            d = self.telescope_diameter
+
+        self.angular_resolution = (1.22 * self.wavelength
+                                   / d).decompose().value
+        self.angular_resolution = (self.angular_resolution
+                                   * units.Unit(&#39;radian&#39;))
+        self.frequency = (constants.c / self.wavelength).to(units.Unit(&#39;Hz&#39;))</div>
+
+
+<div class="viewcode-block" id="SofiaInstrumentInfo.edit_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.instrument.SofiaInstrumentInfo.html#sofia_redux.scan.custom.sofia.info.instrument.SofiaInstrumentInfo.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        info = [
+            (&#39;COMMENT&#39;, &quot;&lt;------ SOFIA Instrument Data ------&gt;&quot;),
+            (&#39;INSTRUME&#39;, self.instrument_name, &#39;Name of SOFIA instrument.&#39;),
+            (&#39;DATATYPE&#39;, self.data_type, &#39;Data type.&#39;),
+            (&#39;INSTCFG&#39;, self.instrument_config, &#39;Instrument configuration.&#39;),
+            (&#39;INSTMODE&#39;, self.instrument_mode, &#39;Instrument observing mode.&#39;),
+            (&#39;MCCSMODE&#39;, self.mccs_mode, &#39;MCCS mode.&#39;),
+            (&#39;EXPTIME&#39;, to_header_float(self.exposure_time, &#39;second&#39;),
+             &#39;(s) total effective on-source time.&#39;),
+            (&#39;SPECTEL1&#39;, self.spectral_element_1, &#39;First spectral element.&#39;),
+            (&#39;SPECTEL2&#39;, self.spectral_element_2, &#39;Second spectral element.&#39;)
+        ]
+
+        if not np.isnan(self.wavelength):
+            info.append((&#39;WAVECENT&#39;, to_header_float(self.wavelength, &#39;um&#39;),
+                         &#39;(um) wavelength at passband center.&#39;))
+
+        if self.slit_id is not None:
+            info.append((&#39;SLIT&#39;, self.slit_id, &#39;Slit identifier.&#39;))
+
+        if not np.isnan(self.spectral_resolution):
+            info.append((&#39;RESOLUN&#39;,
+                         to_header_float(self.spectral_resolution, &#39;um&#39;),
+                         &#39;Spectral resolution.&#39;))
+
+        if self.detector_channel is not None:
+            info.append((&#39;DETCHAN&#39;, self.detector_channel,
+                         &#39;Detector channel ID.&#39;))
+
+        if not np.isnan(self.total_integration_time):
+            info.append((&#39;TOTINT&#39;,
+                         to_header_float(self.total_integration_time,
+                                         &#39;second&#39;),
+                         &#39;(s) Total integration time.&#39;))
+
+        insert_info_in_header(header, info, delete_special=True)</div>
+
+
+<div class="viewcode-block" id="SofiaInstrumentInfo.get_table_entry">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.instrument.SofiaInstrumentInfo.html#sofia_redux.scan.custom.sofia.info.instrument.SofiaInstrumentInfo.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Return a parameter value for the given name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the parameter to retrieve.
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        if name == &#39;wave&#39;:
+            return self.wavelength.to(&#39;um&#39;)
+        elif name == &#39;exp&#39;:
+            return self.exposure_time.to(&#39;second&#39;)
+        elif name == &#39;inttime&#39;:
+            return self.total_integration_time.to(&#39;second&#39;)
+        elif name == &#39;datatype&#39;:
+            return self.data_type
+        elif name == &#39;mode&#39;:
+            return self.instrument_mode
+        elif name == &#39;cfg&#39;:
+            return self.instrument_config
+        elif name == &#39;slit&#39;:
+            return self.slit_id
+        elif name == &#39;spec1&#39;:
+            return self.spectral_element_1
+        elif name == &#39;spec2&#39;:
+            return self.spectral_element_2
+        else:
+            return super().get_table_entry(name)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.calibration.standard_model.genastmodel2 &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.calibration.standard_model.genastmodel2</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Generate thermal models for asteroids.&quot;&quot;&quot;
+
+import os
+import argparse
+import numpy as np
+from scipy.interpolate import interp1d
+
+from sofia_redux.calibration.standard_model import thermast
+from sofia_redux.calibration.pipecal_error import PipeCalError
+
+
+<div class="viewcode-block" id="asteroid_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.genastmodel2.asteroid_model.html#sofia_redux.calibration.standard_model.genastmodel2.asteroid_model">[docs]</a>
+def asteroid_model(params, date, time, outprefix=None,
+                   outfile=None, return_model=False, save_model=True):
+    &quot;&quot;&quot;
+    Generate a model of the flux from an asteroid.
+
+    Parameters
+    ----------
+    params : dict
+        Contains information about the target pulled from
+        JPL&#39;s Horizons database.
+    date : str, datetime.date
+        The date of the observation.
+    time : str, datetime.time
+        The time of the observation.
+    outprefix : str, optional
+        A prefix to attached to the beginning of the filename
+        created with the model. Defaults to &#39;test_obs&#39;.
+    outfile : str, optional
+        Name of output file created with the model. Defaults to
+        &#39; `outprefix` _ `date` _ `time` _model.out&#39;.
+    return_model : bool, optional
+        If set, the model will be returned. Defaults to False.
+    save_model : bool, optional
+        If set, write the model to file. Defaults to True.
+
+    Returns
+    -------
+    model : numpy.array
+        An array with two columns. The first is the wavelength
+        of the model (um), and the second is the asteroid&#39;s
+        flux (Jy).
+
+    &quot;&quot;&quot;
+    # Compute thermal models for each input date and
+    # interpolate to requested filter wavelengths
+    nw = 100000
+    warr, fnu = \
+        thermast.thermast(params[&#39;gmag&#39;], params[&#39;albedo&#39;],
+                          params[&#39;radius&#39;], params[&#39;phi&#39;],
+                          params[&#39;r&#39;], params[&#39;delta&#39;],
+                          nw=nw)
+    model = np.array([warr, fnu])
+
+    fit = interpolate_model(warr, fnu)
+
+    if save_model:
+        if not outfile:
+            if not outprefix:
+                outprefix = &#39;test_out&#39;
+            outfile = f&#39;{outprefix}{date}_{time}_model.out&#39;
+            outfile = outfile.replace(&#39;:&#39;, &#39;&#39;)
+        write_models(model, fit, params, outfile)
+
+    if return_model:
+        return model</div>
+
+
+
+<div class="viewcode-block" id="interpolate_model">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.genastmodel2.interpolate_model.html#sofia_redux.calibration.standard_model.genastmodel2.interpolate_model">[docs]</a>
+def interpolate_model(model_wave, model_flux, requested_wave=None):
+    &quot;&quot;&quot;
+    Interpolate the thermal model at key filter wavelengths.
+
+    Parameters
+    ----------
+    model_wave : numpy.array
+        Wavelengths of the thermal model.
+    model_flux : numpy.array
+        Flux of the themeral model.
+    requested_wave : numpy.array, optional
+        Wavelengths to interpolate the model at. If not
+        provided, the model will be interpolated at
+        wavelengths representative of FORCAST and
+        HAWC filters.
+
+    Returns
+    -------
+    fit : numpy.array
+        Value of the thermal model at the FORCAST/HAWC
+        filter wavelengths.
+
+    &quot;&quot;&quot;
+    # Interpolate the returned function on the filter wavelengths
+    if requested_wave is not None:
+        wfilt = requested_wave
+    else:
+        wfilt = [5.356, 6.348, 6.614, 7.702, 8.605, 11.088, 11.342,
+                 11.796, 19.670, 24.919, 25.242, 31.383, 33.431,
+                 34.678, 37.112, 53.5605, 63.2529, 89.3053,
+                 156.480, 216.969]
+    flux_function = interp1d(model_wave, model_flux)
+    fluxes = flux_function(wfilt)
+    fit = np.array([wfilt, fluxes])
+    return fit</div>
+
+
+
+<div class="viewcode-block" id="write_models">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.genastmodel2.write_models.html#sofia_redux.calibration.standard_model.genastmodel2.write_models">[docs]</a>
+def write_models(model, fit, params, outfile):
+    &quot;&quot;&quot;
+    Write all models to file.
+
+    Parameters
+    ----------
+    model : numpy.array
+        Thermal model of asteroid flux.
+    fit : numpy.array
+        Interpolated fit of `model`. Written to a file
+        called &#39;bb_fit.out&#39;.
+    params : dict
+        Output of call to JPL Horizons database.
+    outfile : str
+        Name of file to write `model` to.
+
+    Returns
+    -------
+    None
+
+    &quot;&quot;&quot;
+    header = (f&#39;STM parameters: \n&#39;
+              f&#39;\tGmag = {params[&quot;gmag&quot;]}\n&#39;
+              f&#39;\tAlbedo = {params[&quot;albedo&quot;]}\n&#39;
+              f&#39;\tRadius = {params[&quot;radius&quot;]} km\n&#39;
+              f&#39;\tPhase = {params[&quot;phi&quot;]} deg\n&#39;
+              f&#39;\tD_sun = {params[&quot;r&quot;]} AU\n&#39;
+              f&#39;\tD_earth = {params[&quot;delta&quot;]} AU\n&#39;
+              f&#39;Wavelength\tFlux\n&#39;
+              f&#39;(microns)\t(Jy)&#39;)
+    np.savetxt(outfile, model.T, header=header, comments=&#39;; &#39;, fmt=&#39;%.6f&#39;)
+    np.savetxt(&#39;bb_fit.out&#39;, fit.T)</div>
+
+
+
+<div class="viewcode-block" id="parse_args">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.genastmodel2.parse_args.html#sofia_redux.calibration.standard_model.genastmodel2.parse_args">[docs]</a>
+def parse_args(args):
+    &quot;&quot;&quot;
+    Parse the command line arguments.
+
+    Parameters
+    ----------
+    args : list
+        Arguments passed in on the command line.
+
+    Returns
+    -------
+    args : argparse.Namespace
+        Namespace populated with the options passed in.
+
+    &quot;&quot;&quot;
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(&#39;params&#39;, metavar=&#39;params&#39;,
+                        type=str, nargs=1,
+                        help=&#39;Output from JPL Horizons database&#39;)
+    parser.add_argument(&#39;obs_file&#39;, metavar=&#39;obs_file&#39;,
+                        type=str, nargs=1,
+                        help=&#39;File containing list of observation &#39;
+                             &#39;dates and times&#39;)
+    parser.add_argument(&#39;outprefix&#39;, metavar=&#39;outprefix&#39;,
+                        type=str, default=&#39;&#39;,
+                        help=&#39;Prefix for output file&#39;)
+
+    args = parser.parse_args(args)
+    return args</div>
+
+
+
+<div class="viewcode-block" id="check_args">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.genastmodel2.check_args.html#sofia_redux.calibration.standard_model.genastmodel2.check_args">[docs]</a>
+def check_args(args):
+    &quot;&quot;&quot;
+    Check the command line arguments are valid.
+
+    Parameters
+    ----------
+    args : argsparse.Namespace
+        Namespace populated with the options passed in.
+
+    Returns
+    -------
+    args : argparse.Namespace
+        Same as input `args` with default values checked.
+
+    Raises
+    ------
+    PipeCalError : exception
+        Raised if any of the input files do not exist.
+
+    &quot;&quot;&quot;
+    if isinstance(args.params, list):
+        args.params = args.params[0]
+    if not os.path.isfile(args.params):
+        raise PipeCalError(f&#39;Value provided for param argument &#39;
+                           f&#39;{args.params} does not exist.&#39;)
+
+    if isinstance(args.obs_file, list):
+        args.obs_file = args.obs_file[0]
+    if not os.path.isfile(args.obs_file):
+        raise PipeCalError(f&#39;Value provided for obs_file argument &#39;
+                           f&#39;{args.obs_file} does not exist.&#39;)
+
+    if not args.outprefix:
+        args.outprefix = &#39;test_out&#39;
+
+    return args</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

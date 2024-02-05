@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.chopnod_properties &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.chopnod_properties</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+
+from sofia_redux.toolkit.utilities.fits import add_history_wrap
+
+from sofia_redux.instruments.forcast.getpar import getpar
+
+addhist = add_history_wrap(&#39;Chopnodprop&#39;)
+
+__all__ = [&#39;chopnod_properties&#39;]
+
+
+<div class="viewcode-block" id="chopnod_properties">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.chopnod_properties.chopnod_properties.html#sofia_redux.instruments.forcast.chopnod_properties.chopnod_properties">[docs]</a>
+def chopnod_properties(header, update_header=False):
+    &quot;&quot;&quot;
+    Returns the chop nod properties in the detector reference frame
+
+    Finds the chop and nod amplitudes in the detector frame.  It also
+    returns if the chop/nod configuration was NMC.
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+    update_header : bool, optional
+        Update the header with plate scale (in HISTORY)
+
+    Returns
+    -------
+    dict
+        chop: dict
+        nod: dict
+        nmc: bool
+        c2nc2 : int
+
+    Notes
+    -----
+    - This function is only useful in the case of C2 or C2N observations
+    - Assume SOFIA plate scale = 0.768 arcsec/pixel
+    &quot;&quot;&quot;
+    telescope = getpar(header, &#39;TELESCOP&#39;)
+    plate_scale = 1.0 if telescope == &#39;PIXELS&#39; else 0.768
+
+    # pixels are square after undistort [x, y]
+    plate_scale = np.array([plate_scale, plate_scale])
+    if update_header:
+        addhist(header, &#39;X,Y plate scales are %s,%s&#39; %
+                (plate_scale[0], plate_scale[1]))
+
+    chop, nod = {}, {}
+    # find distances and angles
+    keys = [&#39;CHPAMP1&#39;, &#39;CHPANGLE&#39;, &#39;NODAMP&#39;, &#39;NODANGLE&#39;]
+    for key in keys:
+        value = getpar(header, key, dtype=float, default=0.)
+        if key == &#39;CHPAMP1&#39;:
+            value *= 2
+        d = chop if &#39;CHP&#39; in key else nod
+        if &#39;ANGLE&#39; in key:
+            d[&#39;angle&#39;] = np.radians(value)
+        else:
+            d[&#39;distance&#39;] = value
+    for d in chop, nod:
+        d[&#39;dxdy&#39;] = [np.sin(d[&#39;angle&#39;]), np.cos(d[&#39;angle&#39;])]
+        d[&#39;dxdy&#39;] *= d[&#39;distance&#39;] / plate_scale
+
+    # find coordinate system
+    # If present, use [CHP/NOD]CRSYS: &#39;ERF&#39; or &#39;SIRF&#39;
+    # Otherwise, use [CHP/NOD]COORD: 0=SIRF, 1=TARF, 2=ERF
+    # NOTE: I think TARF is ignored - don&#39;t know why
+    for cn in [&#39;CHP&#39;, &#39;NOD&#39;]:
+        d = chop if cn == &#39;CHP&#39; else nod
+        value = getpar(header, &#39;%sCRSYS&#39; % cn, dtype=str).upper().strip()
+        if value not in [&#39;ERF&#39;, &#39;SIRF&#39;]:
+            value = getpar(header, &#39;CHPCOORD&#39;, dtype=int, default=0)
+            value = &#39;ERF&#39; if value == 2 else &#39;SIRF&#39;
+        d[&#39;coordsys&#39;] = value
+
+    sky_angle = getpar(header, &#39;SKY_ANGL&#39;, dtype=float, default=0.)
+    sky_angle = np.radians(sky_angle)
+    cosa, sina = np.cos(sky_angle), np.sin(sky_angle)
+
+    for d in chop, nod:
+        if d[&#39;coordsys&#39;] == &#39;ERF&#39;:
+            dx = (d[&#39;dxdy&#39;][0] * cosa) + (d[&#39;dxdy&#39;][1] * sina)
+            dy = (d[&#39;dxdy&#39;][1] * cosa) - (d[&#39;dxdy&#39;][0] * sina)
+            d[&#39;dxdy&#39;][:] = [dx, dy]
+
+    # Check for Nod-match-chop mode:
+    cnmode = getpar(header, &#39;SKYMODE&#39;, dtype=str,
+                    default=&#39;NONE&#39;).strip().upper()
+    nmc = cnmode == &#39;NMC&#39;
+    # More detailed checks for nmc
+    if cnmode == &#39;NONE&#39;:
+        # check for NMC
+        nod_angle = getpar(header, &#39;CHPANGLR&#39;, dtype=float, default=0.)
+        chop_angle = getpar(header, &#39;NODANGLR&#39;, dtype=float, default=0.)
+        # chop amplitude = nod amplitude AND chop angle - nod angle = 180 deg
+        if np.round(chop[&#39;distance&#39;]) == np.round(nod[&#39;distance&#39;]):
+            d_angle = abs(chop_angle - nod_angle)
+            if d_angle == 180 or d_angle == 0:
+                nmc = True
+
+    # check for C2NC2 value
+    c2nc2 = 0
+    instmode = getpar(header, &#39;INSTMODE&#39;, dtype=str).strip().upper()
+    header_c2nc2 = getpar(header, &#39;C2NC2&#39;, dtype=int, default=0,
+                          update_header=False)
+    if cnmode in [&#39;C2NC2&#39;, &#39;C2&#39;, &#39;NXCAC&#39;] or (
+            header_c2nc2 and instmode == &#39;C2&#39;):
+        c2nc2 = 1
+        if (cnmode == &#39;NXCAC&#39;) or getpar(
+                header, &#39;NAXIS3&#39;, default=0, dtype=int) == 4:
+            c2nc2 = 2
+
+    return {&#39;chop&#39;: chop, &#39;nod&#39;: nod, &#39;nmc&#39;: nmc, &#39;c2nc2&#39;: c2nc2}</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

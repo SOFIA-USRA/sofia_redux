@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.info.nodding &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.info.nodding</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from sofia_redux.scan.info.base import InfoBase
+import numpy as np
+from astropy import units
+
+from sofia_redux.scan.utilities.utils import (
+    to_header_float, insert_info_in_header)
+
+__all__ = [&#39;SofiaNoddingInfo&#39;]
+
+
+<div class="viewcode-block" id="SofiaNoddingInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.nodding.SofiaNoddingInfo.html#sofia_redux.scan.custom.sofia.info.nodding.SofiaNoddingInfo">[docs]</a>
+class SofiaNoddingInfo(InfoBase):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize the SOFIA nodding information.
+
+        Contains information on the SOFIA nodding parameters such as the nod
+        amplitude, angle, pattern, and timings.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.nodding = None
+        self.dwell_time = np.nan * units.s
+        self.cycles = -1
+        self.settling_time = np.nan * units.s
+        self.amplitude = np.nan * units.Unit(&#39;arcsec&#39;)
+        self.angle = np.nan * units.Unit(&#39;deg&#39;)
+        self.beam_position = None
+        self.pattern = None
+        self.style = None
+        self.coordinate_system = None
+
+    @property
+    def log_id(self):
+        &quot;&quot;&quot;
+        Return the string log ID for the info.
+
+        The log ID is used to extract certain information from table data.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;nod&#39;
+
+<div class="viewcode-block" id="SofiaNoddingInfo.apply_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.nodding.SofiaNoddingInfo.html#sofia_redux.scan.custom.sofia.info.nodding.SofiaNoddingInfo.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Update nodding information with FITS header information.
+
+        Updates the information by taking the following keywords from the
+        FITS header::
+
+          NODDING - Whether nodding was enabled for the scan (bool)
+          NODTIME - Total dwell time per nod position (seconds)
+          NODN - The number of nod cycles (int)
+          NODSETL - The nod settling time (seconds)
+          NODAMP - The nod amplitude on the sky (arcseconds)
+          NODANGLE - The nod angle on the sky (degrees)
+          NODBEAM - The nod beam position (str)
+          NODPATT - The pointing sequence for one nod cycle (str)
+          NODSTYLE - The nodding style (str)
+          NODCRSYS - The nodding coordinate system (str)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        options = self.options
+        if options is None:
+            return
+        self.nodding = options.get_bool(&quot;NODDING&quot;)
+        self.dwell_time = options.get_float(&quot;NODTIME&quot;) * units.Unit(&#39;s&#39;)
+        self.cycles = options.get_int(&quot;NODN&quot;)
+        self.settling_time = options.get_float(&quot;NODSETL&quot;) * units.Unit(&#39;s&#39;)
+        self.amplitude = options.get_float(&quot;NODAMP&quot;) * units.Unit(&#39;arcsec&#39;)
+        self.angle = options.get_float(&quot;NODANGLE&quot;) * units.Unit(&#39;deg&#39;)
+        self.beam_position = options.get_string(&quot;NODBEAM&quot;)
+        self.pattern = options.get_string(&quot;NODPATT&quot;)
+        self.style = options.get_string(&quot;NODSTYLE&quot;)
+        self.coordinate_system = options.get_string(&quot;NODCRSYS&quot;)</div>
+
+
+<div class="viewcode-block" id="SofiaNoddingInfo.edit_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.nodding.SofiaNoddingInfo.html#sofia_redux.scan.custom.sofia.info.nodding.SofiaNoddingInfo.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        info = [
+            (&#39;COMMENT&#39;, &quot;&lt;------ SOFIA Nodding Data ------&gt;&quot;),
+            (&#39;NODN&#39;, self.cycles, &#39;Number of nod cycles.&#39;),
+            (&#39;NODAMP&#39;, to_header_float(self.amplitude, &#39;arcsec&#39;),
+             &#39;(arcsec) Nod amplitude on sky.&#39;),
+            (&#39;NODANGLE&#39;, to_header_float(self.angle, &#39;deg&#39;),
+             &#39;(deg) Nod angle on sky.&#39;),
+            (&#39;NODTIME&#39;, to_header_float(self.dwell_time, &#39;second&#39;),
+             &#39;(s) Total dwell time per nod position.&#39;),
+            (&#39;NODSETL&#39;, to_header_float(self.settling_time, &#39;second&#39;),
+             &#39;(s) Nod settling time.&#39;),
+            (&#39;NODPATT&#39;, self.pattern, &#39;Pointing sequence for one nod cycle.&#39;),
+            (&#39;NODCRSYS&#39;, self.coordinate_system, &#39;Nodding coordinate system.&#39;),
+            (&#39;NODBEAM&#39;, self.beam_position, &#39;Nod beam position.&#39;),
+        ]
+
+        if self.style is not None:
+            info.append((&#39;NODSTYLE&#39;, self.style, &#39;Nodding style&#39;))
+
+        insert_info_in_header(header, info, delete_special=True)</div>
+
+
+<div class="viewcode-block" id="SofiaNoddingInfo.get_table_entry">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.nodding.SofiaNoddingInfo.html#sofia_redux.scan.custom.sofia.info.nodding.SofiaNoddingInfo.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Return a parameter value for the given name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the parameter to retrieve.
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        if name == &#39;amp&#39;:
+            return self.amplitude.to(&#39;arcsec&#39;)
+        elif name == &#39;angle&#39;:
+            return self.angle.to(&#39;degree&#39;)
+        elif name == &#39;dwell&#39;:
+            return self.dwell_time.to(&#39;second&#39;)
+        elif name == &#39;settle&#39;:
+            return self.settling_time.to(&#39;second&#39;)
+        elif name == &#39;n&#39;:
+            return str(self.cycles)
+        elif name == &#39;pos&#39;:
+            return self.beam_position
+        elif name == &#39;sys&#39;:
+            return self.coordinate_system
+        elif name == &#39;pattern&#39;:
+            return self.pattern
+        elif name == &#39;style&#39;:
+            return self.style
+        else:
+            return super().get_table_entry(name)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

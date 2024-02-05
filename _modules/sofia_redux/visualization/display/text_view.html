@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.visualization.display.text_view &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.visualization.display.text_view</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Text viewer widget for use with the Eye of SOFIA.&quot;&quot;&quot;
+
+try:
+    from PyQt5 import QtWidgets, QtGui, QtCore
+    from sofia_redux.visualization.display.ui import textview as tv
+except ImportError:
+    HAS_PYQT5 = False
+    QtGui = None
+
+    # duck type parents to allow class definition
+    class QtWidgets:
+        class QDialog:
+            pass
+
+    class tv:
+        class Ui_TextWindow:
+            pass
+else:
+    HAS_PYQT5 = True
+
+
+<div class="viewcode-block" id="TextView">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.text_view.TextView.html#sofia_redux.visualization.display.text_view.TextView">[docs]</a>
+class TextView(QtWidgets.QDialog, tv.Ui_TextWindow):
+    &quot;&quot;&quot;
+    View, find, and filter text.
+
+    All attributes and methods for this class are intended for internal
+    use, in response to user actions within a Qt5 application.
+    &quot;&quot;&quot;
+    def __init__(self, parent=None):
+        &quot;&quot;&quot;
+        Initialize the text viewer widget.
+
+        Parameters
+        ----------
+        parent : `QWidget`
+            Parent widget.
+        &quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required.&#39;)
+
+        # parent initialization
+        QtWidgets.QDialog.__init__(self, parent)
+
+        # set up UI from Designer generated file
+        self.setupUi(self)
+
+        # make sure there&#39;s a close button
+        self.setWindowFlags(QtCore.Qt.Window
+                            | QtCore.Qt.WindowMaximizeButtonHint
+                            | QtCore.Qt.WindowMinimizeButtonHint
+                            | QtCore.Qt.WindowCloseButtonHint)
+
+        # connect buttons
+        self.findButton.clicked.connect(self.find)
+        self.filterButton.clicked.connect(self.filter)
+        self.tableButton.setEnabled(False)
+
+        # hide save button: should only appear if text is editable
+        self.saveButton.setVisible(False)
+
+        # last loaded text
+        self.text = None
+        self.html = None
+
+<div class="viewcode-block" id="TextView.load">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.text_view.TextView.html#sofia_redux.visualization.display.text_view.TextView.load">[docs]</a>
+    def load(self, text):
+        &quot;&quot;&quot;
+        Load text into the widget.
+
+        Parameters
+        ----------
+        text : list of str
+            The text to display.
+        &quot;&quot;&quot;
+        if text is None:
+            text = &#39;&#39;
+        if type(text) is not list:
+            text = [text]
+
+        self.text = text
+
+        # format to HTML
+        self.html = self.format()
+
+        # set text in text window
+        self.textEdit.setHtml(self.html)
+        self.textEdit.repaint()</div>
+
+
+<div class="viewcode-block" id="TextView.setTitle">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.text_view.TextView.html#sofia_redux.visualization.display.text_view.TextView.setTitle">[docs]</a>
+    def setTitle(self, title):
+        &quot;&quot;&quot;Set the window title.&quot;&quot;&quot;
+        self.setWindowTitle(title)</div>
+
+
+<div class="viewcode-block" id="TextView.find">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.text_view.TextView.html#sofia_redux.visualization.display.text_view.TextView.find">[docs]</a>
+    def find(self):
+        &quot;&quot;&quot;Find a string within the text.&quot;&quot;&quot;
+
+        # read text to find
+        # whole field will be matched; comma-separated fields not allowed
+        find_text = self.findText.text().strip()
+
+        cursor = self.textEdit.textCursor()
+        if find_text == &#39;&#39;:
+            # set cursor back to beginning of document
+            cursor.movePosition(QtGui.QTextCursor.Start)
+            self.textEdit.setTextCursor(cursor)
+        else:
+            # find next instance
+            found = self.textEdit.find(find_text)
+            if not found:
+                # wrap back to beginning and try one more find
+                cursor.movePosition(QtGui.QTextCursor.Start)
+                self.textEdit.setTextCursor(cursor)
+                self.textEdit.find(find_text)
+        self.textEdit.repaint()</div>
+
+
+<div class="viewcode-block" id="TextView.filter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.text_view.TextView.html#sofia_redux.visualization.display.text_view.TextView.filter">[docs]</a>
+    def filter(self):
+        &quot;&quot;&quot;Filter text to lines containing a specified string.&quot;&quot;&quot;
+
+        # read text to filter
+        # may be comma-separated substrings
+        find_text = self.findText.text().strip()
+
+        if find_text == &#39;&#39;:
+            # clear previous filter / table
+            self.textEdit.setHtml(self.html)
+        else:
+            # allow multiple filter keys
+            sep = find_text.split(&#39;,&#39;)
+
+            # split text on lines
+            header = self.html.split(&#39;&lt;br&gt;&#39;)
+
+            # find substrings in lines
+            filtered = []
+            for line in header:
+                added = False
+
+                # keep anchored lines -- filename headers, &lt;pre&gt; tags
+                if &#39;&lt;a name=&quot;anchor&quot;&gt;&#39; in line:
+                    filtered.append(line)
+                else:
+                    for text in sep:
+                        if added:
+                            break
+                        if text.strip().lower() in line.lower():
+                            filtered.append(line)
+                            added = True
+            self.textEdit.setHtml(&#39;&lt;br&gt;&#39;.join(filtered))
+
+        # repaint required for some versions of Qt/OS
+        self.textEdit.repaint()</div>
+
+
+<div class="viewcode-block" id="TextView.format">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.display.text_view.TextView.html#sofia_redux.visualization.display.text_view.TextView.format">[docs]</a>
+    def format(self):
+        &quot;&quot;&quot;
+        Format the input text to HTML for display.
+
+        Returns
+        -------
+        str
+            HTML-formatted text.
+        &quot;&quot;&quot;
+        anchor = &#39;&lt;a name=&quot;anchor&quot;&gt;&lt;/a&gt;&#39;
+        br = &#39;&lt;br&gt;&#39;
+
+        text_str = br.join(self.text)
+        html = &#39;&lt;pre&gt;&#39; + anchor + br + text_str + br + &#39;&lt;/pre&gt;&#39; + anchor
+
+        return html</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

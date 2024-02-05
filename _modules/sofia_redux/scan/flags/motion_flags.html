@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.flags.motion_flags &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.flags.motion_flags</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import enum
+import numpy as np
+
+from sofia_redux.scan.flags.flags import Flags
+
+__all__ = [&#39;MotionFlags&#39;]
+
+
+<div class="viewcode-block" id="MotionFlags">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.motion_flags.MotionFlags.html#sofia_redux.scan.flags.motion_flags.MotionFlags">[docs]</a>
+class MotionFlags(Flags):
+
+    class MotionFlagTypes(enum.Flag):
+
+        X = enum.auto()
+        Y = enum.auto()
+        Z = enum.auto()
+        X2 = enum.auto()
+        Y2 = enum.auto()
+        Z2 = enum.auto()
+        X_MAGNITUDE = enum.auto()
+        Y_MAGNITUDE = enum.auto()
+        Z_MAGNITUDE = enum.auto()
+        MAGNITUDE = enum.auto()
+        NORM = enum.auto()
+        TELESCOPE = enum.auto()
+        SCANNING = enum.auto()
+        CHOPPER = enum.auto()
+        PROJECT_GLS = enum.auto()
+
+    flags = MotionFlagTypes
+
+    descriptions = {
+        flags.X: &#39;x&#39;,
+        flags.Y: &#39;y&#39;,
+        flags.Z: &#39;z&#39;,
+        flags.X2: &#39;x^2&#39;,
+        flags.Y2: &#39;y^2&#39;,
+        flags.Z2: &#39;z^2&#39;,
+        flags.X_MAGNITUDE: &#39;|x|&#39;,
+        flags.Y_MAGNITUDE: &#39;|y|&#39;,
+        flags.Z_MAGNITUDE: &#39;|z|&#39;,
+        flags.MAGNITUDE: &#39;Magnitude&#39;,
+        flags.NORM: &#39;Norm&#39;,
+        flags.TELESCOPE: &#39;Telescope&#39;,
+        flags.SCANNING: &#39;Scanning&#39;,
+        flags.CHOPPER: &#39;Chopper&#39;,
+        flags.PROJECT_GLS: &#39;Project GLS&#39;
+    }
+
+    letters = {
+        &#39;x&#39;: flags.X,
+        &#39;y&#39;: flags.Y,
+        &#39;z&#39;: flags.Z,
+        &#39;i&#39;: flags.X2,
+        &#39;j&#39;: flags.Y2,
+        &#39;k&#39;: flags.Z2,
+        &#39;X&#39;: flags.X_MAGNITUDE,
+        &#39;Y&#39;: flags.Y_MAGNITUDE,
+        &#39;Z&#39;: flags.Z_MAGNITUDE,
+        &#39;M&#39;: flags.MAGNITUDE,
+        &#39;n&#39;: flags.NORM,
+        &#39;t&#39;: flags.TELESCOPE,
+        &#39;s&#39;: flags.SCANNING,
+        &#39;c&#39;: flags.CHOPPER,
+        &#39;p&#39;: flags.PROJECT_GLS
+    }
+
+    position_functions = {
+        flags.X: lambda position: position.x.copy(),
+        flags.Y: lambda position: position.y.copy(),
+        flags.Z: lambda position: position.z.copy(),
+        flags.X2: lambda position: position.x ** 2,
+        flags.Y2: lambda position: position.y ** 2,
+        flags.Z2: lambda position: position.z ** 2,
+        flags.MAGNITUDE: lambda position: position.length,
+
+        flags.X_MAGNITUDE: lambda position: np.abs(position.x),
+        flags.Y_MAGNITUDE: lambda position: np.abs(position.y),
+        flags.Z_MAGNITUDE: lambda position: np.abs(position.z),
+        flags.NORM: lambda position: np.linalg.norm(
+            position.coordinates, axis=0),
+        flags(0): lambda position: position.x * np.nan,
+    }
+
+<div class="viewcode-block" id="MotionFlags.convert_flag">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.motion_flags.MotionFlags.html#sofia_redux.scan.flags.motion_flags.MotionFlags.convert_flag">[docs]</a>
+    @classmethod
+    def convert_flag(cls, flag):
+        &quot;&quot;&quot;
+        Convert a given user flag to a standard flag Enum.
+
+        Parameters
+        ----------
+        flag : enum.Enum or None or int or str
+            `None` will return flag(0).  str values will look for that given
+            flag name.  Note that unlike the Flags class, the &#39;|&#39; character
+            indicates magnitude rather than a separator for multiple flags.
+
+        Returns
+        -------
+        enum.Enum
+        &quot;&quot;&quot;
+        if isinstance(flag, enum.Flag):
+            return flag
+        elif isinstance(flag, int):
+            return cls.flags(flag)
+        elif isinstance(flag, str):
+            attr = getattr(cls.flags, flag.upper().strip(), None)
+            if attr is not None:
+                return attr
+            s = flag.strip().upper()
+            if s.startswith(&#39;|&#39;):
+                return getattr(cls.flags, f&#39;{s[1]}_MAGNITUDE&#39;)
+            elif &#39;^&#39; in s:
+                return getattr(cls.flags, &#39;&#39;.join(s.split(&#39;^&#39;)))
+            elif s.startswith(&#39;M&#39;):
+                return getattr(cls.flags, &#39;MAGNITUDE&#39;)
+            elif s.startswith(&#39;N&#39;):
+                return getattr(cls.flags, &#39;NORM&#39;)
+            else:
+                raise ValueError(f&quot;Unknown flag: {flag}&quot;)
+        else:
+            raise ValueError(f&quot;Invalid flag type: {flag}&quot;)</div>
+
+
+    def __init__(self, direction):
+        &quot;&quot;&quot;
+        Initialize a MotionFlags object.
+
+        Unlike most other flag classes, the MotionFlags class can be
+        initialized for use in extracting motion signals from a given
+        position.  The given position object (passed into
+        :func:`MotionFlags.__call__` or :func:`MotionFlags.get_value`)
+        must have retrievable values in the &#39;x&#39;, &#39;y&#39;, or &#39;z&#39; attribute.
+
+        Parameters
+        ----------
+        direction : int or str or enum.Enum
+            The direction from which the MotionFlags object will extract
+            position signals.  For example, `direction=&#39;x^2&#39;` will return the
+            value of the &#39;x&#39; attribute squared from any given object.
+        &quot;&quot;&quot;
+        self.direction = self.convert_flag(direction)
+        self.position_function = self.position_functions.get(self.direction)
+        if self.position_function is None:
+            log.warning(f&quot;No position function exists for &quot;
+                        f&quot;{direction} direction.&quot;)
+            log.warning(&quot;Resulting output will be NaN.&quot;)
+            self.direction = self.flags(0)
+            self.position_function = self.position_functions.get(
+                self.direction)
+
+<div class="viewcode-block" id="MotionFlags.get_value">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.motion_flags.MotionFlags.html#sofia_redux.scan.flags.motion_flags.MotionFlags.get_value">[docs]</a>
+    def get_value(self, position):
+        &quot;&quot;&quot;
+        Return a value for the given position.
+
+        Parameters
+        ----------
+        position : Coordinate
+
+        Returns
+        -------
+        value : float or numpy.ndarray or units.Quantity
+        &quot;&quot;&quot;
+        return self.position_function(position)</div>
+
+
+<div class="viewcode-block" id="MotionFlags.__call__">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.flags.motion_flags.MotionFlags.html#sofia_redux.scan.flags.motion_flags.MotionFlags.__call__">[docs]</a>
+    def __call__(self, position):
+        &quot;&quot;&quot;
+        Get the value for a given position.
+
+        Parameters
+        ----------
+        position : Coordinate
+
+        Returns
+        -------
+        value : float or numpy.ndarray or units.Quantity
+        &quot;&quot;&quot;
+        return self.get_value(position)</div>
+
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the motion flag.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return self.__class__.__name__ + f&#39;: {self.direction}&#39;</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

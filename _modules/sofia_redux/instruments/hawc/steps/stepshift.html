@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepshift &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepshift</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Array alignment pipeline step.&quot;&quot;&quot;
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.instruments.hawc.stepparent import StepParent
+from sofia_redux.toolkit.image import adjust
+
+__all__ = [&#39;StepShift&#39;]
+
+
+<div class="viewcode-block" id="StepShift">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepshift.StepShift.html#sofia_redux.instruments.hawc.steps.stepshift.StepShift">[docs]</a>
+class StepShift(StepParent):
+    &quot;&quot;&quot;
+    Align the R and T arrays.
+
+    This step performs various array manipulations to trim and
+    align the detector subarrays. First, the last row is removed,
+    since it is unilluminated. Then, the R1 and T1 subarrays are
+    rotated to align with R0 and T0, and all subarrays are flipped
+    over the y-axis. The first and last chops in the demodulated
+    data are removed. Finally, the R array is shifted to align with
+    the T array.
+
+    Only linear pixel shifts between R and T are performed here. Any
+    additional misalignment (e.g. rotation) is handled in later
+    mapping steps. The parameters passed here are set as header keywords,
+    to be applied as needed by `sofia_redux.instruments.hawc.steps.StepMerge`.
+
+    This step will also check for the TRCKSTAT keyword in the FITS header.
+    If it has been set to BAD, this step will issue an error and halt
+    processing.
+
+    Input for this step is a flat-fielded file, where the R Array,
+    T Array, and their variances are now images instead of columns in the
+    data table. This step is typically run after
+    `sofia_redux.instruments.hawc.steps.StepFlat`.
+
+    Output from this step is the same as the input file, except that
+    the R and T images, variances, and masks have been trimmed and
+    shifted. Additionally, some unneeded columns are removed from the
+    DEMODULATED DATA table, and header keywords are set to describe
+    R and T relative geometry. These keywords are ALNANG1, ALNANG2,
+    ALNMAGX, ALNMAGY, ALNGAPX, ALNGAPY, and ALNROTA.
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepShift.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepshift.StepShift.html#sofia_redux.instruments.hawc.steps.stepshift.StepShift.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;shift&#39;, and are named with
+        the step abbreviation &#39;SFT&#39;.
+
+        Parameters defined for this step are:
+
+        angle1 : float
+            Rotation angle of R0 relative to T0, in degrees
+            counter-clockwise, to be stored in keyword ALNANG1.
+        angle2 : float
+            Rotation angle of R1 relative to T1, in degrees
+            counterclockwise, to be stored in keyword ALNANG2.
+        mag : list of float
+            Magnification of R relative to T, in the x, y pixel
+            direction, given as [mx, my]. This will be stored
+            in keywords ALNMAGX, ALNMAGY.
+        disp1 : list of float
+            Pixel displacement of R0 relative to T0, in the x, y
+            directions, given as [dx, dy]. This will be applied
+            to the data with a linearly interpolated shift.
+        disp2 : list of float
+            Pixel displacement of R1 relative to T1, in the x, y
+            directions, given as [dx, dy]. This will be applied
+            to the data with a linearly interpolated shift.
+        gapx : float
+            Displacement in x pixels between T0 and T1. This
+            will be stored in keyword ALNGAPX.
+        gapy : float
+            Displacement in y pixels between T0 and T1. This
+            will be stored in keyword ALNGAPY.
+        gapangle : float
+            Rotation angle in degrees counter-clockwise between
+            T0 and T1. This will be stored in keyword ALNROTA.
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;shift&#39;
+        self.description = &#39;Align Arrays&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;sft&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+
+        # Append parameters
+        self.paramlist.append([&#39;angle1&#39;, 0.0,
+                               &#39;Rotation angle of R0 relative to T0, &#39;
+                               &#39;in degrees counterclockwise&#39;])
+        self.paramlist.append([&#39;angle2&#39;, 0.0,
+                               &#39;Rotation angle of R1 relative to T1, &#39;
+                               &#39;in degrees counterclockwise&#39;])
+        self.paramlist.append([&#39;mag&#39;, [1.0, 1.0],
+                               &#39;Magnification of R relative to T, &#39;
+                               &#39;in the x, y pixel direction&#39;])
+        self.paramlist.append([&#39;disp1&#39;, [0.0, 0.0],
+                               &quot;Pixel displacement of R0 relative to T0, &quot;
+                               &quot;in the x, y directions&quot;])
+        self.paramlist.append([&#39;disp2&#39;, [0.0, 0.0],
+                               &quot;Pixel displacement of R1 relative to T1, &quot;
+                               &quot;in the x, y directions&quot;])
+        self.paramlist.append([&#39;gapx&#39;, 0.0,
+                               &#39;Displacement in x pixels between T0 and T1&#39;])
+        self.paramlist.append([&#39;gapy&#39;, 0.0,
+                               &#39;Displacement in y pixels between T0 and T1&#39;])
+        self.paramlist.append([&#39;gapangle&#39;, 0.0,
+                               &#39;Rotation angle in degrees CCW between &#39;
+                               &#39;T0 and T1&#39;])</div>
+
+
+<div class="viewcode-block" id="StepShift.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepshift.StepShift.html#sofia_redux.instruments.hawc.steps.stepshift.StepShift.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        Because this step is single-in, single-out (SISO),
+        self.datain must be a DataFits object. The output
+        is also a DataFits object, stored in self.dataout.
+
+        The process is:
+
+        1. Check for tracking status problems.
+        2. Remove unneeded data table columns.
+        3. Rotate, flip, and trim data arrays.
+        4. Store alignment keywords.
+        5. Shift the R array to match the T array.
+
+        Raises
+        ------
+        ValueError
+            If TRCKSTAT is BAD.
+        &quot;&quot;&quot;
+
+        # Check if tracking issues were found in stepDemod
+        if &#39;TRCKSTAT&#39; in self.datain.header:
+            trckstatus = self.datain.getheadval(&#39;TRCKSTAT&#39;)
+            if &quot;BAD&quot; in trckstatus:
+                msg = &#39;Bad file due to tracking issues - more &#39; \
+                      &#39;than 1/3 of samples were removed in stepDemod&#39;
+                log.error(msg)
+                raise ValueError(msg)
+        else:
+            log.warning(&#39;No TRCKSTAT keyword found in the header&#39;)
+
+        originalheader = self.datain.header
+
+        # Remove columns
+        cols_to_del = [&#39;Chop Offset Imag&#39;,
+                       &#39;SLOPES R&#39;, &#39;SLOPES T&#39;,
+                       &#39;RAWMED R&#39;, &#39;RAWMED T&#39;,
+                       &#39;INTERCEPTS R&#39;, &#39;INTERCEPTS T&#39;,
+                       &#39;R ARRAY GAIN&#39;, &#39;T ARRAY GAIN&#39;,
+                       &#39;R ARRAY IMAG&#39;, &#39;T ARRAY IMAG&#39;,
+                       &#39;R ARRAY IMAG VAR&#39;, &#39;T ARRAY IMAG VAR&#39;]
+        try:
+            tabnames = self.datain.table.names
+        except AttributeError:
+            msg = &#39;No valid tables in input data&#39;
+            log.error(msg)
+            raise ValueError(msg)
+
+        for a in cols_to_del:
+            for b in tabnames:
+                if a == b:
+                    self.datain.tabledelcol(a)
+
+        self.dataout = self.datain.copy()
+        # Set the header equal to the input header
+        self.dataout.setheader(originalheader)
+
+        # Rotate R1, T1, Flip all arrays
+        for datname in [&#39;R array&#39;, &#39;T array&#39;,
+                        &#39;R array VAR&#39;, &#39;T array VAR&#39;,
+                        &#39;R BAD PIXEL MASK&#39;, &#39;T BAD PIXEL MASK&#39;]:
+            data = self.dataout.imageget(datname)
+            nrow, ncol = data.shape[-2:]
+            # Cut by 1 row (if size longer than 40) and do flips and twists
+            # (A flip and rotate is just a flip so
+            # each half only needs one flip)
+            if len(data.shape) &gt; 2:
+                if nrow == 41:
+                    data = data[:, :40, :]
+                    nrow -= 1
+                data[..., :ncol // 2] = \
+                    data[:, range(nrow - 1, -1, -1), :ncol // 2]
+                data[..., ncol // 2:ncol] = \
+                    data[..., range(ncol - 1, ncol // 2 - 1, -1)]
+            else:
+                if nrow == 41:
+                    data = data[:40, :]
+                    nrow -= 1
+                data[:, :ncol // 2] = \
+                    data[range(nrow - 1, -1, -1), :ncol // 2]
+                data[:, ncol // 2:ncol] = \
+                    data[:, range(ncol - 1, ncol // 2 - 1, -1)]
+            self.dataout.imageset(data, datname)
+
+        # Remove first and last chops from images and table
+        # (usually produced by demodulation artifacts)
+        for datname in [&#39;R array&#39;, &#39;T array&#39;, &#39;R array VAR&#39;, &#39;T array VAR&#39;]:
+            data = self.dataout.imageget(datname)
+            data = data[1:-1, :, :]
+            self.dataout.imageset(data, datname)
+        table = self.dataout.tableget(&#39;demodulated data&#39;)
+        table = table[1:-1]
+        self.dataout.tableset(table, &#39;demodulated data&#39;)
+
+        # Get values and arrays
+        disp1 = self.getarg(&#39;disp1&#39;)
+        disp2 = self.getarg(&#39;disp2&#39;)
+        mag1 = self.getarg(&#39;mag&#39;)
+        angle1 = self.getarg(&#39;angle1&#39;)
+        angle2 = self.getarg(&#39;angle2&#39;)
+        gapx = self.getarg(&#39;gapx&#39;)
+        gapy = self.getarg(&#39;gapy&#39;)
+        gaprot = self.getarg(&#39;gapangle&#39;)
+        rmask = self.dataout.imageget(&#39;R BAD PIXEL MASK&#39;)
+        demodr = self.dataout.imageget(&#39;R array&#39;)
+        demodrv = self.dataout.imageget(&#39;R array VAR&#39;)
+
+        # write to fits header alignment info
+        self.dataout.setheadval(&quot;ALNANG1&quot;, angle1,
+                                &#39;Rotation angle in degrees of R1 wrt to T1&#39;)
+        self.dataout.setheadval(&quot;ALNANG2&quot;, angle2,
+                                &#39;Rotation angle in degrees of R2 wrt to T2&#39;)
+        self.dataout.setheadval(&quot;ALNMAGX&quot;, mag1[0],
+                                &#39;Mag. of R wrt to T in the X direction&#39;)
+        self.dataout.setheadval(&quot;ALNMAGY&quot;, mag1[1],
+                                &#39;Mag. of R wrt to T in the Y direction&#39;)
+        self.dataout.setheadval(&quot;ALNGAPX&quot;, gapx,
+                                &#39;displacement in x pixels between T1 and T2&#39;)
+        self.dataout.setheadval(&quot;ALNGAPY&quot;, gapy,
+                                &#39;displacement in y pixels between T1 and T2&#39;)
+        self.dataout.setheadval(&quot;ALNROTA&quot;, gaprot,
+                                &#39;Rotation angle in degrees CCW &#39;
+                                &#39;between T1 and T2&#39;)
+
+        # Note, we assume the R and T arrays are the same size and that the
+        # arrays are cleanly divisible by 2 in number of columns
+        nz, nrow, ncol = demodr.shape
+        ncol = ncol // 2
+
+        # Apply shifts to R1 relative to T1
+        ix1 = disp1[0]
+        iy1 = disp1[1]
+        datar1 = demodr[:, :, :ncol]
+        datarv1 = demodrv[:, :, :ncol]
+        maskr1 = rmask[:, :ncol]
+        # must be tenth of a pixel or more to bother
+        shifted = False
+        if not np.allclose([ix1, iy1], 0, atol=1e-2):
+            datar1 = adjust.shift(datar1, [0, iy1, ix1])
+            datarv1 = adjust.shift(datarv1, [0, iy1, ix1])
+            maskr1 = adjust.shift(maskr1, [iy1, ix1], mode=&#39;constant&#39;,
+                                  missing=4, order=0)
+            shifted = True
+
+        # Apply shifts to R2 relative to T2
+        ix2 = disp2[0]
+        iy2 = disp2[1]
+        datar2 = demodr[:, :, ncol:]
+        datarv2 = demodrv[:, :, ncol:]
+        maskr2 = rmask[:, ncol:]
+        if not np.allclose([ix2, iy2], 0, atol=1e-2):
+            datar2 = adjust.shift(datar2, [0, iy2, ix2])
+            datarv2 = adjust.shift(datarv2, [0, iy2, ix2])
+            maskr2 = adjust.shift(maskr2, [iy2, ix2], mode=&#39;constant&#39;,
+                                  missing=4, order=0)
+            shifted = True
+
+        if shifted:
+            # some sort of shift applied
+            log.debug(&#39;Shifted R array to match T array&#39;)
+
+            # combine demodulated data
+            newdata = np.concatenate((datar1, datar2), axis=2)
+
+            # combine variance
+            newvar = np.concatenate((datarv1, datarv2), axis=2)
+
+            # combine r1 &amp; r2 masks
+            newmask = np.concatenate((maskr1, maskr2), axis=1)
+
+            # write out updated data
+            self.dataout.imageset(newdata, &#39;R Array&#39;)
+            self.dataout.imageset(newvar, &#39;R Array VAR&#39;)
+            self.dataout.imageset(newmask, &#39;R BAD PIXEL MASK&#39;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

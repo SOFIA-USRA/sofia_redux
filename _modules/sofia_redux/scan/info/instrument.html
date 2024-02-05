@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.info.instrument &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.info.instrument</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+from astropy import constants, units
+
+from sofia_redux.scan.info.base import InfoBase
+from sofia_redux.scan.flags.mounts import Mount
+
+__all__ = [&#39;InstrumentInfo&#39;]
+
+
+<div class="viewcode-block" id="InstrumentInfo">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.instrument.InstrumentInfo.html#sofia_redux.scan.info.instrument.InstrumentInfo">[docs]</a>
+class InstrumentInfo(InfoBase):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize the instrument information.
+
+        The instrument information contains parameters relating to the
+        observing instrument such as the observing frequency, resolution,
+        sampling interval, gain, and number of channels.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.configuration = None
+        self.name = None
+        self.mount = Mount.UNKNOWN
+        self.frequency = np.nan * units.Unit(&#39;Hz&#39;)
+        self.angular_resolution = np.nan * units.Unit(&#39;radian&#39;)
+        self.resolution = np.nan * self.get_size_unit()
+        self.integration_time = np.nan * units.s
+        self.sampling_interval = np.nan * units.s
+        self.overlap_point_size = np.nan * self.get_size_unit()
+        self.gain = 1.0
+        self.n_store_channels = 0
+        self.n_mapping_channels = 0
+
+    @property
+    def log_id(self):
+        &quot;&quot;&quot;
+        Return the string log ID for the info.
+
+        The log ID is used to extract certain information from table data.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;inst&#39;
+
+<div class="viewcode-block" id="InstrumentInfo.set_mount">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.instrument.InstrumentInfo.html#sofia_redux.scan.info.instrument.InstrumentInfo.set_mount">[docs]</a>
+    def set_mount(self, mount):
+        &quot;&quot;&quot;
+        Set the telescope mount for the instrument.
+
+        Parameters
+        ----------
+        mount : Mount or int or str
+            The actual Mount flag type, it&#39;s integer representation (be
+            careful it&#39;s correct), or the string name for the mount.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if isinstance(mount, int):
+            self.mount = Mount(mount)
+        elif isinstance(mount, str):
+            self.mount = getattr(Mount, mount, None)
+            if self.mount is None:
+                raise ValueError(f&quot;{mount} is not a valid Mount.&quot;)
+        elif isinstance(mount, Mount):
+            self.mount = mount
+        else:
+            raise ValueError(f&quot;{mount!r} is not a valid Mount.&quot;)</div>
+
+
+<div class="viewcode-block" id="InstrumentInfo.get_size_unit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.instrument.InstrumentInfo.html#sofia_redux.scan.info.instrument.InstrumentInfo.get_size_unit">[docs]</a>
+    @staticmethod
+    def get_size_unit():
+        &quot;&quot;&quot;
+        Return the size unit of the instrument.
+
+        Returns
+        -------
+        units.Unit
+        &quot;&quot;&quot;
+        return units.Unit(&#39;arcsec&#39;)</div>
+
+
+<div class="viewcode-block" id="InstrumentInfo.get_spectral_unit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.instrument.InstrumentInfo.html#sofia_redux.scan.info.instrument.InstrumentInfo.get_spectral_unit">[docs]</a>
+    @staticmethod
+    def get_spectral_unit():
+        &quot;&quot;&quot;
+        Return the size unit of the instrument.
+
+        Returns
+        -------
+        units.Unit
+        &quot;&quot;&quot;
+        return units.Unit(&#39;um&#39;)</div>
+
+
+<div class="viewcode-block" id="InstrumentInfo.get_source_size">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.instrument.InstrumentInfo.html#sofia_redux.scan.info.instrument.InstrumentInfo.get_source_size">[docs]</a>
+    def get_source_size(self):
+        &quot;&quot;&quot;
+        Return the size of the source for the instrument.
+
+        Returns
+        -------
+        units.Quantity
+        &quot;&quot;&quot;
+        if self.configuration is None:
+            source_size = 0.0
+        else:
+            source_size = self.configuration.get_float(
+                &#39;sourcesize&#39;, default=0.0)
+        source_size *= self.get_size_unit()
+        beam_size = self.resolution
+        return np.hypot(source_size, beam_size)</div>
+
+
+<div class="viewcode-block" id="InstrumentInfo.get_stability">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.instrument.InstrumentInfo.html#sofia_redux.scan.info.instrument.InstrumentInfo.get_stability">[docs]</a>
+    def get_stability(self):
+        &quot;&quot;&quot;
+        Return the instrument stability timescale.
+
+        The stability time scale is the expected time over which the instrument
+        is expected to produce somewhat consistent results.  This is used to
+        determine the number of frames from which to perform baseline
+        subtraction and other operations.
+
+        Returns
+        -------
+        time : units.Quantity
+            The stability time for the instrument.
+        &quot;&quot;&quot;
+        if self.configuration is None:
+            return 10.0 * units.s
+        else:
+            return self.configuration.get_float(&#39;stability&#39;,
+                                                default=10.0) * units.s</div>
+
+
+<div class="viewcode-block" id="InstrumentInfo.get_point_size">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.instrument.InstrumentInfo.html#sofia_redux.scan.info.instrument.InstrumentInfo.get_point_size">[docs]</a>
+    def get_point_size(self):
+        &quot;&quot;&quot;
+        Return the instrument point size (instrument resolution).
+
+        Returns
+        -------
+        units.Quantity
+        &quot;&quot;&quot;
+        return self.resolution</div>
+
+
+<div class="viewcode-block" id="InstrumentInfo.get_spectral_size">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.instrument.InstrumentInfo.html#sofia_redux.scan.info.instrument.InstrumentInfo.get_spectral_size">[docs]</a>
+    def get_spectral_size(self):
+        &quot;&quot;&quot;
+        Return the instrument spectral point size.
+
+        Returns
+        -------
+        units.Quantity
+        &quot;&quot;&quot;
+        return np.nan * self.get_spectral_unit()</div>
+
+
+<div class="viewcode-block" id="InstrumentInfo.get_data_unit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.instrument.InstrumentInfo.html#sofia_redux.scan.info.instrument.InstrumentInfo.get_data_unit">[docs]</a>
+    def get_data_unit(self):
+        &quot;&quot;&quot;
+        Return the data unit of the instrument
+
+        Returns
+        -------
+        astropy.units.Unit
+        &quot;&quot;&quot;
+        if self.configuration is None:
+            dataunit = &#39;count&#39;
+        else:
+            dataunit = self.configuration.get(&#39;dataunit&#39;, default=&#39;count&#39;)
+        return units.Unit(dataunit)</div>
+
+
+<div class="viewcode-block" id="InstrumentInfo.jansky_per_beam">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.instrument.InstrumentInfo.html#sofia_redux.scan.info.instrument.InstrumentInfo.jansky_per_beam">[docs]</a>
+    def jansky_per_beam(self):
+        &quot;&quot;&quot;
+        Return the Jansky&#39;s per beam.
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        if (self.configuration is None
+                or not self.configuration.has_option(&#39;jansky&#39;)):
+            return 1.0 * units.Unit(&#39;Jy/beam&#39;)
+
+        try:
+            conversion = (1 * self.get_data_unit()).to(&#39;Jy&#39;).value
+        except Exception:
+            conversion = 1.0
+
+        jansky = self.configuration.get_float(&#39;jansky&#39;)
+        if self.configuration.get_bool(&#39;jansky.inverse&#39;):
+            jansky = 1.0 / jansky
+
+        return jansky * conversion * units.Unit(&#39;Jy/beam&#39;)</div>
+
+
+<div class="viewcode-block" id="InstrumentInfo.kelvin">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.instrument.InstrumentInfo.html#sofia_redux.scan.info.instrument.InstrumentInfo.kelvin">[docs]</a>
+    def kelvin(self):
+        &quot;&quot;&quot;
+        Return the instrument temperature in Kelvin.
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        if self.configuration is None:
+            return np.nan * units.Unit(&#39;Kelvin&#39;)
+
+        elif self.configuration.has_option(&#39;kelvin&#39;):
+            return (self.configuration.get_float(&#39;kelvin&#39;)
+                    * units.Unit(&#39;Kelvin&#39;))
+
+        elif self.configuration.has_option(&#39;k2jy&#39;):
+            jy = self.jansky_per_beam().to(&#39;Jy/beam&#39;).value
+            k2jy = self.configuration.get_float(&#39;k2jy&#39;)
+            return jy * k2jy * units.Unit(&#39;Kelvin&#39;)
+
+        else:
+            return np.nan * units.Unit(&#39;Kelvin&#39;)</div>
+
+
+<div class="viewcode-block" id="InstrumentInfo.edit_image_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.instrument.InstrumentInfo.html#sofia_redux.scan.info.instrument.InstrumentInfo.edit_image_header">[docs]</a>
+    def edit_image_header(self, header, scans=None):
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+        scans : list (Scan), optional
+            A list of scans to use during editing.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        header[&#39;INSTRUME&#39;] = self.name, &#39;The instrument used.&#39;
+        header[&#39;V2JY&#39;] = (self.jansky_per_beam().value,
+                          &#39;1 Jy/beam in instrument data units.&#39;)</div>
+
+
+<div class="viewcode-block" id="InstrumentInfo.validate_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.instrument.InstrumentInfo.html#sofia_redux.scan.info.instrument.InstrumentInfo.validate_scan">[docs]</a>
+    def validate_scan(self, scan):
+        &quot;&quot;&quot;
+        Validate scan information with *THIS* information.
+
+        Parameters
+        ----------
+        scan : Scan
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        instrument = scan.info.instrument
+
+        if self.configuration.is_configured(&#39;frequency&#39;):
+            instrument.frequency = self.configuration.get_float(
+                &#39;frequency&#39;) * units.Unit(&#39;Hz&#39;)
+        elif self.configuration.is_configured(&#39;wavelength&#39;):
+            wavelength = self.configuration.get_float(
+                &#39;wavelength&#39;) * units.Unit(&#39;um&#39;)
+            instrument.frequency = (
+                constants.c / wavelength).decompose().to(&#39;Hz&#39;)
+
+        if self.configuration.is_configured(&#39;resolution&#39;):
+            instrument.resolution = self.configuration.get_float(
+                &#39;resolution&#39;) * self.get_size_unit()
+
+        if self.configuration.is_configured(&#39;gain&#39;):
+            instrument.gain = self.configuration.get_float(&#39;gain&#39;)</div>
+
+
+<div class="viewcode-block" id="InstrumentInfo.get_focus_string">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.info.instrument.InstrumentInfo.html#sofia_redux.scan.info.instrument.InstrumentInfo.get_focus_string">[docs]</a>
+    @staticmethod
+    def get_focus_string(focus=None):
+        &quot;&quot;&quot;
+        Return a string describing the focus.
+
+        Parameters
+        ----------
+        focus : InstantFocus, optional
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if focus is None:
+            return &quot;No instant focus&quot;
+        result = &#39;&#39;
+        mm = units.Unit(&#39;mm&#39;)
+        for dimension in [&#39;x&#39;, &#39;y&#39;, &#39;z&#39;]:
+            value = getattr(focus, dimension)
+            weight = getattr(focus, f&#39;{dimension}_weight&#39;)
+            if value is None:
+                continue
+            if not isinstance(value, units.Quantity):
+                value = value * mm
+            if not isinstance(weight, units.Quantity):
+                weight = weight / (mm ** 2)
+            rms = np.sqrt(1 / weight)
+            result += f&#39;\n  Focus.dX --&gt; {value} +- {rms}&#39;
+
+        return result</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

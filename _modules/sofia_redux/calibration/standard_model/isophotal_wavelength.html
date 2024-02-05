@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.calibration.standard_model.isophotal_wavelength &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.calibration.standard_model.isophotal_wavelength</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Calculate various isophotal wavelengths&quot;&quot;&quot;
+
+import numpy as np
+from scipy.interpolate import interp1d, UnivariateSpline
+
+
+<div class="viewcode-block" id="calc_isophotal">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.isophotal_wavelength.calc_isophotal.html#sofia_redux.calibration.standard_model.isophotal_wavelength.calc_isophotal">[docs]</a>
+def calc_isophotal(result, wavelengths, pl, alpha, model_flux_in_filter,
+                   atmosphere_transmission_in_filter, total_throughput):
+    &quot;&quot;&quot;
+    Calculated the isophotal wavelengths.
+
+    Parameters
+    ----------
+    result : dict
+        Collection of calibration results.
+    wavelengths : numpy.array
+        Wavelengths in the band being examined.
+    pl : bool
+        If True, the model is a power law.
+    alpha : float
+        The index used for the power law model if `pl` is True.
+    model_flux_in_filter : numpy.array
+        The modeled flux in the current filter.
+    atmosphere_transmission_in_filter : numpy.array
+        The atmospheric transmission in the current filter.
+    total_throughput : float
+        The throughput through the telescope, instrument, and optics.
+
+    Returns
+    -------
+    result : dict
+        Same as the input `result` but with &#39;isophotal&#39; and &#39;isophotal_wt&#39;
+        keys populated.
+
+    &quot;&quot;&quot;
+    # Find isophotal wavelengths
+    imin = np.argmin(wavelengths)
+    imax = np.argmax(wavelengths)
+
+    # fzero = model_flux_in_filter[imin:imax + 1] - result[&#39;flux_mean&#39;]
+    warrz = wavelengths[imin:imax + 1]
+    flux = model_flux_in_filter[imin:imax + 1]
+
+    if pl:
+        iso_waves = isophotal_from_powerlaw(result, alpha, wavelengths, flux,
+                                            total_throughput,
+                                            atmosphere_transmission_in_filter,
+                                            model_flux_in_filter)
+    else:
+        fzero = flux - result[&#39;flux_mean&#39;]
+        wave_zeros = find_isophotal_candidates(warrz, fzero)
+        iso_waves = isophotal_from_zeros(wave_zeros,
+                                         atmosphere_transmission_in_filter,
+                                         total_throughput,
+                                         wavelengths, model_flux_in_filter)
+
+    result[&#39;isophotal&#39;], result[&#39;isophotal_wt&#39;] = iso_waves
+
+    return result</div>
+
+
+
+<div class="viewcode-block" id="find_isophotal_candidates">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.isophotal_wavelength.find_isophotal_candidates.html#sofia_redux.calibration.standard_model.isophotal_wavelength.find_isophotal_candidates">[docs]</a>
+def find_isophotal_candidates(warr, flux_reduced):
+    &quot;&quot;&quot;
+    Find where the flux is equal to the mean flux.
+
+    Parameters
+    ----------
+    warr : numpy.array
+        Wavelengths in the filter.
+    flux : numpy.array
+        The flux at each wavelength in `warr`.
+
+    Returns
+    -------
+    zeros : numpy.array
+        Wavelengths where flux = mean(flux)
+
+    &quot;&quot;&quot;
+
+    # mean_flux = np.nanmean(flux)
+    # flux_reduced = flux - mean_flux
+    f = UnivariateSpline(warr, flux_reduced, s=0)
+    zeros = f.roots()
+    return zeros</div>
+
+
+
+<div class="viewcode-block" id="isophotal_from_powerlaw">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.isophotal_wavelength.isophotal_from_powerlaw.html#sofia_redux.calibration.standard_model.isophotal_wavelength.isophotal_from_powerlaw">[docs]</a>
+def isophotal_from_powerlaw(result, alpha, warr=None, flux=None,
+                            total_throughput=None, taf=None, fsi=None):
+    &quot;&quot;&quot;
+    Calculate the isophotal wavelengths for a power law model.
+
+    Parameters
+    ----------
+    result : dict
+        Collection of calibration results.
+    alpha : float
+        Slope to use for power-law model.
+    warr : numpy.array
+        Wavelengths in the current filter.
+    flux : numpy.array
+        Flux at each wavelength in `warr`.
+    total_throughput : float
+        Total throughput through telescope + instrument + optics.
+    taf : numpy.array
+        Transmission in the atmosphere in the current filter.
+    fsi : numpy.array
+        Modeled flux in the current filter.
+
+    Returns
+    -------
+    isophotal : float
+        Isophotal wavelength.
+    isophotal_weight : float
+        Weighted isophotal wavelength.
+
+    &quot;&quot;&quot;
+    if alpha == -2:
+        isophotal = result[&#39;lambda_mean&#39;]
+        isophotal_weight = result[&#39;lambda_mean&#39;]
+    else:
+        wave_zeros = find_isophotal_candidates(warr, flux)
+        if len(wave_zeros) &gt; 1:
+            isophotal, isophotal_weight = \
+                isophotal_from_zeros(wave_zeros, taf, total_throughput,
+                                     warr, fsi)
+        else:
+            isophotal = wave_zeros
+            isophotal_weight = wave_zeros
+    return isophotal, isophotal_weight</div>
+
+
+
+<div class="viewcode-block" id="isophotal_from_zeros">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.isophotal_wavelength.isophotal_from_zeros.html#sofia_redux.calibration.standard_model.isophotal_wavelength.isophotal_from_zeros">[docs]</a>
+def isophotal_from_zeros(wave_zeros, taf, total_throughput, warr, fsi):
+    &quot;&quot;&quot;
+    Calculate the isophotal wavelengths from zero points.
+
+    Parameters
+    ----------
+    wave_zeros : float, list, numpy.array
+        Wavelengths where the flux is equal to the mean flux
+        in the filter.
+    taf : numpy.array
+        Atmospheric transmission in the filter.
+    total_throughput : float
+        Total throughput through telescope + instrument + optics.
+    warr : numpy.array
+        Wavelengths in the current filter.
+    fsi : numpy.array
+        Modeled flux in the current filter.
+
+    Returns
+    -------
+    isophotal : float
+        Isophotal wavelength.
+    isophotal_weight : float
+        Weighted isophotal wavelength.
+
+    &quot;&quot;&quot;
+    if isinstance(wave_zeros, (list, np.ndarray)):
+        if len(wave_zeros) &gt; 1:
+            isophotal = np.mean(wave_zeros)
+            tfzero = interpol(fsi * total_throughput * taf, warr, wave_zeros)
+            lam_iso_wt2 = np.sum(wave_zeros * tfzero) / np.sum(tfzero)
+            isophotal_weight = lam_iso_wt2
+        else:
+            isophotal = wave_zeros[0]
+            isophotal_weight = wave_zeros[0]
+    else:
+        isophotal = wave_zeros
+        isophotal_weight = wave_zeros
+    return isophotal, isophotal_weight</div>
+
+
+
+<div class="viewcode-block" id="interpol">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.isophotal_wavelength.interpol.html#sofia_redux.calibration.standard_model.isophotal_wavelength.interpol">[docs]</a>
+def interpol(v, x, xout):
+    &quot;&quot;&quot;Interpolates v(x) at points xout.&quot;&quot;&quot;
+    fit = interp1d(x, v, fill_value=&#39;extrapolate&#39;)
+    return fit(xout)</div>
+
+
+
+<div class="viewcode-block" id="calculated_lambdas">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.isophotal_wavelength.calculated_lambdas.html#sofia_redux.calibration.standard_model.isophotal_wavelength.calculated_lambdas">[docs]</a>
+def calculated_lambdas(result, integrals):
+    &quot;&quot;&quot;
+    Calculate various characteristic wavelengths.
+
+    Parameters
+    ----------
+    result : dict, pandas.Series
+        Collection of various calibration results.
+    integrals : dict
+        Collection of various background integrals.
+
+    Returns
+    -------
+    result : dict
+        Same as input `result` but with several wavelength
+        keys populated.
+
+    References
+    ----------
+    Wavelengths are defined in Tokunaga &amp; Vacca 2005.
+
+    &quot;&quot;&quot;
+
+    result[&#39;lambda_1&#39;] = integrals[&#39;10&#39;] / integrals[&#39;2&#39;]
+    result[&#39;nuref&#39;] = integrals[&#39;3&#39;] / integrals[&#39;11&#39;]
+    result[&#39;irac&#39;] = integrals[&#39;1&#39;] / integrals[&#39;3&#39;]
+    result[&#39;sdss&#39;] = np.exp(integrals[&#39;7&#39;] / integrals[&#39;3&#39;])
+    result[&#39;eff_ph&#39;] = integrals[&#39;6&#39;] / integrals[&#39;5&#39;]
+
+    result[&#39;lambda_mean&#39;] = integrals[&#39;2&#39;] / integrals[&#39;1&#39;]
+    result[&#39;lambda_eff&#39;] = integrals[&#39;5&#39;] / integrals[&#39;4&#39;]
+    result[&#39;lambda_pivot&#39;] = np.sqrt(integrals[&#39;1&#39;] / integrals[&#39;11&#39;])
+    result[&#39;lambda_eff_jv&#39;] = integrals[&#39;11&#39;] / integrals[&#39;12&#39;]
+    result[&#39;rms&#39;] = np.sqrt(integrals[&#39;10&#39;] / integrals[&#39;3&#39;]
+                            - result[&#39;lambda_mean&#39;] ** 2)
+    result[&#39;lambda_prime&#39;] = integrals[&#39;1&#39;] / integrals[&#39;3&#39;]
+
+    result[&#39;lamcorr&#39;] = (result[&#39;lambda_prime&#39;] * result[&#39;lambda_mean&#39;]
+                         / result[&#39;lambda_pivot&#39;]**2)
+
+    return result</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

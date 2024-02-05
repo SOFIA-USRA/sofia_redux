@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.simulation.info &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.simulation.info</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units
+from astropy.coordinates import Angle
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.scan.info.camera.info import CameraInfo
+from sofia_redux.scan.custom.example.info.instrument import (
+    ExampleInstrumentInfo)
+from sofia_redux.scan.custom.example.info.telescope import ExampleTelescopeInfo
+from sofia_redux.scan.custom.example.info.astrometry import (
+    ExampleAstrometryInfo)
+from sofia_redux.scan.custom.example.info.observation import (
+    ExampleObservationInfo)
+from sofia_redux.scan.custom.example.info.detector_array import (
+    ExampleDetectorArrayInfo)
+from sofia_redux.scan.utilities.class_provider import (
+    frames_instance_for,
+    channel_data_class_for)
+
+from sofia_redux.scan.coordinate_systems.equatorial_coordinates import (
+    EquatorialCoordinates)
+from sofia_redux.scan.coordinate_systems.geodetic_coordinates import (
+    GeodeticCoordinates)
+from sofia_redux.scan.coordinate_systems.horizontal_coordinates import (
+    HorizontalCoordinates)
+from sofia_redux.scan.configuration.dates import DateRange
+from sofia_redux.scan.simulation.scan_patterns.daisy import (
+    daisy_pattern_equatorial)
+from sofia_redux.scan.simulation.scan_patterns.lissajous import (
+    lissajous_pattern_equatorial)
+from sofia_redux.scan.simulation.scan_patterns.skydip import (
+    skydip_pattern_equatorial)
+from sofia_redux.scan.simulation.source_models.simulated_source import (
+    SimulatedSource)
+from sofia_redux.scan.simulation.source_models.sky import Sky
+from sofia_redux.scan.utilities.utils import (
+    safe_sidereal_time, get_hms_time, get_dms_angle)
+
+
+__all__ = [&#39;SimulationInfo&#39;]
+
+
+<div class="viewcode-block" id="SimulationInfo">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.simulation.info.SimulationInfo.html#sofia_redux.scan.simulation.info.SimulationInfo">[docs]</a>
+class SimulationInfo(CameraInfo):
+
+    def __init__(self, configuration_path=None):
+        &quot;&quot;&quot;
+        Initialize the example instrument simulation information object.
+
+        Parameters
+        ----------
+        configuration_path : str, optional
+            An alternate directory path to the configuration tree to be used
+            during the reduction.  The default is
+            &lt;package&gt;/data/configurations.
+        &quot;&quot;&quot;
+        super().__init__(configuration_path=configuration_path)
+        self.name = &#39;simulation&#39;
+        self.instrument = ExampleInstrumentInfo()
+        self.telescope = ExampleTelescopeInfo()
+        self.astrometry = ExampleAstrometryInfo()
+        self.observation = ExampleObservationInfo()
+        self.detector_array = ExampleDetectorArrayInfo()
+        self.resolution = self.instrument.resolution
+
+<div class="viewcode-block" id="SimulationInfo.get_file_id">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.simulation.info.SimulationInfo.html#sofia_redux.scan.simulation.info.SimulationInfo.get_file_id">[docs]</a>
+    @staticmethod
+    def get_file_id():
+        &quot;&quot;&quot;
+        Return the file ID.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &quot;SIML&quot;</div>
+
+
+<div class="viewcode-block" id="SimulationInfo.max_pixels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.simulation.info.SimulationInfo.html#sofia_redux.scan.simulation.info.SimulationInfo.max_pixels">[docs]</a>
+    def max_pixels(self):
+        &quot;&quot;&quot;
+        Return the maximum number of pixels in the example instrument.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        return self.detector_array.pixels</div>
+
+
+<div class="viewcode-block" id="SimulationInfo.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.simulation.info.SimulationInfo.html#sofia_redux.scan.simulation.info.SimulationInfo.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the SimulationInfo.
+
+        Returns
+        -------
+        SimulationInfo
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+<div class="viewcode-block" id="SimulationInfo.write_simulated_hdul">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.simulation.info.SimulationInfo.html#sofia_redux.scan.simulation.info.SimulationInfo.write_simulated_hdul">[docs]</a>
+    def write_simulated_hdul(self, filename,
+                             object_name=&#39;Simulation&#39;,
+                             ra=&#39;17h45m39.60213s&#39;,
+                             dec=&#39;-29d00m22.0000s&#39;,
+                             site_longitude=&#39;-122.0644d&#39;,
+                             site_latitude=&#39;37.4089d&#39;,
+                             date_obs=&#39;2021-12-06T18:48:25.876&#39;,
+                             scan_id=1,
+                             scan_pattern=&#39;daisy&#39;,
+                             source_type=&#39;single_gaussian&#39;,
+                             overwrite=True,
+                             **kwargs):
+        &quot;&quot;&quot;
+        Write a simulated HDU list to file.
+
+        Parameters
+        ----------
+        filename : str
+            The file path to the output file for which to write the simulated
+            HDU list.
+        object_name : str, optional
+            The name of the simulated source.
+        ra : str or units.Quantity, optional
+            The right-ascension of the simulated source.  The default is the
+            Galactic center.
+        dec : str or units.Quantity, optional
+            The declination of the simulated source.  The default is the
+            Galactic center.
+        site_longitude : str or units.Quantity, optional
+            The site longitude of the simulated observation.  The default is
+            NASA Ames.
+        site_latitude : str or units.Quantity, optional
+            The site latitude of the simulated observation.  The default is
+            NASA Ames.
+        date_obs : str or Time, optional
+            The date of the simulated observation.  String values should be
+            provided in ISOT format in UTC scale.
+        scan_id : str or int, optional
+            The ID of the scan to be pla
+        scan_pattern : str, optional
+            The scanning pattern type.  Available patterns are {&#39;daisy&#39;,
+            &#39;lissajous&#39;, &#39;skydip&#39;}.
+        source_type : str, optional
+            The source type.  Available types are {&#39;single_gaussian&#39;, &#39;sky&#39;}.
+        overwrite : bool, optional
+            If `True`, allow `filename` to be overwritten if it already exists.
+        kwargs : dict, optional
+            Optional keyword arguments that are passed into the scan pattern
+            simulation or simulated source data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        hdul = self.simulated_hdul(object_name=object_name,
+                                   ra=ra, dec=dec,
+                                   site_longitude=site_longitude,
+                                   site_latitude=site_latitude,
+                                   date_obs=date_obs,
+                                   scan_id=scan_id,
+                                   scan_pattern=scan_pattern,
+                                   source_type=source_type,
+                                   **kwargs)
+        hdul.writeto(filename, overwrite=overwrite)
+        hdul.close()</div>
+
+
+<div class="viewcode-block" id="SimulationInfo.simulated_hdul">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.simulation.info.SimulationInfo.html#sofia_redux.scan.simulation.info.SimulationInfo.simulated_hdul">[docs]</a>
+    def simulated_hdul(self,
+                       object_name=&#39;Simulation&#39;,
+                       ra=&#39;17h45m39.60213s&#39;,
+                       dec=&#39;-29d00m22.0000s&#39;,
+                       site_longitude=&#39;-122.0644d&#39;,
+                       site_latitude=&#39;37.4089d&#39;,
+                       date_obs=&#39;2021-12-06T18:48:25.876&#39;,
+                       scan_id=1,
+                       scan_pattern=&#39;daisy&#39;,
+                       source_type=&#39;single_gaussian&#39;,
+                       **kwargs):
+        &quot;&quot;&quot;
+        Create an HDU list containing simulated data.
+
+        Parameters
+        ----------
+        object_name : str, optional
+            The name of the simulated source.
+        ra : str or units.Quantity, optional
+            The right-ascension of the simulated source.  The default is the
+            Galactic center.
+        dec : str or units.Quantity, optional
+            The declination of the simulated source.  The default is the
+            Galactic center.
+        site_longitude : str or units.Quantity, optional
+            The site longitude of the simulated observation.  The default is
+            NASA Ames.
+        site_latitude : str or units.Quantity, optional
+            The site latitude of the simulated observation.  The default is
+            NASA Ames.
+        date_obs : str or Time, optional
+            The date of the simulated observation.  String values should be
+            provided in ISOT format in UTC scale.
+        scan_id : str or int, optional
+            The ID of the scan to be pla
+        scan_pattern : str, optional
+            The scanning pattern type.  Available patterns are {&#39;daisy&#39;,
+            &#39;lissajous&#39;}.
+        source_type : str, optional
+            The source type.  Available types are {&#39;single_gaussian&#39;,
+            &#39;sky&#39;}.
+        kwargs : dict, optional
+            Optional keyword arguments that are passed into the scan pattern
+            simulation or simulated source data.
+
+        Returns
+        -------
+        hdul : fits.HDUList
+            A FITS HDU list where the first (hdul[0]) HDU contains no data and
+            the primary header.  The second HDU (hdul[1]) contains a FITS
+            binary table with the following columns: DMJD, LST, RA, DEC, AZ,
+            EL, and DAC.
+        &quot;&quot;&quot;
+        header = self.simulated_observation_header(
+            object_name=object_name, ra=ra, dec=dec,
+            site_latitude=site_latitude, site_longitude=site_longitude,
+            date_obs=date_obs, scan_id=scan_id, scan_pattern=scan_pattern,
+        )
+        scan_hdu = self.scan_hdu_from_header(header, **kwargs)
+        source_model = SimulatedSource.get_source_model(source_type, **kwargs)
+        data_hdu = self.simulated_data(scan_hdu, header, source_model,
+                                       **kwargs)
+        hdul = fits.HDUList()
+        hdul.append(fits.PrimaryHDU(header=header, data=np.empty(0)))
+        hdul.append(data_hdu)
+        return hdul</div>
+
+
+<div class="viewcode-block" id="SimulationInfo.simulated_observation_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.simulation.info.SimulationInfo.html#sofia_redux.scan.simulation.info.SimulationInfo.simulated_observation_header">[docs]</a>
+    @staticmethod
+    def simulated_observation_header(object_name=&#39;Simulation&#39;,
+                                     ra=&#39;17h45m39.60213s&#39;,
+                                     dec=&#39;-29d00m22.0000s&#39;,
+                                     site_longitude=&#39;-122.0644d&#39;,
+                                     site_latitude=&#39;37.4089d&#39;,
+                                     date_obs=&#39;2021-12-06T18:48:25.876&#39;,
+                                     scan_id=1,
+                                     scan_pattern=&#39;daisy&#39;):
+        &quot;&quot;&quot;
+        Create a simulated observation primary header.
+
+        Parameters
+        ----------
+        object_name : str
+            The name of the observed object.
+        ra : str or units.Quantity or float
+            The right-ascension of the observation.  If a float value is
+            supplied, it should be in degrees.
+        dec : str or units.Quantity or float
+            The declination of the observation.  If a float value is
+            supplied, it should be in degrees.
+        site_longitude : str or units.Quantity
+            The site longitude.
+        site_latitude : str or units.Quantity
+            The site latitude.
+        date_obs : str
+            The date-time of the observation in ISOT format, UTC scale.
+        scan_id : str or int
+            The scan identifier.
+        scan_pattern : str
+            The scan pattern type.  Allowable values are
+            {&#39;daisy&#39;, &#39;lissajous&#39;}.
+
+        Returns
+        -------
+        header : fits.Header
+        &quot;&quot;&quot;
+        obs_header = fits.Header()
+        obs_header[&#39;OBJECT&#39;] = object_name, &#39;Object catalog name.&#39;
+        obs_header[&#39;SCANID&#39;] = scan_id, &#39;Scan identifier.&#39;
+        date_obs = DateRange.to_time(date_obs)
+        obs_header[&#39;DATE-OBS&#39;] = date_obs.isot, &#39;Observation start (UTC).&#39;
+        obs_header[&#39;SCANPATT&#39;] = scan_pattern, &#39;Scanning pattern.&#39;
+
+        if isinstance(ra, str):
+            ra = get_hms_time(ra, angle=True).to(&#39;degree&#39;)
+            dec = get_dms_angle(dec)
+            center = EquatorialCoordinates([ra, dec])
+        else:
+            center = EquatorialCoordinates([ra, dec])
+
+        obs_header[&#39;OBSRA&#39;] = (
+            center.ra.to(&#39;hourangle&#39;).value, &#39;(hour) Requested RA.&#39;)
+        obs_header[&#39;OBSDEC&#39;] = (
+            center.dec.to(&#39;degree&#39;).value, &#39;(deg) Requested DEC.&#39;)
+
+        if isinstance(site_latitude, str):
+            site_latitude = Angle(site_latitude)
+            site_longitude = Angle(site_longitude)
+        site = GeodeticCoordinates([site_longitude, site_latitude],
+                                   unit=&#39;degree&#39;)
+        obs_header[&#39;SITELON&#39;] = site.longitude.value, &#39;(deg) Site longitude.&#39;
+        obs_header[&#39;SITELAT&#39;] = site.latitude.value, &#39;(deg) Site latitude.&#39;
+
+        lst = safe_sidereal_time(
+            date_obs, &#39;mean&#39;, longitude=site.longitude)
+        horizontal = center.to_horizontal(site, lst)
+        obs_header[&#39;LST&#39;] = lst.value, &#39;(hour) Local sidereal time.&#39;
+        obs_header[&#39;OBSAZ&#39;] = (horizontal.az.to(&#39;degree&#39;).value,
+                               &#39;(deg) Observation Azimuth.&#39;)
+        obs_header[&#39;OBSEL&#39;] = (horizontal.el.to(&#39;degree&#39;).value,
+                               &#39;(deg) Observation Elevation.&#39;)
+
+        return obs_header</div>
+
+
+<div class="viewcode-block" id="SimulationInfo.scan_hdu_from_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.simulation.info.SimulationInfo.html#sofia_redux.scan.simulation.info.SimulationInfo.scan_hdu_from_header">[docs]</a>
+    def scan_hdu_from_header(self, header, **kwargs):
+        &quot;&quot;&quot;
+        Create an HDU containing the simulated scan pattern from a header.
+
+        Parameters
+        ----------
+        header : fits.Header
+            The simulated observation primary header.
+        kwargs : dict, optional
+            Optional keyword arguments to pass into the scan pattern simulator.
+
+        Returns
+        -------
+        hdu : fits.BinTableHDU
+            The header data unit containing DMJD, LST, RA, DEC, AZ, and EL
+            columns.
+        &quot;&quot;&quot;
+        scan_type = header[&#39;SCANPATT&#39;].upper().strip()
+        ra = header[&#39;OBSRA&#39;] * units.Unit(&#39;hourangle&#39;)
+        dec = header[&#39;OBSDEC&#39;] * units.Unit(&#39;degree&#39;)
+        center = EquatorialCoordinates([ra, dec])
+        site = GeodeticCoordinates([header[&#39;SITELON&#39;], header[&#39;SITELAT&#39;]],
+                                   unit=&#39;degree&#39;)
+        dt = self.instrument.sampling_interval
+        date_obs = DateRange.to_time(header[&#39;DATE-OBS&#39;])
+
+        if scan_type == &#39;DAISY&#39;:
+            equatorial = daisy_pattern_equatorial(center, dt, **kwargs)
+        elif scan_type == &#39;LISSAJOUS&#39;:
+            equatorial = lissajous_pattern_equatorial(center, dt, **kwargs)
+        elif scan_type == &#39;SKYDIP&#39;:
+            equatorial = skydip_pattern_equatorial(center, dt, site, date_obs,
+                                                   **kwargs)
+        else:
+            raise NotImplementedError(
+                f&quot;{scan_type} scanning pattern not supported.&quot;)
+
+        obs_time = dt * np.arange(equatorial.size) + date_obs
+        lst = safe_sidereal_time(obs_time, &#39;mean&#39;, longitude=site.longitude)
+        horizontal = equatorial.to_horizontal(site, lst)
+
+        ra = fits.Column(name=&#39;RA&#39;, format=&#39;1D&#39;, unit=&#39;hourangle&#39;,
+                         array=equatorial.ra.to(&#39;hourangle&#39;).value)
+        dec = fits.Column(name=&#39;DEC&#39;, format=&#39;1D&#39;, unit=&#39;degree&#39;,
+                          array=equatorial.dec.to(&#39;degree&#39;).value)
+        dmjd = fits.Column(name=&#39;DMJD&#39;, format=&#39;1D&#39;, unit=&#39;day&#39;,
+                           array=obs_time.mjd)
+        lst = fits.Column(name=&#39;LST&#39;, format=&#39;1D&#39;, unit=&#39;hour&#39;, array=lst)
+        az = fits.Column(name=&#39;AZ&#39;, format=&#39;1D&#39;, unit=&#39;degree&#39;,
+                         array=horizontal.az.to(&#39;degree&#39;).value)
+        el = fits.Column(name=&#39;EL&#39;, format=&#39;1D&#39;, unit=&#39;degree&#39;,
+                         array=horizontal.el.to(&#39;degree&#39;).value)
+        columns = fits.ColDefs([dmjd, lst, ra, dec, az, el])
+        hdu = fits.BinTableHDU.from_columns(columns)
+        return hdu</div>
+
+
+<div class="viewcode-block" id="SimulationInfo.set_frames_coordinates">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.simulation.info.SimulationInfo.html#sofia_redux.scan.simulation.info.SimulationInfo.set_frames_coordinates">[docs]</a>
+    def set_frames_coordinates(self, frames, table):
+        &quot;&quot;&quot;
+        Set the frame data from an HDU Binary table.
+
+        Parameters
+        ----------
+        frames : sofia_redux.scan.custom.example.frames.frames.ExampleFrames
+            The frames to populate with the HDU data.
+        table : astropy.table.Table or dict or fits.FITS_rec
+            The HDU table containing the the columns: DMJD, LST, RA, DEC, AZ,
+            and EL.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        hourangle = units.Unit(&#39;hourangle&#39;)
+        deg = units.Unit(&#39;degree&#39;)
+
+        if frames.info is None:
+            frames.default_info = self
+
+        if frames.valid is None:
+            frames.set_frame_size(table.size)
+
+        frames.mjd[:] = table[&#39;DMJD&#39;]
+        frames.lst[:] = table[&#39;LST&#39;] * hourangle
+        ra = table[&#39;RA&#39;] * hourangle
+        dec = table[&#39;DEC&#39;] * deg
+
+        equatorial = EquatorialCoordinates(
+            np.stack((ra, dec)), epoch=frames.info.astrometry.epoch,
+            copy=False)
+        frames.equatorial[:] = equatorial
+
+        horizontal = HorizontalCoordinates(np.stack(
+            (table[&#39;AZ&#39;], table[&#39;EL&#39;])), unit=&#39;degree&#39;, copy=False)
+        frames.horizontal[:] = horizontal
+
+        frames.calculate_parallactic_angle()
+        horizontal_offset = equatorial.get_native_offset_from(
+            frames.info.astrometry.equatorial)
+        frames.equatorial_native_to_horizontal_offset(
+            horizontal_offset, in_place=True)
+        frames.horizontal_offset[:] = horizontal_offset
+        frames.set_rotation(0)</div>
+
+
+<div class="viewcode-block" id="SimulationInfo.simulated_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.simulation.info.SimulationInfo.html#sofia_redux.scan.simulation.info.SimulationInfo.simulated_data">[docs]</a>
+    def simulated_data(self, scan_hdu, header, source_model, **kwargs):
+        &quot;&quot;&quot;
+        Create an HDU containing modelled source data.
+
+        Parameters
+        ----------
+        scan_hdu : fits.BinTableHDU
+            A FITS table containing scanning data which must include the
+            columns RA, DEC, AZ, and EL.
+        header : fits.Header
+            The primary FITS header.  Must contain the keys OBSRA, OBSDEC,
+            SITELON, and SITELAT.
+        source_model : SimulatedSource
+        kwargs : dict, optional
+            Optional keyword arguments to be applied to the simulated data.
+
+        Returns
+        -------
+        data_hdu : fits.BinTableHDU
+            An updated FITS table including the simulated data in the DAC
+            column.
+        &quot;&quot;&quot;
+        data = self.create_data(scan_hdu, header, source_model, **kwargs)
+        n_records, n_row, n_col = data.shape
+
+        data_column = fits.Column(
+            name=&#39;DAC&#39;,
+            format=f&#39;{n_records}D&#39;,
+            unit=&#39;count&#39;,
+            array=data,
+            dim=f&#39;({n_row}, {n_col})&#39;)
+
+        new_cols = scan_hdu.columns + data_column
+        hdu = fits.BinTableHDU.from_columns(new_cols)
+        return hdu</div>
+
+
+<div class="viewcode-block" id="SimulationInfo.create_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.simulation.info.SimulationInfo.html#sofia_redux.scan.simulation.info.SimulationInfo.create_data">[docs]</a>
+    def create_data(self, scan_hdu, header, source_model, **kwargs):
+        &quot;&quot;&quot;
+        Create modelled source data.
+
+        Parameters
+        ----------
+        scan_hdu : fits.BinTableHDU
+            A FITS table containing scanning data which must include the
+            columns RA, DEC, AZ, and EL.
+        header : fits.Header
+            The primary FITS header.  Must contain the keys OBSRA, OBSDEC,
+            SITELON, and SITELAT.
+        source_model : SimulatedSource
+        kwargs : dict, optional
+            Optional keyword arguments that will be applied to the data.
+
+        Returns
+        -------
+        data : numpy.ndarray
+            Simulated data of the shape (n_records, n_row, n_col).
+        &quot;&quot;&quot;
+        table = scan_hdu.data
+
+        info = self.copy()
+        lon = header[&#39;SITELON&#39;] * units.Unit(&#39;degree&#39;)
+        lat = header[&#39;SITELAT&#39;] * units.Unit(&#39;degree&#39;)
+        ra = header[&#39;OBSRA&#39;] * units.Unit(&#39;hourangle&#39;)
+        dec = header[&#39;OBSDEC&#39;] * units.Unit(&#39;degree&#39;)
+        info.astrometry.equatorial = EquatorialCoordinates([ra, dec])
+        info.astrometry.site = GeodeticCoordinates([lon, lat])
+        frames = frames_instance_for(&#39;example&#39;)
+        info.set_frames_coordinates(frames, table)
+
+        channel_data = channel_data_class_for(&#39;example&#39;)()
+        channel_data.default_info = info
+
+        info.detector_array.initialize_channel_data(channel_data)
+        if isinstance(source_model, Sky):
+            coordinates = frames.get_horizontal(channel_data.position)
+        else:
+            coordinates = frames.get_equatorial_native_offset(
+                channel_data.position)
+
+        # Create the output data
+        n_records = table.size
+        n_row, n_col = info.detector_array.ROWS, info.detector_array.COLS
+        data = np.empty((n_records, n_row, n_col), dtype=float)
+        data[:, channel_data.row, channel_data.col] = source_model(coordinates)
+        self.modify_data(data, **kwargs)
+        return data</div>
+
+
+<div class="viewcode-block" id="SimulationInfo.modify_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.simulation.info.SimulationInfo.html#sofia_redux.scan.simulation.info.SimulationInfo.modify_data">[docs]</a>
+    @staticmethod
+    def modify_data(data, **kwargs):
+        &quot;&quot;&quot;
+        Add various properties to simulated scan data.
+
+        Parameters
+        ----------
+        data : numpy.ndarray (float)
+            The simulated data of shape (n_records, n_row, n_col).  Will be
+            modified in-place.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        s2n = kwargs.get(&#39;s2n&#39;)
+        seed = kwargs.get(&#39;seed&#39;)
+        if seed is not None:
+            rand = np.random.RandomState(seed)
+        else:
+            rand = np.random
+        if s2n is not None and float(s2n) &gt; 0:
+            max_data = np.nanmax(np.abs(data))
+            noise_level = max_data / float(s2n)
+            data += rand.randn(*data.shape) * noise_level</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

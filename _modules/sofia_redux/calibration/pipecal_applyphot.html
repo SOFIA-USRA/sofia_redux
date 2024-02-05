@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.calibration.pipecal_applyphot &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.calibration.pipecal_applyphot</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Calculate aperture photometry and update FITS header.&quot;&quot;&quot;
+
+import argparse
+import warnings
+
+from astropy import log
+from astropy.io import fits
+
+from sofia_redux.calibration.pipecal_config import pipecal_config
+from sofia_redux.calibration.pipecal_error import PipeCalError
+from sofia_redux.calibration.pipecal_photometry import pipecal_photometry
+from sofia_redux.calibration.pipecal_calfac import pipecal_calfac
+from sofia_redux.calibration.pipecal_util \
+    import guess_source_position, add_phot_keys
+
+__all__ = [&#39;pipecal_applyphot&#39;]
+
+
+<div class="viewcode-block" id="pipecal_applyphot">
+<a class="viewcode-back" href="../../../api/sofia_redux.calibration.pipecal_applyphot.pipecal_applyphot.html#sofia_redux.calibration.pipecal_applyphot.pipecal_applyphot">[docs]</a>
+def pipecal_applyphot(fitsfile, srcpos=None, fitsize=None, fwhm=None,
+                      profile=&#39;moffat&#39;, aprad=None, skyrad=None,
+                      runits=None, overwrite=True):
+
+    &quot;&quot;&quot;
+    Calculate  photometry on a FITS image and store results to FITS header.
+
+    FITS images are expected to have been produced by either the
+    HAWC+, FORCAST, or FLITECAM pipelines.  For any other data format,
+    call the `pipecal_util.run_photometry` function instead.
+
+    The procedure followed here is:
+
+        1. Read the header, data, and variance from the FITS file.
+        2. Call pipecal_photometry on the data.
+        3. Add photometry keywords to header.
+        4. Write file back to disk.
+
+    Defaults for all photometry parameters except `srcpos` are
+    determined from the instrument configuration (`pipecal_config`)
+    if possible.  If not, they are set by `pipecal_photometry`
+    instead.
+
+    Parameters
+    ----------
+    fitsfile : string
+        Path to a FITS image file.
+    srcpos : 2d-array, optional
+        Initial guess at source position (x,y), zero-indexed.
+        If not provided, will be read from FITS header keywords
+        SRCPOSX, SRCPOSY if present.
+    fitsize : float, optional
+        Size of subimage to fit.
+    fwhm : float, optional
+        Initial guess at PSF fwhm.
+    profile : string, optional
+        Fit type (Moffat, Lorentzian, Gaussian).
+    aprad : float, optional
+        Aperture radius for aperture photometry.
+    skyrad : array-like, optional
+        Sky radii (inner, outer) for aperture photometry.
+    runits : string, optional
+        Raw data units, before flux calibration.
+    overwrite : bool, optional
+        If set, the input FITS file will be overwritten with the updated
+        header.  If not, a FITS file of the same base name and a
+        &#39;_new.fits` suffix will be written instead, to the same location
+        as the input file.
+    &quot;&quot;&quot;
+    if overwrite:
+        mode = &#39;update&#39;
+    else:
+        mode = &#39;readonly&#39;
+
+    # Read the data
+    try:
+        hdul = fits.open(fitsfile, mode=mode)
+        header = hdul[0].header
+    except FileNotFoundError as err:
+        log.error(f&#39;Unable to open {fitsfile}.&#39;)
+        raise PipeCalError(err)
+    except (OSError, IndexError) as err:
+        log.error(f&#39;Bad FITS file: {fitsfile}.&#39;)
+        raise PipeCalError(err)
+
+    inst = header[&#39;INSTRUME&#39;].strip().upper()
+
+    # Special handling for each instrument
+    if inst == &#39;HAWC_PLUS&#39;:
+        # First extension is flux
+        # Error is either in NOISE or ERROR I extension
+        image = hdul[0].data
+        try:
+            variance = hdul[&#39;NOISE&#39;].data ** 2
+        except KeyError:
+            variance = hdul[&#39;ERROR I&#39;].data ** 2
+    elif inst == &#39;FLITECAM&#39;:
+        # new FLITECAM data has first extension flux,
+        # second extension error
+        try:
+            image = hdul[0].data
+            variance = hdul[1].data ** 2
+        except IndexError:
+            # old FLITECAM has a data cube;
+            # first plane is flux, second is error
+            data = hdul[0].data
+            image = data[0]
+            variance = data[1] ** 2
+    elif inst == &#39;FORCAST&#39;:
+        # new FORCAST data has first extension flux,
+        # second extension error
+        try:
+            image = hdul[0].data
+            variance = hdul[1].data ** 2
+        except IndexError:
+            # old FORCAST has a data cube;
+            # first plane is flux, second is variance
+            data = hdul[0].data
+            image = data[0]
+            variance = data[1]
+    else:
+        msg = &#39;Unsupported instrument: {}&#39;.format(inst)
+        log.error(msg)
+        raise PipeCalError(msg)
+
+    # Read in pipecal config from header
+    config = pipecal_config(header)
+    if config is None:
+        log.warning(&#39;No config found.&#39;)
+    else:
+        log.debug(&#39;Full pipecal configuration:&#39;)
+        for key, value in config.items():
+            log.debug(&#39;  {}: {}&#39;.format(key, value))
+
+    # Check the srcpos input. If it isn&#39;t filled, fill it
+    # with info from the header
+    try:
+        srcposx = header[&#39;SRCPOSX&#39;]
+        srcposy = header[&#39;SRCPOSY&#39;]
+    except KeyError:
+        srcposx = None
+        srcposy = None
+    srcpos = guess_source_position(header, image, srcpos=srcpos)
+    log.debug(&#39;Starting guess position: {}&#39;.format(srcpos))
+
+    # Set defaults from config file
+    if config and not aprad and &#39;aprad&#39; in config:
+        aprad = config[&#39;aprad&#39;]
+        log.info(&#39;Aperture radius: {}&#39;.format(aprad))
+    if config and not skyrad and &#39;bgin&#39; in config and &#39;bgout&#39; in config:
+        skyrad = [config[&#39;bgin&#39;], config[&#39;bgout&#39;]]
+        log.info(&#39;Sky radii: {}&#39;.format(skyrad))
+    if config and not fwhm and &#39;fwhm&#39; in config:
+        fwhm = config[&#39;fwhm&#39;]
+    if config and not fitsize and &#39;fitsize&#39; in config:
+        fitsize = config[&#39;fitsize&#39;]
+    if config and not runits and &#39;runits&#39; in config:
+        runits = config[&#39;runits&#39;]
+
+    # Perform photometry
+    phot = pipecal_photometry(image, variance, srcpos=srcpos,
+                              fitsize=fitsize, fwhm=fwhm,
+                              profile=profile, aprad=aprad,
+                              skyrad=skyrad, runits=runits)
+
+    # Loop through phot and update the header
+    add_phot_keys(header, phot, config=config)
+
+    log.info(&#39;Source Position (x,y): &#39;
+             &#39;{:.2f}, {:.2f}&#39;.format(header[&#39;STCENTX&#39;], header[&#39;STCENTY&#39;]))
+    if srcposx is not None and srcposy is not None:
+        log.info(&#39;Diff in position: &#39;
+                 &#39;{:.2f}, {:.2f}&#39;.format(srcposx - header[&#39;STCENTX&#39;],
+                                         srcposy - header[&#39;STCENTY&#39;]))
+    log.info(&#39;Source Flux: &#39;
+             &#39;{:.2f} +/- {:.2f}&#39;.format(header[&#39;STAPFLX&#39;],
+                                        header[&#39;STAPFLXE&#39;]))
+
+    # Calculate reference calibration factor from flux
+    if not config or &#39;std_flux&#39; not in config:
+        log.warning(&#39;No model found. Not writing REFCALFC.&#39;)
+        if overwrite:
+            hdul.flush()
+        else:
+            newfile = fitsfile.replace(&#39;.fits&#39;, &#39;_new.fits&#39;)
+            with warnings.catch_warnings():
+                warnings.simplefilter(&#39;ignore&#39;)
+                hdul.writeto(newfile, overwrite=True)
+        return
+
+    log.info(&#39;Model Flux: &#39;
+             &#39;{:.3f} +/- {:.3f}&#39;.format(header[&#39;MODLFLX&#39;],
+                                        header[&#39;MODLFLXE&#39;]))
+
+    # Calculate reference cal factor, assuming already
+    # telluric-corrected data
+    flux = header[&#39;STAPFLX&#39;]
+    flux_err = header[&#39;STAPFLXE&#39;]
+    try:
+        ref_calfac, ref_ecalfac = pipecal_calfac(flux, flux_err, config)
+    except ValueError:
+        log.warning(&#39;Negative flux; not adding REFCALFC.&#39;)
+        return
+
+    # Add to header
+    header[&#39;REFCALFC&#39;] = (ref_calfac, &#39;Reference calibration factor&#39;)
+    header[&#39;REFCALER&#39;] = (ref_ecalfac, &#39;Reference calibration factor error&#39;)
+
+    log.info(&#39;Reference Cal Factor: &#39;
+             &#39;{:.3f} +/- {:.3f}&#39;.format(header[&#39;REFCALFC&#39;],
+                                        header[&#39;REFCALER&#39;]))
+
+    # Write the new fits header to file
+    if overwrite:
+        hdul.flush()
+    else:
+        newfile = fitsfile.replace(&#39;.fits&#39;, &#39;_new.fits&#39;)
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;)
+            hdul.writeto(newfile, overwrite=True)</div>
+
+
+
+def main():
+    &quot;&quot;&quot;Run photometry from the command line.&quot;&quot;&quot;
+    parser = argparse.ArgumentParser(
+        description=&#39;Compute photometry.&#39;)
+    parser.add_argument(&#39;filename&#39;, metavar=&#39;filename&#39;, nargs=&#39;+&#39;,
+                        help=&#39;Path to one or more input files to &#39;
+                             &#39;modify in place.&#39;)
+    parser.add_argument(&#39;-n&#39;, &#39;--new&#39;, dest=&#39;overwrite&#39;,
+                        action=&#39;store_false&#39;, default=True,
+                        help=&#39;Set to write to _new.fits file instead &#39;
+                             &#39;of overwriting the input.&#39;)
+    parser.add_argument(&#39;-l&#39;, &#39;--loglevel&#39;, dest=&#39;loglevel&#39;, type=str,
+                        action=&#39;store&#39;, default=&#39;INFO&#39;,
+                        help=&#39;Log level.&#39;)
+    parser.add_argument(&#39;-z&#39;, &#39;--fitsize&#39;, dest=&#39;fitsize&#39;, type=int,
+                        action=&#39;store&#39;, default=None,
+                        help=&#39;Fit subimage size (pix).&#39;)
+    parser.add_argument(&#39;-s&#39;, &#39;--srcpos&#39;, dest=&#39;srcpos&#39;, type=str,
+                        action=&#39;store&#39;, default=None,
+                        help=&#39;Estimated source position (x,y).&#39;)
+    parser.add_argument(&#39;-f&#39;, &#39;--fwhm&#39;, dest=&#39;fwhm&#39;, type=float,
+                        action=&#39;store&#39;, default=None,
+                        help=&#39;Estimated FWHM (pix).&#39;)
+    parser.add_argument(&#39;-p&#39;, &#39;--profile&#39;, dest=&#39;profile&#39;, type=str,
+                        action=&#39;store&#39;, default=&#39;moffat&#39;,
+                        help=&#39;Profile function (moffat, gaussian, &#39;
+                             &#39;or lorentzian).&#39;)
+    parser.add_argument(&#39;-r&#39;, &#39;--aprad&#39;, dest=&#39;aprad&#39;, type=float,
+                        action=&#39;store&#39;, default=None,
+                        help=&#39;Aperture radius (pix).&#39;)
+    parser.add_argument(&#39;-b&#39;, &#39;--skyrad&#39;, dest=&#39;skyrad&#39;, type=str,
+                        action=&#39;store&#39;, default=None,
+                        help=&#39;Sky radii in pix (inner,outer).&#39;)
+    parser.add_argument(&#39;-u&#39;, &#39;--raw_units&#39;, dest=&#39;runits&#39;, type=str,
+                        action=&#39;store&#39;, default=None,
+                        help=&#39;Raw data units before calibration, &#39;
+                             &#39;to use in header comments.&#39;)
+    args = parser.parse_args()
+
+    if args.srcpos is not None:
+        try:
+            srcpos = [float(x) for x in args.srcpos.split(&#39;,&#39;)]
+            if len(srcpos) != 2:
+                raise ValueError
+        except ValueError:
+            srcpos = None
+            parser.error(&quot;Invalid srcpos argument.&quot;)
+    else:
+        srcpos = None
+    if args.skyrad is not None:
+        try:
+            skyrad = [float(x) for x in args.skyrad.split(&#39;,&#39;)]
+            if len(skyrad) != 2:
+                raise ValueError
+        except ValueError:
+            skyrad = None
+            parser.error(&quot;Invalid skyrad argument.&quot;)
+    else:
+        skyrad = None
+
+    log.setLevel(args.loglevel.upper())
+    for fname in args.filename:
+        log.info(&#39;Running: {}&#39;.format(fname))
+        pipecal_applyphot(fname, srcpos=srcpos,
+                          fitsize=args.fitsize, fwhm=args.fwhm,
+                          profile=args.profile, aprad=args.aprad,
+                          skyrad=skyrad, runits=args.runits,
+                          overwrite=args.overwrite)
+        log.info(&#39;&#39;)
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

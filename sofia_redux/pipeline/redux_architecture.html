@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>&lt;no title&gt; &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../_static/plot_directive.css" />
+    
+    <script src="../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <p>Redux is designed to be a light-weight interface to data reduction
+pipelines.  It contains the definitions of how reduction algorithms
+should be called for any given instrument, mode, or pipeline,
+in either a command-line interface (CLI) or graphical user
+interface (GUI) mode, but it does not contain the reduction
+algorithms themselves.</p>
+<p>Redux is organized around the principle that
+any data reduction procedure can be accomplished by running a linear
+sequence of data reduction steps. It relies on a <code class="xref py py-obj docutils literal notranslate"><span class="pre">Reduction</span></code> class that
+defines what these steps are and in which order they should be run
+(the reduction “recipe”).  Reductions have an associated <code class="xref py py-obj docutils literal notranslate"><span class="pre">Parameter</span></code>
+class that defines what parameters the steps may accept.  Because
+reduction classes share common interaction methods, they can be
+instantiated and called from a completely generic front-end GUI,
+which provides the capability to load in raw data files, and then:</p>
+<ol class="arabic simple">
+<li><p>set the parameters for a reduction step,</p></li>
+<li><p>run the step on all input data,</p></li>
+<li><p>display the results of the processing,</p></li>
+</ol>
+<p>and repeat this process for every step in sequence to complete the
+reduction on the loaded data. In order to choose the correct
+reduction object for a given data set, the interface uses a <code class="xref py py-obj docutils literal notranslate"><span class="pre">Chooser</span></code>
+class, which reads header information from loaded input files and
+uses it to decide which reduction object to instantiate and return.</p>
+<p>The GUI is a PyQt  application, based around the <code class="xref py py-obj docutils literal notranslate"><span class="pre">Application</span></code>
+class. Because the GUI operations are completely separate from the
+reduction operations, the automatic pipeline script is simply a wrapper
+around a reduction object: the <code class="xref py py-obj docutils literal notranslate"><span class="pre">Pipe</span></code> class uses the Chooser to
+instantiate the Reduction, then calls its <em>reduce</em> method, which calls
+each reduction step in order and reports any output files generated.
+Both the Application and Pipe classes inherit from a common <code class="xref py py-obj docutils literal notranslate"><span class="pre">Interface</span></code>
+class that holds reduction objects and defines the methods for
+interacting with them.  The <code class="xref py py-obj docutils literal notranslate"><span class="pre">Application</span></code> class additionally may
+start and update custom data viewers associated with the
+data reduction; these should inherit from the Redux <code class="xref py py-obj docutils literal notranslate"><span class="pre">Viewer</span></code> class.</p>
+<p>All reduction classes inherit from the generic <code class="xref py py-obj docutils literal notranslate"><span class="pre">Reduction</span></code> class,
+which defines the common interface for all reductions: how parameters
+are initialized and modified, how each step is called.
+Each specific reduction class must then define
+each data reduction step as a method that calls the appropriate
+algorithm.</p>
+<p>The reduction methods may contain any code necessary to
+accomplish the data reduction step. Typically, a reduction method will
+contain code to fetch the parameters for the method from the object’s
+associated Parameters class, then will
+call an external data reduction algorithm with appropriate parameter values,
+and store the results in the ‘input’ attribute to be available for the
+next processing step. If processing results in data that can be displayed,
+it should be placed in the ‘display_data’ attribute, in a format that
+can be recognized by the associated Viewers.  The Redux GUI checks
+this attribute at the end of each data reduction step and displays the
+contents via the Viewer’s ‘display’ method.</p>
+<p>Parameters for data reduction are stored as a list of <code class="xref py py-obj docutils literal notranslate"><span class="pre">ParameterSet</span></code>
+objects, one for each reduction step.  Parameter sets contain the key,
+value, data type, and widget type information for every parameter.
+A <code class="xref py py-obj docutils literal notranslate"><span class="pre">Parameters</span></code> class may generate these parameter sets by
+defining a default dictionary that associates step names with parameter
+lists that define these values.  This dictionary may be defined directly
+in the Parameters class, or may be read in from an external configuration
+file or software package, as appropriate for the reduction.</p>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+<ul class="simple">
+</ul>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right">
+    <a href="../../_sources/sofia_redux/pipeline/redux_architecture.rst.txt"
+       rel="nofollow">Page Source</a> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

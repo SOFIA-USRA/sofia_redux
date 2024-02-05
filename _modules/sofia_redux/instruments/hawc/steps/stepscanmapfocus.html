@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepscanmapfocus &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepscanmapfocus</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Focus image reconstruction pipeline step.&quot;&quot;&quot;
+
+from astropy import log
+
+from sofia_redux.instruments.hawc.dataparent import DataParent
+from sofia_redux.instruments.hawc.stepmoparent import StepMOParent
+from sofia_redux.instruments.hawc.steps.stepscanmap import StepScanMap
+
+__all__ = [&#39;StepScanMapFocus&#39;]
+
+
+<div class="viewcode-block" id="StepScanMapFocus">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepscanmapfocus.StepScanMapFocus.html#sofia_redux.instruments.hawc.steps.stepscanmapfocus.StepScanMapFocus">[docs]</a>
+class StepScanMapFocus(StepMOParent):
+    &quot;&quot;&quot;
+    Reconstruct an image from short focus scans.
+
+    This step calls the scan map data reduction package as an external
+    process to reduce focus scans data.
+
+    Data are grouped by the focus value before being passed to scan map.
+    Each set of focus values produces a single scan map output file with
+    image extensions SIGNAL, EXPOSURE, NOISE and S/N.
+
+    Scan map parameters are not generally modified for this step. They
+    are used as defined in the configuration files for mode_focus
+    data.
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepScanMapFocus.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepscanmapfocus.StepScanMapFocus.html#sofia_redux.instruments.hawc.steps.stepscanmapfocus.StepScanMapFocus.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;scanmapfocus&#39;, and are named with
+        the step abbreviation &#39;SMP&#39;.
+
+        Parameters defined for this step are:
+
+        groupkeys : str
+            List of header keywords to decide data group
+            membership (| separated).
+        groupkfmt : str
+            List of group key formats for string
+            comparison (unused if &quot;&quot;, | separated).
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;scanmapfocus&#39;
+        self.description = &#39;Construct Scan Map&#39;
+
+        # procname is taken from the redstep below
+        self.procname = &#39;smp&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+
+        # Append parameters
+        self.paramlist.append([&#39;groupkeys&#39;, &#39;FOCUS_ST&#39;,
+                               &#39;List of header keywords to decide data &#39;
+                               &#39;group membership (| separated)&#39;])
+        self.paramlist.append([&#39;groupkfmt&#39;, &#39;%.1f&#39;,
+                               &#39;List of group key formats for string &#39;
+                               &#39;comparison (unused if &quot;&quot;, | separated)&#39;])</div>
+
+
+<div class="viewcode-block" id="StepScanMapFocus.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepscanmapfocus.StepScanMapFocus.html#sofia_redux.instruments.hawc.steps.stepscanmapfocus.StepScanMapFocus.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        This step is run as a multi-in multi-out (MIMO) step:
+        self.datain should be a list of DataFits, and output
+        will be a single DataFits, stored in self.dataout.
+
+        The process is:
+
+        1. Group input data by the header keyword FOCUS_ST.
+        2. Call StepScanMap for each input group.
+
+        &quot;&quot;&quot;
+
+        # Get the step to run on the group
+        redstep = StepScanMap()
+
+        # Set up data groups, get keys and key formats
+        datagroups = []
+        groupkeys = self.getarg(&#39;groupkeys&#39;).split(&#39;|&#39;)
+        groupkfmt = self.getarg(&#39;groupkfmt&#39;)
+        if len(groupkfmt) == 0:
+            groupkfmt = None
+        else:
+            groupkfmt = groupkfmt.split(&#39;|&#39;)
+
+        # Loop over files
+        for data in self.datain:
+            groupind = 0
+            # Loop over groups until group match found or end reached
+            while groupind &lt; len(datagroups):
+                # Check if data fits group
+                found = True
+                gdata = datagroups[groupind][0]
+                for keyi in range(len(groupkeys)):
+                    # Get key from group and new data - format if needed
+                    key = groupkeys[keyi]
+                    dkey = data.getheadval(key)
+                    gkey = gdata.getheadval(key)
+                    if groupkfmt is not None:
+                        dkey = groupkfmt[keyi] % dkey
+                        gkey = groupkfmt[keyi] % gkey
+
+                    # Compare
+                    if dkey != gkey:
+                        found = False
+
+                # Found -&gt; add to group
+                if found:
+                    datagroups[groupind].append(data)
+                    break
+
+                # Not found -&gt; increase group index
+                groupind += 1
+
+            # If not in any group -&gt; make new group
+            if groupind == len(datagroups):
+                datagroups.append([data, ])
+
+        # info messages
+        log.debug(&quot; Found %d data groups&quot; % len(datagroups))
+        for groupind in range(len(datagroups)):
+            group = datagroups[groupind]
+            msg = &quot;  Group %d len=%d&quot; % (groupind, len(group))
+            for key in groupkeys:
+                msg += &quot; %s = %s&quot; % (key, group[0].getheadval(key))
+            log.debug(msg)
+
+        # Reduce input files - collect output files
+        self.dataout = []
+
+        # Loop over groups -&gt; save output in self.dataout
+        for groupi in range(len(datagroups)):
+            group = datagroups[groupi]
+
+            # Reduce the data
+            dataout = redstep(group)
+
+            # add output to dataout
+            if issubclass(dataout.__class__, DataParent):
+                self.dataout.append(dataout)
+            else:
+                for data in dataout:
+                    self.dataout.append(data)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

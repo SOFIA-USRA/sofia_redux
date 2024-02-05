@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.hawc_plus.integration.integration &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.hawc_plus.integration.integration</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log, units
+import numpy as np
+
+from sofia_redux.scan.custom.hawc_plus.integration import (
+    hawc_integration_numba_functions)
+from sofia_redux.scan.custom.sofia.integration.integration import (
+    SofiaIntegration)
+
+__all__ = [&#39;HawcPlusIntegration&#39;]
+
+
+<div class="viewcode-block" id="HawcPlusIntegration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration">[docs]</a>
+class HawcPlusIntegration(SofiaIntegration):
+
+    def __init__(self, scan=None):
+        &quot;&quot;&quot;
+
+        Initialize a HAWC+ integration.
+
+        Parameters
+        ----------
+        scan : sofia_redux.scan.custom.hawc_plus.scan.scan.HawcPlusScan
+            The scan to which this integration belongs (optional).
+        &quot;&quot;&quot;
+        self.fix_jumps = False
+        self.min_jump_level_frames = 0
+        self.fix_subarray = None
+        self.drift_dependents = None
+        super().__init__(scan=scan)
+
+    @property
+    def scan_astrometry(self):
+        &quot;&quot;&quot;
+        Return the scan astrometry.
+
+        Returns
+        -------
+        HawcPlusAstrometryInfo
+        &quot;&quot;&quot;
+        return super().scan_astrometry
+
+<div class="viewcode-block" id="HawcPlusIntegration.apply_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Apply configuration options to an integration.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.read">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.read">[docs]</a>
+    def read(self, hdus):
+        &quot;&quot;&quot;
+        Read integration information from a list of Data HDUs.  All HDUs should
+        consist of &quot;timestream&quot; data.
+
+        Parameters
+        ----------
+        hdus : list (astropy.io.fits.hdu.table.BinTableHDU)
+            A list of data HDUs containing &quot;timestream&quot; data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        log.info(&quot;Processing scan data:&quot;)
+        records = 0
+        for hdu in hdus:
+            records += int(hdu.header.get(&#39;NAXIS2&#39;, 0))
+
+        log.debug(f&quot;Reading {records} frames from {len(hdus)} HDU(s)&quot;)
+        sampling = (1.0 / self.info.instrument.integration_time).to(
+            units.Unit(&#39;Hz&#39;))
+        minutes = (self.info.instrument.sampling_interval * records).to(
+            units.Unit(&#39;min&#39;))
+        log.debug(f&quot;Sampling at {sampling:.3f} ---&gt; {minutes:.2f}.&quot;)
+
+        self.frames.initialize(self, records)
+        self.frames.read_hdus(hdus)</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.validate">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.validate">[docs]</a>
+    def validate(self):
+        &quot;&quot;&quot;
+        Validate the integration after a read.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.configuration.is_configured(&#39;chopper.shift&#39;):
+            self.shift_chopper(self.configuration.get_int(&#39;chopper.shift&#39;))
+
+        self.flag_zeroed_channels()
+        self.check_jumps()
+        if self.configuration.is_configured(&#39;jumpdata&#39;):
+            self.correct_jumps()
+        if self.configuration.is_configured(&#39;gyrocorrect&#39;):
+            self.info.gyro_drifts.correct(integration=self)
+        super().validate()</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.get_table_entry">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Return a parameter value for the given name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the parameter to retrieve.
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        if name == &#39;hwp&#39;:
+            return self.get_mean_hwp_angle().to(&#39;degree&#39;)
+        if name == &#39;pwv&#39;:
+            return self.get_mean_pwv().to(&#39;um&#39;)
+        return super().get_table_entry(name)</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.shift_chopper">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.shift_chopper">[docs]</a>
+    def shift_chopper(self, n_frames):
+        &quot;&quot;&quot;
+        Shift the chopper position by a given number of frames
+
+        Parameters
+        ----------
+        n_frames : int
+            The number of frames to shift the chopper signal.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if n_frames == 0:
+            return
+        log.debug(f&quot;Shifting chopper signal by {n_frames} frames.&quot;)
+        self.frames.chopper_position.shift(n_frames, fill_value=np.nan)
+        if n_frames &gt; 0:
+            self.frames.valid[:n_frames] = False
+        elif n_frames &lt; 0:
+            self.frames.valid[n_frames:] = False</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.flag_zeroed_channels">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.flag_zeroed_channels">[docs]</a>
+    def flag_zeroed_channels(self):
+        &quot;&quot;&quot;
+        Flags all channels with completely zeroed frame data as DISCARD/DEAD.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        log.debug(&quot;Flagging zeroed channels.&quot;)
+
+        hawc_integration_numba_functions.flag_zeroed_channels(
+            frame_data=self.frames.data,
+            frame_valid=self.frames.valid,
+            channel_indices=np.arange(self.channels.size),
+            channel_flags=self.channels.data.flag,
+            discard_flag=self.channel_flagspace.convert_flag(&#39;DISCARD&#39;).value)
+
+        # Flag discarded channels as DEAD
+        self.channels.data.set_flags(
+            &#39;DEAD&#39;, indices=self.channels.data.is_flagged(&#39;DISCARD&#39;))</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.set_tau">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.set_tau">[docs]</a>
+    def set_tau(self, spec=None, value=None):
+        &quot;&quot;&quot;
+        Set the tau values for the integration.
+
+        If a value is explicitly provided without a specification, will be used
+        to set the zenith tau if ground based, or transmission.  If a
+        specification and value is provided, will set the zenith tau as:
+
+        ((band_a / t_a) * (value - t_b)) + band_b
+
+        where band_a/b are retrieved from the configuration as tau.&lt;spec&gt;.a/b,
+        and t_a/b are retrieved from the configuration as tau.&lt;instrument&gt;.a/b.
+
+        Parameters
+        ----------
+        spec : str, optional
+            The tau specification to read from the configuration.  If not
+            supplied, will be read from the configuration &#39;tau&#39; setting.
+        value : float, optional
+            The tau value to set.  If not supplied, will be retrieved from the
+            configuration as tau.&lt;spec&gt;.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_tau(spec=spec, value=value)
+        self.print_equivalent_taus(self.zenith_tau)</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.print_equivalent_taus">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.print_equivalent_taus">[docs]</a>
+    def print_equivalent_taus(self, tau):
+        &quot;&quot;&quot;
+        Write a log message for the given tau value.
+
+        Parameters
+        ----------
+        tau : float
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pwv = (self.get_tau(&#39;pwv&#39;, tau) * units.Unit(&#39;um&#39;)).round(1)
+        los = np.round(tau / self.scan_astrometry.horizontal.sin_lat, 3)
+        wave = self.info.instrument.wavelength.round(0).astype(int)
+        msg = f&#39;---&gt; tau({wave}):{np.round(tau, 3)}, tau(LOS):{los}, PWV:{pwv}&#39;
+        log.info(msg)</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.check_jumps">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.check_jumps">[docs]</a>
+    def check_jumps(self):
+        &quot;&quot;&quot;
+        Checks for jumps in the jump counter.
+
+        Returns
+        -------
+        has_jumps : bool
+            `True` if jumps were detected.
+        &quot;&quot;&quot;
+        log.debug(&quot;Checking for flux jumps.&quot;)
+
+        if (not hasattr(self.frames, &#39;jump_counter&#39;)
+                or self.frames.jump_counter is None):
+            log.warning(&quot;Scan has no jump counter data.&quot;)
+            return
+
+        try:
+            start_counter = self.get_first_frame().jump_counter
+        except IndexError:
+            log.warning(&quot;No valid frames available to check jumps.&quot;)
+            return
+
+        n_jumps = hawc_integration_numba_functions.check_jumps(
+            start_counter=start_counter,
+            jump_counter=self.frames.jump_counter,
+            frame_valid=self.frames.valid,
+            has_jumps=self.channels.data.has_jumps,
+            channel_indices=np.arange(self.channels.size))
+
+        if n_jumps == 0:
+            log.debug(&quot;---&gt; All good!&quot;)
+        else:
+            log.debug(f&quot;---&gt; found jump(s) in {n_jumps} pixels.&quot;)</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.correct_jumps">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.correct_jumps">[docs]</a>
+    def correct_jumps(self):
+        &quot;&quot;&quot;
+        Correct jumps in the data.
+
+        The data are corrected by:
+
+        data -= jump_counter * channel_jumps
+
+        where jump_counter is created for each frame and channel, and jumps
+        are per channel.  Since jump counter is a byte valued, wrap around
+        values are accounted for by jump_range (power of 2 value).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        log.debug(&quot;Correcting flux jumps.&quot;)
+        hawc_integration_numba_functions.correct_jumps(
+            frame_data=self.frames.data,
+            frame_valid=self.frames.valid,
+            jump_counter=self.frames.jump_counter,
+            channel_indices=np.arange(self.channels.size),
+            channel_jumps=self.channels.data.jump,
+            jump_range=self.info.detector_array.JUMP_RANGE)</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.remove_drifts">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.remove_drifts">[docs]</a>
+    def remove_drifts(self, target_frame_resolution=None, robust=False):
+        &quot;&quot;&quot;
+        Remove drifts in frame data given a target frame resolution.
+
+        Will also set the filter time scale based on the target frame
+        resolution.
+
+        Sets additional attributes based on jumps.
+
+        Parameters
+        ----------
+        target_frame_resolution : int
+            The number of frames for the target resolution.
+        robust : bool, optional
+            If `True` use the robust (median) method to determine means.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.fix_jumps = self.configuration.get_bool(&#39;fixjumps&#39;)
+        det = self.info.detector_array
+        self.fix_subarray = np.full(det.subarrays, False)
+
+        self.fix_subarray[det.R0] = self.configuration.get_bool(&#39;fixjumps.r0&#39;)
+        self.fix_subarray[det.R1] = self.configuration.get_bool(&#39;fixjumps.r1&#39;)
+        self.fix_subarray[det.T0] = self.configuration.get_bool(&#39;fixjumps.t0&#39;)
+        self.fix_subarray[det.T1] = self.configuration.get_bool(&#39;fixjumps.t1&#39;)
+
+        self.min_jump_level_frames = self.frames_for(
+            10 * self.get_point_crossing_time())
+
+        self.drift_dependents = self.get_dependents(&#39;drifts&#39;)
+
+        super().remove_drifts(target_frame_resolution=target_frame_resolution,
+                              robust=robust)</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.get_mean_hwp_angle">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.get_mean_hwp_angle">[docs]</a>
+    def get_mean_hwp_angle(self):
+        &quot;&quot;&quot;
+        Return the mean Half Wave Plate angle.
+
+        The mean HWP angle is given as the mean of the first and last valid
+        frame HWP angle values.
+
+        Returns
+        -------
+        astropy.units.Quantity
+            The mean HWP angle.
+        &quot;&quot;&quot;
+        hwp_1 = self.frames.get_first_frame_value(&#39;hwp_angle&#39;)
+        hwp_2 = self.frames.get_last_frame_value(&#39;hwp_angle&#39;)
+        return 0.5 * (hwp_1 + hwp_2)</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.get_full_id">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.get_full_id">[docs]</a>
+    def get_full_id(self, separator=&#39;|&#39;):
+        &quot;&quot;&quot;
+        Return the full integration ID.
+
+        Parameters
+        ----------
+        separator : str, optional
+            The separator character/phase between the scan and integration ID.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return self.scan.get_id()</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.check_consistency">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.check_consistency">[docs]</a>
+    def check_consistency(self, channels, frame_dependents, start_frame=None,
+                          stop_frame=None):
+        &quot;&quot;&quot;
+        Check consistency of frame dependents and channels.
+
+        In addition to the standard consistency checks, will also fix jumps
+        in the frame data if configuration settings allow, and jumps are
+        present.
+
+        Parameters
+        ----------
+        channels : ChannelGroup
+        frame_dependents : numpy.ndarray (float)
+        start_frame : int, optional
+            The starting frame (inclusive).  Defaults to the first (0) frame.
+        stop_frame : int, optional
+            The end frame (exclusive).  Defaults to the last (self.size) frame.
+
+        Returns
+        -------
+        consistent : numpy.ndarray (bool)
+            An array of size self.size where `True` indicates a consistent
+            frame.
+        &quot;&quot;&quot;
+        is_ok = super().check_consistency(channels, frame_dependents,
+                                          start_frame=start_frame,
+                                          stop_frame=stop_frame)
+
+        no_jumps = self.level_jumps(channels, frame_dependents,
+                                    start_frame=start_frame,
+                                    stop_frame=stop_frame)
+
+        return is_ok &amp; no_jumps</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.get_jump_blank_range">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.get_jump_blank_range">[docs]</a>
+    def get_jump_blank_range(self):
+        &quot;&quot;&quot;
+        Return the number of frames to flag before and after a jump.
+
+        Returns
+        -------
+        blank_frames : numpy.ndarray (int)
+            The [flag_before, flag_after] number of frames to flag before and
+            after each jump.
+        &quot;&quot;&quot;
+        blank_time = self.configuration.get_float_list(
+            &#39;fixjumps.blank&#39;, default=None)
+
+        if blank_time is None:
+            blank_frames = np.zeros(2, dtype=int)
+        else:
+            if len(blank_time) == 1:
+                blank_time = np.full(2, blank_time[0]) * units.Unit(&#39;second&#39;)
+            elif len(blank_time) != 2:
+                log.warning(&quot;Jump blanking time in configuration is &quot;
+                            &quot;not a 1 or 2 element array.  &quot;
+                            &quot;Will not apply blank flags.&quot;)
+                blank_time = np.full(2, blank_time[0]) * units.Unit(&#39;second&#39;)
+            else:
+                blank_time = np.asarray(blank_time) * units.Unit(&#39;second&#39;)
+
+            blank_frames = np.asarray(list(map(self.frames_for, blank_time)))
+            blank_frames[blank_time == 0] = 0
+        return blank_frames</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.level_jumps">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.level_jumps">[docs]</a>
+    def level_jumps(self, channels, frame_dependents, start_frame=None,
+                    stop_frame=None):
+        &quot;&quot;&quot;
+        Levels frame data based on jump locations.
+
+        Parameters
+        ----------
+        channels : ChannelGroup
+        frame_dependents : numpy.ndarray (float)
+        start_frame : int, optional
+            The starting frame (inclusive).  Defaults to the first (0) frame.
+        stop_frame : int, optional
+            The end frame (exclusive).  Defaults to the last (self.size) frame.
+
+        Returns
+        -------
+        consistent : numpy.ndarray (bool)
+            An array of size self.size where `True` indicates a consistent
+            frame.
+        &quot;&quot;&quot;
+        self.drift_dependents = self.get_dependents(&#39;drifts&#39;)
+
+        exclude_sample_flag = ~(
+            self.flagspace.convert_flag(&#39;SAMPLE_SOURCE_BLANK&#39;).value)
+        jump_flag = self.flagspace.convert_flag(&#39;SAMPLE_PHI0_JUMP&#39;).value
+        blank_frames = self.get_jump_blank_range()
+
+        no_jumps = hawc_integration_numba_functions.fix_jumps(
+            frame_valid=self.frames.valid,
+            frame_data=self.frames.data,
+            frame_weights=self.frames.relative_weight,
+            modeling_frames=self.frames.is_flagged(&#39;MODELING_FLAGS&#39;),
+            frame_parms=frame_dependents,
+            sample_flags=self.frames.sample_flag,
+            exclude_sample_flag=exclude_sample_flag,
+            channel_indices=channels.indices,
+            channel_parms=self.drift_dependents.for_channel,
+            min_jump_level_frames=self.min_jump_level_frames,
+            jump_flag=jump_flag,
+            fix_each=self.fix_jumps,
+            fix_subarray=self.fix_subarray,
+            has_jumps=channels.has_jumps,
+            subarray=channels.sub,
+            jump_counter=self.frames.jump_counter,
+            start_frame=start_frame,
+            end_frame=stop_frame,
+            flag_before=blank_frames[0],
+            flag_after=blank_frames[1])
+
+        return no_jumps</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.update_inconsistencies">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.update_inconsistencies">[docs]</a>
+    def update_inconsistencies(self, channels, frame_dependents, drift_size):
+        &quot;&quot;&quot;
+        Check consistency of frame dependents and channels.
+
+        Looks for inconsistencies in the channel and frame data post levelling
+        and updates the `inconsistencies` attribute of the channel data.
+
+        Parameters
+        ----------
+        frame_dependents : numpy.ndarray (float)
+        channels : HawcPlusChannelGroup
+        drift_size : int
+            The size of the drift removal block size in frames.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().update_inconsistencies(channels, frame_dependents, drift_size)
+        drift_parms = self.get_dependents(&#39;drifts&#39;)
+        exclude_sample_flag = ~(
+            self.flagspace.convert_flag(&#39;SAMPLE_SOURCE_BLANK&#39;).value)
+        jump_flag = self.flagspace.convert_flag(&#39;SAMPLE_PHI0_JUMP&#39;).value
+        blank_frames = self.get_jump_blank_range()
+
+        self.detect_jumps()
+
+        inconsistencies = \
+            hawc_integration_numba_functions.find_inconsistencies(
+                frame_valid=self.frames.valid,
+                frame_data=self.frames.data,
+                frame_weights=self.frames.relative_weight,
+                modeling_frames=self.frames.is_flagged(&#39;MODELING_FLAGS&#39;),
+                frame_parms=frame_dependents,
+                sample_flags=self.frames.sample_flag,
+                exclude_sample_flag=exclude_sample_flag,
+                channel_indices=channels.indices,
+                channel_parms=drift_parms.for_channel,
+                min_jump_level_frames=self.min_jump_level_frames,
+                jump_flag=jump_flag,
+                fix_each=self.fix_jumps,
+                fix_subarray=self.fix_subarray,
+                has_jumps=channels.has_jumps,
+                subarray=channels.sub,
+                jump_counter=self.frames.jump_counter,
+                drift_size=drift_size,
+                flag_before=blank_frames[0],
+                flag_after=blank_frames[1])
+
+        channels.inconsistencies += inconsistencies</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.detect_jumps">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.detect_jumps">[docs]</a>
+    def detect_jumps(self):
+        &quot;&quot;&quot;
+        Attempt to detect jumps in the frame data when not reported.
+
+        If fixjumps.detect is set to a positive value and fixjumps is also
+        enabled, attempts to detect unreported jumps in the SQ1Feedback data.
+        Jumps are only searched for in channels that do not currently contain
+        any known jumps, and the frame jump counter is incremented to mark
+        a jump for subsequent processing by the standard fixjumps algorithm.
+
+        The fixjumps.detect threshold (x) is used in the following way::
+
+            dd = frame_data[1:] - frame_data[:-1]
+            mad = medabsdev(dd)
+            threshold = x * mad
+            possible_jumps = dd &gt;= threshold
+
+        For each possible jump, if the median of the data before differs to
+        the median of the data after by more than threshold, then the jump
+        is considered valid.  Note that each before/after chunk only extends
+        to the previous/next possible jump.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.fix_jumps:
+            return
+        detect_threshold = self.configuration.get_float(
+            &#39;fixjumps.detect&#39;, default=0.0)
+        if detect_threshold &lt;= 0:
+            return
+        blank_frames = self.get_jump_blank_range()
+        jumps_found = hawc_integration_numba_functions.detect_jumps(
+            data=self.frames.data,
+            has_jumps=self.channels.data.has_jumps,
+            jumps=self.frames.jump_counter,
+            threshold=detect_threshold,
+            start_pad=blank_frames[0],
+            end_pad=blank_frames[1])
+        n_jumps = np.sum(jumps_found)
+        if n_jumps &gt; 0:
+            channel_indices = self.channels.data.fixed_index[
+                np.unique(np.nonzero(jumps_found)[1])]
+            log.debug(f&#39;Detected {n_jumps} unreported jumps in channels &#39;
+                      f&#39;{channel_indices}&#39;)</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.get_first_frame">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.get_first_frame">[docs]</a>
+    def get_first_frame(self, reference=0):
+        &quot;&quot;&quot;
+        Return the first valid frame.
+
+        Parameters
+        ----------
+        reference : int, optional
+            The first actual frame index after which to return the first valid
+            frame.  The default is the first (0).
+
+        Returns
+        -------
+        HawcPlusFrames
+        &quot;&quot;&quot;
+        return super().get_first_frame(reference=reference)</div>
+
+
+<div class="viewcode-block" id="HawcPlusIntegration.get_last_frame">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.html#sofia_redux.scan.custom.hawc_plus.integration.integration.HawcPlusIntegration.get_last_frame">[docs]</a>
+    def get_last_frame(self, reference=None):
+        &quot;&quot;&quot;
+        Return the first valid frame.
+
+        Parameters
+        ----------
+        reference : int, optional
+            The last actual frame index before which to return the last valid
+            frame.  The default is the last.
+
+        Returns
+        -------
+        HawcPlusFrames
+        &quot;&quot;&quot;
+        return super().get_last_frame(reference=reference)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

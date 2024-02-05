@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Image Warping through polynomial transformation &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Interpolate (sofia_redux.toolkit.interpolate)" href="../interpolate/index.html" />
+    <link rel="prev" title="Surface Fitting and Smoothing" href="smooth.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li class="right">
+	<a href="../interpolate/index.html" title="Interpolate (sofia_redux.toolkit.interpolate)">
+	  next &raquo;
+	</a>
+      </li>
+      <li class="right">
+	<a href="smooth.html" title="Surface Fitting and Smoothing">
+	  &laquo; previous
+	</a>
+	 |
+      </li>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" >SOFIA Redux</a> &#187;</li>
+      <li><a href="../index.html" >sofia_redux.toolkit: Shared Utilities for SOFIA Pipelines</a> &#187;</li>
+      <li><a href="index.html" accesskey="U">Image Algorithms (<code class="xref py py-obj docutils literal notranslate"><span class="pre">sofia_redux.toolkit.image</span></code>)</a> &#187;</li>
+      
+      <li>Image Warping through polynomial transformation</li> 
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="image-warping-through-polynomial-transformation">
+<h1>Image Warping through polynomial transformation<a class="headerlink" href="#image-warping-through-polynomial-transformation" title="Link to this heading">¶</a></h1>
+<p>Image warping can be achieved using the <a class="reference internal" href="../../../api/sofia_redux.toolkit.image.warp.warp_image.html#sofia_redux.toolkit.image.warp.warp_image" title="sofia_redux.toolkit.image.warp.warp_image"><code class="xref py py-func docutils literal notranslate"><span class="pre">warp_image()</span></code></a> function.  Here, two
+sets of coordinates should be provided: one indicating a standard set of (x, y)
+coordinates; the other giving those same coordinates at a warped location.
+Note that NaN handling is available for <a class="reference internal" href="../../../api/sofia_redux.toolkit.image.warp.warp_image.html#sofia_redux.toolkit.image.warp.warp_image" title="sofia_redux.toolkit.image.warp.warp_image"><code class="xref py py-func docutils literal notranslate"><span class="pre">warp_image()</span></code></a>.  The following
+warps an image in which pixels are rotated according from their distance
+from the center:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">imageio</span>
+<span class="kn">from</span> <span class="nn">sofia_redux.toolkit.image.warp</span> <span class="kn">import</span> <span class="n">warp_image</span>
+
+<span class="n">image</span> <span class="o">=</span> <span class="n">imageio</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="s1">&#39;imageio:checkerboard.png&#39;</span><span class="p">)</span>
+<span class="n">sy</span><span class="p">,</span> <span class="n">sx</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">shape</span>
+
+<span class="c1"># Define some original grid positions</span>
+<span class="n">xi</span><span class="p">,</span> <span class="n">yi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">sx</span><span class="p">,</span> <span class="n">sx</span> <span class="o">//</span> <span class="mi">20</span><span class="p">),</span>
+                     <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">sy</span><span class="p">,</span> <span class="n">sy</span> <span class="o">//</span> <span class="mi">20</span><span class="p">))</span>
+
+<span class="c1"># Define some rotated grid positions</span>
+<span class="n">cenx</span><span class="p">,</span> <span class="n">ceny</span> <span class="o">=</span> <span class="n">sx</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">sy</span> <span class="o">/</span> <span class="mi">2</span>
+<span class="n">xo</span> <span class="o">=</span> <span class="n">xi</span> <span class="o">-</span> <span class="n">cenx</span>
+<span class="n">yo</span> <span class="o">=</span> <span class="n">yi</span> <span class="o">-</span> <span class="n">ceny</span>
+<span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">((</span><span class="n">xo</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">yo</span> <span class="o">**</span> <span class="mi">2</span><span class="p">))</span>
+<span class="n">r</span> <span class="o">/=</span> <span class="n">r</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+<span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="o">-</span><span class="mi">20</span><span class="p">)</span> <span class="o">*</span> <span class="n">r</span>
+<span class="n">xo</span> <span class="o">=</span> <span class="n">xo</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="o">-</span> <span class="n">yo</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+<span class="n">yo</span> <span class="o">=</span> <span class="n">xo</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="o">+</span> <span class="n">yo</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+<span class="n">xo</span> <span class="o">+=</span> <span class="n">cenx</span>
+<span class="n">yo</span> <span class="o">+=</span> <span class="n">ceny</span>
+
+<span class="c1"># create a new image on the rotated coordinates</span>
+<span class="n">rotated</span> <span class="o">=</span> <span class="n">warp_image</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">xi</span><span class="p">,</span> <span class="n">yi</span><span class="p">,</span> <span class="n">xo</span><span class="p">,</span> <span class="n">yo</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;edge&#39;</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">121</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Original Image&quot;</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">122</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">rotated</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Warped Image&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>(<a class="reference download internal" download="" href="../../../_downloads/eb2d5ea781d93c035670f639fa0edf79/warp-1.py"><code class="xref download docutils literal notranslate"><span class="pre">Source</span> <span class="pre">code</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/aa8776547fa411560e50ca0af8333d09/warp-1.png"><code class="xref download docutils literal notranslate"><span class="pre">png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/d12bbb127f4c9b77a5421eb2a13d2436/warp-1.hires.png"><code class="xref download docutils literal notranslate"><span class="pre">hires.png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/b3648454209e3021aa31ec64ed877021/warp-1.pdf"><code class="xref download docutils literal notranslate"><span class="pre">pdf</span></code></a>)</p>
+<figure class="align-default">
+<img alt="../../../_images/warp-1.png" class="plot-directive" src="../../../_images/warp-1.png" />
+</figure>
+</section>
+<section id="polynomial-image-warping">
+<h1>Polynomial Image Warping<a class="headerlink" href="#polynomial-image-warping" title="Link to this heading">¶</a></h1>
+<p>The <a class="reference internal" href="../../../api/sofia_redux.toolkit.image.warp.polywarp.html#sofia_redux.toolkit.image.warp.polywarp" title="sofia_redux.toolkit.image.warp.polywarp"><code class="xref py py-func docutils literal notranslate"><span class="pre">polywarp()</span></code></a> function is functionally equivalent to the IDL
+<a class="reference external" href="https://www.harrisgeospatial.com/docs/POLYWARP.html">polywarp</a>
+function.  It returns the <span class="math notranslate nohighlight">\(K_x\)</span> and <span class="math notranslate nohighlight">\(K_y\)</span> coefficients that
+describe the transformation of coordinates <span class="math notranslate nohighlight">\((x_0, y_0)\)</span> onto
+<span class="math notranslate nohighlight">\((x_1, y_1)\)</span> such that</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+x_1 &amp; = &amp; \sum_{i, j} K_{x_{i, j}} x_0^j y_0^i \\
+y_1 &amp; = &amp; \sum_{i, j} K_{y_{i, j}} x_0^j y_0^i
+\end{eqnarray}</div></div></blockquote>
+<p>For example:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sofia_redux.toolkit.image.warp</span> <span class="kn">import</span> <span class="n">polywarp</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x0</span> <span class="o">=</span> <span class="p">[</span><span class="mi">61</span><span class="p">,</span> <span class="mi">62</span><span class="p">,</span> <span class="mi">143</span><span class="p">,</span> <span class="mi">133</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">y0</span> <span class="o">=</span> <span class="p">[</span><span class="mi">89</span><span class="p">,</span> <span class="mi">34</span><span class="p">,</span> <span class="mi">38</span><span class="p">,</span> <span class="mi">105</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x1</span> <span class="o">=</span> <span class="p">[</span><span class="mi">24</span><span class="p">,</span> <span class="mi">35</span><span class="p">,</span> <span class="mi">102</span><span class="p">,</span> <span class="mi">92</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">y1</span> <span class="o">=</span> <span class="p">[</span><span class="mi">81</span><span class="p">,</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">25</span><span class="p">,</span> <span class="mi">92</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">kx</span><span class="p">,</span> <span class="n">ky</span> <span class="o">=</span> <span class="n">polywarp</span><span class="p">(</span><span class="n">x1</span><span class="p">,</span> <span class="n">y1</span><span class="p">,</span> <span class="n">x0</span><span class="p">,</span> <span class="n">y0</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">kx</span><span class="p">,</span> <span class="n">ky</span>
+<span class="go">(array([[-5.37841592e+00, -3.20945283e-01],</span>
+<span class="go">        [ 7.51471270e-01,  2.22928691e-03]]),</span>
+<span class="go"> array([[-1.01479518e+01,  1.07084966e+00],</span>
+<span class="go">        [-1.68754432e-02, -5.76213991e-04]]))</span>
+</pre></div>
+</div>
+<p>Since this formulation of polynomial coefficients does not fit into the
+standard <code class="xref py py-mod docutils literal notranslate"><span class="pre">sofia_redux.toolkit.polynomial</span></code> API, a special use case function,
+<a class="reference internal" href="../../../api/sofia_redux.toolkit.image.warp.polywarp_image.html#sofia_redux.toolkit.image.warp.polywarp_image" title="sofia_redux.toolkit.image.warp.polywarp_image"><code class="xref py py-func docutils literal notranslate"><span class="pre">polywarp_image()</span></code></a> can be used to call and apply the results of
+<a class="reference internal" href="../../../api/sofia_redux.toolkit.image.warp.polywarp.html#sofia_redux.toolkit.image.warp.polywarp" title="sofia_redux.toolkit.image.warp.polywarp"><code class="xref py py-func docutils literal notranslate"><span class="pre">polywarp()</span></code></a>.</p>
+<p>Firstly, polynomial coefficients are derived using <a class="reference internal" href="../../../api/sofia_redux.toolkit.image.warp.polywarp.html#sofia_redux.toolkit.image.warp.polywarp" title="sofia_redux.toolkit.image.warp.polywarp"><code class="xref py py-func docutils literal notranslate"><span class="pre">polywarp()</span></code></a> followed
+by interpolation (through <code class="xref py py-class docutils literal notranslate"><span class="pre">sofia_redux.toolkit.interpolate.Interpolate</span></code>) of the
+original image onto a newly defined warped set of coordinates.  For example:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">sofia_redux.toolkit.image.warp</span> <span class="kn">import</span> <span class="n">polywarp_image</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">imageio</span>
+
+<span class="n">image</span> <span class="o">=</span> <span class="n">imageio</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="s1">&#39;imageio:camera.png&#39;</span><span class="p">)</span>
+<span class="c1"># Define warp based on corners of image for this example</span>
+<span class="n">x0</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">511</span><span class="p">,</span> <span class="mi">511</span><span class="p">]</span>
+<span class="n">y0</span> <span class="o">=</span> <span class="p">[</span><span class="mi">511</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">511</span><span class="p">]</span>
+<span class="n">x1</span> <span class="o">=</span> <span class="p">[</span><span class="mi">200</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">300</span><span class="p">,</span> <span class="mi">400</span><span class="p">]</span>
+<span class="n">y1</span> <span class="o">=</span> <span class="p">[</span><span class="mi">400</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">400</span><span class="p">]</span>
+<span class="n">warped</span> <span class="o">=</span> <span class="n">polywarp_image</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">x0</span><span class="p">,</span> <span class="n">y0</span><span class="p">,</span> <span class="n">x1</span><span class="p">,</span> <span class="n">y1</span><span class="p">)</span>
+
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">nrows</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ncols</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;Original Image&quot;</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">-</span><span class="mi">10</span><span class="p">,</span> <span class="mi">521</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="mi">521</span><span class="p">,</span> <span class="o">-</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x0</span> <span class="o">+</span> <span class="p">[</span><span class="n">x0</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="n">y0</span> <span class="o">+</span> <span class="p">[</span><span class="n">y0</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="s1">&#39;-o&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>
+           <span class="n">label</span><span class="o">=</span><span class="s2">&quot;$(x_0, y_0)$&quot;</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x1</span> <span class="o">+</span> <span class="p">[</span><span class="n">x1</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="n">y1</span> <span class="o">+</span> <span class="p">[</span><span class="n">y1</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="s1">&#39;-o&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;lime&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>
+           <span class="n">label</span><span class="o">=</span><span class="s2">&quot;$(x_1, y_1)$&quot;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">):</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="n">x0</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">x1</span><span class="p">[</span><span class="n">i</span><span class="p">]],</span> <span class="p">[</span><span class="n">y0</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">y1</span><span class="p">[</span><span class="n">i</span><span class="p">]],</span> <span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;cyan&#39;</span><span class="p">)</span>
+
+<span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="p">(</span><span class="mf">0.12</span><span class="p">,</span> <span class="mf">0.82</span><span class="p">))</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">warped</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;Warped Image&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>(<a class="reference download internal" download="" href="../../../_downloads/73693c9ce54a94dd8e519688ee985572/warp-2.py"><code class="xref download docutils literal notranslate"><span class="pre">Source</span> <span class="pre">code</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/0c4524c24dd407785493a0a06b0871cc/warp-2.png"><code class="xref download docutils literal notranslate"><span class="pre">png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/dde7d1c30b381ecd4d8f4b120d0e9c8f/warp-2.hires.png"><code class="xref download docutils literal notranslate"><span class="pre">hires.png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/387436f1f1cf3340a03593a3b99103ec/warp-2.pdf"><code class="xref download docutils literal notranslate"><span class="pre">pdf</span></code></a>)</p>
+<figure class="align-default">
+<img alt="../../../_images/warp-2.png" class="plot-directive" src="../../../_images/warp-2.png" />
+</figure>
+<p>If warping is required in more than two dimensions, similar results could be
+achieved using a combination of <a class="reference internal" href="../../../api/sofia_redux.toolkit.fitting.polynomial.Polyfit.html#sofia_redux.toolkit.fitting.polynomial.Polyfit" title="sofia_redux.toolkit.fitting.polynomial.Polyfit"><code class="xref py py-class docutils literal notranslate"><span class="pre">sofia_redux.toolkit.fitting.polynomial.Polyfit</span></code></a>
+and <code class="xref py py-class docutils literal notranslate"><span class="pre">sofia_redux.toolkit.interpolate.Interpolate</span></code>.</p>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+<ul>
+<li><a class="reference internal" href="#">Image Warping through polynomial transformation</a></li>
+<li><a class="reference internal" href="#polynomial-image-warping">Polynomial Image Warping</a></li>
+</ul>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right">
+    <a href="../../../_sources/sofia_redux/toolkit/image/warp.rst.txt"
+       rel="nofollow">Page Source</a> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

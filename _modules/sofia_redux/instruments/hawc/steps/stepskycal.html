@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepskycal &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepskycal</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Sky calibration pipeline step.&quot;&quot;&quot;
+
+import os
+
+from astropy import log
+from astropy.stats.sigma_clipping import sigma_clip
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
+import numpy as np
+import pandas as pd
+
+from sofia_redux.instruments.hawc.datafits import DataFits
+from sofia_redux.instruments.hawc.steploadaux import StepLoadAux
+from sofia_redux.instruments.hawc.stepmiparent import StepMIParent
+
+
+__all__ = [&#39;StepSkycal&#39;]
+
+
+<div class="viewcode-block" id="StepSkycal">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepskycal.StepSkycal.html#sofia_redux.instruments.hawc.steps.stepskycal.StepSkycal">[docs]</a>
+class StepSkycal(StepMIParent, StepLoadAux):
+    &quot;&quot;&quot;
+    Generate a reference sky calibration file.
+
+    This step divides scan mode sky flats by processed INT_CAL data,
+    then combines and normalizes the sky flats to generate a
+    master reference sky cal.
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepSkycal.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepskycal.StepSkycal.html#sofia_redux.instruments.hawc.steps.stepskycal.StepSkycal.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;skycal&#39;, and are named with
+        the step abbreviation &#39;SCL&#39;.
+
+        Parameters defined for this step are:
+
+        normalize : bool
+            If set, sky cals are divided by their median values to
+            normalize them before sigma-clipping.
+        sigma_lower : float
+            Lower sigma value to use for clipping.
+        sigma_upper : float
+            Upper sigma value to use for clipping.
+        ttor : float
+            Scale factor for the T array to the R array
+        scalfitkeys : list of str
+            Keys that need to match between data file reference SCAL file,
+            for comparison.
+        binning : str
+            Binning method for comparison histogram.
+        dclfile : str
+            File name glob to match DCL files.  Default is
+            &#39;intcals/*DCL*.fits&#39; to match DCL files in a folder
+            named intcals, in the same directory as the input file.
+        dclfitkeys : list of str
+            Keys that need to match between DCL and data file.
+
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;skycal&#39;
+        self.description = &#39;Make SkyCal&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;scl&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+
+        self.paramlist.append([&#39;normalize&#39;, False,
+                               &#39;Normalize skycal for each array by &#39;
+                               &#39;its median value.&#39;])
+        self.paramlist.append([&#39;sigma_lower&#39;, 3.0,
+                               &#39;Lower sigma value to use for clipping.&#39;])
+        self.paramlist.append([&#39;sigma_upper&#39;, 3.0,
+                               &#39;Upper sigma value to use for clipping.&#39;])
+        self.paramlist.append([&#39;ttor&#39;, 1.275,
+                               &#39;Scale factor for T/R flatfield&#39;])
+        self.paramlist.append([&#39;bins&#39;, &#39;fd&#39;,
+                               &#39;Binning method for comparison histogram.&#39;])
+        self.paramlist.append([&#39;scalfitkeys&#39;, [&#39;SPECTEL1&#39;],
+                               &#39;Match keys for SCAL comparison.&#39;])
+        self.paramlist.append([&#39;pixfile&#39;, &#39;pixel*.dat&#39;,
+                               &#39;File name pattern for pixeldata files.&#39;])
+        self.paramlist.append([&#39;pixfitkeys&#39;, [],
+                               &#39;Match keys for pixeldata files.&#39;])
+        self.paramlist.append([&#39;ref_pixpath&#39;, &#39;&#39;,
+                               &#39;Path to reference pixel files.&#39;])
+        self.paramlist.append([&#39;ref_pixfile&#39;, [],
+                               &#39;Reference pixel files, one per band.&#39;])
+
+        # Get parameters for StepLoadAux, replace auxfile with dclfile
+        self.loadauxsetup(&#39;dcl&#39;)</div>
+
+
+<div class="viewcode-block" id="StepSkycal.loadauxname">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepskycal.StepSkycal.html#sofia_redux.instruments.hawc.steps.stepskycal.StepSkycal.loadauxname">[docs]</a>
+    def loadauxname(self, auxpar=&#39;&#39;, data=None, multi=False):
+        &quot;&quot;&quot;
+        Search for files matching auxfile.
+
+        Overrides the default function in order to make flat path
+        relative to data output directory if necessary.
+
+        Parameters
+        ----------
+        auxpar : str, optional
+            A name for the aux file parameter to use. This
+            allows loadauxfiles to be used multiple times
+            in a given pipe step (for example for darks and
+            flats). Default value is self.auxpar which is set
+            by loadauxsetup().
+        data : DataFits or DataText, optional
+            A data object to match the auxiliary file to.
+            If no data is specified, self.datain is used (for
+            Multi Input steps self.datain[0]).
+        multi : bool, optional
+            If set, a list of file names is returned instead of a single
+            file name.
+
+        Returns
+        -------
+        str or list of str
+            The matching auxiliary file(s).
+        &quot;&quot;&quot;
+        # override loadauxname to make aux path relative to
+        # data output directory if necessary
+
+        # Set auxpar
+        if len(auxpar) == 0:
+            auxpar = self.auxpar
+
+        # Get parameters
+        auxfile = os.path.expandvars(self.getarg(auxpar + &#39;file&#39;))
+        if not os.path.isabs(auxfile):
+            # if input folder is not an absolute path, make it
+            # relative to the data location
+            auxfile = os.path.join(
+                os.path.dirname(self.datain[0].filename),
+                auxfile)
+        return self._loadauxnamefile(auxfile, auxpar, data, multi,
+                                     backup=False)</div>
+
+
+<div class="viewcode-block" id="StepSkycal.read_refpix">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepskycal.StepSkycal.html#sofia_redux.instruments.hawc.steps.stepskycal.StepSkycal.read_refpix">[docs]</a>
+    def read_refpix(self):
+        &quot;&quot;&quot;
+        Read a reference pixel file from the parameters.
+
+        The parameter is expected to be defined as a list, with
+        one entry for each HAWC band.  The correct value for the
+        input data is selected from the list.
+
+        Returns
+        -------
+        pixfile : str
+            Path to the reference file.
+        &quot;&quot;&quot;
+        pixfiles = self.getarg(&#39;ref_pixfile&#39;)
+        pixpath = os.path.expandvars(self.getarg(&#39;ref_pixpath&#39;))
+        waveband = self.datain[0].getheadval(&#39;spectel1&#39;)
+        bands = [&#39;A&#39;, &#39;B&#39;, &#39;C&#39;, &#39;D&#39;, &#39;E&#39;]
+        try:
+            idx = bands.index(waveband[-1])
+        except (ValueError, IndexError):
+            # waveband not in list
+            msg = f&#39;Cannot parse waveband: {waveband}&#39;
+            log.error(msg)
+            raise ValueError(msg)
+        try:
+            pixfile = os.path.expandvars(pixfiles[idx])
+            if pixfile == &#39;&#39;:
+                log.warning(f&#39;No reference pixel file &#39;
+                            f&#39;specified for {waveband}.&#39;)
+                pixfile = None
+            else:
+                pixfile = os.path.join(pixpath, pixfile)
+                if not os.path.isfile(pixfile):
+                    msg = f&#39;Pixel file {pixfile} not found&#39;
+                    log.error(msg)
+                    raise ValueError(msg)
+                else:
+                    log.info(f&#39;Found default pixel file: {pixfile}&#39;)
+        except IndexError:
+            log.warning(f&#39;No reference pixel file specified for {waveband}.&#39;)
+            pixfile = None
+
+        return pixfile</div>
+
+
+    @staticmethod
+    def _log_stats(rgain, tgain, rbad, tbad):
+        log.info(&#39;&#39;)
+        log.info(&quot;     R Array Stats:&quot;)
+        log.info(&quot;         Min       : {:4.2f}&quot;.format(np.nanmin(rgain)))
+        log.info(&quot;         Max       : {:4.2f}&quot;.format(np.nanmax(rgain)))
+        log.info(&quot;         Median    : {:4.2f} \u00B1 {:4.2f}&quot;.
+                 format(np.nanmedian(rgain), np.nanstd(rgain)))
+        log.info(&quot;         Bad Pixel : {:&lt;6d}&quot;.format(np.sum(rbad == 1)))
+
+        log.info(&quot;     T Array Stats:&quot;)
+        log.info(&quot;         Min       : {:4.2f}&quot;.format(np.nanmin(tgain)))
+        log.info(&quot;         Max       : {:4.2f}&quot;.format(np.nanmax(tgain)))
+        log.info(&quot;         Median    : {:4.2f} \u00B1 {:4.2f}&quot;.
+                 format(np.nanmedian(tgain), np.nanstd(tgain)))
+        log.info(&quot;         Bad Pixel : {:&lt;6d}&quot;.format(np.sum(tbad == 2)))
+
+        log.info(&quot;     T/R Ratio: {:5.3f}&quot;.format(
+                 np.nanmedian(tgain) / np.nanmedian(rgain)))
+        log.info(&#39;&#39;)
+
+    def _make_flat_plot(self, auxname, rgain, tgain, basename):
+        scal = DataFits(auxname)
+        prgain = scal.imageget(&#39;R ARRAY GAIN&#39;)
+        ptgain = scal.imageget(&#39;T ARRAY GAIN&#39;)
+        try:
+            prbad = scal.imageget(&#39;R BAD PIXEL MASK&#39;)
+        except ValueError:  # pragma: no cover
+            prbad = np.zeros_like(prgain)
+        try:
+            ptbad = scal.imageget(&#39;T BAD PIXEL MASK&#39;)
+        except ValueError:  # pragma: no cover
+            ptbad = np.zeros_like(ptgain)
+
+        log.info(&#39;&#39;)
+        log.info(&#39;Default flat statistics:&#39;)
+        self._log_stats(prgain, ptgain, prbad, ptbad)
+
+        fig = Figure()
+        FigureCanvas(fig)
+        bins = self.getarg(&#39;bins&#39;)
+
+        ax = fig.add_subplot(2, 2, 1)
+        ax.hist(prgain.flatten(), bins=bins, label=&#39;R Gain&#39;)
+        ax.set_xlim([0, 2.0])
+        ax.legend()
+        ax.set_title(&#39;Default %.2f $\\pm$ %.2f&#39; %
+                     (float(np.nanmedian(prgain)),
+                      float(np.nanstd(prgain))))
+
+        ax = fig.add_subplot(2, 2, 2)
+        ax.hist(ptgain.flatten(), bins=bins, label=&#39;T Gain&#39;)
+        ax.set_xlim([0.5, 2.5])
+        ax.legend()
+        ax.set_title(&#39;Default %.2f $\\pm$ %.2f&#39; %
+                     (float(np.nanmedian(ptgain)),
+                      float(np.nanstd(ptgain))))
+
+        ax = fig.add_subplot(2, 2, 3)
+        try:
+            ax.hist(rgain.flatten(), bins=bins, label=&#39;R Gain&#39;)
+        except ValueError:  # pragma: no cover
+            log.warning(&#39;Could not plot R histogram&#39;)
+        ax.set_xlim([0, 2.0])
+        ax.legend()
+        ax.set_title(&#39;Scan map %.2f $\\pm$ %.2f&#39; %
+                     (float(np.nanmedian(rgain)),
+                      float(np.nanstd(rgain))))
+
+        ax = fig.add_subplot(2, 2, 4)
+        try:
+            ax.hist(tgain.flatten(), bins=bins, label=&#39;T Gain&#39;)
+        except ValueError:  # pragma: no cover
+            log.warning(&#39;Could not plot T histogram&#39;)
+        ax.set_xlim([0.5, 2.5])
+        ax.legend()
+        ax.set_title(&#39;Scan map %.2f $\\pm$ %.2f&#39; %
+                     (float(np.nanmedian(tgain)),
+                      float(np.nanstd(tgain))))
+
+        fig.tight_layout()
+
+        # output file name
+        outfile = os.path.splitext(basename)[0] + &#39;_comparison.png&#39;
+
+        # save figure
+        fig.savefig(outfile, dpi=200)
+        fig.clear()
+        log.info(&#39;Saved result %s&#39; % outfile)
+        return outfile
+
+    @staticmethod
+    def _average_pixel_data(pixfiles):
+        f_tbl = {}
+        f_cols = [&#39;ch&#39;, &#39;gain&#39;, &#39;weight&#39;, &#39;flag&#39;, &#39;eff&#39;,
+                  &#39;Gmux1&#39;, &#39;Gmux2&#39;, &#39;idx&#39;, &#39;sub&#39;, &#39;row&#39;, &#39;col&#39;]
+        a_cols = [&#39;ch&#39;, &#39;Gmux1&#39;, &#39;Gmux2&#39;, &#39;idx&#39;, &#39;sub&#39;, &#39;row&#39;, &#39;col&#39;]
+
+        new_df = {}
+        for i in range(len(pixfiles)):
+            f_id = os.path.splitext(
+                os.path.basename(pixfiles[i]))[0].split(&#39;-&#39;)[-1]
+            f_tbl[f_id] = pd.read_table(pixfiles[i], names=f_cols, comment=&#39;#&#39;)
+
+            m_cols = [&#39;ch&#39;, f&#39;gain_{i}&#39;, f&#39;weight_{i}&#39;,
+                      f&#39;flag_{i}&#39;, f&#39;eff_{i}&#39;,
+                      &#39;Gmux1&#39;, &#39;Gmux2&#39;, &#39;idx&#39;, &#39;sub&#39;,
+                      &#39;row&#39;, &#39;col&#39;]
+            if i == 0:
+                new_df = pd.read_table(pixfiles[i], names=m_cols, comment=&#39;#&#39;)
+            else:
+                tmp_df = pd.read_table(pixfiles[i], names=m_cols, comment=&#39;#&#39;)
+                new_df = pd.merge(new_df, tmp_df, how=&#39;outer&#39;, left_on=a_cols,
+                                  right_on=a_cols).sort_values([&#39;idx&#39;])
+
+        # keep gain, weight, and eff for averaging;
+        # directly or-combine character flags
+        gain = []
+        weight = []
+        eff = []
+        flags = None
+        for key in new_df.keys():
+            if key.find(&#39;gain&#39;) != -1:
+                gain.append(new_df[key])
+            elif key.find(&#39;weight&#39;) != -1:
+                weight.append(new_df[key])
+            elif key.find(&#39;eff&#39;) != -1:
+                eff.append(new_df[key])
+            elif key.find(&#39;flag&#39;) != -1:
+                new_flags = list(new_df[key].fillna(&#39;-&#39;))
+                if flags is None:
+                    flags = new_flags
+                else:
+                    # join unique characters
+                    for i in range(len(flags)):
+                        join_flags = set(flags[i]) | set(new_flags[i])
+                        all_flags = &#39;&#39;.join(sorted(join_flags))
+                        # should contain - only if there are no other flags
+                        if all_flags != &#39;-&#39;:
+                            all_flags = all_flags.replace(&#39;-&#39;, &#39;&#39;)
+                        flags[i] = all_flags
+
+        new_df[&#39;avg_gain&#39;] = np.nanmean(gain, axis=0)
+        new_df[&#39;avg_weight&#39;] = np.nanmean(weight, axis=0)
+        new_df[&#39;avg_eff&#39;] = np.nanmean(eff, axis=0)
+        new_df[&#39;flag&#39;] = flags
+
+        n_cols = [&#39;ch&#39;, &#39;avg_gain&#39;, &#39;avg_weight&#39;, &#39;flag&#39;, &#39;avg_eff&#39;,
+                  &#39;Gmux1&#39;, &#39;Gmux2&#39;, &#39;idx&#39;, &#39;sub&#39;, &#39;row&#39;, &#39;col&#39;]
+        new_df = new_df[n_cols]
+
+        return f_tbl, new_df
+
+    @staticmethod
+    def _get_pix_header(pixfiles):
+        hdr = []
+        scan_line = 3
+        for i, pixfile in enumerate(pixfiles):
+            with open(pixfile, &#39;r&#39;) as fh:
+                for line in fh.readlines():
+                    if line.startswith(&#39;#&#39;):
+                        if i == 0:
+                            hdr.append(line)
+                        if &#39;Scan&#39; in line:
+                            # keep the index for the &quot;Scan&quot; line
+                            # from the first file
+                            if i == 0:
+                                scan_line = len(hdr) - 1
+                            else:
+                                # for all other files, concat in the
+                                # scan number to this description
+                                nbr = line.split(&#39;-&#39;)[-1]
+                                hdr[scan_line] = hdr[scan_line].rstrip() \
+                                    + &#39;,&#39; + nbr
+        return hdr
+
+    @staticmethod
+    def _gain_stat(tag, df, idx=None, key=&#39;gain&#39;):
+        gain = df[key]
+        x_med = np.median(gain)
+        x_std = gain.std()
+        x_max = gain.max()
+        x_min = gain.min()
+
+        if idx is not None:
+            gain = df[df.idx.isin(idx)][key]
+
+        x_gain = sigma_clip(gain, sigma=3.0)
+
+        log.info(f&quot;    {tag} Median: {x_med:.3f} \u00B1 {x_std:.3f}, &quot;
+                 f&quot;Max: {x_max:.3f}, Min: {x_min:.3f}&quot;)
+        x_gs = {&#39;ID&#39;: tag, &#39;Gain&#39;: x_gain, &#39;Median&#39;: x_med,
+                &#39;StdDev&#39;: x_std, &#39;Max&#39;: x_max, &#39;Min&#39;: x_min}
+        return x_gs
+
+    def _plot_gains(self, data, average, default, basename):
+        # first plot: histograms
+        fig = Figure(figsize=(12, 8))
+        FigureCanvas(fig)
+        fig.suptitle(&#39;Histogram of pixel*.dat file&#39;)
+
+        # layout from number of files + average + default
+        n = len(data) + 2
+        ncol = int(np.ceil(np.sqrt(n)))
+        nrow = int(np.ceil(float(n) / ncol))
+
+        # put each data set in a new subplot
+        ax0 = None
+        bins = self.getarg(&#39;bins&#39;)
+        for i, dataset in enumerate(data + [average, default]):
+            # create an axis
+            if i == 0:
+                ax = fig.add_subplot(nrow, ncol, i + 1)
+                ax0 = ax
+            else:
+                ax = fig.add_subplot(nrow, ncol, i + 1,
+                                     sharex=ax0, sharey=ax0)
+            # handle missing default
+            if dataset is None:
+                ax.text(0.5, 0.5, &#39;(No default provided)&#39;,
+                        horizontalalignment=&#39;center&#39;,
+                        verticalalignment=&#39;center&#39;,
+                        transform=ax.transAxes)
+                continue
+
+            # histogram the gain and label with stats
+            ax.hist(dataset[&#39;Gain&#39;], bins=bins,
+                    label=f&quot;    {dataset[&#39;ID&#39;]}\n&quot;
+                          f&quot;{dataset[&#39;Median&#39;]:.3f} \u00B1 &quot;
+                          f&quot;{dataset[&#39;StdDev&#39;]:.3f}&quot;)
+            ax.set(xlabel=&#39;Gain&#39;, ylabel=&#39;Counts&#39;)
+            ax.legend()
+        fig.tight_layout()
+
+        # save figure
+        outhist = os.path.splitext(basename)[0] + &#39;_histogram.png&#39;
+        fig.savefig(outhist, dpi=200)
+        log.info(f&#39;Saved result {outhist}&#39;)
+
+        # no second plot if default is None
+        if default is None or len(default[&#39;Gain&#39;]) == 0:
+            return outhist,
+
+        # second plot: pixel-to-pixel comparison
+        fig2 = Figure(figsize=(12, 8))
+        FigureCanvas(fig2)
+        fig2.suptitle(&#39;Pixel-to-pixel comparison of pixel*.dat file&#39;)
+
+        # layout from number of files + average
+        ncol = 1
+        nrow = len(data) + 1
+
+        ax0 = None
+        minval = np.nanmin(default[&#39;Gain&#39;])
+        maxval = np.nanmax(default[&#39;Gain&#39;])
+        for i, dataset in enumerate(data + [average]):
+            if i == 0:
+                ax = fig2.add_subplot(nrow, ncol, i + 1)
+                ax0 = ax
+            else:
+                ax = fig2.add_subplot(nrow, ncol, i + 1,
+                                      sharex=ax0, sharey=ax0)
+
+            # plot individual and average pixel gains
+            # against the default
+            ax.plot(default[&#39;Gain&#39;], dataset[&#39;Gain&#39;], &#39;.&#39;)
+            ax.set(xlabel=default[&#39;ID&#39;], ylabel=dataset[&#39;ID&#39;])
+
+            # plot default line
+            ax.plot([minval, maxval], [minval, maxval], &#39;-r&#39;)
+
+        fig2.tight_layout()
+
+        # save figure
+        outpix = os.path.splitext(basename)[0] + &#39;_pix2pix.png&#39;
+        fig2.savefig(outpix, dpi=200)
+        log.info(f&#39;Saved result {outpix}&#39;)
+
+        return outhist, outpix
+
+    @staticmethod
+    def _write_pixfile(outfile, header, av_df):
+        with open(outfile, &#39;w&#39;) as fh:
+            for line in header:
+                fh.write(line)
+
+        # format data for text file
+        av_df[&#39;avg_gain&#39;] = av_df[&#39;avg_gain&#39;].map(&#39;{:.3f}&#39;.format)
+        av_df[&#39;avg_weight&#39;] = av_df[&#39;avg_weight&#39;].map(&#39;{:.3E}&#39;.format)
+        av_df[&#39;avg_eff&#39;] = av_df[&#39;avg_eff&#39;].map(&#39;{:.3f}&#39;.format)
+        av_df[&#39;Gmux1&#39;] = av_df[&#39;Gmux1&#39;].map(&#39;{:.3f}&#39;.format)
+        av_df[&#39;Gmux2&#39;] = av_df[&#39;Gmux2&#39;].map(&#39;{:.3f}&#39;.format)
+        av_df.to_csv(outfile, sep=&#39;\t&#39;, index=None, header=0, mode=&#39;a&#39;)
+        log.info(f&#39;Saved result {outfile}&#39;)
+
+<div class="viewcode-block" id="StepSkycal.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepskycal.StepSkycal.html#sofia_redux.instruments.hawc.steps.stepskycal.StepSkycal.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        This step is run as a multiple-in single-out (MISO) step:
+        self.datain should be a list of DataFits, and output
+        will also be a single DataFits, stored in self.dataout.
+
+        The process is to make a skyflat for the DRP pipeline:
+
+        1. Divide R and T gains by the INTCAL DCL files closest in
+           time, to derive master sky gains.
+        2. Mean combine all sky gains and optionally normalize by
+           the median value.
+        3. Sigma clip the gains arrays to identify additional bad pixels.
+        4. Scale the T array to the R array.
+        5. Compare the produced skyflat with the current default, saving
+           a comparison image to disk with the filename as
+           basename + &#39;_comparison.png&#39;.
+
+        Then, to make a pixeldata (flat/bad pixel table) for the scan
+        mode pipeline:
+
+        1. Read in pixeldata files.
+        2. Mean-combine gains for each pixel.
+        3. Or-combine flags for each pixel.
+        4. Generate plots comparing the individual and averaged pixel
+           data files to an existing default file.  Plot file names
+           are basename + &#39;_histogram.png&#39; and basename + &#39;_pix2pix.png&#39;.
+        5. Save the combined table to disk, with the filename as
+           basename + &#39;.dat&#39;.
+
+        &quot;&quot;&quot;
+        # loop over input data, dividing by intcal
+        rgains = []
+        tgains = []
+        for data in self.datain:
+            # get matching DCL, closest in time to the input file
+            try:
+                # this will log an error message if no DCL is found
+                dcl = self.loadauxfile(data=data)
+            except ValueError:
+                dcl = None
+
+            # get DCL images
+            if dcl is not None:
+                dcl_rgain = dcl.imageget(&#39;R ARRAY GAIN&#39;)
+                dcl_tgain = dcl.imageget(&#39;T ARRAY GAIN&#39;)
+                dcl_rbad = dcl.imageget(&#39;R BAD PIXEL MASK&#39;)
+                dcl_tbad = dcl.imageget(&#39;T BAD PIXEL MASK&#39;)
+                dcl_rgain[dcl_rbad != 0] = np.nan
+                dcl_tgain[dcl_tbad != 0] = np.nan
+            else:
+                # allow flat to be saved, even if no DCL is
+                # available
+                dcl_rgain = 1.0
+                dcl_tgain = 1.0
+
+            # get sky flat images
+            sky_rgain = data.imageget(&#39;R ARRAY GAIN&#39;)
+            sky_tgain = data.imageget(&#39;T ARRAY GAIN&#39;)
+            sky_rbad = data.imageget(&#39;R BAD PIXEL MASK&#39;)
+            sky_tbad = data.imageget(&#39;T BAD PIXEL MASK&#39;)
+
+            # set NaNs from bad masks
+            sky_rgain[sky_rbad != 0] = np.nan
+            sky_tgain[sky_tbad != 0] = np.nan
+
+            # divide sky flat by intcal
+            rgains.append(sky_rgain / dcl_rgain)
+            tgains.append(sky_tgain / dcl_tgain)
+
+        # mean combine the flats, allowing NaNs to propagate
+        rgain = np.mean(rgains, axis=0)
+        tgain = np.mean(tgains, axis=0)
+
+        # normalize if desired
+        if self.getarg(&#39;normalize&#39;):
+            log.info(&#39;&#39;)
+            log.info(&#39;Normalizing gain arrays by median value.&#39;)
+            log.info(f&#39;    R median: {np.nanmedian(rgain)}&#39;)
+            log.info(f&#39;    T median: {np.nanmedian(tgain)}&#39;)
+            rgain /= np.nanmedian(rgain)
+            tgain /= np.nanmedian(tgain)
+
+        # make bad pixel masks from the new gains
+        rbad = np.zeros(rgain.shape, dtype=int)
+        rbad[np.isnan(rgain)] = 1
+        tbad = np.zeros(tgain.shape, dtype=int)
+        tbad[np.isnan(tgain)] = 2
+
+        # log flat statistics
+        log.info(&#39;&#39;)
+        log.info(&#39;Flat statistics before sigma clip:&#39;)
+        self._log_stats(rgain, tgain, rbad, tbad)
+
+        # sigma clip both arrays for additional bad pixels
+        sigma_lower = self.getarg(&#39;sigma_lower&#39;)
+        sigma_upper = self.getarg(&#39;sigma_upper&#39;)
+        rgain = sigma_clip(rgain, masked=True, sigma_upper=sigma_upper,
+                           sigma_lower=sigma_lower, copy=False)
+        rgain = rgain.filled(np.nan)
+        tgain = sigma_clip(tgain, masked=True, sigma_upper=sigma_upper,
+                           sigma_lower=sigma_lower, copy=False)
+        tgain = tgain.filled(np.nan)
+
+        # propagate to bad mask
+        rbad[np.isnan(rgain)] = 1
+        tbad[np.isnan(tgain)] = 2
+
+        # scale T to R
+        ttor = self.getarg(&#39;ttor&#39;)
+        tgain *= ttor * np.nanmedian(rgain) / np.nanmedian(tgain)
+
+        # log flat statistics again
+        log.info(&#39;Flat statistics after sigma clip and T scaling:&#39;)
+        self._log_stats(rgain, tgain, rbad, tbad)
+
+        # make output data by copying first input
+        self.dataout = self.datain[0].copy()
+        for data in self.datain[1:]:
+            self.dataout.mergehead(data)
+
+        # update gain and mask images
+        self.dataout.imageset(rgain, &#39;R ARRAY GAIN&#39;)
+        self.dataout.imageset(tgain, &#39;T ARRAY GAIN&#39;)
+        self.dataout.imageset(rbad, &#39;R BAD PIXEL MASK&#39;)
+        self.dataout.imageset(tbad, &#39;T BAD PIXEL MASK&#39;)
+
+        # get the basename for side effect output files
+        tmp = self.dataout.copy()
+        self.updateheader(tmp)
+        basename = tmp.filename
+
+        # compare to existing pipeline flat
+        log.info(&#39;&#39;)
+        log.info(&#39;Comparison to default flat:&#39;)
+        try:
+            auxfile = os.path.expandvars(
+                self.dataout.config[&#39;mkflat&#39;][&#39;scalfile&#39;])
+            auxname = self._loadauxnamefile(auxfile, &#39;scal&#39;,
+                                            self.dataout, False,
+                                            backup=False)
+        except (KeyError, ValueError):
+            auxname = None
+            log.warning(&#39;No default pipeline flat found; &#39;
+                        &#39;comparison plot will not be generated.&#39;)
+
+        # make SCL comparison plot
+        self.auxout = []
+        if auxname is not None:
+            flat_plot = self._make_flat_plot(auxname, rgain, tgain, basename)
+            self.auxout.append(flat_plot)
+
+        # get pixeldata files for combination: any files that match the
+        # &#39;pixfile&#39; glob parameter
+        log.info(&#39;&#39;)
+        log.info(&#39;Get pixel data files:&#39;)
+        try:
+            pixfiles = self.loadauxname(auxpar=&#39;pix&#39;, data=None, multi=True)
+        except ValueError:
+            # just return if no pixeldata found
+            log.warning(&quot;No pixel data files found; skipping pixel file &quot;
+                        &quot;combination.&quot;)
+            return
+
+        # also get a default pixel file, if available
+        de_file = self.read_refpix()
+        log.info(&#39;&#39;)
+
+        # average all input pixel data files
+        f_df, av_df = self._average_pixel_data(pixfiles)
+
+        # compare to existing pixeldata
+        if de_file is not None:
+            col_names = (&#39;ch&#39;, &#39;gain&#39;, &#39;weight&#39;, &#39;flag&#39;, &#39;eff&#39;,
+                         &#39;Gmux1&#39;, &#39;Gmux2&#39;, &#39;idx&#39;, &#39;sub&#39;, &#39;row&#39;, &#39;col&#39;)
+            de_df = pd.read_table(de_file, names=col_names, comment=&#39;#&#39;)
+
+            # get matching pixels for comparison purposes
+            idx = set(de_df[&#39;idx&#39;])
+            for key in f_df:
+                idx &amp;= set(f_df[key][&#39;idx&#39;])
+        else:
+            de_df = None
+            idx = None
+
+        log.info(&#39;Pixel data stats:&#39;)
+        log.info(&#39;&#39;)
+        stats = []
+        for key in f_df:
+            stats.append(self._gain_stat(f&#39;File {key}&#39;, f_df[key], idx=idx))
+
+        log.info(&#39;    --&#39;)
+        avg_stats = self._gain_stat(&#39;Average&#39;, av_df, idx=idx, key=&#39;avg_gain&#39;)
+        if de_df is not None:
+            default_stats = self._gain_stat(&#39;Default&#39;, de_df, idx=idx)
+        else:
+            default_stats = None
+        log.info(&#39;&#39;)
+
+        plots = self._plot_gains(stats, avg_stats, default_stats, basename)
+        self.auxout.extend(list(plots))
+
+        # compile output header from input pixel files
+        header = self._get_pix_header(pixfiles)
+
+        # write output file
+        outfile = os.path.splitext(basename)[0] + &#39;.dat&#39;
+        self._write_pixfile(outfile, header, av_df)
+        self.auxout.append(outfile)
+        log.info(&#39;&#39;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

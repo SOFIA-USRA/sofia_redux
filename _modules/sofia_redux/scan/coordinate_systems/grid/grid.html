@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.coordinate_systems.grid.grid &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.coordinate_systems.grid.grid</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import ABC, abstractmethod
+from copy import deepcopy
+
+from sofia_redux.scan.coordinate_systems.coordinate import Coordinate
+from sofia_redux.scan.utilities.class_provider import get_grid_class
+
+__all__ = [&#39;Grid&#39;]
+
+
+<div class="viewcode-block" id="Grid">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid.Grid.html#sofia_redux.scan.coordinate_systems.grid.grid.Grid">[docs]</a>
+class Grid(ABC):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize a Grid.
+
+        The Grid abstract class is a base for representation of astronomical
+        data on a regular grid.  The exact coordinate system used is not
+        specified, and should be defined by the user.  At the simplest level,
+        a grid consists of a coordinate system (set of axes), a reference
+        position, and the grid resolution.
+
+        The grid is used to convert from coordinates to offsets in relation
+        to a specified reference onto a regular grid, and the reverse
+        operation.
+
+        Forward transform: grid projection -&gt; offsets -&gt; coordinates
+        Reverse transform: coordinates -&gt; offsets -&gt; grid projection
+
+        &quot;&quot;&quot;
+        self._coordinate_system = None
+        self.variant = 0
+
+    @property
+    def referenced_attributes(self):
+        &quot;&quot;&quot;
+        Return attributes that should be referenced rather than copied.
+
+        Returns
+        -------
+        set (str)
+        &quot;&quot;&quot;
+        return set([])
+
+<div class="viewcode-block" id="Grid.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid.Grid.html#sofia_redux.scan.coordinate_systems.grid.grid.Grid.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Create and return a copy.
+
+        Note that the copy scan is a reference.  The configuration is unlinked
+        (i.e. is no longer a reference).
+
+        Returns
+        -------
+        Channels
+        &quot;&quot;&quot;
+        new = self.__class__()
+        for attribute, value in self.__dict__.items():
+            if attribute in self.referenced_attributes:
+                setattr(new, attribute, value)
+            elif hasattr(value, &#39;copy&#39;):
+                setattr(new, attribute, value.copy())
+            else:
+                setattr(new, attribute, deepcopy(value))
+        return new</div>
+
+
+    def __eq__(self, other):
+        &quot;&quot;&quot;
+        Check if this grid is equal to another.
+
+        Parameters
+        ----------
+        other : Grid
+
+        Returns
+        -------
+        equal : bool
+        &quot;&quot;&quot;
+        if self.__class__ != other.__class__:
+            return False
+        if self.coordinate_system != other.coordinate_system:
+            return False
+        if self.variant != other.variant:
+            return False
+        return True
+
+    @property
+    def coordinate_system(self):
+        &quot;&quot;&quot;
+        Return the coordinate system.
+
+        Returns
+        -------
+        CoordinateSystem
+        &quot;&quot;&quot;
+        return self._coordinate_system
+
+    @coordinate_system.setter
+    def coordinate_system(self, system):
+        &quot;&quot;&quot;
+        Set the coordinate system.
+
+        Parameters
+        ----------
+        system : CoordinateSystem
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_coordinate_system(system)
+
+    @property
+    def ndim(self):
+        &quot;&quot;&quot;
+        Return the number of grid dimensions.
+
+        Returns
+        -------
+        n_dimensions : int
+        &quot;&quot;&quot;
+        return self.get_dimensions()
+
+    @property
+    def resolution(self):
+        &quot;&quot;&quot;
+        Return the grid resolution.
+
+        Returns
+        -------
+        Coordinate
+        &quot;&quot;&quot;
+        return self.get_resolution()
+
+    @resolution.setter
+    def resolution(self, value):
+        &quot;&quot;&quot;
+        Set the grid resolution.
+
+        Parameters
+        ----------
+        value : Coordinate
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_resolution(value)
+
+    @property
+    def reference(self):
+        &quot;&quot;&quot;
+        Return the grid reference position.
+
+        Returns
+        -------
+        Coordinate
+        &quot;&quot;&quot;
+        return self.get_reference()
+
+    @reference.setter
+    def reference(self, value):
+        &quot;&quot;&quot;
+        Set the grid reference position.
+
+        Parameters
+        ----------
+        value : Coordinate
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_reference(value)
+
+    @property
+    def fits_id(self):
+        &quot;&quot;&quot;
+        Return the FITS ID for the grid.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return self.get_fits_id()
+
+<div class="viewcode-block" id="Grid.get_grid_class">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid.Grid.html#sofia_redux.scan.coordinate_systems.grid.grid.Grid.get_grid_class">[docs]</a>
+    @staticmethod
+    def get_grid_class(name):
+        &quot;&quot;&quot;
+        Return a grid class of the given name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the grid.
+
+        Returns
+        -------
+        grid : class
+        &quot;&quot;&quot;
+        return get_grid_class(name)</div>
+
+
+<div class="viewcode-block" id="Grid.get_grid_instance">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid.Grid.html#sofia_redux.scan.coordinate_systems.grid.grid.Grid.get_grid_instance">[docs]</a>
+    @staticmethod
+    def get_grid_instance(name):
+        &quot;&quot;&quot;
+        Return a grid instance for the given name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the grid.
+
+        Returns
+        -------
+        grid : Grid or Grid2D1
+        &quot;&quot;&quot;
+        return get_grid_class(name)()</div>
+
+
+<div class="viewcode-block" id="Grid.get_default_coordinate_instance">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid.Grid.html#sofia_redux.scan.coordinate_systems.grid.grid.Grid.get_default_coordinate_instance">[docs]</a>
+    def get_default_coordinate_instance(self):
+        &quot;&quot;&quot;
+        Return a coordinate for the dimensions of the grid.
+
+        Returns
+        -------
+        Coordinate
+        &quot;&quot;&quot;
+        return Coordinate.get_instance(f&#39;{self.ndim}d&#39;)</div>
+
+
+<div class="viewcode-block" id="Grid.set_coordinate_system">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid.Grid.html#sofia_redux.scan.coordinate_systems.grid.grid.Grid.set_coordinate_system">[docs]</a>
+    def set_coordinate_system(self, system):
+        &quot;&quot;&quot;
+        Set the coordinate system for the grid.
+
+        Parameters
+        ----------
+        system : CoordinateSystem
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.ndim is not None and self.ndim != system.size:
+            raise ValueError(
+                f&quot;Number of coordinate system axes ({system.size}) &quot;
+                f&quot;does not equal the grid dimensions ({self.ndim}).&quot;)
+        self._coordinate_system = system</div>
+
+
+<div class="viewcode-block" id="Grid.get_fits_id">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid.Grid.html#sofia_redux.scan.coordinate_systems.grid.grid.Grid.get_fits_id">[docs]</a>
+    def get_fits_id(self):
+        &quot;&quot;&quot;
+        Return the FITS variant ID for the grid.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if self.variant == 0:
+            return &#39;&#39;
+        else:
+            return chr(ord(&#39;A&#39;) + self.variant)</div>
+
+
+<div class="viewcode-block" id="Grid.get_dimensions">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid.Grid.html#sofia_redux.scan.coordinate_systems.grid.grid.Grid.get_dimensions">[docs]</a>
+    @abstractmethod
+    def get_dimensions(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the number of grid dimensions.
+
+        Returns
+        -------
+        n_dimensions : int
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="Grid.get_reference">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid.Grid.html#sofia_redux.scan.coordinate_systems.grid.grid.Grid.get_reference">[docs]</a>
+    @abstractmethod
+    def get_reference(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the reference position of the grid.
+
+        Returns
+        -------
+        reference : Coordinate
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="Grid.set_reference">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid.Grid.html#sofia_redux.scan.coordinate_systems.grid.grid.Grid.set_reference">[docs]</a>
+    @abstractmethod
+    def set_reference(self, value):  # pragma: no cover
+        &quot;&quot;&quot;
+        Set the reference position of the grid.
+
+        Parameters
+        ----------
+        value : Coordinate
+            The reference coordinate to set.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="Grid.get_reference_index">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid.Grid.html#sofia_redux.scan.coordinate_systems.grid.grid.Grid.get_reference_index">[docs]</a>
+    @abstractmethod
+    def get_reference_index(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the reference index of the reference position on the grid.
+
+        Returns
+        -------
+        index : Offset
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="Grid.set_reference_index">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid.Grid.html#sofia_redux.scan.coordinate_systems.grid.grid.Grid.set_reference_index">[docs]</a>
+    @abstractmethod
+    def set_reference_index(self, value):  # pragma: no cover
+        &quot;&quot;&quot;
+        Set the reference index of the reference position on the grid.
+
+        Parameters
+        ----------
+        value : Offset
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="Grid.get_resolution">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid.Grid.html#sofia_redux.scan.coordinate_systems.grid.grid.Grid.get_resolution">[docs]</a>
+    @abstractmethod
+    def get_resolution(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the grid resolution.
+
+        Returns
+        -------
+        resolution : Offset
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="Grid.set_resolution">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid.Grid.html#sofia_redux.scan.coordinate_systems.grid.grid.Grid.set_resolution">[docs]</a>
+    @abstractmethod
+    def set_resolution(self, value):  # pragma: no cover
+        &quot;&quot;&quot;
+        Set the grid resolution.
+
+        Parameters
+        ----------
+        value : Offset
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.simwavecal2d &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.simwavecal2d</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+from sofia_redux.toolkit.fitting.polynomial import poly1d
+import warnings
+
+__all__ = [&#39;simwavecal2d&#39;]
+
+
+<div class="viewcode-block" id="simwavecal2d">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.simwavecal2d.simwavecal2d.html#sofia_redux.spectroscopy.simwavecal2d.simwavecal2d">[docs]</a>
+def simwavecal2d(shape, edgecoeffs, xranges, slith_arc, ds):
+    &quot;&quot;&quot;
+    Simulate a 2D wavecal file using pixels for wavelengths
+
+    NOTE: will also return indices for new iSHELL wavecal FITS
+    format.
+
+    Parameters
+    ----------
+    shape : 2-tuple of int
+        (nrow, ncol) shape of image.
+    edgecoeffs : array_like of float
+        (norders, 2, degree+1) array of polynomial coefficients which
+        define the edges of the orders. edgecoeffs[0, 0, :] are the
+        coefficients of the bottom edge of the first order and
+        edgecoeffs[0, 1, :] are the coefficients of the top edge of the
+        first order.
+    xranges : array_like of float
+        (norders, 2) array of column numbers between which the orders
+        are completely on the array.
+    slith_arc : float
+        The slit height in arcseconds.
+    ds : float
+        The plate scale in arcseconds per pixel.
+
+    Returns
+    -------
+    wavecal, spatcal, indices : numpy.ndarray, numpy.ndarray, dict
+        - wavecal (nrow, ncol) array where each pixel is set to its
+          wavelength (column in this case).
+        - spatcal (nrow, ncol) array where each pixel is set to its
+          angular position on the sky.
+        - indices (dict of dict) where 1st keys are orders (int) and
+          second level keys are as follows:
+
+              ``&quot;x&quot;``
+                  x indices of constant wavelength and angle in
+                  the zeroth order.
+              ``&quot;y&quot;``
+                  y indices of constant wavelength and angle in
+                  the zeroth order.
+              ``&quot;xgrid&quot;``
+                  (ncol) array of wavelength values along x
+              ``&quot;ygrid&quot;``
+                  (nrow) array of spatial coordinates along y
+
+    &quot;&quot;&quot;
+    if not hasattr(shape, &#39;__len__&#39;) or len(shape) != 2:
+        log.error(&quot;Invalid shape&quot;)
+        return
+    edgecoeffs = np.array(edgecoeffs)
+    if edgecoeffs.ndim != 3 or edgecoeffs.shape[1] != 2:
+        log.error(&quot;Invalid edgecoeffs shape&quot;)
+        return
+    norders = edgecoeffs.shape[0]
+    xranges = np.array(xranges)
+    if xranges.shape != (norders, 2):
+        log.error(&quot;Invalid xranges shape&quot;)
+        return
+    wavecal = np.full(shape, np.nan)
+    spatcal = np.full(shape, np.nan)
+    indices = {}
+
+    nsgrid = int(np.round(slith_arc / ds)) + 1
+    sgrid = np.arange(nsgrid) * ds
+
+    with warnings.catch_warnings():
+        warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+        for i in range(norders):
+            minx, maxx = xranges[i, 0], xranges[i, 1]
+            nx = int(maxx - minx) + 1
+            ny = shape[0]
+            x = np.arange(nx) + minx
+            y = np.arange(ny)
+            pixtoarc = np.zeros((nx, 2))
+
+            # Find the bottom and top of the slit
+            botedge = poly1d(x, edgecoeffs[i, 0, :])
+            topedge = poly1d(x, edgecoeffs[i, 1, :])
+            pixtoarc[:, 1] = slith_arc / (topedge - botedge)
+            pixtoarc[:, 0] = -pixtoarc[:, 1] * botedge
+
+            # make sure bottom and top don&#39;t spill over array
+            botedge[botedge &lt; 0] = 0
+            topedge[topedge &gt;= ny] = ny - 1
+
+            # Start indices
+            ix = np.empty((nsgrid, nx))
+            ix[None] = x.copy()
+            iy = np.full((nsgrid, nx), np.nan)
+
+            for j in range(nx):
+                j0, j1 = int(np.floor(botedge[j])), int(np.ceil(topedge[j]))
+                wavecal[j0: j1, int(x[j])] = x[j]
+                ypix = y[j0: j1]
+                spix = poly1d(ypix, pixtoarc[j])
+                spatcal[j0: j1, int(x[j])] = spix.copy()
+                iy[:, j] = np.interp(sgrid, spix, ypix)
+
+            indices[i] = {&#39;x&#39;: ix, &#39;y&#39;: iy,
+                          &#39;xgrid&#39;: x.copy(),
+                          &#39;ygrid&#39;: sgrid.copy()}
+
+    return wavecal, spatcal, indices</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

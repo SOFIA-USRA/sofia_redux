@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.fifi_ls.lambda_calibrate &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.fifi_ls.lambda_calibrate</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import os
+
+import astropy.constants as const
+from astropy.io import fits
+from astropy import log
+from astropy import units
+import numpy as np
+import pandas as pd
+
+from sofia_redux.instruments import fifi_ls
+from sofia_redux.toolkit.utilities \
+    import (gethdul, write_hdul, hdinsert, goodfile,
+            multitask)
+
+__all__ = [&#39;clear_wavecal_cache&#39;, &#39;get_wavecal_from_cache&#39;,
+           &#39;store_wavecal_in_cache&#39;, &#39;read_wavecal&#39;, &#39;wave&#39;,
+           &#39;lambda_calibrate&#39;, &#39;wrap_lambda_calibrate&#39;]
+
+__wavecal_cache = {}
+
+
+<div class="viewcode-block" id="clear_wavecal_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.lambda_calibrate.clear_wavecal_cache.html#sofia_redux.instruments.fifi_ls.lambda_calibrate.clear_wavecal_cache">[docs]</a>
+def clear_wavecal_cache():
+    &quot;&quot;&quot;
+    Clear all data from the wavecal cache.
+    &quot;&quot;&quot;
+    global __wavecal_cache
+    __wavecal_cache = {}</div>
+
+
+
+<div class="viewcode-block" id="get_wavecal_from_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.lambda_calibrate.get_wavecal_from_cache.html#sofia_redux.instruments.fifi_ls.lambda_calibrate.get_wavecal_from_cache">[docs]</a>
+def get_wavecal_from_cache(wavecalfile):
+    &quot;&quot;&quot;
+    Retrieves wavelength calibration data from the wavecal cache.
+
+    Checks to see if the file still exists, can be read, and has not
+    been altered since last time.  If the file has changed, it will be
+    deleted from the cache so that it can be re-read.
+
+    Parameters
+    ----------
+    wavecalfile : str
+        File path to the wavecal file
+
+    Returns
+    -------
+    wavecal : pd.DataFrame
+        Wavelength calibration table
+    &quot;&quot;&quot;
+    global __wavecal_cache
+
+    if wavecalfile not in __wavecal_cache:
+        return
+
+    if not goodfile(wavecalfile):
+        try:
+            del __wavecal_cache[wavecalfile]
+        except KeyError:   # pragma: no cover
+            pass
+        return
+
+    modtime = str(os.path.getmtime(wavecalfile))
+    if modtime not in __wavecal_cache.get(wavecalfile, {}):
+        return
+
+    log.debug(&quot;Retrieving data from wavecal file (%s) in cache&quot; % wavecalfile)
+    return __wavecal_cache.get(wavecalfile, {}).get(modtime)</div>
+
+
+
+<div class="viewcode-block" id="store_wavecal_in_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.lambda_calibrate.store_wavecal_in_cache.html#sofia_redux.instruments.fifi_ls.lambda_calibrate.store_wavecal_in_cache">[docs]</a>
+def store_wavecal_in_cache(wavecalfile, wavecal):
+    &quot;&quot;&quot;
+    Store wavecal data in the wavecal cache.
+
+    Parameters
+    ----------
+    wavecalfile : str
+        File path to the wavecal file
+    wavecal : pd.DataFrame
+        Wave calibration table
+    &quot;&quot;&quot;
+    global __wavecal_cache
+    log.debug(f&quot;Storing wavecal data ({wavecalfile}) in cache&quot;)
+    __wavecal_cache[wavecalfile] = {}
+    modtime = str(os.path.getmtime(wavecalfile))
+    __wavecal_cache[wavecalfile][modtime] = wavecal</div>
+
+
+
+<div class="viewcode-block" id="read_wavecal">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.lambda_calibrate.read_wavecal.html#sofia_redux.instruments.fifi_ls.lambda_calibrate.read_wavecal">[docs]</a>
+def read_wavecal(calfile=None):
+    &quot;&quot;&quot;
+    Read and return the data from the wavecal file.
+
+    Parameters
+    ----------
+    calfile : str, optional
+       Path to the calibration results text file.  If not specified,
+       it will be read from fifi_ls/data/wave_cal/FIFI_LS_WaveCal_Coeffs.txt.
+
+    Returns
+    -------
+    pd.DataFrame
+    &quot;&quot;&quot;
+    if calfile is None:
+        calfile = os.path.join(
+            os.path.dirname(fifi_ls.__file__),
+            &#39;data&#39;, &#39;wave_cal&#39;, &#39;FIFI_LS_WaveCal_Coeffs.txt&#39;)
+
+    wavecal = get_wavecal_from_cache(calfile)
+    if wavecal is not None:
+        return wavecal
+
+    if not goodfile(calfile, verbose=True):
+        raise ValueError(
+            f&quot;Cannot read wavelength calibration file: {calfile}&quot;)
+    try:
+        colnames = [&#39;Date&#39;, &#39;ch&#39;, &#39;g0&#39;, &#39;NP&#39;, &#39;a&#39;, &#39;PS&#39;, &#39;QOFF&#39;, &#39;QS&#39;]
+        colnames += [f&#39;ISOFF{i + 1}&#39; for i in range(25)]
+        df = pd.read_csv(calfile, comment=&#39;#&#39;,
+                         delim_whitespace=True, names=colnames)
+    except Exception as err:  # pragma: no cover
+        raise ValueError(f&quot;Cannot parse {calfile} to dataframe: {str(err)}&quot;)
+    df.calfile = calfile
+
+    log.debug(f&quot;Loaded wavelength calibration file: {calfile}&quot;)
+
+    store_wavecal_in_cache(calfile, df)
+
+    return df</div>
+
+
+
+<div class="viewcode-block" id="wave">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.lambda_calibrate.wave.html#sofia_redux.instruments.fifi_ls.lambda_calibrate.wave">[docs]</a>
+def wave(ind, date, dichroic, blue=None, wavecal=None):
+    &quot;&quot;&quot;
+    Calculate wavelengths for each spectral pixel.
+
+    Requires FIFI_LS_WaveCal_Coeffs.txt file, in fifi_ls/data/wave_cal/,
+    as provided by FIFI-LS team.
+
+    The procedure is:
+
+        1. Read wavelength calibration file.  This file is stored in a
+           text table format, provided by the FIFI-LS instrument team.
+           The FIFI-LS team also provides the wavelength equation.
+        2. Loop over spaxels, calculating the wavelength and spectral
+           width for each spexel, from the parameters specified in the
+           calibration file.
+        3. Return an array of wavelengths.
+
+    Parameters
+    ----------
+    ind : int
+        Inductosyn position
+    date : array_like of int
+        [Y, M, D] vector
+    dichroic : int
+        Dichroic value (105 or 130)
+    blue : str, optional
+        Either &#39;B1&#39; to indicate first BLUE order of &#39;B2&#39; to indicate
+        second BLUE order.  If not provided, data is assumed to be
+        RED channel
+    wavecal : pd.DataFrame, optional
+        DataFrame containing wave calibration data.  May be supplied in
+        order to remove the overhead of reading the file
+        every iteration of this function.
+
+    Returns
+    -------
+    dict
+        Contains:
+            - &#39;wavelength&#39; (numpy.ndarray): a 2-D array (16, 25) containing
+              the wavelength of each pixel for each module in microns.
+            - &#39;width&#39; (numpy.ndarray): a 2-D array (16, 25) containing the
+              spectral width of each pixel for each spatial module in microns
+            - &#39;calfile&#39; (str): the name of the wavelength calibration file used
+
+    &quot;&quot;&quot;
+    if blue is None:
+        channel = &#39;R&#39;
+    elif str(blue).upper() in [&#39;B1&#39;, &#39;B2&#39;]:
+        channel = str(blue).upper()
+    else:
+        log.error(&quot;BLUE must be B1 or B2&quot;)
+        return
+    try:
+        ind = int(ind)
+    except (TypeError, ValueError):
+        log.error(&quot;Invalid IND&quot;)
+        return
+    if ind &lt; 0:
+        log.error(&quot;IND must be positive&quot;)
+        return
+    if len(date) != 3:
+        log.error(&quot;DATE must be an array of length 3&quot;)
+        return
+
+    if not isinstance(wavecal, pd.DataFrame) or len(wavecal) == 0:
+        wavecal = read_wavecal()
+
+    # Get date in YYYYMMDD format
+    obsdate = int(&#39;&#39;.join([str(x).zfill(2) for x in date]))
+    wavecal_dates = np.array(pd.unique(wavecal[&#39;Date&#39;]))
+    wavecal_dates = wavecal_dates[wavecal_dates &lt;= obsdate]
+    if len(wavecal_dates) == 0:
+        log.error(f&quot;No calibration data found for date {obsdate}&quot;)
+        return
+    last_date = wavecal_dates.max()
+    if &#39;B&#39; in channel:
+        # no dichroic difference for blue
+        config = channel
+    else:
+        config = f&#39;{channel}{dichroic}&#39;
+
+    rows = wavecal[(wavecal[&#39;Date&#39;] == last_date)
+                   &amp; (wavecal[&#39;ch&#39;] == config)]
+    if len(rows) == 0:
+        log.error(f&#39;{last_date} {config} wavecal data not found&#39;)
+        return
+    cal = rows.iloc[0]
+
+    # fixed parameter by channel
+    if &#39;B&#39; in config:
+        gamma = 8.90080e-03
+    else:
+        gamma = 1.67200e-02
+
+    # axis 0
+    pix = np.arange(1, 17)
+    sign = 2 * (((pix - cal[&#39;QOFF&#39;]) &gt; 0) - 0.5)
+    delta = ((pix - 8.5) * cal[&#39;PS&#39;])
+    delta += sign * cal[&#39;QS&#39;] * (pix - cal[&#39;QOFF&#39;]) ** 2
+
+    # axis 1
+    isf = 1.0
+    isoff = np.array([cal[f&#39;ISOFF{i + 1}&#39;] for i in range(25)])
+    modules = np.arange(25)
+    slitpos = 25 - (6 * (modules // 5)) + (modules % 5)
+    g = cal[&#39;g0&#39;]
+    g *= np.cos(np.arctan((slitpos - cal[&#39;NP&#39;]) / cal[&#39;a&#39;]))
+    phi = 2 * np.pi * isf * (ind + isoff) / (2 ** 24)
+
+    # cross terms for wavelength
+    w = np.sin(np.add.outer(delta + gamma, phi))
+    w += np.sin(phi - gamma)[None]
+    w *= 1000 * g[None]
+
+    # cross terms for pixel width
+    p = np.cos(np.add.outer(delta + gamma, phi))
+    p *= (cal[&#39;PS&#39;] + 2 * sign
+          * cal[&#39;QS&#39;] * (pix - cal[&#39;QOFF&#39;]))[..., None]
+    p *= 1000 * g[None]
+
+    if channel.lower() == &#39;b2&#39;:
+        w /= 2
+        p /= 2
+
+    wavefile = wavecal.calfile if hasattr(wavecal, &#39;calfile&#39;) else None
+    return {&#39;wavelength&#39;: w, &#39;width&#39;: p, &#39;wavefile&#39;: wavefile}</div>
+
+
+
+<div class="viewcode-block" id="lambda_calibrate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.lambda_calibrate.lambda_calibrate.html#sofia_redux.instruments.fifi_ls.lambda_calibrate.lambda_calibrate">[docs]</a>
+def lambda_calibrate(filename, obsdate=None, outdir=None, write=False,
+                     wavecal=None):
+    &quot;&quot;&quot;
+    Apply spectral calibration.
+
+    The procedure is:
+
+        1. Read input file.
+        2. Call fifi_ls.wave to calculate wavelength values and spectral
+           widths in microns for each spexel.
+        3. Create FITS file and (optionally) write results to disk.
+
+    The generated FITS file contains n_scan * 3 image extensions:
+    DATA, STDDEV, and LAMBDA for each scan, named with a &#39;_G{i}&#39; suffix
+    for each grating scan index i.  The LAMBDA arrays are always 25 x 16.
+    The DATA and STDDEV arrays are 25 x 16 x n_ramp for OTF mode A nods,
+    and 25 x 16 otherwise. If a SCANPOS_G{i} table is present in the input,
+    it will also be attached unmodified to the output.
+
+    Parameters
+    ----------
+    filename : str
+        File to be wavelength-calibrated.  Should have been generated
+        by fifi_ls.combine_nods.
+    obsdate : array_like of int, optional
+        Date of observation.  Intended for files that do not have
+        the DATE-OBS keyword (and value) in the FITS primary header
+        (early files do not).  Format is [YYYY,MM,DD].
+    outdir : str, optional
+        Directory path to write output.  If None, output files
+        will be written to the same directory as the input files.
+    write : bool, optional
+        If True, write to disk and return the path to the output
+        file.  If False, return the HDUList.  The output directory
+        is the same as the directory of the input file.
+    wavecal : pd.DataFrame, optional
+        DataFrame containing wave calibration data.  May be supplied in
+        order to remove the overhead of reading the
+        FIFI_LS_WaveCal_Coeffs.txt file every iteration of this function.
+
+    Returns
+    -------
+    fits.HDUList or str
+        Either the HDUList (if write is False) or the filename of the
+        output file (if write is True).
+    &quot;&quot;&quot;
+    hdul = gethdul(filename, verbose=True)
+    if hdul is None:
+        return
+    if not isinstance(filename, str):
+        filename = hdul[0].header[&#39;FILENAME&#39;]
+
+    if isinstance(outdir, str):
+        if not os.path.isdir(outdir):
+            log.error(&quot;Output directory %s does not exist&quot; % outdir)
+            return
+    if not isinstance(outdir, str):
+        outdir = os.path.dirname(filename)
+
+    if not isinstance(wavecal, pd.DataFrame) or len(wavecal) == 0:
+        wavecal = read_wavecal()
+        if wavecal is None:
+            log.warning(&quot;Unable to read wave calibration data&quot;)
+            return
+
+    dichroic = hdul[0].header.get(&#39;DICHROIC&#39;)
+    channel = hdul[0].header.get(&#39;CHANNEL&#39;)
+    b_order = int(hdul[0].header.get(&#39;G_ORD_B&#39;, -1))
+    if channel == &#39;BLUE&#39;:
+        if b_order in [1, 2]:
+            blue = &#39;B%i&#39; % b_order
+        else:
+            log.error(&quot;Invalid Blue grating order in file %s&quot; %
+                      filename)
+            return
+    else:
+        blue = None
+
+    if obsdate is None:
+        obsdate = hdul[0].header.get(&#39;DATE-OBS&#39;)
+        try:
+            obsdate = [int(x) for x in obsdate[:10].split(&#39;-&#39;)]
+        except (ValueError, TypeError, IndexError):
+            log.error(&#39;Invalid DATE-OBS in file %s&#39; % filename)
+            return
+
+    outname = os.path.basename(filename)
+    for replace in [&#39;NCM&#39;, &#39;CSB&#39;, &#39;RP0&#39;, &#39;RP1&#39;]:
+        outname = outname.replace(replace, &#39;WAV&#39;)
+
+    result = fits.HDUList(fits.PrimaryHDU(header=hdul[0].header))
+    wavefile = None
+    speed_of_light = const.c.to(units.um / units.s).value
+
+    ngrating = hdul[0].header.get(&#39;NGRATING&#39;, 1)
+    for idx in range(ngrating):
+        name = f&#39;FLUX_G{idx}&#39;
+        stdname = f&#39;STDDEV_G{idx}&#39;
+
+        exthdr = hdul[name].header
+        data = hdul[name].data
+        stddev = hdul[stdname].data
+        ind = exthdr.get(&#39;INDPOS&#39;)
+
+        calibration = wave(ind, obsdate, dichroic, blue=blue, wavecal=wavecal)
+        if calibration is None:
+            log.error(&quot;Wavelength calibration failed&quot;)
+            return
+
+        if calibration[&#39;wavefile&#39;] is not None:
+            wavefile = calibration[&#39;wavefile&#39;]
+
+        wavelength = calibration[&#39;wavelength&#39;]
+        pixelwidth = calibration[&#39;width&#39;]
+
+        # transform the fluxes into flux densities by dividing the
+        # flux by the frequency interval
+        dnu = speed_of_light * pixelwidth / (wavelength ** 2)
+        data /= dnu
+        stddev /= dnu
+
+        log.debug(&quot;Pixel width (dlambda) at 2,2: %s&quot; %
+                  &#39;, &#39;.join([str(x) for x in pixelwidth[:, 12]]))
+        log.debug(&quot;Pixel width (dnu) at 2,2: %s&quot; %
+                  &#39;, &#39;.join([str(x) for x in dnu[:, 12]]))
+
+        exthdr[&#39;BUNIT&#39;] = (&#39;adu/(Hz s)&#39;, &#39;Data units&#39;)
+        result.append(fits.ImageHDU(data, header=exthdr,
+                                    name=name))
+        result.append(fits.ImageHDU(stddev, header=exthdr,
+                                    name=stdname))
+        exthdr[&#39;BUNIT&#39;] = &#39;um&#39;
+        result.append(fits.ImageHDU(wavelength, header=exthdr,
+                                    name=name.replace(&#39;FLUX&#39;, &#39;LAMBDA&#39;)))
+        # propagate scan positions forward if present
+        pname = f&#39;SCANPOS_G{idx}&#39;
+        if pname in hdul:
+            result.append(hdul[pname].copy())
+
+    # update header
+    result[0].header[&#39;HISTORY&#39;] = &#39;Wavelength calibrated&#39;
+    result[0].header[&#39;PRODTYPE&#39;] = &#39;wavelength_calibrated&#39;
+    result[0].header[&#39;FILENAME&#39;] = outname
+    if wavefile is not None:
+        hdinsert(result[0].header, &#39;WAVEFILE&#39;, os.path.basename(wavefile),
+                 comment=&#39;Wavelength calibration file&#39;)
+
+    if not write:
+        return result
+    else:
+        return write_hdul(result, outdir=outdir, overwrite=True)</div>
+
+
+
+def lambda_calibrate_wrap_helper(_, kwargs, filename):
+    return lambda_calibrate(filename, **kwargs)
+
+
+<div class="viewcode-block" id="wrap_lambda_calibrate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.lambda_calibrate.wrap_lambda_calibrate.html#sofia_redux.instruments.fifi_ls.lambda_calibrate.wrap_lambda_calibrate">[docs]</a>
+def wrap_lambda_calibrate(files, outdir=None, obsdate=None,
+                          allow_errors=False, write=False, jobs=None):
+    &quot;&quot;&quot;
+    Wrapper for lambda_calibrate over multiple files.
+
+    See `lambda_calibrate` for full description of reduction
+    on a single file.
+
+    Parameters
+    ----------
+    files : array_like of str
+        paths to files to be wavelength calibrated
+    outdir : str, optional
+        Directory path to write output.  If None, output files
+        will be written to the same directory as the input files.
+    obsdate : array_like of int, optional
+        Date of observation.  Intended for files that do not have
+        the DATE-OBS keyword (and value) in the FITS primary header
+        (early files do not).  Format is [YYYY,MM,DD].
+    allow_errors : bool, optional
+        If True, return all created files on error.  Otherwise, return None
+    write : bool, optional
+        If True, write the output to disk and return the filename instead
+        of the HDU.
+    jobs : int, optional
+        Specifies the maximum number of concurrently running jobs.
+        Values of 0 or 1 will result in serial processing.  A negative
+        value sets jobs to `n_cpus + 1 + jobs` such that -1 would use
+        all cpus, and -2 would use all but one cpu.
+
+    Returns
+    -------
+    tuple of str
+        output filenames written to disk
+    &quot;&quot;&quot;
+    if isinstance(files, str):
+        files = [files]
+    if not hasattr(files, &#39;__len__&#39;):
+        log.error(&quot;Invalid input files type (%s)&quot; % repr(files))
+        return
+
+    clear_wavecal_cache()
+
+    kwargs = {&#39;outdir&#39;: outdir, &#39;obsdate&#39;: obsdate, &#39;write&#39;: write}
+
+    output = multitask(lambda_calibrate_wrap_helper, files, None, kwargs,
+                       jobs=jobs)
+
+    failure = False
+    result = []
+    for x in output:
+        if x is None:
+            failure = True
+        else:
+            result.append(x)
+    if failure:
+        if len(result) &gt; 0:
+            if not allow_errors:
+                log.error(&quot;Errors were encountered but the following &quot;
+                          &quot;files were created:\n%s&quot; % &#39;\n&#39;.join(result))
+                return
+
+    clear_wavecal_cache()
+
+    return tuple(result)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.stepparent &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.stepparent</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Pipeline step that processes a single input object.&quot;&quot;&quot;
+
+import time
+
+from astropy import log
+from configobj import ConfigObj
+
+from sofia_redux.instruments.hawc.dataparent import DataParent
+
+__all__ = [&#39;StepParent&#39;]
+
+
+<div class="viewcode-block" id="StepParent">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.stepparent.StepParent.html#sofia_redux.instruments.hawc.stepparent.StepParent">[docs]</a>
+class StepParent(object):
+    &quot;&quot;&quot;
+    Pipeline step parent class.
+
+    This class defines a pipeline step. Pipeline steps are
+    the modules responsible for all data reduction tasks. Input
+    and output data are passed as pipeline data objects (`DataFits`).
+    This class expects that data is passed as a single data object,
+    and the output is also a single data object (single-in,
+    single-out (SISO) mode).
+
+    All pipeline steps inheriting from this class must define a
+    `setup` function that initializes data reduction parameters
+    and metadata, and a `run` function that performs the data reduction.
+
+    This class is callable: given a data object input and keyword
+    arguments corresponding to the step parameters, it calls the run
+    function and returns a data object as output.
+    &quot;&quot;&quot;
+    def __init__(self):
+        # initialize input and output
+        self.datain = DataParent()
+        self.dataout = DataParent()
+
+        # placeholder for any extra output file names produced
+        # by the pipeline (region files, PNG images, etc.)
+        self.auxout = []
+
+        # set names
+        self.name = None
+        self.description = None
+        self.procname = None
+
+        # set parameters
+        # Dictionary with current arguments
+        self.arglist = {}
+        # List with possible parameters
+        self.paramlist = []
+
+        # set configuration
+        self.config = None
+
+        # specify whether this step runs on a single
+        # PipeData object with a single output PipeData
+        # object (SISO), multiple input PipeData objects
+        # with multiple output PipeData objects (MIMO),
+        # or multiple input Pipefile objects with a single
+        # output PipeData object (MISO).
+        self.iomode = &#39;SISO&#39;
+
+        # do local setup
+        self.setup()
+
+<div class="viewcode-block" id="StepParent.setup">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.stepparent.StepParent.html#sofia_redux.instruments.hawc.stepparent.StepParent.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        This function is called at the end of __init__ to establish
+        parameters and metadata specific to a pipeline step.
+
+        The name of the step and a short description should be set,
+        as well as a three-letter abbreviation for the step. The first
+        two values are used for header history and pipeline display;
+        the abbreviation is used in the output filenames.
+
+        Parameters are stored in a list, where each element is a list
+        containing the following information:
+
+            - name: The name for the parameter. This name is used when
+              calling the pipe step from a python shell. It is also
+              used to identify the parameter in the pipeline
+              configuration file.
+            - default: A default value for the parameter. If nothing, set
+              &#39;&#39; for strings, 0 for integers and 0.0 for floats.
+            - help: A short description of the parameter.
+
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;parent&#39;
+        self.description = &#39;Step Parent&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;unk&#39;
+
+        # Clear Parameter list
+        self.paramlist = []</div>
+
+
+<div class="viewcode-block" id="StepParent.run">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.stepparent.StepParent.html#sofia_redux.instruments.hawc.stepparent.StepParent.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        Input is read from self.datain. The result is
+        set in self.dataout.
+        &quot;&quot;&quot;
+        # Copy datain to dataout
+        self.dataout = self.datain</div>
+
+
+<div class="viewcode-block" id="StepParent.__call__">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.stepparent.StepParent.html#sofia_redux.instruments.hawc.stepparent.StepParent.__call__">[docs]</a>
+    def __call__(self, datain, **kwargs):
+        &quot;&quot;&quot;
+        Run the pipeline step.
+
+        Parameters
+        ----------
+        datain : DataFits or DataText
+            Input data.
+        **kwargs
+            Parameter name, value pairs to pass to the pipeline step.
+
+        Returns
+        -------
+        DataFits or DataText
+        &quot;&quot;&quot;
+        # Get input data
+        self.datain = datain
+
+        # Start Setup
+        self.runstart(self.datain, kwargs)
+
+        # Call the run function
+        self.run()
+
+        # Finish - call end
+        self.runend(self.dataout)
+
+        # return result
+        return self.dataout</div>
+
+
+<div class="viewcode-block" id="StepParent.runstart">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.stepparent.StepParent.html#sofia_redux.instruments.hawc.stepparent.StepParent.runstart">[docs]</a>
+    def runstart(self, data, arglist):
+        &quot;&quot;&quot;
+        Initialize the pipeline step.
+
+        This method should be called after setting self.datain,
+        and before calling self.run.
+
+        Sends an initial log message, checks the validity of the
+        input data, and gets the configuration from input data.
+
+        Parameters
+        ----------
+        data : DataFits or DataText
+            Input data to validate.
+        arglist : dict
+            Parameters to pass to the step.
+        &quot;&quot;&quot;
+        # Start Message
+        log.info(&#39;Start Reduction: Pipe Step %s&#39; % self.name)
+
+        # Set input arguments
+        for k in arglist.keys():
+            self.arglist[k.lower()] = arglist[k]
+
+        # Check input data type and set data config
+        if issubclass(data.__class__, DataParent):
+            self.config = data.config
+        else:
+            msg = &#39;Invalid input data type: DataParent &#39; \
+                  &#39;child object is required&#39;
+            log.error(msg)
+            raise TypeError(&#39;Runstart: &#39; + msg)
+
+        # Set Configuration
+        if self.config is None:
+            # no config specified, make an empty one
+            self.config = ConfigObj()
+            self.config[self.name] = {}
+
+        # Check configuration
+        if not isinstance(self.config, ConfigObj):
+            msg = &#39;Invalid configuration information - aborting&#39;
+            log.error(msg)
+            raise RuntimeError(&#39;Runstart: &#39; + msg)</div>
+
+
+<div class="viewcode-block" id="StepParent.runend">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.stepparent.StepParent.html#sofia_redux.instruments.hawc.stepparent.StepParent.runend">[docs]</a>
+    def runend(self, data):
+        &quot;&quot;&quot;
+        Clean up after a pipeline step.
+
+        This method should be called after calling self.run.
+
+        Sends a final log message, updates the header in
+        the output data, and clears input parameter arguments.
+
+        Parameters
+        ----------
+        data : DataFits or DataText
+            Output data to update.
+        &quot;&quot;&quot;
+        # update header (status and history)
+        self.updateheader(data)
+
+        # clear input arguments
+        self.arglist = {}
+        log.info(&#39;Finished Reduction: Pipe Step %s&#39; % self.name)</div>
+
+
+<div class="viewcode-block" id="StepParent.updateheader">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.stepparent.StepParent.html#sofia_redux.instruments.hawc.stepparent.StepParent.updateheader">[docs]</a>
+    def updateheader(self, data):
+        &quot;&quot;&quot;
+        Update the header for a data object.
+
+        This function:
+
+            - Updates the filename with the self.procname value
+            - Sets the PROCSTAT and PRODTYPE keywords in the data header
+            - Adds a history entry to the data header
+
+        Data is modified in place.
+
+        Parameters
+        ----------
+        data : DataFits or DataText
+            Output data to update.
+        &quot;&quot;&quot;
+        # Update PRODuct TYPE keyword with step name, add history keyword
+        data.setheadval(&#39;PRODTYPE&#39;, self.name, &#39;Product Type&#39;)
+        histmsg = &#39;Reduced: {} {}&#39;.format(
+            self.name, time.strftime(&#39;%Y-%m-%d_%H:%M:%S&#39;))
+        data.setheadval(&#39;HISTORY&#39;, histmsg)
+
+        # Add input parameters to history
+        for p in [par[0] for par in self.paramlist]:
+            histmsg = &#39; %s: %s=%s&#39; % (self.name, p, self.getarg(p))
+            data.setheadval(&#39;HISTORY&#39;, histmsg)
+
+        # Update file name with procname
+        data.filename = data.filenamebegin + \
+            self.procname.upper() + data.filenameend
+
+        # Add config file name if available and not already present
+        # in HISTORY
+        for fname in data.config_files:
+            # New history message
+            basename = fname.split(str(data.data_path))[-1]
+            histmsg = &#39;CONFIG: %s&#39; % basename
+
+            # Check history for presence of the full message or possibly
+            # a truncated version (eg. for long filenames in FITS headers)
+            full_history = data.getheadval(&#39;HISTORY&#39;)
+            if len(histmsg) &gt; 72:
+                shortmsg = histmsg[0:72]
+            else:
+                shortmsg = histmsg
+            if histmsg not in full_history and shortmsg not in full_history:
+                log.debug(&#39;Recording config file name %s&#39; % fname)
+                data.setheadval(&#39;HISTORY&#39;, histmsg)</div>
+
+
+<div class="viewcode-block" id="StepParent.getarg">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.stepparent.StepParent.html#sofia_redux.instruments.hawc.stepparent.StepParent.getarg">[docs]</a>
+    def getarg(self, parname):
+        &quot;&quot;&quot;
+        Return the value of a parameter.
+
+        The parameter is first searched for in self.arglist[&#39;parname&#39;],
+        then in config[&#39;stepname&#39;][&#39;parname&#39;]. If the parameter is not found,
+        the default value from parameter list is returned.
+        Should the parameter name not have an entry in the parameter list,
+        a error is returned and a KeyError is raised.
+
+        All name comparisons are made in lower case.
+
+        Parameters
+        ----------
+        parname : str
+            The parameter name.
+
+        Returns
+        -------
+        bool, int, float, str, or list
+            The parameter value.
+
+        Raises
+        ------
+        KeyError
+            If the parameter name is not found.
+        &quot;&quot;&quot;
+        # list of strings that should parse to boolean true
+        # we need to handle booleans separately, because bool(&quot;False&quot;)
+        # evaluates to True
+        booltrue = [&#39;yes&#39;, &#39;true&#39;, &#39;1&#39;, &#39;t&#39;]
+
+        # so we don&#39;t have to worry about case
+        parname = parname.lower()
+
+        # Get paramlist index and check if parameter is valid
+        try:
+            ind = [par[0].lower() for par in self.paramlist].index(parname)
+        except ValueError:
+            msg = &#39;GetArg: There is no parameter named %s&#39; % parname
+            log.error(msg)
+            raise KeyError(msg)
+        # ParName in original Case
+        parnameraw = self.paramlist[ind][0]
+        default = self.paramlist[ind][1]
+
+        # get from arguments if possible
+        if parname in self.arglist:
+            try:
+                ret = self.arglist[parnameraw]
+            except KeyError:
+                ret = self.arglist[parname]
+            log.debug(&#39;GetArg: from arg list, done (%s=%s)&#39; %
+                      (parnameraw, repr(ret)))
+            return ret
+
+        # make temporary config entry with lowercase key names
+        conftmp = {}
+        if self.name in self.config:
+            # skip if no step entry in config
+            for keyname in self.config[self.name].keys():
+                conftmp[keyname.lower()] = self.config[self.name][keyname]
+
+        # get from config if possible
+        if parname in conftmp:
+            value = conftmp[parname]
+            # If default is a sequence:
+            if isinstance(default, (tuple, list)):
+                # Get type for list elements
+                # (if default is empty, convert to string)
+                if len(default) &gt; 0:
+                    outtype = type(default[0])
+                else:
+                    outtype = str
+                ret = []
+                # Convert elements in list
+                # Note: if the keyword only has one item in the list and there
+                # is no trailing comma, configobj will read it as a string
+                # instead of a 1-element list. We force to list here.
+                if isinstance(value, str):
+                    value = [value]
+                for i in range(len(value)):
+                    # Check if it&#39;s boolean
+                    if outtype == bool:
+                        if value[i].lower() in booltrue:
+                            ret.append(True)
+                        else:
+                            # default to False
+                            ret.append(False)
+                    # Not boolean - just convert to type
+                    else:
+                        ret.append(outtype(value[i]))
+                # convert to tuple
+                log.debug(&#39;GetArg: from config file &#39;
+                          &#39;(%s=%s)&#39; %
+                          (parname, repr(type(default)(ret))))
+                return type(default)(ret)
+            else:
+                # Default is not a sequence
+                # Check if it&#39;s boolean
+                if isinstance(default, bool) and not \
+                        isinstance(value, bool):
+                    if value.lower() in booltrue:
+                        log.debug(&#39;GetArg: from config file &#39;
+                                  &#39;(%s=True)&#39; % parname)
+                        return True
+                    else:
+                        log.debug(&#39;GetArg: from config file &#39;
+                                  &#39;(%s=False)&#39; % parname)
+                        return False
+                else:
+                    # Not boolean - just convert to type
+                    log.debug(&#39;GetArg: from config file &#39;
+                              &#39;(%s=%s)&#39; %
+                              (parname, repr(type(default)(value))))
+                    return type(default)(value)
+
+        # get default from parameter list
+        ret = self.paramlist[ind][1]
+
+        # return parameter
+        log.debug(&#39;GetArg: from param list &#39;
+                  &#39;(%s=%s)&#39; % (parname, repr(ret)))
+        return ret</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

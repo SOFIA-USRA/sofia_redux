@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.coordinate_systems.projection.global_sinusoidal_projection &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.coordinate_systems.projection.global_sinusoidal_projection</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+import warnings
+
+from sofia_redux.scan.coordinate_systems.projection.spherical_projection \
+    import SphericalProjection
+from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
+    SphericalCoordinates
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+
+__all__ = [&#39;GlobalSinusoidalProjection&#39;]
+
+
+<div class="viewcode-block" id="GlobalSinusoidalProjection">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.global_sinusoidal_projection.GlobalSinusoidalProjection.html#sofia_redux.scan.coordinate_systems.projection.global_sinusoidal_projection.GlobalSinusoidalProjection">[docs]</a>
+class GlobalSinusoidalProjection(SphericalProjection):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize a global sinusoidal projection.
+
+        The global spherical projection is a very simple projection that
+        converts between coordinates and offsets when the projection is also
+        in spherical coordinates and celestial and native poles are equivalent.
+        I.e, the only parameter of importance is the reference position of the
+        projection.
+        &quot;&quot;&quot;
+        super().__init__()
+
+<div class="viewcode-block" id="GlobalSinusoidalProjection.get_fits_id">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.global_sinusoidal_projection.GlobalSinusoidalProjection.html#sofia_redux.scan.coordinate_systems.projection.global_sinusoidal_projection.GlobalSinusoidalProjection.get_fits_id">[docs]</a>
+    @classmethod
+    def get_fits_id(cls):
+        &quot;&quot;&quot;
+        Return the FITS ID for the projection.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &quot;GLS&quot;</div>
+
+
+<div class="viewcode-block" id="GlobalSinusoidalProjection.get_full_name">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.global_sinusoidal_projection.GlobalSinusoidalProjection.html#sofia_redux.scan.coordinate_systems.projection.global_sinusoidal_projection.GlobalSinusoidalProjection.get_full_name">[docs]</a>
+    @classmethod
+    def get_full_name(cls):
+        &quot;&quot;&quot;
+        Return the full name of the projection.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;Global Sinusoidal&#39;</div>
+
+
+<div class="viewcode-block" id="GlobalSinusoidalProjection.project">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.global_sinusoidal_projection.GlobalSinusoidalProjection.html#sofia_redux.scan.coordinate_systems.projection.global_sinusoidal_projection.GlobalSinusoidalProjection.project">[docs]</a>
+    def project(self, coordinates, projected=None):
+        &quot;&quot;&quot;
+        Project the coordinates.
+
+        The forward projection for the global sinusoidal projection converts
+        spherical coordinates to cartesian offsets from a reference position as
+        follows:
+
+            dx = (x - x_reference) * cos(y)
+            dy = y - y_reference
+
+        Parameters
+        ----------
+        coordinates : SphericalCoordinates
+            The coordinates to project.
+        projected : Coordinate2D, optional
+            The output coordinates.  Will be created if not supplied.
+
+        Returns
+        -------
+        projected : Coordinate2D
+            The projected coordinates.
+        &quot;&quot;&quot;
+        if projected is None:
+            projected = Coordinate2D(unit=&#39;degree&#39;)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            x = np.fmod(coordinates.x - self.reference.x, self.full_circle
+                        ) * coordinates.cos_lat
+        y = coordinates.y - self.reference.y
+        projected.set([x, y])
+        return projected</div>
+
+
+<div class="viewcode-block" id="GlobalSinusoidalProjection.deproject">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.global_sinusoidal_projection.GlobalSinusoidalProjection.html#sofia_redux.scan.coordinate_systems.projection.global_sinusoidal_projection.GlobalSinusoidalProjection.deproject">[docs]</a>
+    def deproject(self, projected, coordinates=None):
+        &quot;&quot;&quot;
+        Deproject global sinusoidal projection offsets to coordinates.
+
+        The reverse projection (deprojection) is used to convert offsets in
+        relation to a reference position into spherical coordinates as follows:
+
+            y = y_reference + dy
+            x = x_reference + (dx / cos(y))
+
+        Parameters
+        ----------
+        projected : Coordinate2D
+            The projected coordinates to deproject.
+        coordinates : SphericalCoordinates, optional
+            The output deprojected coordinates.  Will be created if not
+            supplied.
+
+        Returns
+        -------
+        coordinates : Coordinate2D
+            The deprojected coordinates.
+        &quot;&quot;&quot;
+        if coordinates is None:
+            coordinates = SphericalCoordinates(unit=&#39;degree&#39;)
+        coordinates.set_y(self.reference.y + projected.y)
+        coordinates.set_x(self.reference.x
+                          + (projected.x / coordinates.cos_lat))
+        return coordinates</div>
+
+
+<div class="viewcode-block" id="GlobalSinusoidalProjection.get_phi_theta">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.global_sinusoidal_projection.GlobalSinusoidalProjection.html#sofia_redux.scan.coordinate_systems.projection.global_sinusoidal_projection.GlobalSinusoidalProjection.get_phi_theta">[docs]</a>
+    def get_phi_theta(self, offset, phi_theta=None):
+        &quot;&quot;&quot;
+        Return the phi_theta coordinates.
+
+        Parameters
+        ----------
+        offset : Coordinate2D
+        phi_theta : SphericalCoordinates, optional
+            An optional output coordinate system in which to place the results.
+
+        Returns
+        -------
+        coordinates : SphericalCoordinates
+        &quot;&quot;&quot;
+        raise NotImplementedError(
+            f&quot;Not implemented for {self.__class__} projection.&quot;)</div>
+
+
+<div class="viewcode-block" id="GlobalSinusoidalProjection.get_offsets">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.global_sinusoidal_projection.GlobalSinusoidalProjection.html#sofia_redux.scan.coordinate_systems.projection.global_sinusoidal_projection.GlobalSinusoidalProjection.get_offsets">[docs]</a>
+    def get_offsets(self, theta, phi, offsets=None):
+        &quot;&quot;&quot;
+        Get the offsets given theta and phi.
+
+        Parameters
+        ----------
+        theta : units.Quantity
+            The theta angle.
+        phi : units.Quantity
+            The phi angle.
+        offsets : Coordinate2D, optional
+            An optional coordinate system in which to place the results.
+
+        Returns
+        -------
+        offsets : Coordinate2D
+        &quot;&quot;&quot;
+        raise NotImplementedError(
+            f&quot;Not implemented for {self.__class__} projection.&quot;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

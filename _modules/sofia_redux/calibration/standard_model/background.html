@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.calibration.standard_model.background &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.calibration.standard_model.background</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Derive flux expected from background sources&quot;&quot;&quot;
+
+import numpy as np
+import pandas as pd
+import scipy.integrate as si
+import astropy.constants as const
+import astropy.units as u
+
+from sofia_redux.calibration.standard_model import thermast
+
+
+<div class="viewcode-block" id="derive_background_photon_flux">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.background.derive_background_photon_flux.html#sofia_redux.calibration.standard_model.background.derive_background_photon_flux">[docs]</a>
+def derive_background_photon_flux(warr, temperatures):
+    &quot;&quot;&quot;
+    Setup planck functions for each non-target source.
+
+    Typical sources are the telescope, foreoptics,
+    atmosphere, window, and instrument.
+
+    Parameters
+    ----------
+    warr : numpy.array
+        Wavelengths to determine the blackbody flux at, in microns.
+    temperatures : dict
+        Sources to generate blackbodies for. The keys are the
+        name of the source, and values are the temperatures
+        of each source.
+
+    Returns
+    -------
+    plancks : dict
+        Collection of blackbody spectrums for each source in
+        `temperatures`. The keys are the same as `temperature` and
+        the values are numpy arrays holding the blackbody flux.
+
+    &quot;&quot;&quot;
+    plancks = dict()
+    for source, temperature in temperatures.items():
+        plancks[source] = thermast.planck_function(warr, temperature)
+    return plancks</div>
+
+
+
+<div class="viewcode-block" id="background_integrand_1">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.background.background_integrand_1.html#sofia_redux.calibration.standard_model.background.background_integrand_1">[docs]</a>
+def background_integrand_1(plancks, emissivity, etas, total_throughput, tfi,
+                           filter_number):
+    &quot;&quot;&quot;
+    Calculate the first background integral.
+
+    Parameters
+    ----------
+    plancks : dict
+        Collection of background sources and their corresponding
+        blackbody emission.
+    emissivity : dict
+        Collection of background sources and their corresponding
+        emissivity.
+    etas : dict
+        Collection of background sources and their corresponding
+        transmissions.
+    total_throughput : numpy.array
+        Total throughput (telescope + filter + instrument) as a
+        function of wavelength.
+    filter_number : int
+        Current filter number.
+
+    Returns
+    -------
+    final : numpy.array
+        Integration of the product of all throughputs as a
+        function of wavelength.
+
+    &quot;&quot;&quot;
+    throughputs = dict()
+    throughputs[&#39;atmosphere&#39;] = total_throughput
+    throughputs[&#39;telescope&#39;] = total_throughput / etas[&#39;telescope&#39;]
+    throughputs[&#39;foreoptics&#39;] = (tfi * etas[&#39;window&#39;][filter_number]
+                                 * etas[&#39;instrument&#39;][filter_number])
+    throughputs[&#39;window&#39;] = etas[&#39;instrument&#39;][filter_number] * tfi
+    throughputs[&#39;instrument&#39;] = etas[&#39;instrument&#39;][filter_number]
+
+    emiss = dict()
+    emiss[&#39;atmosphere&#39;] = emissivity[&#39;atmosphere&#39;]
+    emiss[&#39;telescope&#39;] = emissivity[&#39;telescope&#39;]
+    emiss[&#39;foreoptics&#39;] = emissivity[&#39;foreoptics&#39;]
+    emiss[&#39;window&#39;] = emissivity[&#39;window&#39;][filter_number]
+    emiss[&#39;instrument&#39;] = 1
+
+    integrand = pd.DataFrame({&#39;plancks&#39;: plancks, &#39;emissivity&#39;: emiss,
+                              &#39;throughput&#39;: throughputs})
+
+    integrand[&#39;product&#39;] = integrand.prod(axis=1)
+    final = integrand[&#39;product&#39;].sum()
+
+    return final</div>
+
+
+
+<div class="viewcode-block" id="background_integrand_2">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.background.background_integrand_2.html#sofia_redux.calibration.standard_model.background.background_integrand_2">[docs]</a>
+def background_integrand_2(plancks, temperatures, warr, total_throughput,
+                           emissivity, etas, transmissions, filter_number):
+    &quot;&quot;&quot;
+    Calculate the second background integral.
+
+    Parameters
+    ----------
+    plancks : dict
+        Collection of background sources and their corresponding
+        blackbody emission.
+    temperatures : dict
+        Collection of background sources and their corresponding
+        temperatures.
+    warr : numpy.array
+        Wavelengths to integrate over, in microns.
+    total_throughput : numpy.array
+        Total throughput (telescope + filter + instrument) as a
+        function of wavelength.
+    emissivity : dict
+        Collection of background sources and their corresponding
+        emissivity.
+    etas : dict
+        Collection of background sources and their corresponding
+        transmissions.
+    transmissions : numpy.array
+        Transmission of filters.
+    filter_number : int
+        Current filter number.
+
+    Returns
+    -------
+    final : float
+        Evaluation of integrating everything over wavelength.
+
+    &quot;&quot;&quot;
+    field_order = [&#39;atmosphere&#39;, &#39;telescope&#39;, &#39;window&#39;,
+                   &#39;foreoptics&#39;, &#39;instrument&#39;]
+    numerators = dict()
+    numerators[&#39;atmosphere&#39;] = [np.prod(emissivity[&#39;atmosphere&#39;])
+                                * total_throughput]
+    numerators[&#39;telescope&#39;] = [np.prod(emissivity[&#39;telescope&#39;])
+                               * total_throughput / etas[&#39;telescope&#39;]]
+    numerators[&#39;foreoptics&#39;] = [np.prod([emissivity[&#39;foreoptics&#39;],
+                                etas[&#39;window&#39;][filter_number],
+                                etas[&#39;instrument&#39;][filter_number]])
+                                * transmissions]
+    numerators[&#39;window&#39;] = [np.prod([emissivity[&#39;window&#39;][filter_number],
+                            etas[&#39;instrument&#39;][filter_number]])
+                            * transmissions]
+    numerators[&#39;instrument&#39;] = [etas[&#39;instrument&#39;][filter_number]]
+    temperatures = temperatures.copy()
+    temperatures[&#39;instrument&#39;] = temperatures[&#39;window&#39;]
+    etas[&#39;atmosphere&#39;] = 0
+    factors = integrand2(numerators, warr, temperatures,
+                         field_order=field_order)
+
+    integrand = pd.DataFrame({&#39;plancks&#39;: plancks, &#39;factors&#39;: factors})
+    final = integrand.prod(axis=1).sum()
+
+    return final</div>
+
+
+
+<div class="viewcode-block" id="integrand2">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.background.integrand2.html#sofia_redux.calibration.standard_model.background.integrand2">[docs]</a>
+def integrand2(numerators, warr, temperatures, field_order):
+    &quot;&quot;&quot;
+    Calculate scale factors for terms in background_intetgral_2.
+
+    Parameters
+    ----------
+    numerators : dict
+        Collection of sources and their corresponding
+        effective emissivities in the current filter.
+    warr : numpy.array
+        Wavelengths to integrate over, in microns.
+    temperatures : dict
+        Collection of sources and their corresponding
+        temperatures.
+    field_order : list
+        List of the keys in `numerators` and `temperatures`
+        to ensure everything is done in the right order.
+
+    Returns
+    -------
+    factors : dict
+        Background integral coeffecient for each source.
+
+    &quot;&quot;&quot;
+    factors = dict()
+    for i, field in enumerate(field_order):
+        numerator = numerators[field]
+        temperature = temperatures[field]
+        factor = background_integrand_coeff(numerator, warr, temperature)
+        factors[field] = factor
+    return factors</div>
+
+
+
+<div class="viewcode-block" id="background_integrand_coeff">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.background.background_integrand_coeff.html#sofia_redux.calibration.standard_model.background.background_integrand_coeff">[docs]</a>
+def background_integrand_coeff(numerator, warr, temperature):
+    &quot;&quot;&quot;
+    Coefficient of the background integral for each source.
+
+    Parameters
+    ----------
+    numerator : list
+        Collection of various emissivity/throughput for the given source.
+    warr : numpy.array
+        Wavelengths to integrate over, in microns.
+    temperature : float
+        Temperature of the given source.
+
+    Returns
+    -------
+    coeff : numpy.array
+        Background integral coefficient.
+
+    &quot;&quot;&quot;
+    exponential_factor = (const.h * const.c / const.k_B).to(u.um * u.K).value
+    top = np.prod(numerator, axis=0)**2
+    bottom = np.exp(exponential_factor / (warr * temperature)) - 1
+    return top / bottom</div>
+
+
+
+<div class="viewcode-block" id="background_power">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.background.background_power.html#sofia_redux.calibration.standard_model.background.background_power">[docs]</a>
+def background_power(telescope_area, omega_pix, bg_integrand1,
+                     num_pix, wavelengths):
+    &quot;&quot;&quot;
+    Background power in the extraction area.
+
+    Parameters
+    ----------
+    telescope_area : float
+        Area of the telescope in microns^2.
+    omega_pix : float
+        Pixel sold angle in steradians.
+    bg_integrand1 : numpy.array
+        Background integrand at each eavelength.
+    num_pix : numpy.array
+        Number of pixels in the extraction area for each wavelength.
+    wavelengths : numpy.array
+        Wavelength to integrate over, in microns.
+
+    Returns
+    -------
+    power : float
+        Background power, in Watts.
+
+    &quot;&quot;&quot;
+
+    integral = si.simps(bg_integrand1 * num_pix, wavelengths)
+    power = telescope_area * omega_pix * integral
+    return power</div>
+
+
+
+<div class="viewcode-block" id="setup_integrands">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.background.setup_integrands.html#sofia_redux.calibration.standard_model.background.setup_integrands">[docs]</a>
+def setup_integrands(total_throughput, atmosphere_transmission, telescope_area,
+                     warr, model_flux, num_pix, fwhm):
+    &quot;&quot;&quot;
+    Define all the integrands to be used.
+
+    Parameters
+    ----------
+    total_throughput : numpy.array
+        Total throughput at each wavelength.
+    atmosphere_transmission : numpy.array
+        Atmosphere transmission as a function of wavelength.
+    telescope_area : float
+        Area of telescope in microns^2.
+    warr : numpy.array
+        Wavelengths to integrate over, in microns.
+    model_flux : numpy.array
+        Modelled flux of the source as a function of wavelength.
+    num_pix : numpy.array
+        Number of pixels in the extraction area as a function
+        of wavelength.
+    fwhm : numpy.array
+        FWHM of source as a function of wavelength.
+
+    Returns
+    -------
+    integrands : dict
+        The required integrands for fully characterizing the
+        background flux.
+
+    &quot;&quot;&quot;
+    integrands = dict()
+    integrands[&#39;0&#39;] = total_throughput * atmosphere_transmission
+    integrands[&#39;1&#39;] = integrands[&#39;0&#39;] * telescope_area
+    integrands[&#39;2&#39;] = integrands[&#39;1&#39;] * warr
+    integrands[&#39;3&#39;] = integrands[&#39;1&#39;] / warr
+    integrands[&#39;4&#39;] = integrands[&#39;1&#39;] * model_flux
+    integrands[&#39;5&#39;] = integrands[&#39;4&#39;] * warr
+    integrands[&#39;6&#39;] = integrands[&#39;5&#39;] * warr
+    integrands[&#39;7&#39;] = integrands[&#39;3&#39;] * np.log(warr)
+    integrands[&#39;8&#39;] = integrands[&#39;4&#39;] * num_pix
+    integrands[&#39;9&#39;] = integrands[&#39;4&#39;] * fwhm
+    integrands[&#39;10&#39;] = integrands[&#39;2&#39;] * warr
+    integrands[&#39;11&#39;] = integrands[&#39;3&#39;] / warr
+    integrands[&#39;12&#39;] = integrands[&#39;11&#39;] / warr
+
+    return integrands</div>
+
+
+
+<div class="viewcode-block" id="integrate_integrands">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.background.integrate_integrands.html#sofia_redux.calibration.standard_model.background.integrate_integrands">[docs]</a>
+def integrate_integrands(integrands, warr):
+    &quot;&quot;&quot;
+    Integrate the functions set up in `setup_integrands`.
+
+    Parameters
+    ----------
+    integrands : dict
+        Collection of integrands.
+    warr : numpy.array
+        Wavlengths to integrate over.
+
+    Returns
+    -------
+    integrals : dict
+        The integrals of each integrand in `integrands`
+        over wavelength.
+
+    &quot;&quot;&quot;
+    integrals = dict()
+    for key, integrand in integrands.items():
+        integrals[key] = si.simps(integrand, warr)
+    return integrals</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

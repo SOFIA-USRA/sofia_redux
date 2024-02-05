@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Kernel Resampling &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Splines (sofia_redux.toolkit.resampling.splines)" href="../splines/index.html" />
+    <link rel="prev" title="Basic Usage Example" href="examples.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li class="right">
+	<a href="../splines/index.html" title="Splines (sofia_redux.toolkit.resampling.splines)">
+	  next &raquo;
+	</a>
+      </li>
+      <li class="right">
+	<a href="examples.html" title="Basic Usage Example">
+	  &laquo; previous
+	</a>
+	 |
+      </li>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" >SOFIA Redux</a> &#187;</li>
+      <li><a href="../index.html" >sofia_redux.toolkit: Shared Utilities for SOFIA Pipelines</a> &#187;</li>
+      <li><a href="index.html" accesskey="U">Resampling (<code class="xref py py-obj docutils literal notranslate"><span class="pre">sofia_redux.toolkit.resampling</span></code>)</a> &#187;</li>
+      
+      <li>Kernel Resampling</li> 
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="kernel-resampling">
+<span id="resample-kernel-examples"></span><h1>Kernel Resampling<a class="headerlink" href="#kernel-resampling" title="Link to this heading">¶</a></h1>
+<p>The kernel resampler can take a set of irregular or regular data points, and
+interpolate them onto given coordinates through convolution with an irregular
+or regular kernel in N-dimensions.  The base algorithm is very similar to the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ResamplePolynomial</span></code> class in that fits are processed in blocks
+according to overlaps between the sample space and fitting space.  However,
+rather than defining a polynomial for interpolation, a spline is used to
+represent the given kernel and used to produce a convolution of that kernel
+and all samples within the range, centered at each fit coordinate.</p>
+<p>Splines are represented and evaluated using the <code class="xref py py-class docutils literal notranslate"><span class="pre">Spline</span></code> class.  Please
+see <a class="reference internal" href="../splines/index.html#sofia-redux-toolkit-splines"><span class="std std-ref">Splines (sofia_redux.toolkit.resampling.splines)</span></a> for further details.  Here, irregular
+refers to a set of arbitrary coordinates, while regular implies that the
+coordinates and values of the samples or kernel exist on a regularly spaced
+grid.</p>
+</section>
+<section id="use-cases">
+<h1>Use Cases<a class="headerlink" href="#use-cases" title="Link to this heading">¶</a></h1>
+<p>The main use case for the <code class="xref py py-class docutils literal notranslate"><span class="pre">KernelResampler</span></code> is to perform convolutions
+when either the sample space or kernel consists of irregular coordinates, or
+a smooth continuous function should be used to represent a noisy kernel.  For
+a more standard convolution involving both regular sample space and a regular
+kernel, it is much faster to use standard ND convolution algorithms such as
+<a class="reference external" href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.convolve.html#scipy.ndimage.convolve" title="(in SciPy v1.12.0)"><code class="xref py py-func docutils literal notranslate"><span class="pre">scipy.ndimage.convolve()</span></code></a>, or the more robust
+<a class="reference internal" href="../../../api/sofia_redux.toolkit.convolve.kernel.KernelConvolve.html#sofia_redux.toolkit.convolve.kernel.KernelConvolve" title="sofia_redux.toolkit.convolve.kernel.KernelConvolve"><code class="xref py py-class docutils literal notranslate"><span class="pre">sofia_redux.toolkit.convolve.kernel.KernelConvolve</span></code></a> class.</p>
+</section>
+<section id="caveats">
+<h1>Caveats<a class="headerlink" href="#caveats" title="Link to this heading">¶</a></h1>
+<p>1. By default, an attempt will be made to fit any kernel exactly (smoothing=0).
+While this is suitable for most regular kernels, it may necessary to increase
+smoothing for irregular kernels to achieve a valid spline fit.  Invalid spline
+fits result in a runtime error which may also provide information on how to
+produce a valid fit.</p>
+<ol class="arabic" start="2">
+<li><p>Convolution is generally of the form:</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+    f(x) = \frac{\sum_{\Omega}{d k}}
+                {\sum_{\Omega}{k}}
+\end{eqnarray}</div></div></blockquote>
+</li>
+</ol>
+<p>where <span class="math notranslate nohighlight">\(\Omega\)</span> is the window centered around <span class="math notranslate nohighlight">\(x\)</span>, <span class="math notranslate nohighlight">\(k\)</span> is the
+kernel, and <span class="math notranslate nohighlight">\(d\)</span> are the data samples in the window.  This is not always
+suitable in cases where the kernel contains negative values and may result in
+misleading or unexpected output results.  In this case, the solution may be
+changed to:</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\begin{eqnarray}
+    f(x) = \frac{\sum_{\Omega}{d k}}
+                {\sum_{\Omega}{|k|}}
+\end{eqnarray}</div></div></blockquote>
+<p>by setting <code class="xref py py-obj docutils literal notranslate"><span class="pre">absolute_weights=True</span></code> during call().  By default, absolute_weights
+will be set to <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a> if the kernel contains negative values and <a class="reference external" href="https://docs.python.org/3/library/constants.html#False" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">False</span></code></a>
+otherwise.  Note that <code class="xref py py-obj docutils literal notranslate"><span class="pre">absolute_weights</span></code> will also be applied to any output
+weights if requested by the user.</p>
+<p>3. The resampler naturally normalizes the kernel during convolution.  If this
+is not desirable, the normalization can be removed by setting <code class="xref py py-obj docutils literal notranslate"><span class="pre">normalize=False</span></code>
+during call().</p>
+</section>
+<section id="examples">
+<h1>Examples<a class="headerlink" href="#examples" title="Link to this heading">¶</a></h1>
+<p>In the following example, we shall convolve an image with an irregular kernel
+which is effective at detecting edges.  Firstly we plot a reconstructed
+regular kernel from the irregular input and then apply it to a regular image.
+Note that the kernel contains negative values so standard convolution may result
+in misleading values if normalization factor is not taken as the sum of absolute
+kernel values.  This is done automatically if negative values are detected in
+the kernel and the absolute_weight parameter is not explicitly set by the user.
+Also note that the smoothing factor has been set to a small non-zero value in
+order to effectively fit a spline, as an exact fit may not always be possible
+with irregular coordinates.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">imageio</span>
+<span class="kn">from</span> <span class="nn">sofia_redux.toolkit.resampling.resample_kernel</span> <span class="kn">import</span> <span class="n">ResampleKernel</span>
+
+<span class="k">def</span> <span class="nf">mexican_hat</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+    <span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">x</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">y</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span>
+    <span class="n">rs</span> <span class="o">=</span> <span class="n">r</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="n">period</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">rs</span><span class="p">)</span> <span class="o">/</span> <span class="n">rs</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+<span class="c1"># Create a set of random kernel coordinates and values</span>
+<span class="n">rand</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">width</span> <span class="o">=</span> <span class="mi">6</span>
+<span class="n">w2</span> <span class="o">=</span> <span class="n">width</span> <span class="o">/</span> <span class="mi">2</span>
+
+<span class="n">kx</span> <span class="o">=</span> <span class="n">width</span> <span class="o">*</span> <span class="p">(</span><span class="n">rand</span><span class="o">.</span><span class="n">random</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">)</span>
+<span class="n">ky</span> <span class="o">=</span> <span class="n">width</span> <span class="o">*</span> <span class="p">(</span><span class="n">rand</span><span class="o">.</span><span class="n">random</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">)</span>
+<span class="n">kernel</span> <span class="o">=</span> <span class="n">mexican_hat</span><span class="p">(</span><span class="n">kx</span><span class="p">,</span> <span class="n">ky</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="n">w2</span><span class="p">)</span>
+<span class="n">kernel_offsets</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">kx</span><span class="p">,</span> <span class="n">ky</span><span class="p">])</span>
+
+<span class="c1"># First create a representation of the kernel on a grid by convolving</span>
+<span class="c1"># with a delta function.</span>
+<span class="n">xx</span><span class="p">,</span> <span class="n">yy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="n">w2</span><span class="p">,</span> <span class="n">w2</span><span class="p">,</span> <span class="mi">101</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="n">w2</span><span class="p">,</span> <span class="n">w2</span><span class="p">,</span> <span class="mi">101</span><span class="p">))</span>
+<span class="n">cc</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">xx</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">yy</span><span class="o">.</span><span class="n">ravel</span><span class="p">()])</span>
+<span class="n">delta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">xx</span><span class="p">)</span>
+<span class="n">delta</span><span class="p">[</span><span class="mi">50</span><span class="p">,</span> <span class="mi">50</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+
+<span class="n">resampler</span> <span class="o">=</span> <span class="n">ResampleKernel</span><span class="p">(</span><span class="n">cc</span><span class="p">,</span> <span class="n">delta</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">kernel</span><span class="p">,</span> <span class="n">degrees</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                           <span class="n">smoothing</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="n">kernel_offsets</span><span class="o">=</span><span class="n">kernel_offsets</span><span class="p">)</span>
+
+<span class="n">regular_kernel</span> <span class="o">=</span> <span class="n">resampler</span><span class="p">(</span><span class="n">cc</span><span class="p">,</span> <span class="n">jobs</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">normalize</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+    <span class="n">delta</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+<span class="c1"># Now show an example of edge detection using the irregular kernel</span>
+<span class="n">image</span> <span class="o">=</span> <span class="n">imageio</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="s1">&#39;imageio:camera.png&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+<span class="n">image</span> <span class="o">-=</span> <span class="n">image</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+<span class="n">image</span> <span class="o">/=</span> <span class="n">image</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+
+<span class="n">ny</span><span class="p">,</span> <span class="n">nx</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">shape</span>
+<span class="n">iy</span><span class="p">,</span> <span class="n">ix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mgrid</span><span class="p">[:</span><span class="n">ny</span><span class="p">,</span> <span class="p">:</span><span class="n">nx</span><span class="p">]</span>
+<span class="n">coordinates</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">ix</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">iy</span><span class="o">.</span><span class="n">ravel</span><span class="p">()])</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+
+<span class="n">resampler</span> <span class="o">=</span> <span class="n">ResampleKernel</span><span class="p">(</span><span class="n">coordinates</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">kernel</span><span class="p">,</span> <span class="n">degrees</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                           <span class="n">smoothing</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span> <span class="n">kernel_offsets</span><span class="o">=</span><span class="n">kernel_offsets</span><span class="p">)</span>
+<span class="n">edges</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">resampler</span><span class="p">(</span><span class="n">coordinates</span><span class="p">,</span> <span class="n">jobs</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">normalize</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+    <span class="n">image</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+<span class="n">fig</span><span class="p">,</span> <span class="p">((</span><span class="n">ax1</span><span class="p">,</span> <span class="n">ax2</span><span class="p">,</span> <span class="n">ax3</span><span class="p">))</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">15</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Original image&#39;</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">regular_kernel</span><span class="p">,</span> <span class="n">interpolation</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">,</span> <span class="n">extent</span><span class="o">=</span><span class="p">[</span><span class="o">-</span><span class="n">w2</span><span class="p">,</span> <span class="n">w2</span><span class="p">,</span> <span class="o">-</span><span class="n">w2</span><span class="p">,</span> <span class="n">w2</span><span class="p">])</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Interpolated regular kernel&#39;</span><span class="p">)</span>
+<span class="n">ax3</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">edges</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">)</span>
+<span class="n">ax3</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Irregular kernel convolved with image&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>(<a class="reference download internal" download="" href="../../../_downloads/234701149f2bc46cd2cac42fd6857459/kernel_resampler-1.py"><code class="xref download docutils literal notranslate"><span class="pre">Source</span> <span class="pre">code</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/c570c4e1723963e6ae6ca479d5873c2a/kernel_resampler-1.png"><code class="xref download docutils literal notranslate"><span class="pre">png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/0624ebe9afe9f51c4ef42a73e1b6f632/kernel_resampler-1.hires.png"><code class="xref download docutils literal notranslate"><span class="pre">hires.png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/e21b84f5b76d4397ed5d15f06dca3bdd/kernel_resampler-1.pdf"><code class="xref download docutils literal notranslate"><span class="pre">pdf</span></code></a>)</p>
+<figure class="align-default">
+<img alt="../../../_images/kernel_resampler-1.png" class="plot-directive" src="../../../_images/kernel_resampler-1.png" />
+</figure>
+<p>The next example shows the usage of the kernel resampler on both irregular data
+and an irregular kernel.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">from</span> <span class="nn">sofia_redux.toolkit.resampling.resample_kernel</span> <span class="kn">import</span> <span class="n">ResampleKernel</span>
+
+<span class="c1"># Create an irregular kernel</span>
+<span class="n">rand</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">width</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="n">x_range</span> <span class="o">=</span> <span class="mi">30</span>
+<span class="n">n_impulse</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="n">n_kernel</span> <span class="o">=</span> <span class="mi">1000</span>
+<span class="n">n_samples</span> <span class="o">=</span> <span class="mi">1000</span>
+
+<span class="n">x</span> <span class="o">=</span> <span class="n">width</span> <span class="o">*</span> <span class="p">(</span><span class="n">rand</span><span class="o">.</span><span class="n">random</span><span class="p">(</span><span class="n">n_kernel</span><span class="p">)</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">)</span>
+<span class="n">kernel</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sinc</span><span class="p">(</span><span class="n">x</span> <span class="o">*</span> <span class="mi">4</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="p">(</span><span class="n">x</span> <span class="o">**</span> <span class="mi">2</span><span class="p">))</span>
+
+<span class="c1"># Add random impulses</span>
+<span class="n">impulse_locations</span> <span class="o">=</span> <span class="n">rand</span><span class="o">.</span><span class="n">random</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)</span> <span class="o">*</span> <span class="n">x_range</span>
+<span class="n">impulses</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)</span>
+<span class="n">impulses</span><span class="p">[:</span><span class="n">n_impulse</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">rand</span><span class="o">.</span><span class="n">random</span><span class="p">(</span><span class="n">n_impulse</span><span class="p">)</span>
+
+<span class="n">resampler</span> <span class="o">=</span> <span class="n">ResampleKernel</span><span class="p">(</span><span class="n">impulse_locations</span><span class="p">,</span> <span class="n">impulses</span><span class="p">,</span> <span class="n">kernel</span><span class="p">,</span>
+                           <span class="n">kernel_offsets</span><span class="o">=</span><span class="n">x</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span> <span class="n">smoothing</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">)</span>
+
+<span class="n">x_out</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">x_range</span><span class="p">,</span> <span class="mi">500</span><span class="p">)</span>
+<span class="n">fit</span> <span class="o">=</span> <span class="n">resampler</span><span class="p">(</span><span class="n">x_out</span><span class="p">,</span> <span class="n">normalize</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_out</span><span class="p">,</span> <span class="n">fit</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;fit&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">vlines</span><span class="p">(</span><span class="n">impulse_locations</span><span class="p">[:</span><span class="n">n_impulse</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">impulses</span><span class="p">[:</span><span class="n">n_impulse</span><span class="p">],</span>
+           <span class="n">linestyles</span><span class="o">=</span><span class="s1">&#39;dashed&#39;</span><span class="p">,</span> <span class="n">colors</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">impulse_locations</span><span class="p">[:</span><span class="n">n_impulse</span><span class="p">],</span> <span class="n">impulses</span><span class="p">[:</span><span class="n">n_impulse</span><span class="p">],</span> <span class="s1">&#39;x&#39;</span><span class="p">,</span>
+         <span class="n">color</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;impulses&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;A set of impulse signals convolved with an irregular kernel.&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>(<a class="reference download internal" download="" href="../../../_downloads/1f8317e2dd0cb20f2c92d8b6105d5ba3/kernel_resampler-2.py"><code class="xref download docutils literal notranslate"><span class="pre">Source</span> <span class="pre">code</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/0a2ebeb276ae68ac6c3b13b1b56881ff/kernel_resampler-2.png"><code class="xref download docutils literal notranslate"><span class="pre">png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/cc159c88595e03ce6dc48c4f35bce1a1/kernel_resampler-2.hires.png"><code class="xref download docutils literal notranslate"><span class="pre">hires.png</span></code></a>, <a class="reference download internal" download="" href="../../../_downloads/2528b688572f29b947be67caa4c15ec0/kernel_resampler-2.pdf"><code class="xref download docutils literal notranslate"><span class="pre">pdf</span></code></a>)</p>
+<figure class="align-default">
+<img alt="../../../_images/kernel_resampler-2.png" class="plot-directive" src="../../../_images/kernel_resampler-2.png" />
+</figure>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+<ul>
+<li><a class="reference internal" href="#">Kernel Resampling</a></li>
+<li><a class="reference internal" href="#use-cases">Use Cases</a></li>
+<li><a class="reference internal" href="#caveats">Caveats</a></li>
+<li><a class="reference internal" href="#examples">Examples</a></li>
+</ul>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right">
+    <a href="../../../_sources/sofia_redux/toolkit/resampling/kernel_resampler.rst.txt"
+       rel="nofollow">Page Source</a> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

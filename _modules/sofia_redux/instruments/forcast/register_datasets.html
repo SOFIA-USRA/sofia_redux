@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.register_datasets &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.register_datasets</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from warnings import catch_warnings, simplefilter
+
+from astropy import log
+from astropy.io import fits
+from astropy.wcs import WCS
+import numpy as np
+
+from sofia_redux.toolkit.utilities.fits import add_history_wrap, hdinsert
+
+from sofia_redux.instruments.forcast.getpar import getpar
+from sofia_redux.instruments.forcast.register import register
+from sofia_redux.instruments.forcast.shift import shift
+
+addhist = add_history_wrap(&#39;Coadd&#39;)
+
+__all__ = [&#39;wcs_shift&#39;, &#39;get_shifts&#39;, &#39;expand_array&#39;, &#39;shift_set&#39;,
+           &#39;shift_datasets&#39;, &#39;resize_datasets&#39;, &#39;register_datasets&#39;]
+
+
+<div class="viewcode-block" id="wcs_shift">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.register_datasets.wcs_shift.html#sofia_redux.instruments.forcast.register_datasets.wcs_shift">[docs]</a>
+def wcs_shift(header, refheader, xy, wcskey=&#39; &#39;):
+    &quot;&quot;&quot;
+    Return the pixel offset of a point on header relative to refheader
+
+    Parameters
+    ----------
+    header : astropy.io.fits.header.Header
+
+    refheader : astropy.io.fits.header. Header
+    xy : array_like of float
+        2-element (x, y) coordinate to shift or (n, (x, y)) coordinates
+
+    Returns
+    -------
+    numpy.ndarray
+        (x, y) offset in pixels of xy on header relative to refheader.
+        This is the shift you would need to apply to xy in order for
+        that point to align with that same point on the reference
+        header after transformation.
+    &quot;&quot;&quot;
+    wcs_in = WCS(header, key=wcskey)
+    wcs_out = WCS(refheader, key=wcskey)
+    xyin = np.array(xy)
+    if len(xyin.shape) == 1:
+        xyin = np.array([xyin])
+
+    wxy = wcs_in.wcs_pix2world(xyin, 1)
+    xyin_on_ref = wcs_out.wcs_world2pix(wxy, 1)
+    return xyin - xyin_on_ref</div>
+
+
+
+<div class="viewcode-block" id="get_shifts">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.register_datasets.get_shifts.html#sofia_redux.instruments.forcast.register_datasets.get_shifts">[docs]</a>
+def get_shifts(datasets, user_shifts=None, refset=0, basehead=None,
+               algorithm=None, initial_reference=None,
+               do_wcs_shift=False, wcskey=&#39; &#39;):
+    &quot;&quot;&quot;
+    Returns all shifts relative to the reference set.
+
+    No error check is performed.  Should be performed by the calling
+    function.
+
+    Parameters
+    ----------
+    datasets : array_like of tuples
+        All elements are 3-tuples.  Each tuple represents a data set consisting
+        where the elements are as follows:
+
+            1. numpy.ndarray
+                image array (nrow, ncol).  Image shapes are allowed to
+                differ from others in the inputs data set.
+            2. astropy.io.fits.header.Header
+                FITS header for the image array
+            3. numpy.ndarray, optional
+                variance array (nrow, ncol).  Used to propagate variance.
+                Must be the same shape as the data array in the first
+                element.
+            4. numpy.ndarray, optional
+                normalization map (nrow, ncol) to propagate.  Must be the
+                same shape as the data array in the first element.
+
+    refset : int, optional
+        Index of the dataset to use as the reference.  Default is the first
+        set in the list (0).
+    user_shifts : array_like of array_like, optional
+        User shifts if required.  No shift may be represented by None.
+        All other shifts should be supplied as (dx, dy).  Length must be
+        the same length as datasets
+    basehead : astropy.io.fits.header.Header, optional
+        FITS header to update with HISTORY messages
+    algorithm : str, optional
+        Registration and coadding algorithm.  If None, defaults to the
+        coadding algorithm determined by the drip configuration or
+        reference header.
+    initial_reference : array_like, optional
+        An optional reference to pass if an initial shift on the reference
+        dataset is required.
+    do_wcs_shift : bool, optional
+        If set, offsets returned are intended to be added to the CRPIX
+        values in the header, rather than applied to the image array.
+    wcskey : str, optional
+        If not &#39; &#39;, an alternate WCS is used for calculating WCS shifts.
+        For spectral images, it is expected that wcskey=&#39;A&#39;.
+
+    Returns
+    -------
+    numpy.ndarray
+        (nsets, (x, y)) array of offsets
+    &quot;&quot;&quot;
+    if basehead is None:
+        basehead = fits.header.Header()
+        addhist(basehead, &#39;Created header&#39;)
+    nsets = len(datasets)
+    positions = [None] * nsets if user_shifts is None else user_shifts
+    refdata = datasets[refset][0].copy()
+    refheader = datasets[refset][1].copy()
+    refposition = positions[refset]
+
+    if algorithm is None:
+        algorithm = getpar(refheader, &#39;CORCOADD&#39;)
+
+    if algorithm == &#39;OVERRIDE&#39;:
+        # just returns shifts, for either WCS shifts or image shifts
+        shifts = []
+        for (dset, pos) in zip(datasets, positions):
+            init = [0, 0] if initial_reference is None else initial_reference
+            shifts.append(register(dset[0], dset[1].copy(), reference=init,
+                                   position=pos, get_offsets=True))
+        return np.array(shifts)
+
+    # shift the reference if necessary
+    reference = refdata.copy()
+    shift_init = np.array([0., 0.])
+    if algorithm == &#39;HEADER&#39; or initial_reference is not None:
+        reference = register(
+            refdata, refheader.copy(), reference=initial_reference,
+            position=refposition, crpix=shift_init, algorithm=algorithm)
+    else:
+        hdinsert(basehead, &#39;HISTORY&#39;, &quot;First image; not shifted&quot;, after=True)
+
+    # non-reference sets
+    sets = [s for (i, s) in enumerate(datasets) if i != refset]
+    positions = [s for (i, s) in enumerate(positions) if i != refset]
+
+    # for alternate WCS (spectral case)
+    strip_key = wcskey.strip()
+    if strip_key != &#39;&#39;:
+        refxy = [refheader[f&#39;CRPIX1{strip_key}&#39;],
+                 refheader[f&#39;CRPIX2{strip_key}&#39;],
+                 refheader[f&#39;CRPIX3{strip_key}&#39;]]
+    else:
+        refxy = [refheader[&#39;CRPIX1&#39;],
+                 refheader[&#39;CRPIX2&#39;]]
+
+    s0 = shift_init[0], shift_init[1]
+    shifts = []
+    for dset, pos in zip(sets, positions):
+        if algorithm == &#39;WCS&#39;:
+            wcs_xy = wcs_shift(refheader, dset[1], refxy,
+                               wcskey=wcskey)[0]
+            if len(wcs_xy) == 3:
+                # coords are wavelength, dec, ra
+                wcs_xy = np.array([wcs_xy[2], wcs_xy[1]])
+            shifts.append(wcs_xy)
+        else:
+            s = register(dset[0], dset[1].copy(),
+                         reference=reference,
+                         algorithm=algorithm,
+                         position=pos, get_offsets=True)
+            shifts.append(s)
+    result = shifts
+    result.insert(refset, s0)
+
+    if do_wcs_shift:
+        crpix_shifts = result.copy()
+        for i, s in enumerate(result):
+            # skip if shift failed
+            if s is not None:
+                dset = datasets[i]
+
+                # subtract out wcs shift to get crpix movement
+                wcs_xy = wcs_shift(refheader, dset[1], refxy,
+                                   wcskey=wcskey)[0]
+                if len(wcs_xy) == 3:
+                    # coords are wavelength, dec, ra
+                    wcs_xy = np.array([wcs_xy[2], wcs_xy[1]])
+                crpix_shifts[i] = -1 * (s - wcs_xy)
+        result = crpix_shifts
+
+    return np.array(result)</div>
+
+
+
+<div class="viewcode-block" id="expand_array">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.register_datasets.expand_array.html#sofia_redux.instruments.forcast.register_datasets.expand_array">[docs]</a>
+def expand_array(arr, shape, missing=np.nan):
+    &quot;&quot;&quot;
+    Expands an array to a new shape
+
+    New shape must be greater than the original in both dimensions.
+    Original data will be inserted in the lower left corner (0, 0).
+    The right and upper border will be filled with `missing`.
+
+    Parameters
+    ----------
+    arr : numpy.ndarray
+        array to expand (nrow, ncol)
+    shape : array_like
+        (y, x) dimensions of new shape
+    missing : float, optional
+        value with which to fill the right and upper borders after
+        expansion.
+
+    Returns
+    -------
+    numpy.ndarray
+        expanded array (shape[0], shape[1])
+    &quot;&quot;&quot;
+    if not isinstance(arr, np.ndarray):
+        return
+    if shape is None:
+        return arr.copy()
+    else:
+        s0 = arr.shape
+        result = np.full(shape, missing)
+        result[0: s0[0], 0: s0[1]] = arr.copy()
+    return result</div>
+
+
+
+<div class="viewcode-block" id="shift_set">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.register_datasets.shift_set.html#sofia_redux.instruments.forcast.register_datasets.shift_set">[docs]</a>
+def shift_set(dataset, offset, newshape=None, missing=np.nan):
+    &quot;&quot;&quot;
+    Shifts an individual data set
+
+    Note that the shift order is read via
+    sofia_redux.instruments.forcast.getpar in
+    sofia_redux.instruments.forcast.shift.
+
+    Integration time is taken from the maximum normalization value.  This
+    should not be necessary since it should have been calculated at
+    `sofia_redux.instruments.forcast.merge`, but is done anyway.
+
+    Parameters
+    ----------
+    dataset : tuple
+        data : numpy.ndarray
+        header : astropy.io.fits.header.Header
+        variance : numpy.ndarray, optional
+        normalization : numpy.ndarray, optional
+    newshape : array_like
+        (y, x) shape of any output arrays.  Must be greater than or
+        equal to the original image shape in each dimension.  Original
+        images are inserted in the bottom-left (0, 0) corner of the
+        expanded image before shifting.
+    offset : array_like
+        (x, y) shift
+    missing : float, optional
+        value with which to fill the right and upper borders after
+        expansion.
+
+    Returns
+    -------
+    tuple
+        shifted version of input dataset
+    &quot;&quot;&quot;
+    data = expand_array(dataset[0], newshape, missing=missing)
+    header = dataset[1].copy()
+    hdinsert(header, &#39;COADX0&#39;, offset[0], &#39;X shift during coadd process&#39;)
+    hdinsert(header, &#39;COADY0&#39;, offset[1], &#39;Y shift during coadd process&#39;)
+    header[&#39;NAXIS1&#39;] = data.shape[1]
+    header[&#39;NAXIS2&#39;] = data.shape[0]
+    if len(dataset) &gt; 2 and isinstance(dataset[2], np.ndarray):
+        var = expand_array(dataset[2], newshape, missing=missing)
+    else:
+        var = None
+    data, var = shift(data, offset, header=header,
+                      variance=var, missing=missing)
+
+    if len(dataset) &gt; 3 and isinstance(dataset[3], np.ndarray):
+        norm = expand_array(dataset[3], newshape, missing=missing)
+        norm, _ = shift(norm, offset, missing=missing, order=0)
+        hdinsert(header, &#39;EXPTIME&#39;, np.nanmax(norm), refkey=&#39;HISTORY&#39;)
+    else:
+        norm = None
+
+    result = data, header
+    if len(dataset) &gt; 2:
+        result = *result, var
+    if len(dataset) &gt; 3:
+        result = *result, norm
+    return result</div>
+
+
+
+<div class="viewcode-block" id="shift_datasets">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.register_datasets.shift_datasets.html#sofia_redux.instruments.forcast.register_datasets.shift_datasets">[docs]</a>
+def shift_datasets(datasets, shifts, refset, missing=np.nan):
+    &quot;&quot;&quot;
+    Shifts datasets onto common frame
+
+    Parameters
+    ----------
+    datasets : list of tuple
+        tuple is of the form: data, header, variance, normalization
+    shifts : numpy.ndarray
+        (nimage, (x, y))
+    refset : int
+        Index of the dataset to use as the reference.
+    missing : float, optional
+        value with which to fill missing data points
+
+    Returns
+    -------
+    list of tuples
+    &quot;&quot;&quot;
+    if len(datasets) == 1:
+        return [shift_set(datasets[0], shifts[0], missing=missing)]
+
+    dout = []
+    s = np.array(shifts).copy().astype(float)
+    minvals = np.min(s, axis=0)
+    s[:, minvals &lt; 0] += 0 - np.floor(minvals[minvals &lt; 0])
+
+    # swap x and y in shifts to add to shapes
+    shape_s = np.roll(s, 1, axis=1)
+    shapes = np.array([tuple(d)[0].shape for d in datasets])
+
+    maxshape = np.max(np.ceil(shape_s + shapes), axis=0).astype(int)
+
+    for dset, offset in zip(datasets, s):
+        dout.append(shift_set(dset, offset, newshape=maxshape,
+                              missing=missing))
+
+    # update all WCS to the reference set
+    refwcs = WCS(dout[refset][1]).to_header(relax=True)
+    for dset in dout:
+        for key, value in refwcs.items():
+            if key in dset[1]:
+                dset[1][key] = value
+
+    return dout</div>
+
+
+
+<div class="viewcode-block" id="resize_datasets">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.register_datasets.resize_datasets.html#sofia_redux.instruments.forcast.register_datasets.resize_datasets">[docs]</a>
+def resize_datasets(datasets, missing=np.nan):
+    &quot;&quot;&quot;
+    Resize all datasets to the same shape
+
+    Parameters
+    ----------
+    datasets
+
+    Returns
+    -------
+    datasets
+    &quot;&quot;&quot;
+    mx, my = 0, 0
+    for dset in datasets:
+        mx = dset[0].shape[1] if mx &lt; dset[0].shape[1] else mx
+        my = dset[0].shape[0] if my &lt; dset[0].shape[0] else my
+    maxshape = my, mx
+    result = []
+    for dset in datasets:
+        newset = []
+        if dset[0].shape != maxshape:
+            newset.append(expand_array(dset[0], maxshape, missing=missing))
+            header = dset[1].copy()
+            header[&#39;NAXIS1&#39;] = mx
+            header[&#39;NAXIS2&#39;] = my
+            newset.append(dset[1].copy())
+            if len(dset) &gt; 2:
+                newset.append(expand_array(dset[2], maxshape, missing=missing))
+            if len(dset) &gt; 3:
+                newset.append(expand_array(dset[3], maxshape, missing=0))
+            result.append(tuple(newset))
+        else:
+            result.append(dset)
+    return result</div>
+
+
+
+<div class="viewcode-block" id="register_datasets">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.register_datasets.register_datasets.html#sofia_redux.instruments.forcast.register_datasets.register_datasets">[docs]</a>
+def register_datasets(datasets, user_shifts=None, basehead=None, refset=0,
+                      algorithm=None, initial_reference=None,
+                      missing=np.nan):
+    &quot;&quot;&quot;
+    Registers multiple sets of data to the same frame
+
+    Parameters
+    ----------
+    datasets : array_like of tuples
+        All elements are tuples.  Each tuple represents a data set consisting
+        where the elements are as follows:
+
+        1. numpy.ndarray:
+           image array (nrow, ncol).  Image shapes are allowed to
+           differ from others in the inputs data set.
+        2. astropy.io.fits.header.Header:
+           FITS header for the image array
+        3. numpy.ndarray, optional:
+           variance array (nrow, ncol).  Used to propagate variance.
+           Must be the same shape as the data array in the first
+           element.
+        4. numpy.ndarray, optional:
+           normalization map (nrow, ncol) to propagate.  Must be the
+           same shape as the data array in the first element.
+
+    refset : int, optional
+        Index of the dataset to use as the reference.  Default is the first
+        set in the list (0).
+    user_shifts : array_like of array_like, optional
+        User shifts if required.  No shift may be represented by None.
+        All other shifts should be supplied as (dx, dy).  Length must be
+        the same length as datasets
+    basehead : astropy.io.fits.header.Header, optional
+        FITS header to update with HISTORY messages
+    algorithm : str, optional
+        Registration and coadding algorithm.  If None, defaults to the
+        coadding algorithm determined by the drip configuration or
+        reference header.
+    initial_reference : array_like, optional
+        An optional reference to pass if an initial shift on the reference
+        dataset is required.
+    missing : float, optional
+        Value with which to fill missing data points following a shift
+
+    Returns
+    -------
+    list of tuple
+        registered datasets
+    &quot;&quot;&quot;
+    if not hasattr(datasets, &#39;__len__&#39;):
+        log.error(&#39;Invalid datasets - nothing to coadd&#39;)
+        return
+    for i, dset in enumerate(datasets):
+        if len(dset) &lt; 2 or len(dset) &gt; 4:
+            log.error(&quot;dataset %i - invalid elements&quot; % i)
+            return
+        elif not isinstance(dset[0], np.ndarray) or len(dset[0].shape) != 2:
+            log.error(&quot;dataset %i - invalid image&quot; % i)
+            return
+        elif not isinstance(dset[1], fits.header.Header):
+            log.error(&quot;dataset %s - invalid header&quot; % i)
+            return
+        if len(dset) &gt; 2 and isinstance(dset[2], np.ndarray):
+            if dset[2].shape != dset[0].shape:
+                log.error(&quot;dataset %s - invalid variance&quot; % i)
+                return
+        if len(dset) &gt; 3 and isinstance(dset[3], np.ndarray):
+            if dset[3].shape != dset[0].shape:
+                log.error(&quot;dataset %s - invalid normmap&quot; % i)
+                return
+
+    if user_shifts is not None:
+        if not hasattr(user_shifts, &#39;__len__&#39;) or \
+                len(user_shifts) != len(datasets):
+            log.error(&quot;invalid user offsets&quot;)
+            return
+
+    datasets = resize_datasets(datasets, missing=missing)
+
+    with catch_warnings():
+        simplefilter(&#39;ignore&#39;)
+        shifts = get_shifts(datasets, user_shifts=user_shifts, refset=refset,
+                            algorithm=algorithm,
+                            initial_reference=initial_reference,
+                            basehead=basehead)
+    failure = False
+    for idx, s in enumerate(shifts):
+        if s is None:
+            log.error(&quot;failed to register dataset %i&quot; % idx)
+            failure = True
+    if failure:
+        return
+
+    registered = shift_datasets(datasets, shifts, refset,
+                                missing=missing)
+
+    return registered</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

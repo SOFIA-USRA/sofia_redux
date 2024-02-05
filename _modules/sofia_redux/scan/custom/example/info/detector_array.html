@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.example.info.detector_array &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.example.info.detector_array</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units
+import numpy as np
+
+from sofia_redux.scan.info.base import InfoBase
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+
+__all__ = [&#39;ExampleDetectorArrayInfo&#39;]
+
+
+<div class="viewcode-block" id="ExampleDetectorArrayInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.example.info.detector_array.ExampleDetectorArrayInfo.html#sofia_redux.scan.custom.example.info.detector_array.ExampleDetectorArrayInfo">[docs]</a>
+class ExampleDetectorArrayInfo(InfoBase):
+
+    # An 11x11 pixel array
+    COLS = 11
+    ROWS = 11
+
+    boresight_index = Coordinate2D(
+        (np.array([ROWS, COLS]) / 2) - 0.5, unit=None)
+
+    pixel_size = 2 * units.Unit(&#39;arcsec&#39;)  # Nyquist ish
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize the detector array information for the example instrument.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.pixels = self.ROWS * self.COLS
+        self.pixel_sizes = Coordinate2D([self.pixel_size, self.pixel_size])
+
+<div class="viewcode-block" id="ExampleDetectorArrayInfo.get_sibs_position">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.example.info.detector_array.ExampleDetectorArrayInfo.html#sofia_redux.scan.custom.example.info.detector_array.ExampleDetectorArrayInfo.get_sibs_position">[docs]</a>
+    def get_sibs_position(self, row, col):
+        &quot;&quot;&quot;
+        Given a subarray, row, and column, return the pixel position.
+
+        The SIBS position are in tEl, tXel coordinates in units of the
+        `pixel_size` attribute.
+
+        Parameters
+        ----------
+        row : int or float or numpy.ndarray (int or float)
+            The channel/pixel detector row.
+        col : int or float or numpy.ndarray (int or float)
+            The channel/pixel detector column.
+
+        Returns
+        -------
+        position : Coordinate2D
+            The pixel (x, y) pixel positions.
+        &quot;&quot;&quot;
+        position = Coordinate2D()
+        position.set([self.boresight_index.x - col,
+                      self.boresight_index.y - row])
+        position.scale(self.pixel_size)
+        return position</div>
+
+
+<div class="viewcode-block" id="ExampleDetectorArrayInfo.initialize_channel_data">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.example.info.detector_array.ExampleDetectorArrayInfo.html#sofia_redux.scan.custom.example.info.detector_array.ExampleDetectorArrayInfo.initialize_channel_data">[docs]</a>
+    def initialize_channel_data(self, data):
+        &quot;&quot;&quot;
+        Apply this information to create and populate the channel data.
+
+        Parameters
+        ----------
+        data : ExampleChannelData
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        index = np.arange(self.pixels)
+        data.fixed_index = index
+        data.set_default_values()
+        data.col = index % self.COLS
+        data.row = data.mux = index // self.COLS
+        data.bias_line = np.right_shift(data.row, 1)
+        data.flag = np.zeros(data.size, dtype=int)
+        data.channel_id = np.array(
+            [f&#39;{x[0]},{x[1]}&#39; for x in zip(data.row, data.col)])
+        data.calculate_sibs_position()</div>
+
+
+<div class="viewcode-block" id="ExampleDetectorArrayInfo.equatorial_to_detector_coordinates">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.example.info.detector_array.ExampleDetectorArrayInfo.html#sofia_redux.scan.custom.example.info.detector_array.ExampleDetectorArrayInfo.equatorial_to_detector_coordinates">[docs]</a>
+    def equatorial_to_detector_coordinates(self, equatorial):
+        &quot;&quot;&quot;
+        Convert equatorial coordinates to detector coordinates.
+
+        Parameters
+        ----------
+        equatorial : EquatorialCoordinates
+
+        Returns
+        -------
+        detector_coordinates : Coordinate2D
+        &quot;&quot;&quot;
+        return Coordinate2D(equatorial)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

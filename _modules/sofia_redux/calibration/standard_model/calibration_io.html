@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.calibration.standard_model.calibration_io &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.calibration.standard_model.calibration_io</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Handle file I/O for model generation&quot;&quot;&quot;
+
+import os
+import numpy as np
+import pandas as pd
+import astropy.io.fits as pf
+
+from sofia_redux.calibration.standard_model import thermast
+from sofia_redux.calibration.standard_model import isophotal_wavelength as iso
+from sofia_redux.calibration.pipecal_error import PipeCalError
+
+
+<div class="viewcode-block" id="model_spectrum">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.calibration_io.model_spectrum.html#sofia_redux.calibration.standard_model.calibration_io.model_spectrum">[docs]</a>
+def model_spectrum(infile, txt=False, dataframe=False, alpha=None, temp=None,
+                   wmin=40., wmax=300., df_index=0):
+    &quot;&quot;&quot;
+    Read in or generate model spectrum.
+
+    Parameters
+    ----------
+    infile : str, pandas.DataFrame
+        Defines how to generate the model. It can be the name of
+        a file (if model is in an ASCII format or FITS format),
+        set to &quot;Blackbody&quot; to generate a blackbody model, set to
+        &quot;PowerLaw&quot; to generate a power law mdodel, or it could be
+        a straight pandas DataFrame.
+    txt : bool
+        If set, `infile` is the name of an ASCII formatted file.
+    dataframe : bool
+        If set, `infile` is a pandas DataFrame.
+    alpha : float
+        The power law index to use if `infile` is set to &quot;PowerLaw&quot;.
+    temp : float
+        The blackbody temperature to use if `infile` is set
+        to &quot;Blackbody&quot;.
+    wmin : float, optional
+        Minimum wavelength of the spectrum. Defaults to 40 microns.
+    wmax : float, optional
+        Maximum wavelength of the spectrum. Defaults to 300 microns.
+
+    Returns
+    -------
+    wavelength : numpy.array
+        Wavelengths in stellar spectrum.
+    flux : numpy.array
+        Flux at each wavelength in `wavelength`.
+    power_law : bool
+        A flag to indicate the model is a generated
+        power law model.
+    blackbody : bool
+        A flag to indicate the model is a generated
+        blackbody model.
+    &quot;&quot;&quot;
+    if txt:
+        power_law = False
+        blackbody = False
+        wstar, fstar = read_text(infile)
+    elif dataframe:
+        power_law = False
+        blackbody = False
+        try:
+            filename = infile[&#39;model_file&#39;].iloc[df_index]
+        except KeyError:
+            raise PipeCalError(&#39;Input dataframe is improperly formatted.&#39;)
+        wstar, fstar = read_text(filename)
+    elif infile.lower() == &#39;powerlaw&#39;:
+        if not alpha:
+            raise PipeCalError(&#39;Power Law model requires an index alpha&#39;)
+        else:
+            power_law = True
+            blackbody = False
+            wstar, fstar = generate_power_law(alpha, wmin=wmin, wmax=wmax)
+    elif infile.lower() == &#39;blackbody&#39;:
+        if not temp:
+            raise PipeCalError(&#39;Blackbody model requires an input temperature&#39;)
+        else:
+            power_law = False
+            blackbody = True
+            wstar, fstar = generate_blackbody(temp, wmin=wmin, wmax=wmax)
+    else:
+        power_law = False
+        blackbody = False
+        wstar, fstar = read_fits(infile)
+
+    return wstar, fstar, power_law, blackbody</div>
+
+
+
+<div class="viewcode-block" id="read_text">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.calibration_io.read_text.html#sofia_redux.calibration.standard_model.calibration_io.read_text">[docs]</a>
+def read_text(filename):
+    &quot;&quot;&quot;
+    Read spectrum input file if formatted in plain text.
+
+    Parameters
+    ----------
+    filename : str
+        Name of file to read.
+
+    Returns
+    -------
+    wavelength : numpy.array
+        Wavelengths in stellar spectrum.
+    flux : numpy.array
+        Flux at each wavelength in `wavelength`.
+
+    &quot;&quot;&quot;
+    with open(filename, &#39;r&#39;) as f:
+        com = f.readline()[0]
+    wavelength, flux = np.loadtxt(filename, unpack=True,
+                                  usecols=(0, 1), comments=com)
+    return wavelength, flux</div>
+
+
+
+<div class="viewcode-block" id="generate_power_law">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.calibration_io.generate_power_law.html#sofia_redux.calibration.standard_model.calibration_io.generate_power_law">[docs]</a>
+def generate_power_law(alpha, wmin=40., wmax=300.):
+    &quot;&quot;&quot;
+    Generate a power law input spectrum.
+
+    Parameters
+    ----------
+    alpha : float
+        Power law index.
+    wmin : float, optional
+        Minimum wavelength of the spectrum. Defaults to 40 microns.
+    wmax : float, optional
+        Maximum wavelength of the spectrum. Defaults to 300 microns.
+
+    Returns
+    -------
+    wavelength : numpy.array
+        Wavelengths in stellar spectrum.
+    flux : numpy.array
+        Flux at each wavelength in `wavelength`.
+
+    &quot;&quot;&quot;
+    c = 2.99792e14  # cm/s
+    # cm2mum = 1e4  # Convert cm to microns
+    wref = 24.0
+    fref = 1.0
+    # nuref = c * cm2mum / wref
+    nuref = c / wref
+    dw = 0.005
+    nw = int((wmax - wmin) / dw) + 1
+    wstar = np.arange(nw) * dw + wmin
+    nuarr = c / wstar
+    fstar = fref * (nuarr / nuref) ** alpha
+
+    return wstar, fstar</div>
+
+
+
+<div class="viewcode-block" id="generate_blackbody">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.calibration_io.generate_blackbody.html#sofia_redux.calibration.standard_model.calibration_io.generate_blackbody">[docs]</a>
+def generate_blackbody(temp, wmin=40., wmax=300.):
+    &quot;&quot;&quot;
+    Generate a simple blackbody spectrum.
+
+    Parameters
+    ----------
+    temp : float
+        Temperature of the asteroid.
+    wmin : float, optional
+        Minimum wavelength of the spectrum. Defaults to 40 microns.
+    wmax : float, optional
+        Maximum wavelength of the spectrum. Defaults to 300 microns.
+
+    Returns
+    -------
+    wavelength : numpy.array
+        Wavelengths in stellar spectrum.
+    flux : numpy.array
+        Flux at each wavelength in `wavelength`.
+
+    &quot;&quot;&quot;
+    c = 2.99792e14  # um/s
+    Jy2W = 1e-26  # Convert Jy to W/m2/Hz
+    dw = 0.005
+    nw = int((wmax - wmin) / dw) + 1
+    wstar = np.arange(nw) * dw + wmin
+    fstar = np.pi * thermast.planck_function(wstar, temp) \
+        * wstar ** 2 / (Jy2W * c)
+    return wstar, fstar</div>
+
+
+
+<div class="viewcode-block" id="read_fits">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.calibration_io.read_fits.html#sofia_redux.calibration.standard_model.calibration_io.read_fits">[docs]</a>
+def read_fits(infile):
+    &quot;&quot;&quot;
+    Read spectrum from a FITS file.
+
+    Parameters
+    ----------
+    infile : str
+        Name of FITS file to read.
+
+    Returns
+    -------
+    wavelength : numpy.array
+        Wavelengths in stellar spectrum.
+    flux : numpy.array
+        Flux at each wavelength in `wavelength`.
+
+    &quot;&quot;&quot;
+    hdul = pf.open(infile)
+    data = hdul[0].data[0]
+    wstar = data[0, :]
+    fstar = data[1, :]
+    return wstar, fstar</div>
+
+
+
+<div class="viewcode-block" id="read_atran">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.calibration_io.read_atran.html#sofia_redux.calibration.standard_model.calibration_io.read_atran">[docs]</a>
+def read_atran(atmofile, ws, no_atm=False, wmin=40., wmax=300.):
+    &quot;&quot;&quot;
+    Read in atmospheric transmission model.
+
+    Parameters
+    ----------
+    atmofile : str
+        Name of the ATRAN file.
+    ws : numpy.array
+        Wavelengths of spectrum.
+    no_atm : bool
+        If set, do not read in a ATRAN file.
+    wmin : float, optional
+        Minimum wavelength of spectrum to use. Defaults to 40 microns.
+    wmax : float, optional
+        Maximum wavelength of spectrum to use. Defaults to 300 microns.
+
+    Returns
+    -------
+    wa : numpy.array
+        Wavelengths of atmospheric transmission spectrum in microns.
+    ta : numpy.array
+        Transmission at each wavelength in `wa`.
+    afile : str
+        Full path of ATRAN file read in.
+    &quot;&quot;&quot;
+    atran_location = &#39;/dps/calibrations/ATRAN/fits/&#39;
+    local_apath = &#39;./atranfiles/fits/&#39;
+    if no_atm:
+        wa = ws
+        ta = np.ones_like(wa)
+        afile = None
+    else:
+        if not os.path.isfile(atmofile):  # pragma: no cover
+            if os.sep not in atmofile:
+                afile = os.path.join(atran_location, atmofile)
+                if not os.path.isfile(afile):
+                    print(f&#39;Cannot find ATRAN file {atmofile} in default &#39;
+                          f&#39;location {atran_location}.\nUsing local copy.&#39;)
+                    afile = os.path.join(local_apath, atmofile)
+            else:
+                afile = os.path.join(os.getcwd(), atmofile)
+        else:
+            afile = os.path.join(os.getcwd(), atmofile)
+        hdul_a = pf.open(afile)
+        watm = hdul_a[0].data[0]
+        tatm = hdul_a[0].data[1]
+
+        indx = (watm &gt;= wmin) &amp; (watm &lt;= wmax)
+        wa = watm[indx]
+        ta = tatm[indx]
+    return wa, ta, afile</div>
+
+
+
+<div class="viewcode-block" id="calibration_data_path">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.calibration_io.calibration_data_path.html#sofia_redux.calibration.standard_model.calibration_io.calibration_data_path">[docs]</a>
+def calibration_data_path():
+    &quot;&quot;&quot;
+    Location of local calibration data.
+
+    Returns
+    -------
+    caldata : str
+        Full path to local data.
+
+    &quot;&quot;&quot;
+    pkgpath = (os.path.dirname(
+        os.path.dirname(os.path.realpath(__file__))) + os.path.sep)
+    caldata = os.path.join(*[pkgpath, &#39;data&#39;, &#39;models&#39;])
+    return caldata</div>
+
+
+
+<div class="viewcode-block" id="open_outfile_and_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.calibration_io.open_outfile_and_header.html#sofia_redux.calibration.standard_model.calibration_io.open_outfile_and_header">[docs]</a>
+def open_outfile_and_header(outfile, no_atm=False, afile=None, infile=None,
+                            index=0):
+    &quot;&quot;&quot;
+    Open the outfile and print all headers.
+
+    Parameters
+    ----------
+    outfile : str, None
+        Filename of ouptut file. If None, pull outfile from
+        `infile` or use a default filename.
+    no_atm : bool
+        If set, no ATRAN file was read in.
+    afile : str
+        Name of ARAN file read in.
+
+    Returns
+    -------
+    outf : file
+        Handler pointing to open output file.
+
+    &quot;&quot;&quot;
+    if no_atm:
+        print(&#39;\nNo atmosphere&#39;)
+    else:
+        print(f&#39;\nUsing ATRAN: {afile}&#39;)
+    print(&#39;    lambda_ref   lambda_mean   lambda_1     lambda_pivot&#39;
+          &#39;  lambda_eff lambda_eff_jv   lambda_iso   &#39;
+          &#39;width       Response  F_mean Fnu_mean    ColorTerm    &#39;
+          &#39;ColorTerm   Source_Rate      Source_Size   Source_FWHM&#39;
+          &#39;Bkgd_Power           NEP            NEFD         MDCF&#39;
+          &#39;     Npix   Filter&#39;)
+    print(&#39;     microns       microns      microns      microns      &#39;
+          &#39;microns microns         microns      microns&#39;
+          &#39;       W/mJy   W/m^2/mum Jy                                 &#39;
+          &#39;Watts            pix          arcsec Watts               &#39;
+          &#39;W/sqrt(Hz)      Jy/sqrt(Hz)    mJy&#39;)
+
+    if outfile is None:
+        if isinstance(infile, pd.DataFrame):
+            outfile = infile[&#39;cal_file&#39;][index]
+        else:
+            outfile = &#39;flux_values.out&#39;
+    outf = open(outfile, &#39;w&#39;)
+    outf.write(f&#39;{outfile}\n&#39;)
+    if no_atm:
+        outf.write(&#39;No atmosphere\n\n&#39;)
+    else:
+        outf.write(f&#39;{os.path.basename(afile)}\n\n&#39;)
+    outf.write(&#39;lambda_ref   lambda_mean  lambda_1     lambda_pivot &#39;
+               &#39;lambda_eff  lambda_eff_jv lambda_iso  &#39;
+               &#39;width        Response    F_mean       Fnu_mean     &#39;
+               &#39;ColorTerm    ColorTerm    Source_Rate Source_Size  &#39;
+               &#39;Source_FWHM  Bkgd_Power   NEP          NEFD        &#39;
+               &#39;MDCF         Npix                                   Filter\n&#39;)
+    outf.write(&#39;microns      microns      microns      microns      &#39;
+               &#39;microns     microns       microns     &#39;
+               &#39;microns      W/mJy       W/m^2/mum    &#39;
+               &#39;Jy                                     Watts       &#39;
+               &#39;pix          arcsec       &#39;
+               &#39;Watts        W/sqrt(Hz)   Jy/sqrt(Hz) mJy\n\n&#39;)
+    return outf</div>
+
+
+
+<div class="viewcode-block" id="report_result">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.calibration_io.report_result.html#sofia_redux.calibration.standard_model.calibration_io.report_result">[docs]</a>
+def report_result(result, filter_name, outf):
+    &quot;&quot;&quot;
+    Format the result of the calibration and report it.
+
+    Parameters
+    ----------
+    result : dict
+        Collection of calibration results.
+    filter_name : str
+        Name of the current filter.
+    outf : IOStream
+        Open output file to write to.
+
+    Returns
+    -------
+    None
+
+    &quot;&quot;&quot;
+    s = (f&quot;{result[&#39;lambda_c&#39;]:.5e}  {result[&#39;lambda_mean&#39;]:.5e}  &quot;
+         f&quot;{result[&#39;lambda_1&#39;]:.5e}  &quot;
+         f&quot;{result[&#39;lambda_pivot&#39;]:.5e}  &quot;
+         f&quot;{result[&#39;lambda_eff&#39;]:.5e}  &quot;
+         f&quot;{result[&#39;lambda_eff_jv&#39;]:.5e}  {result[&#39;isophotal_wt&#39;]:.5e}  &quot;
+         f&quot;{result[&#39;width&#39;]:.5e}  {result[&#39;response&#39;]:.5e}  &quot;
+         f&quot;{result[&#39;flux_mean&#39;]:.5e}  {result[&#39;flux_nu_mean&#39;]:.5e}  &quot;
+         f&quot;{result[&#39;color_term_k0&#39;]:.5e}  &quot;
+         f&quot;{result[&#39;color_term_k1&#39;]:.5e}  {result[&#39;source_rate&#39;]:.5e}  &quot;
+         f&quot;{result[&#39;source_size&#39;]:.5e} &quot;
+         f&quot;{result[&#39;source_fwhm&#39;]:.5e}  {result[&#39;background_power&#39;]:.5e}  &quot;
+         f&quot;{result[&#39;nep&#39;]:.5e}  &quot;
+         f&quot;{result[&#39;nefd&#39;]:.5e}  {result[&#39;mdcf&#39;]:.5e}  &quot;
+         f&quot;{result[&#39;npix_mean&#39;]:.5e}  {result[&#39;lambda_prime&#39;]:.5e}  &quot;
+         f&quot;{result[&#39;lamcorr&#39;]:.5e}  &quot;
+         f&quot;{os.path.basename(filter_name)}&quot;)
+    print(s)
+    outf.write(s + &#39;\n&#39;)</div>
+
+
+
+<div class="viewcode-block" id="plot_spectrum">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.calibration_io.plot_spectrum.html#sofia_redux.calibration.standard_model.calibration_io.plot_spectrum">[docs]</a>
+def plot_spectrum(model_wave, model_flux, power_law, blackbody,
+                  isophotal_weight, calibration_results, outfile=None):
+    &quot;&quot;&quot;
+    Generate a plot of the final spectrum.
+
+    Parameters
+    ----------
+    ws : numpy.array
+        Wavelength of spectrum.
+    fs : numpy.array
+        Flux at each wavelength in `ws`.
+    power_law : bool
+        If set, spectrum was generated from a power law.
+    blackbody : bool
+        If set, spectrumw as generated from an ideal blackbody.
+    lam_iso_wt : numpy.array
+        ISO weighted wavelength in each filter.
+    Nf : int
+        Number of filters.
+    outfile : str
+        Name of the output file, that the file the plots
+        is saved to is based on.
+
+    Returns
+    -------
+    None
+
+    &quot;&quot;&quot;
+    from matplotlib.backends.backend_agg \
+        import FigureCanvasAgg as FigureCanvas
+    from matplotlib.figure import Figure
+
+    print(&#39;\nPlotting isophotal wavelengths&#39;)
+    fig = Figure(figsize=(10, 10))
+    FigureCanvas(fig)
+    ax = fig.add_subplot(1, 1, 1)
+
+    fmin = np.min(model_flux)
+    fmax = np.max(model_flux)
+    f_mean = calibration_results[&#39;flux_mean&#39;]
+    isophotal_weight = calibration_results[&#39;isophotal_wt&#39;]
+    if power_law == 1 or blackbody == 1:
+        ax.plot(model_wave, model_flux)
+    else:
+        ax.step(model_wave, model_flux, where=&#39;mid&#39;)
+    ax.plot(isophotal_weight, f_mean, color=&#39;red&#39;, linestyle=&#39;--&#39;)
+    print(&#39;Lambda_iso      &lt;F_lambda&gt;      F_lambda(lambda_iso)&#39;)
+    for i in range(len(isophotal_weight)):
+        ax.scatter(isophotal_weight.iloc[i], f_mean.iloc[i],
+                   marker=&#39;d&#39;, color=&#39;k&#39;)
+        fiso = iso.interpol(model_flux, model_wave, isophotal_weight.iloc[i])
+        print(f&#39;{isophotal_weight[i]:.5e}\t{f_mean[i]:.5e}\t{fiso:.5e}&#39;)
+
+    ax.set_ylabel([fmin, fmax])
+    ax.set_yscale(&#39;log&#39;)
+    ax.set_xlabel(&#39;Wavelength (micron)&#39;)
+    ax.set_ylabel(&#39;Flux (W/m2/micron)&#39;)
+
+    if outfile is None:
+        plotname = &#39;spectrum.png&#39;
+    else:
+        plotname = &#39;.&#39;.join(outfile.split(&#39;.&#39;)[:-1]) + &#39;.png&#39;
+    fig.savefig(plotname, bbox_inches=&#39;tight&#39;, dpi=300)
+    print(f&#39;Plotting to {plotname}&#39;)</div>
+
+
+
+<div class="viewcode-block" id="unique_wavelengths">
+<a class="viewcode-back" href="../../../../api/sofia_redux.calibration.standard_model.calibration_io.unique_wavelengths.html#sofia_redux.calibration.standard_model.calibration_io.unique_wavelengths">[docs]</a>
+def unique_wavelengths(wavelengths, flux, wmin=40., wmax=300.):
+    &quot;&quot;&quot;
+    Select out a window of unique wavelengths.
+
+    Parameters
+    ----------
+    wavelengths : numpy.array
+        Full list of wavelengths in microns.
+    flux : numpy.array
+        Flux at each wavelength in `wavelengths`.
+    wmin : float, optional
+        Minimum wavelength to allow. Defaults to 40 microns.
+    wmax :float, optional
+        Maximum wavelength to allow. Defaults to 300 microns.
+
+    Returns
+    -------
+    ws : numpy.array
+        Unique values of `wavelengths` between `wmin` and `wmax`.
+    fs : numpy.array
+        Flux at each wavelength in `ws`.
+
+    &quot;&quot;&quot;
+
+    wsin, indicies = np.unique(wavelengths, return_index=True)
+    fsin = flux[indicies]
+    indx = (wsin &gt;= wmin) &amp; (wsin &lt;= wmax)
+    ws = wsin[indx]
+    fs = fsin[indx]
+    return ws, fs</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.mkapmask &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.mkapmask</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+from sofia_redux.toolkit.interpolate import tabinv
+
+__all__ = [&#39;mkapmask&#39;]
+
+
+<div class="viewcode-block" id="mkapmask">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.mkapmask.mkapmask.html#sofia_redux.spectroscopy.mkapmask.mkapmask">[docs]</a>
+def mkapmask(slit, wave, apertures, background=None):
+    &quot;&quot;&quot;
+    Constructs a 2D aperture mask.
+
+    First, the mask is set to zero for all values.  Then, the backgrounds
+    are set to NaN without regard to the apertures.
+
+    Then, for each aperture, the &#39;trace&#39; value +/- the &#39;psf_radius&#39; value
+    is set to the aperture number. The full PSF apertures are indexed to
+    apnum, inner aperture radii to -apnum.  PSF radius is required,
+    aperture radius is optional. It is assumed that the PSF radius is
+    larger than the aperture radius if present.
+
+    The edge pixels for the PSF aperture are set to reflect their fractional
+    pixel values.  To determine where the full aperture n is:
+
+        z = (abs(mask) &gt; n-1) &amp; (abs(mask) &lt;= n)
+
+    Inner aperture radii are set to whole pixels only.  To determine
+    the central region of the aperture n:
+
+        z = (mask == -1 * n)
+
+    Parameters
+    ----------
+    slit : array_like of float
+        (n_values,) 1D array of slit position values (e.g. pixels,
+        arcseconds).
+    wave : array_like of float
+        (n_values,) 1D array of wavelength coordinate values (e.g. um).
+    apertures : list of dict
+        Required keys and values for the dictionaries are:
+            trace : float
+            aperture_radius : float
+            psf_radius : float
+    apertures : list of dict
+        Required keys and values for the dictionaries are:
+            trace : float
+            aperture_radius : float
+            psf_radius : float
+    background : list of list, optional
+        Each element should be a [start, stop] pair of spatial
+        coordinates indicating a background region.
+
+    Returns
+    -------
+    numpy.ndarray
+        (ns, nw) array of int
+    &quot;&quot;&quot;
+    if not hasattr(slit, &#39;__len__&#39;):
+        slit = [slit]
+    slit = np.array(slit).astype(float)
+
+    # mask starts as zero -- unused pixels will remain zero
+    mask = np.zeros((slit.size, wave.size))
+
+    # set background to nan
+    if background is not None:
+        regions = np.round(tabinv(slit, background)).astype(int)
+        for region in regions:
+            if len(region) == 2:
+                mask[region[0]: region[1] + 1, :] = np.nan
+
+    for api, aperture in enumerate(apertures):
+        pos = aperture[&#39;trace&#39;]
+
+        # define PSF aperture
+        rad = aperture[&#39;psf_radius&#39;]
+        ap = np.array([pos - rad, pos + rad])
+
+        # this gets the effective index for aperture position
+        # in the slit array, clipping to 0 at the lower edge,
+        # and len(slit)-1 at the upper
+        apidxs = tabinv(slit, ap)
+
+        # define aperture radius, if available
+        if &#39;aperture_radius&#39; in aperture:
+            aprad = aperture[&#39;aperture_radius&#39;]
+            apradpos = np.array([pos - aprad, pos + aprad])
+            aprad_idxs = tabinv(slit, apradpos)
+        else:
+            aprad_idxs = None
+
+        for wavei, apidx in enumerate(apidxs.T):
+            # this takes the floor of the identified indices,
+            # so may include a fractional pixel on the lower edge,
+            # and will miss any fractional pixels on the upper edge
+            apint = apidx.astype(int)
+
+            # check for overlap with previous aperture:
+            # identified pixels must be either nan or 0
+            maxap = apint[1] + 2 if apint[1] &lt; len(slit) - 2 else len(slit)
+            test = mask[apint[0]:maxap, wavei]
+            if not np.all(np.isnan(test) | (test == 0)):
+                msg = &quot;The extraction apertures overlap. &quot; \
+                      &quot;Please lower the aperture radii.&quot;
+                log.error(msg)
+                raise ValueError(msg)
+
+            # set values to aperture number
+            mask[apint[0]:apint[1] + 1, wavei] = api + 1
+
+            # fix endpoints to reflect fractional pixels
+            # Note that this assumes aperture widths are greater than
+            # pixel widths.
+            dap = apidx - apint
+            if dap[0] &gt; 0:
+                # correct the first point to a fractional weight
+                # (weight for extraction is mask - api, so full
+                # pixels have weight 1)
+                mask[apint[0], wavei] = api + dap[0]
+
+            if dap[1] &gt; 0:
+                # add the next point up the slit to the aperture,
+                # with a fractional weight
+                mask[apint[1] + 1, wavei] = api + dap[1]
+
+            # define aperture radius, if available
+            if aprad_idxs is not None:
+                # for the central aperture region, use only whole pixels
+                apidx = aprad_idxs.T[wavei]
+                apint[0] = int(np.ceil(apidx[0]))
+                apint[1] = int(np.floor(apidx[1]))
+
+                # set value to -1 * aperture number
+                mask[apint[0]:apint[1] + 1, wavei] *= -1
+
+    return mask</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

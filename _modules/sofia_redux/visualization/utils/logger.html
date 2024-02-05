@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.visualization.utils.logger &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.visualization.utils.logger</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;This module defines a logging class based on the astropy logging module.&quot;&quot;&quot;
+
+import sys
+import logging
+from logging import Logger
+
+from astropy.utils import find_current_module
+
+try:
+    from PyQt5 import QtWidgets
+except ImportError:
+    HAS_PYQT5 = False
+    QtWidgets = None
+else:
+    HAS_PYQT5 = True
+
+__all__ = [&#39;log&#39;, &#39;EyeLogger&#39;, &#39;StreamLogger&#39;,
+           &#39;StatusLogger&#39;, &#39;DialogLogger&#39;]
+
+
+# Initialize by calling init_log()
+log = None
+
+
+def _init_log():
+    &quot;&quot;&quot;
+    Initializes the Eye log.
+
+    In most circumstances, this is called automatically when
+    importing sofia_redux.visualization.
+    &quot;&quot;&quot;
+    global log
+
+    orig_logger_cls = logging.getLoggerClass()
+    logging.setLoggerClass(EyeLogger)
+    try:
+        log = logging.getLogger(&#39;eye&#39;)
+        log._set_defaults()
+    finally:
+        logging.setLoggerClass(orig_logger_cls)
+
+    return log
+
+
+<div class="viewcode-block" id="EyeLogger">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.logger.EyeLogger.html#sofia_redux.visualization.utils.logger.EyeLogger">[docs]</a>
+class EyeLogger(Logger):
+    &quot;&quot;&quot;
+    Set up the Eye logging.
+
+    This class is based on the astropy logger, but keeping only the
+    record handling and some default setting functionality.
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="EyeLogger.makeRecord">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.logger.EyeLogger.html#sofia_redux.visualization.utils.logger.EyeLogger.makeRecord">[docs]</a>
+    def makeRecord(self, name, level, pathname, lineno, msg, args, exc_info,
+                   func=None, extra=None, sinfo=None):
+        if extra is None:
+            extra = {}
+        if &#39;origin&#39; not in extra:
+            current_module = find_current_module(1, finddiff=[True, &#39;logging&#39;])
+            if current_module is not None:
+                extra[&#39;origin&#39;] = current_module.__name__
+            else:
+                extra[&#39;origin&#39;] = &#39;unknown&#39;
+        return Logger.makeRecord(self, name, level, pathname, lineno, msg,
+                                 args, exc_info, func=func, extra=extra,
+                                 sinfo=sinfo)</div>
+
+
+    def _set_defaults(self):
+        &quot;&quot;&quot;Reset logger to its initial state.&quot;&quot;&quot;
+
+        # Remove all previous handlers
+        for handler in self.handlers[:]:
+            self.removeHandler(handler)
+
+        # Set levels
+        self.setLevel(&#39;DEBUG&#39;)
+
+        # Set up the stdout handler
+        sh = StreamLogger()
+        self.addHandler(sh)</div>
+
+
+
+<div class="viewcode-block" id="StreamLogger">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.logger.StreamLogger.html#sofia_redux.visualization.utils.logger.StreamLogger">[docs]</a>
+class StreamLogger(logging.StreamHandler):
+    &quot;&quot;&quot;
+    Log handler for logging messages to stdout or stderr streams.
+
+    A specialized StreamHandler that logs INFO and DEBUG messages to
+    stdout, and all other messages to stderr.  Also provides color
+    coding of the output.
+    &quot;&quot;&quot;
+
+<div class="viewcode-block" id="StreamLogger.emit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.logger.StreamLogger.html#sofia_redux.visualization.utils.logger.StreamLogger.emit">[docs]</a>
+    def emit(self, record):
+        &quot;&quot;&quot;
+        Emit log messages to terminal.
+
+        Parameters
+        ----------
+        record : `logging.LogRecord`
+           The log record, with an additional &#39;origin&#39; attribute
+           attached by `EyeLogger.makeRecord`.
+        &quot;&quot;&quot;
+        if record.levelno &lt;= logging.INFO:
+            stream = sys.stdout
+        else:
+            stream = sys.stderr
+
+        if record.levelno &lt; logging.DEBUG:
+            print(record.levelname, end=&#39;&#39;, file=stream)
+        else:
+            # Import utils.console only if necessary and at the latest because
+            # the import takes a significant time [#4649]
+            from astropy.utils.console import color_print
+            if record.levelno &lt; logging.INFO:
+                color_print(record.levelname, &#39;magenta&#39;, end=&#39;&#39;, file=stream)
+            elif record.levelno &lt; logging.WARN:
+                color_print(record.levelname, &#39;green&#39;, end=&#39;&#39;, file=stream)
+            elif record.levelno &lt; logging.ERROR:
+                color_print(record.levelname, &#39;brown&#39;, end=&#39;&#39;, file=stream)
+            else:
+                color_print(record.levelname, &#39;red&#39;, end=&#39;&#39;, file=stream)
+        record.message = f&quot;{record.msg} [{record.origin:s}]&quot;
+        print(&quot;: &quot; + record.message, file=stream)</div>
+</div>
+
+
+
+<div class="viewcode-block" id="StatusLogger">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.logger.StatusLogger.html#sofia_redux.visualization.utils.logger.StatusLogger">[docs]</a>
+class StatusLogger(logging.Handler):
+    def __init__(self, status_bar):
+        &quot;&quot;&quot;
+        Log handler for logging info messages to a status bar.
+
+        Parameters
+        ----------
+        status_bar : `PyQt5.QtWidgets.QStatusBar`
+           Status bar widget to display to.
+        &quot;&quot;&quot;
+
+        super().__init__()
+        self.status_bar = status_bar
+
+<div class="viewcode-block" id="StatusLogger.emit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.logger.StatusLogger.html#sofia_redux.visualization.utils.logger.StatusLogger.emit">[docs]</a>
+    def emit(self, record):
+        &quot;&quot;&quot;
+        Display an INFO message in the status bar.
+
+        Parameters
+        ----------
+        record : `logging.LogRecord`
+           The log record, with an additional &#39;origin&#39; attribute
+           attached.
+        &quot;&quot;&quot;
+        if record.levelno == logging.INFO:
+            msg = str(record.msg)
+            try:
+                self.status_bar.showMessage(msg, 5000)
+            except RuntimeError:  # pragma: no cover
+                # can happen in race conditions, if app is
+                # closed before log completes
+                pass</div>
+</div>
+
+
+
+<div class="viewcode-block" id="DialogLogger">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.logger.DialogLogger.html#sofia_redux.visualization.utils.logger.DialogLogger">[docs]</a>
+class DialogLogger(logging.Handler):
+    def __init__(self, parent):
+        &quot;&quot;&quot;
+        Log handler for logging error messages to a dialog box.
+
+        Parameters
+        ----------
+        parent : PyQt5.QtWidgets.QWidget
+        &quot;&quot;&quot;
+        super().__init__()
+        self.parent = parent
+
+<div class="viewcode-block" id="DialogLogger.emit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.utils.logger.DialogLogger.html#sofia_redux.visualization.utils.logger.DialogLogger.emit">[docs]</a>
+    def emit(self, record):
+        &quot;&quot;&quot;
+        Display a WARNING or ERROR message in a dialog box.
+
+        Parameters
+        ----------
+        record : `logging.LogRecord`
+           The log record, with an additional &#39;origin&#39; attribute
+           attached by `EyeLogger.makeRecord`.
+        &quot;&quot;&quot;
+        # no op if no pyqt
+        if not HAS_PYQT5:  # pragma: no cover
+            return
+
+        # don&#39;t show dialog box if parent isn&#39;t up yet
+        if not self.parent.isVisible():
+            return
+
+        msg = str(record.msg)
+        if record.levelno == logging.WARNING:
+            QtWidgets.QMessageBox.warning(self.parent, &#39;WARNING&#39;, msg)
+        elif record.levelno == logging.ERROR:
+            QtWidgets.QMessageBox.critical(self.parent, &#39;ERROR&#39;, msg)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

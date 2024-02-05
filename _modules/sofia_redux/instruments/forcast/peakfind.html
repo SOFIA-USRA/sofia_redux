@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.peakfind &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.peakfind</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from warnings import simplefilter, catch_warnings
+
+from astropy import log
+from astropy.convolution import Gaussian2DKernel, convolve_fft
+from astropy.modeling import models, fitting
+from astropy.stats import gaussian_fwhm_to_sigma
+from astropy.table import Table
+from astropy.utils.exceptions import AstropyWarning
+import numpy as np
+from pandas import DataFrame
+from photutils import DAOStarFinder
+from scipy.signal import correlate2d
+
+__all__ = [&#39;peakfind&#39;, &#39;PeakFinder&#39;]
+
+
+<div class="viewcode-block" id="PeakFinder">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.peakfind.PeakFinder.html#sofia_redux.instruments.forcast.peakfind.PeakFinder">[docs]</a>
+class PeakFinder(object):
+    &quot;&quot;&quot;Configure and run peak finding algorithm.&quot;&quot;&quot;
+    def __init__(self, image, reference=None,
+                 npeaks=4, fwhm=4.5,
+                 sharplo=0.2, sharphi=1.0,
+                 roundlo=-0.75, roundhi=0.75,
+                 silent=False, maxiter=1000,
+                 epsilon=5, eps=1e-7, ncut=30,
+                 chopnoddist=None, refine=True,
+                 positive=False, smooth=True):
+        self.image = image
+        self.reference = reference
+        self.npeaks = npeaks
+        self.fwhm = fwhm
+        self.gfit_image = None
+        self.gfit_reference = None
+        self.sharplo = sharplo
+        self.sharphi = sharphi
+        self.roundlo = roundlo
+        self.roundhi = roundhi
+        self.iteration = 0
+        self.maxiter = maxiter
+        self.epsilon = epsilon
+        self.eps = eps
+        self.ncut = ncut
+        self.positive = positive
+        self.smooth = smooth
+        self.refine = refine
+        self.silent = silent
+        self.image_table = Table()
+        self.reference_table = Table()
+        self.current = None
+        self.frame = DataFrame()
+        self.threshold = None
+        try:
+            self.chopdist = chopnoddist[0]
+            self.noddist = chopnoddist[1]
+        except TypeError:
+            self.chopdist = None
+            self.noddist = None
+
+    @property
+    def sigma(self):
+        return self.fwhm * gaussian_fwhm_to_sigma
+
+<div class="viewcode-block" id="PeakFinder.print">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.peakfind.PeakFinder.html#sofia_redux.instruments.forcast.peakfind.PeakFinder.print">[docs]</a>
+    def print(self, message):
+        if not self.silent:
+            log.info(message)</div>
+
+
+<div class="viewcode-block" id="PeakFinder.chopnod_sort">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.peakfind.PeakFinder.html#sofia_redux.instruments.forcast.peakfind.PeakFinder.chopnod_sort">[docs]</a>
+    def chopnod_sort(self, table):
+        &quot;&quot;&quot;
+        Select peaks that follow a particular pattern for merge
+
+        The table passed in will be cut in place.
+
+        Parameters
+        ----------
+        table : astropy.table.Table
+        &quot;&quot;&quot;
+        if not isinstance(table, Table):
+            return
+        elif None in [self.chopdist, self.noddist]:
+            return
+        elif &#39;xcentroid&#39; not in table.columns or \
+                &#39;ycentroid&#39; not in table.columns:
+            return
+        dist = np.sqrt((self.chopdist ** 2) + (self.noddist ** 2))
+        x0, y0 = table[&#39;xcentroid&#39;], table[&#39;ycentroid&#39;]
+        valid = [False] * len(table)
+        for idx, row in enumerate(table):
+            dx = x0 - row[&#39;xcentroid&#39;]
+            dy = y0 - row[&#39;ycentroid&#39;]
+            dr = np.sqrt((dx ** 2) + (dy ** 2))
+            dchop = abs(dr - self.chopdist)
+            dnod = abs(dr - self.noddist)
+            dchopnod = abs(dr - dist)
+            ok = (np.array([dchop, dnod, dchopnod]) &lt; self.epsilon)
+            if ok.astype(int).sum() &gt;= 2:
+                valid[idx] = True
+        table = table[valid]</div>
+
+
+<div class="viewcode-block" id="PeakFinder.search_peaks">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.peakfind.PeakFinder.html#sofia_redux.instruments.forcast.peakfind.PeakFinder.search_peaks">[docs]</a>
+    def search_peaks(self, image):
+        &quot;&quot;&quot;Initial search for peaks in the image
+
+        Parameters
+        ----------
+        image : numpy.ndarray
+
+        Returns
+        -------
+        astropy.table.Table
+        &quot;&quot;&quot;
+        table = Table()
+        if not isinstance(image, np.ndarray):
+            return table
+
+        search_image = image
+        if self.smooth:
+            with catch_warnings():
+                simplefilter(&#39;ignore&#39;)
+                search_image = convolve_fft(
+                    search_image, Gaussian2DKernel(self.sigma),
+                    normalize_kernel=True,
+                    preserve_nan=True)
+
+        # always replace NaNs with median level: DAOStarFinder
+        # won&#39;t find sources with NaN on top
+        nval = np.isnan(search_image)
+        search_image[nval] = np.median(search_image[~nval])
+
+        # always take absolute value for fitting purposes
+        search_image = abs(search_image)
+
+        threshold = np.array([np.nanmin(search_image),
+                              np.nanmax(search_image)])
+        threshold *= [0.9, 1.1]
+        if threshold[0] &lt; 0:  # pragma: no cover
+            threshold[0] = 0.
+
+        self.iteration = 0
+        while self.iteration &lt; self.maxiter:
+            self.iteration += 1
+            with catch_warnings():
+                simplefilter(&#39;ignore&#39;, AstropyWarning)
+                self.threshold = threshold.mean()
+                finder = DAOStarFinder(
+                    self.threshold, self.fwhm,
+                    sharplo=self.sharplo, sharphi=self.sharphi,
+                    roundlo=self.roundlo, roundhi=self.roundhi)
+                table = finder.find_stars(search_image)
+            self.chopnod_sort(table)
+
+            if self.refine and self.positive:
+                self.refine_table(image, table)
+            if not table:
+                nfound = 0
+            else:
+                nfound = len(table)
+
+            if abs(threshold[0] - threshold[1]) &lt; self.eps and (
+                    nfound != self.npeaks):
+                self.print(&#39;Min/max interval is null, breaking loop at &#39;
+                           &#39;iteration #%s&#39; % self.iteration)
+                return table
+            elif nfound &lt; self.npeaks:
+                threshold[1] = self.threshold
+            elif nfound &gt; self.npeaks:
+                threshold[0] = self.threshold
+            else:
+                return table
+        else:
+            return table</div>
+
+
+<div class="viewcode-block" id="PeakFinder.refine_table">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.peakfind.PeakFinder.html#sofia_redux.instruments.forcast.peakfind.PeakFinder.refine_table">[docs]</a>
+    def refine_table(self, image, table):
+        &quot;&quot;&quot;
+        Refine table contents with a fit on the image
+
+        The table is modified in place.
+
+        Parameters
+        ----------
+        image : np.ndarray
+        table : astropy.table.Table
+        &quot;&quot;&quot;
+        if table is None or len(table) == 0 or \
+                not isinstance(image, np.ndarray):
+            return
+
+        x0, y0 = np.mgrid[-self.ncut:self.ncut, -self.ncut:self.ncut]
+        model_g = models.Gaussian2D(
+            1.0, self.ncut, self.ncut,
+            x_stddev=self.sigma, y_stddev=self.sigma)
+        psf = np.zeros(x0.shape)
+        psf = model_g.render(psf)
+
+        ymax = image.shape[0] - self.ncut
+        xmax = image.shape[1] - self.ncut
+
+        remove_rows = []
+        for idx, row in enumerate(table):
+            x, y = row[&#39;xcentroid&#39;], row[&#39;ycentroid&#39;]
+            if (self.ncut &lt; x &lt; xmax) and (self.ncut &lt; y &lt; ymax):
+                bxmin = int(np.floor(x - self.ncut))
+                bxmax = int(np.ceil(x + self.ncut))
+                bymin = int(np.floor(y - self.ncut))
+                bymax = int(np.ceil(y + self.ncut))
+                box = image[bymin:bymax, bxmin:bxmax].copy()
+                g_init = models.Gaussian2D(row[&#39;flux&#39;], x, y,
+                                           x_stddev=self.sigma,
+                                           y_stddev=self.sigma)
+
+                flip = np.nanmean(correlate2d(box, psf)) &lt; 0
+                box *= -1 if flip else 1
+
+                fitter = fitting.LevMarLSQFitter()
+                by, bx = np.mgrid[bymin:bymax, bxmin:bxmax]
+                nn = ~np.isnan(box)
+                g = fitter(g_init, bx[nn], by[nn], box[nn])
+
+                # catch fit failures - just skip refinement in this case
+                try:
+                    failure = (g.fit_info[&#39;ierr&#39;] not in [1, 2, 3, 4])
+                except (AttributeError, KeyError):  # pragma: no cover
+                    failure = False
+                bad = not np.all(
+                    np.isfinite([g.x_mean.value, g.y_mean.value,
+                                 g.amplitude.value]))
+                if failure or bad:  # pragma: no cover
+                    # ignore bad fits
+                    continue
+
+                if flip:
+                    g.amplitude *= -1
+
+                row[&#39;xcentroid&#39;] = g.x_mean.value
+                row[&#39;ycentroid&#39;] = g.y_mean.value
+                row[&#39;flux&#39;] = g.amplitude.value
+
+                if self.positive:
+                    if row[&#39;flux&#39;] &lt; 0 or row[&#39;peak&#39;] &lt; 0:
+                        remove_rows.append(idx)
+
+        for idx in sorted(remove_rows, reverse=True):
+            table.remove_row(idx)</div>
+
+
+<div class="viewcode-block" id="PeakFinder.findpeaks">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.peakfind.PeakFinder.html#sofia_redux.instruments.forcast.peakfind.PeakFinder.findpeaks">[docs]</a>
+    def findpeaks(self):
+        columns = [&#39;id&#39;, &#39;xcentroid&#39;, &#39;ycentroid&#39;, &#39;sharpness&#39;,
+                   &#39;roundness1&#39;, &#39;roundness2&#39;, &#39;npix&#39;, &#39;sky&#39;,
+                   &#39;peak&#39;, &#39;flux&#39;, &#39;mag&#39;]
+        self.frame = DataFrame(index=range(self.npeaks), columns=columns)
+        self.frame[&#39;id&#39;] = self.frame[&#39;id&#39;].fillna(-1)
+        self.frame = self.frame.fillna(np.nan)
+
+        tables = []
+        for attr in [&#39;reference&#39;, &#39;image&#39;]:
+            image = getattr(self, attr)
+            table_name = attr + &#39;_table&#39;
+            table = Table()
+            setattr(self, table_name, table)
+            if not isinstance(image, np.ndarray) or (np.isnan(image)).all():
+                continue
+            table = self.search_peaks(image)
+
+            if not isinstance(table, Table) or len(table) == 0:
+                self.print(&quot;Could not create %s table&quot; % attr)
+                return
+
+            if self.refine and not self.positive:
+                self.refine_table(image, table)
+
+            tables.append(table)
+
+            self.print(&#39;Number of loops run: %s/%s&#39; %
+                       (self.iteration, self.maxiter))
+            self.print(&#39;Peaks found: %s/%s&#39; % (len(table), self.npeaks))
+            self.print(&quot;Threshold used: %s&quot; % self.threshold)
+
+        if len(tables) == 0:
+            log.error(&quot;No peaks could be found&quot;)
+            return
+
+        if len(tables) == 2:
+            if len(tables[0]) != len(tables[1]):  # pragma: no cover
+                # edge case of peak finding failure
+                log.error(&quot;Matching peaks could not be found&quot;)
+                return
+            dtable = tables[1].copy()
+            dtable[&#39;xcentroid&#39;] -= tables[0][&#39;xcentroid&#39;]
+            dtable[&#39;ycentroid&#39;] -= tables[0][&#39;ycentroid&#39;]
+        else:
+            dtable = tables[0].copy()
+
+        self.frame.update(dtable.to_pandas())
+        fluxcol = &#39;fit_amplitude&#39; if self.refine else &#39;flux&#39;
+        self.frame = self.frame.rename(columns={
+            &#39;xcentroid&#39;: &#39;x&#39;, &#39;ycentroid&#39;: &#39;y&#39;, &#39;flux&#39;: fluxcol})
+        cols = [&#39;x&#39;, &#39;y&#39;, &#39;sharpness&#39;, &#39;roundness2&#39;,
+                &#39;peak&#39;, fluxcol]
+        self.print(&#39;\n&#39; + self.frame[cols].to_string(
+            header=[c.upper() for c in cols]))</div>
+</div>
+
+
+
+<div class="viewcode-block" id="peakfind">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.peakfind.peakfind.html#sofia_redux.instruments.forcast.peakfind.peakfind">[docs]</a>
+def peakfind(coadded, newimage=None,
+             refine=True, npeaks=4, fwhm=4.5,
+             sharplo=0.2, sharphi=1.0,
+             roundlo=-0.75, roundhi=0.75,
+             silent=False, maxiter=1000,
+             epsilon=5, eps=1e-7, ncut=30,
+             chopnoddist=None,
+             positive=False,
+             smooth=True,
+             return_object=False,
+             coordinates=False):
+    &quot;&quot;&quot;
+    Find peaks (stars) in FORCAST images
+
+    Identifies the desired number of peaks in the image using the DAO
+    search algorithm followed by optional (default=True) Levenberg-
+    Marquardt least squares fitting of a gaussian psf to refine the
+    fit.
+
+    Parameters
+    ----------
+    coadded : numpy.ndarray
+        Reference image to find peak positions
+    newimage : numpy.ndarray, optional
+        Secondary image to compare to coadded.  If provided, the return
+        value will be the shifts required to move the sources in newimage
+        onto the sources in coadded.  If not provided, the return value
+        is the positions of the peaks in coadded
+    refine : bool, optional
+        If set, the x, y coordinates are fine tuned by fitting a
+        Gaussian to the profile of each found center
+    npeaks : int, optional
+        Number of peaks to find; usually determined from the chop/nod
+        mode
+    fwhm : float, optional
+        Expected FWHM in pixels
+    roundlo : float, optional
+        The lower bound on roundness for object detection
+    roundhi : float, optional
+        The upper bound on roundness for object detection
+    sharplo : float, optional
+        The lower bound on sharpness for object detection
+    sharphi : float, optional
+        The upper bound on sharpness for object detection
+    silent : bool, optional
+        If set, output will be suppressed
+    maxiter : int, optional
+        Maximum number of iterations for iteratefind
+    epsilon : int or float, optional
+        Maximum nod/chop deviation for exclusion in chopnod_sort
+    eps : float, optional
+        Precision to terminate iteration
+    ncut : int, optional
+        Positive integer cutout region used for Gaussian fitting
+        (pixels)
+    chopnoddist : (list or tuple) of float, optional
+        If provided, will be used to identify the expected positions of the
+        peaks and prioritize those that are nearest to where they should be.
+        Format is [chop distance, nod distance]
+    positive : bool, optional
+        If set, only positive peaks will be returned.
+    smooth : bool, optional
+        If True, the data will be smoothed before searching for peaks.
+    return_object : bool, optional
+        If set, return the PeakFinder object rather than the DataFrame
+    coordinates : bool, optional
+        If set, return tuples of (x, y) coordinates as a list
+
+    Returns
+    -------
+    pandas.DataFrame or PeakFinder or list
+        The default DataFrame represents either shift_image distances to
+        move newimage on top of coadded, or positions of the peaks
+        in coadded if newimage was not supplied as an input parameter.
+        The PeakFinder object contains lots of useful little attributes
+        such as the fits, tables and models of coadded and newimage.
+
+        If coordinates=True, a list of (x, y) coordinates will be
+        returned.
+    &quot;&quot;&quot;
+
+    # If newimage is input then we calculate the peaks for that image.
+    # If not, we set x and y to 0.  If newimage is input then we will
+    # return the shift_image, otherwise we return the peak positions.
+    findpeak = PeakFinder(coadded, reference=newimage,
+                          npeaks=npeaks, fwhm=fwhm,
+                          sharplo=sharplo, sharphi=sharphi,
+                          roundlo=roundlo, roundhi=roundhi,
+                          silent=silent, maxiter=maxiter,
+                          epsilon=epsilon, eps=eps, ncut=ncut,
+                          chopnoddist=chopnoddist, refine=refine,
+                          positive=positive, smooth=smooth)
+    findpeak.findpeaks()
+    if return_object:
+        return findpeak
+    else:
+        if coordinates:
+            if isinstance(findpeak.frame, DataFrame):
+                result = []
+                if &#39;x&#39; not in findpeak.frame:
+                    return result
+                for _, row in findpeak.frame.iterrows():
+                    result.append((row[&#39;x&#39;], row[&#39;y&#39;]))
+                return result
+        else:
+            return findpeak.frame</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

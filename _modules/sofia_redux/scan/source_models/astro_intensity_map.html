@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.source_models.astro_intensity_map &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.source_models.astro_intensity_map</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log, units
+import numpy as np
+
+from sofia_redux.scan.source_models.astro_data_2d import AstroData2D
+from sofia_redux.scan.source_models.maps.image_2d import Image2D
+from sofia_redux.scan.source_models.maps.observation_2d import Observation2D
+from sofia_redux.scan.utilities.range import Range
+from sofia_redux.scan.source_models.beams.elliptical_source import (
+    EllipticalSource)
+from sofia_redux.scan.source_models import source_numba_functions as snf
+from sofia_redux.scan.coordinate_systems.index_2d import Index2D
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.projector.astro_projector import \
+    AstroProjector
+from sofia_redux.scan.coordinate_systems.grid.spherical_grid import \
+    SphericalGrid
+
+__all__ = [&#39;AstroIntensityMap&#39;]
+
+
+<div class="viewcode-block" id="AstroIntensityMap">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap">[docs]</a>
+class AstroIntensityMap(AstroData2D):
+
+    default_map_class = Observation2D
+    default_image_class = Image2D
+
+    def __init__(self, info, reduction=None):
+        &quot;&quot;&quot;
+        Initialize an astronomical intensity map.
+
+        The astronomical intensity map represents the source as an
+        :class:`Observation2D` map containing data, noise, and exposure values.
+        It also contains a base image containing the results of the previous
+        reduction iteration in order to calculate gain and coupling increments.
+
+        Parameters
+        ----------
+        info : sofia_redux.scan.info.info.Info
+            The Info object which should belong to this source model.
+        reduction : sofia_redux.scan.reduction.reduction.Reduction, optional
+            The reduction for which this source model should be applied.
+        &quot;&quot;&quot;
+        self.map = self.default_map_class()
+        self.base = None  # referenced, not copied
+        super().__init__(info, reduction=reduction)
+        self.create_map()
+
+<div class="viewcode-block" id="AstroIntensityMap.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.copy">[docs]</a>
+    def copy(self, with_contents=True):
+        &quot;&quot;&quot;
+        Return a copy of the source model.
+
+        Parameters
+        ----------
+        with_contents : bool, optional
+            If `True`, return a true copy of the map.  Otherwise, just return
+            a map with basic metadata.
+
+        Returns
+        -------
+        AstroIntensityMap
+        &quot;&quot;&quot;
+        new = super().copy(with_contents=with_contents)
+        if self.grid is not None and isinstance(new, AstroIntensityMap):
+            new.map.set_grid(self.grid)
+        return new</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.clear_all_memory">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.clear_all_memory">[docs]</a>
+    def clear_all_memory(self):
+        &quot;&quot;&quot;
+        Clear all memory references prior to deletion.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().clear_all_memory()
+        self.map = None
+        self.base = None</div>
+
+
+    @property
+    def referenced_attributes(self):
+        &quot;&quot;&quot;
+        Return attributes that should be referenced during a copy.
+
+        Returns
+        -------
+        set (str)
+        &quot;&quot;&quot;
+        attributes = super().referenced_attributes
+        attributes.add(&#39;base&#39;)
+        return attributes
+
+    @property
+    def flagspace(self):
+        &quot;&quot;&quot;
+        Return the flagspace associated with the underlying map observation.
+
+        Returns
+        -------
+        sofia_redux.scan.flags.flags.Flag
+        &quot;&quot;&quot;
+        if self.map is None:
+            return super().flagspace
+        return self.map.flagspace
+
+    @property
+    def shape(self):
+        &quot;&quot;&quot;
+        Return the shape of the map.
+
+        Note that this is in numpy (y, x) order.
+
+        Returns
+        -------
+        tuple of int
+        &quot;&quot;&quot;
+        if self.map is None:
+            return ()
+        return self.map.shape
+
+    @shape.setter
+    def shape(self, new_shape):
+        &quot;&quot;&quot;
+        Set the shape of the map.
+
+        Parameters
+        ----------
+        new_shape : tuple of int
+            The shape should be supplied in numpy format (y, x).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.map is None:
+            return
+        self.map.shape = new_shape
+
+<div class="viewcode-block" id="AstroIntensityMap.set_info">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.set_info">[docs]</a>
+    def set_info(self, info):
+        &quot;&quot;&quot;
+        Set the Info object for the source model.
+
+        This sets the provided `info` as the primary Info object containing
+        the configuration and reduction information for the source model.
+        The source model will also take ownership of the `info` and set
+        various parameters from the contents.
+
+        Parameters
+        ----------
+        info : sofia_redux.info.info.Info
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_info(info)
+        if self.map is not None and self.info is not None:
+            self.map.fits_properties.set_instrument_name(
+                self.info.instrument.name)
+            self.map.fits_properties.set_telescope_name(
+                self.info.telescope.telescope)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.get_jansky_unit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.get_jansky_unit">[docs]</a>
+    def get_jansky_unit(self):
+        &quot;&quot;&quot;
+        Return the Jansky&#39;s per unit area.
+
+        Returns
+        -------
+        janskys : units.Quantity
+        &quot;&quot;&quot;
+        beam = self.map.underlying_beam
+        if beam is None:
+            beam_area = 0 * units.Unit(&#39;radian2&#39;)
+        else:
+            beam_area = beam.area
+
+        beam_factor = beam_area.to(&#39;radian2&#39;).value * units.Unit(&#39;beam&#39;)
+        jy_per_beam = self.info.instrument.jansky_per_beam()
+        jy = (beam_factor * jy_per_beam).to(&#39;Jy&#39;)
+        # - Old method (wrong units)
+        # jy = units.Unit(&#39;Jy&#39;)
+        # return beam_area * self.info.instrument.jansky_per_beam() * jy
+        return jy</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.add_model_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.add_model_data">[docs]</a>
+    def add_model_data(self, source_model, weight=1.0):
+        &quot;&quot;&quot;
+        Add an increment source model data onto the current model.
+
+        Parameters
+        ----------
+        source_model : AstroIntensityMap
+            The source model increment.
+        weight : float, optional
+            The weight of the source model increment.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.map.accumulate(source_model.map, weight=weight)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.merge_accumulate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.merge_accumulate">[docs]</a>
+    def merge_accumulate(self, other):
+        &quot;&quot;&quot;
+        Merge another source with this one.
+
+        Parameters
+        ----------
+        other : AstroIntensityMap
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.map.merge_accumulate(other.map)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.stand_alone">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.stand_alone">[docs]</a>
+    def stand_alone(self):
+        &quot;&quot;&quot;
+        Create a stand alone base image.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.base = self.default_image_class(
+            x_size=self.size_x, y_size=self.size_y, dtype=float)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.create_map">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.create_map">[docs]</a>
+    def create_map(self):
+        &quot;&quot;&quot;
+        Create the source model map.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.map = self.default_map_class()
+        self.map.set_grid(self.grid)
+        self.map.set_validating_flags(~self.mask_flag)
+        self.map.add_local_unit(self.get_native_unit())
+        self.map.set_display_grid_unit(self.info.instrument.get_size_unit())
+        self.map.fits_properties.set_instrument_name(
+            self.info.instrument.name)
+        self.map.fits_properties.set_copyright(
+            self.map.fits_properties.default_copyright)
+        if self.reduction is not None:
+            self.map.set_parallel(self.reduction.max_jobs)
+            self.map.fits_properties.set_creator_name(
+                self.reduction.__class__.__name__)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.create_from">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.create_from">[docs]</a>
+    def create_from(self, scans, assign_scans=True):
+        &quot;&quot;&quot;
+        Initialize model from scans.
+
+        Sets the model scans to those provided, and the source model for each
+        scan as this.  All integration gains are normalized to the first scan.
+        If the first scan is non-sidereal, the system will be forced to an
+        equatorial frame.
+
+        Parameters
+        ----------
+        scans : list (Scan)
+            A list of scans from which to create the model.
+        assign_scans : bool, optional
+            If `True`, assign the scans to this source model.  Otherwise,
+            there will be no hard link between the scans and source model.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.create_map()
+        super().create_from(scans, assign_scans=assign_scans)
+        self.map.fits_properties.set_object_name(
+            self.get_first_scan().source_name)
+        self.map.set_underlying_beam(self.get_average_resolution())
+        self.map.add_local_unit(self.get_kelvin_unit())
+        self.map.add_local_unit(self.get_jansky_unit())
+        log.info(&quot;\n&quot;.join(self.map.get_info()))
+        self.base = self.default_image_class(
+            data=np.zeros(self.map.shape, dtype=float))</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.post_process_scan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.post_process_scan">[docs]</a>
+    def post_process_scan(self, scan):
+        &quot;&quot;&quot;
+        Perform post-processing steps on a scan.
+
+        At this stage, the map should have already been added to the main
+        reduction map and we are left with a throw-away map that can be used
+        to update settings in other objects.  The intensity map may be used to
+        update the pointing for a given scan.
+
+        Parameters
+        ----------
+        scan : Scan
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().post_process_scan(scan)
+        if self.is_empty():
+            return
+
+        if self.configuration.get_bool(&#39;pointing.suggest&#39;):
+            optimal = self.configuration.get_float(&#39;smooth.optimal&#39;)
+            if np.isnan(optimal):
+                optimal = scan.info.instrument.get_point_size()
+            else:
+                optimal = optimal * self.info.instrument.get_size_unit()
+            self.map.smooth_to(optimal)
+
+        if self.has_option(&#39;pointing.exposureclip&#39;):
+            exposure = self.map.get_exposures()
+            limit = self.configuration.get_float(
+                &#39;pointing.exposureclip&#39;) * exposure.select(0.9)
+            valid_range = Range(min_val=limit)
+            exposure.restrict_range(valid_range)
+
+        # Robust weight before restricting to potentially tiny search area
+        self.map.reweight(robust=True)
+
+        if self.has_option(&#39;pointing.radius&#39;):
+            # In case pointing.radius is None, use default of infinity
+            radius = self.configuration.get_float(
+                &#39;pointing.radius&#39;, default=np.inf) * units.Unit(&#39;arcsec&#39;)
+            if np.isfinite(radius):
+                iy, ix = np.indices(self.map.shape)
+                map_indices = Coordinate2D([ix, iy])
+                distance = self.map.grid.index_to_offset(map_indices).length
+                self.map.discard(distance &gt; radius)
+
+        spline_degree = self.configuration.get_int(&#39;pointing.degree&#39;,
+                                                   default=3)
+        reduce_degrees = self.configuration.get_bool(&#39;pointing.reduce_degrees&#39;)
+        # Sets a GaussianSource or None
+        scan.pointing = self.get_peak_source(degree=spline_degree,
+                                             reduce_degrees=reduce_degrees)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.get_peak_index">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.get_peak_index">[docs]</a>
+    def get_peak_index(self):
+        &quot;&quot;&quot;
+        Return the peak index.
+
+        Returns
+        -------
+        index : Index2D
+            The peak (x, y) coordinate.
+        &quot;&quot;&quot;
+        sign = self.configuration.get_sign(&#39;source.sign&#39;)
+        s2n = self.get_significance()
+
+        if sign &gt; 0:
+            y, x = np.unravel_index(np.nanargmax(s2n.data), s2n.shape)
+        elif sign &lt; 0:
+            y, x = np.unravel_index(np.nanargmin(s2n.data), s2n.shape)
+        else:
+            y, x = np.unravel_index(np.nanargmax(np.abs(s2n.data)), s2n.shape)
+        return Index2D([x, y])</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.get_peak_coords">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.get_peak_coords">[docs]</a>
+    def get_peak_coords(self):
+        &quot;&quot;&quot;
+        Return the coordinates of the peak value.
+
+        Returns
+        -------
+        peak_coordinates : Coordinate2D
+            The (x, y) peak coordinate.
+        &quot;&quot;&quot;
+        projector = AstroProjector(self.projection)
+        self.grid.get_offset(self.get_peak_index(), offset=projector.offset)
+        projector.deproject()
+        return projector.coordinates</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.get_peak_source">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.get_peak_source">[docs]</a>
+    def get_peak_source(self, degree=3, reduce_degrees=False):
+        &quot;&quot;&quot;
+        Return the peak source model.
+
+        Parameters
+        ----------
+        degree : int, optional
+            The spline degree used to fit the peak map value.
+        reduce_degrees : bool, optional
+            If `True`, allow the spline fit to reduce the number of degrees
+            in cases where there are not enough points available to perform
+            the spline fit of `degree`.  If `False`, a ValueError will be
+            raised if such a fit fails.
+
+        Returns
+        -------
+        GaussianSource
+        &quot;&quot;&quot;
+        self.map.level(robust=True)
+        beam = self.map.get_image_beam()
+        peak_source = EllipticalSource(gaussian_model=beam)
+        peak_source.set_positioning_method(
+            self.configuration.get_string(
+                &#39;pointing.method&#39;, default=&#39;centroid&#39;))
+        peak_source.position = self.get_peak_coords()
+
+        if self.configuration.get_bool(&#39;pointing.lsq&#39;):
+            log.debug(&quot;Fitting peak source using LSQ method.&quot;)
+            try:
+                peak_source.fit_map_least_squares(
+                    self.map, degree=degree, reduce_degrees=reduce_degrees)
+            except Exception as err:
+                log.warning(f&quot;Could not fit using LSQ method: {err}&quot;)
+                log.warning(&quot;Attempting standard fitting...&quot;)
+                try:
+                    peak_source.fit_map(self.map, degree=degree,
+                                        reduce_degrees=reduce_degrees)
+                except Exception as err:
+                    log.warning(f&quot;Could not fit peak: {err}&quot;)
+                    return None
+        else:
+            try:
+                peak_source.fit_map(self.map, degree=degree,
+                                    reduce_degrees=reduce_degrees)
+            except Exception as err:
+                log.warning(f&quot;Could not fit peak: {err}&quot;)
+                return None
+
+        peak_source.deconvolve_with(self.map.smoothing_beam)
+        critical_s2n = self.configuration.get_float(
+            &#39;pointing.significance&#39;, default=5.0)
+
+        if peak_source.peak_significance &lt; critical_s2n:
+            return None
+        else:
+            return peak_source</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.update_mask">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.update_mask">[docs]</a>
+    def update_mask(self, blanking_level=None, min_neighbors=2):
+        &quot;&quot;&quot;
+        Update the map mask based on significance levels and valid neighbors.
+
+        If a blanking level is supplied, significance values above or equal to
+        the blanking level will be masked.
+
+        Parameters
+        ----------
+        blanking_level : float, optional
+            The significance level used to mark the map.  If not supplied,
+            significance is irrelevant.  See above for more details.
+        min_neighbors : int, optional
+            The minimum number of neighbors including the pixel itself.
+            Therefore, the default of 2 excludes single pixels as this would
+            require a single valid pixel and one valid neighbor.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if blanking_level is None or np.isnan(blanking_level):
+            blanking_range = np.array([-np.inf, np.inf])
+            check_blanking = False
+        else:
+            blanking_range = np.array([-blanking_level, blanking_level],
+                                      dtype=float)
+            sign = self.configuration.get_sign(self.source_option(&#39;sign&#39;))
+            check_blanking = True
+            if sign &lt; 0:
+                blanking_range[1] = np.inf
+            elif sign &gt; 0:
+                blanking_range[0] = -np.inf
+
+        neighbors = self.map.get_neighbors()
+        mask = neighbors &gt;= min_neighbors  # neighbors includes center pix
+        mask &amp;= self.map.valid
+
+        if check_blanking:
+            significance = self.map.significance_values()
+            blank = significance &lt; blanking_range[0]
+            blank |= significance &gt;= blanking_range[1]
+            mask &amp;= blank
+
+        self.map.set_flags(self.mask_flag, mask)
+        self.map.unflag(self.mask_flag, ~mask)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.merge_mask">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.merge_mask">[docs]</a>
+    def merge_mask(self, other_map):
+        &quot;&quot;&quot;
+        Merge the mask from another map onto this one.
+
+        Parameters
+        ----------
+        other_map : FlaggedArray
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        other_mask_flag = other_map.flagspace.convert_flag(self.FLAG_MASK)
+        self.map.set_flags(
+            self.mask_flag, indices=other_map.is_flagged(other_mask_flag))</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.is_masked">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.is_masked">[docs]</a>
+    def is_masked(self):
+        &quot;&quot;&quot;
+        Return the map mask.
+
+        Returns
+        -------
+        numpy.ndarray (bool)
+        &quot;&quot;&quot;
+        return self.map.is_flagged(self.mask_flag)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.add_points">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.add_points">[docs]</a>
+    def add_points(self, frames, pixels, frame_gains, source_gains):
+        &quot;&quot;&quot;
+        Add points to the source model.
+
+        Accumulates the combined frame and channel data to the source map
+        for each frame/channel sample.  If a given sample maps to a single map
+        pixel, that pixel is incremented by::
+
+            i = frame_data * weights * gains
+            w = weights * gains^2
+            weights = frame_weight / channel_variance
+            gains = frame_gain * channel_gain
+
+        where i is the weighted data increment, and w is the weight increment.
+        The exposure values are also added to by simply incrementing the time
+        at any pixel by the sampling interval multiplied by the number of
+        samples falling within that pixel.
+
+        Parameters
+        ----------
+        frames : Frames
+            The frames to add to the source model.
+        pixels : ChannelGroup
+            The channels (pixels) to add to the source model.
+        frame_gains : numpy.ndarray (float)
+            The gain values for all frames of shape (n_frames,).
+        source_gains : numpy.ndarray (float)
+            The channel source gains for all channels of shape (all_channels,).
+
+        Returns
+        -------
+        mapping_frames : int
+            The number of valid mapping frames added for the model.
+        &quot;&quot;&quot;
+        dt = pixels.info.instrument.sampling_interval
+        if isinstance(dt, units.Quantity):
+            dt = dt.to(&#39;second&#39;).value
+        else:
+            dt = float(dt)
+
+        n, frame_data, sample_gains, sample_weights, sample_indices = (
+            self.get_sample_points(frames, pixels, frame_gains, source_gains))
+
+        self.map.accumulate_at(image=frame_data,
+                               gains=sample_gains,
+                               weights=sample_weights,
+                               times=dt,
+                               indices=sample_indices)
+        return n</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.mask_samples">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.mask_samples">[docs]</a>
+    def mask_samples(self, flag=&#39;SAMPLE_SKIP&#39;):
+        &quot;&quot;&quot;
+        Propagate masked source samples to integration sample flags.
+
+        Flags the integration samples using the given flag if they correspond
+        to a masked source sample.
+
+        Parameters
+        ----------
+        flag : str or int or Enum, optional
+           The name, integer identifier, or actual flag by which to mask
+           samples.  By default, any integration samples that correspond to
+           masked source samples will be flagged as &#39;SAMPLE_SKIP&#39;.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.scans is None:
+            return
+        for scan in self.scans:
+            if scan.integrations is None:
+                continue
+            for integration in scan.integrations:
+                self.mask_integration_samples(integration, flag)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.mask_integration_samples">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.mask_integration_samples">[docs]</a>
+    def mask_integration_samples(self, integration, flag=&#39;SAMPLE_SKIP&#39;):
+        &quot;&quot;&quot;
+        Set the sample flag in an integration for masked map elements.
+
+        Parameters
+        ----------
+        integration : Integration
+        flag : str or int or Enum, optional
+            The name, integer identifier, or actual flag by which to flag
+            samples.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        masked = self.is_masked()
+        if not masked.any():
+            return
+
+        pixels = integration.channels.get_mapping_pixels()
+        flag_value = integration.frames.flagspace.convert_flag(flag).value
+
+        if integration.frames.map_index is None or np.allclose(
+                integration.frames.map_index.x, -1):
+            self.create_lookup(integration)
+
+        xi, yi = integration.frames.map_index.coordinates[..., pixels.indices]
+        masked_samples = masked[yi, xi]
+        if not masked_samples.any():
+            return
+
+        sample_flags = integration.frames.sample_flag[..., pixels.indices]
+        sample_flags[masked_samples] |= flag_value
+        integration.frames.sample_flag[..., pixels.indices] = sample_flags</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.add_frames_from_integration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.add_frames_from_integration">[docs]</a>
+    def add_frames_from_integration(self, integration, pixels, source_gains,
+                                    signal_mode=None):
+        &quot;&quot;&quot;
+        Add frames from an integration to the source model.
+
+        Parameters
+        ----------
+        integration : Integration
+            The integration to add.
+        pixels : ChannelGroup
+            The channels (pixels) to add to the source model.
+        source_gains : numpy.ndarray (float)
+            The source gains for the all channels (pixels).  Should be of
+            shape (all_channels,).
+        signal_mode : FrameFlagTypes, optional
+            The signal mode flag, indicating which signal should be used to
+            extract the frame source gains.  Typically, TOTAL_POWER.
+
+        Returns
+        -------
+        mapping_frames : int
+            The number of frames that contributed towards mapping.
+        &quot;&quot;&quot;
+        good_frames = super().add_frames_from_integration(
+            integration=integration, pixels=pixels, source_gains=source_gains,
+            signal_mode=signal_mode)
+        self.add_integration_time(
+            good_frames * integration.info.instrument.sampling_interval)
+        return good_frames</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.sync_source_gains">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.sync_source_gains">[docs]</a>
+    def sync_source_gains(self, frames, pixels, frame_gains, source_gains,
+                          sync_gains):
+        &quot;&quot;&quot;
+        Remove the map source from frame data.
+
+        In addition to source removal, samples are also flagged if the map
+        is masked at that location.
+
+        For a given sample at frame i and channel j, frame data d_{i,j} will be
+        decremented by dg where:
+
+        dg = fg * ( (gain(source) * map[index]) - (gain(sync) * base[index]) )
+
+        Here, fg is the frame gain and index is the index on the map of sample
+        (i,j).
+
+        Any masked map value will result in matching samples being flagged.
+
+        Parameters
+        ----------
+        frames : Frames
+            The frames for which to remove the source gains.
+        pixels : Channels or ChannelGroup
+            The channels for which to remove the source gains.
+        frame_gains : numpy.ndarray (float)
+            An array of frame gains of shape (n_frames,).
+        source_gains : numpy.ndarray (float)
+            An array of channel source gains for all channels of shape
+            (all_channels,).
+        sync_gains : numpy.ndarray (float)
+            an array of channel sync gains for all channels of shape
+            (all_channels,).  The sync gains should contain the prior source
+            gain.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        snf.sync_map_samples(
+            frame_data=frames.data,
+            frame_valid=frames.valid,
+            frame_gains=frame_gains,
+            channel_indices=pixels.indices,
+            map_values=self.map.data,
+            map_valid=self.map.valid,
+            map_masked=self.is_masked(),
+            map_indices=frames.map_index.coordinates,
+            base_values=self.base.data,
+            base_valid=self.base.valid,
+            source_gains=source_gains,
+            sync_gains=sync_gains,
+            sample_flags=frames.sample_flag,
+            sample_blank_flag=frames.flagspace.convert_flag(
+                &#39;SAMPLE_SOURCE_BLANK&#39;).value)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.calculate_coupling">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.calculate_coupling">[docs]</a>
+    def calculate_coupling(self, integration, pixels, source_gains,
+                           sync_gains):
+        &quot;&quot;&quot;
+        Calculate the channel source coupling values.
+
+        Parameters
+        ----------
+        integration : Integration
+        pixels : Channels or ChannelGroup
+            The pixels for which to calculate coupling.
+        source_gains : numpy.ndarray (float)
+            The source gains for all frames in the integration of shape
+            (n_frames,).
+        sync_gains : numpy.ndarray (float)
+            The sync gains for all channels in the integration of shape
+            (all_channels,).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.has_option(&#39;source.coupling.s2n&#39;):
+            s2n_range = self.configuration.get_range(&#39;source.coupling.s2n&#39;)
+        else:
+            s2n_range = Range(min_val=5.0)
+
+        if integration.frames.map_index is None or np.allclose(
+                integration.frames.map_index.x, -1):
+            self.create_lookup(integration)
+
+        frame_gains = integration.gain * integration.frames.get_source_gain(
+            self.signal_mode)
+
+        coupling_increment = snf.calculate_coupling_increment(
+            map_indices=integration.frames.map_index.coordinates,
+            base_values=self.base.data,
+            map_values=self.map.data,
+            map_noise=self.map.get_noise().data,
+            sync_gains=sync_gains,  # Frame space
+            source_gains=source_gains,  # Channel space
+            frame_data=integration.frames.data,
+            frame_weight=integration.frames.relative_weight,
+            frame_gains=frame_gains,
+            frame_valid=integration.frames.valid,
+            sample_flags=integration.frames.sample_flag,
+            channel_indices=pixels.indices,
+            min_s2n=s2n_range.min,
+            max_s2n=s2n_range.max,
+            exclude_flag=self.exclude_samples.value)
+
+        coupling = integration.channels.data.coupling
+        new_coupling = coupling + (coupling * coupling_increment)
+
+        integration.channels.data.coupling = new_coupling
+
+        # Normalize the couplings to 1.0
+        integration.channels.modalities.get(
+            &#39;coupling&#39;).modes[0].normalize_gains()
+
+        # If the coupling falls out of range, revert to the default of 1.0
+        if self.has_option(&#39;source.coupling.range&#39;):
+            coupling_range = self.configuration.get_range(
+                &#39;source.coupling.range&#39;)
+            snf.flag_out_of_range_coupling(
+                channel_indices=pixels.indices,
+                coupling_values=pixels.data.coupling,
+                min_coupling=coupling_range.min,
+                max_coupling=coupling_range.max,
+                flags=pixels.data.flag,
+                blind_flag=pixels.flagspace.convert_flag(&#39;BLIND&#39;).value)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.process_final">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.process_final">[docs]</a>
+    def process_final(self):
+        &quot;&quot;&quot;
+        Perform the final processing steps.
+
+        The additional steps performed for the AstroIntensityMap are
+        map leveling (if not extended or deep) and map re-weighting.
+        The map may also be resampled if re-griding is enabled.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().process_final()
+        if not (self.configuration.get_bool(&#39;extended&#39;)
+                | self.configuration.get_bool(&#39;deep&#39;)):
+            if self.enable_level:
+                self.map.level(robust=True)
+            if self.enable_weighting:
+                self.map.reweight(robust=True)
+
+        if self.has_option(&#39;regrid&#39;):
+            size_unit = self.info.instrument.get_size_unit()
+            resolution = self.configuration.get_float(&#39;regrid&#39;) * size_unit
+            self.map.resample(resolution)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.get_table_entry">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Return a parameter value for a given name.
+
+        Parameters
+        ----------
+        name : str, optional
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        if name == &#39;system&#39;:
+            if not isinstance(self.grid, SphericalGrid):
+                return None
+            if self.grid.reference is None:
+                return None
+            return self.grid.reference.two_letter_code
+        if name.startswith(&#39;map.&#39;):
+            return self.map.get_table_entry(name[4:])
+        return super().get_table_entry(name)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.get_pixel_footprint">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.get_pixel_footprint">[docs]</a>
+    def get_pixel_footprint(self):
+        &quot;&quot;&quot;
+        Returns the Number of bytes per pixel.
+
+        This is probably no longer relevant and just copies CRUSH.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        return 32</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.base_footprint">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.base_footprint">[docs]</a>
+    def base_footprint(self, pixels):
+        &quot;&quot;&quot;
+        Returns the base footprint.
+
+        Parameters
+        ----------
+        pixels : int
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        return 8 * pixels</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.set_data_shape">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.set_data_shape">[docs]</a>
+    def set_data_shape(self, shape):
+        &quot;&quot;&quot;
+        Set the shape of the map.
+
+        Parameters
+        ----------
+        shape : tuple (int)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.map.set_data_shape(shape)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.set_base">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.set_base">[docs]</a>
+    def set_base(self):
+        &quot;&quot;&quot;
+        Set the base to the map (copy of).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.base is None:
+            self.stand_alone()
+        self.base.paste(self.map, report=False)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.reset_processing">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.reset_processing">[docs]</a>
+    def reset_processing(self):
+        &quot;&quot;&quot;
+        Reset the source processing.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().reset_processing()
+        self.map.reset_processing()</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.covariant_points">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.covariant_points">[docs]</a>
+    def covariant_points(self):
+        &quot;&quot;&quot;
+        Return the number of points in the smoothing beam of the map.
+
+        Returns
+        -------
+        float
+        &quot;&quot;&quot;
+        return self.map.get_points_per_smoothing_beam()</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.get_map_2d">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.get_map_2d">[docs]</a>
+    def get_map_2d(self):
+        &quot;&quot;&quot;
+        Return the 2D map.
+
+        Returns
+        -------
+        Map2D
+        &quot;&quot;&quot;
+        return self.map</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.get_source_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.get_source_name">[docs]</a>
+    def get_source_name(self):
+        &quot;&quot;&quot;
+        Return the source name.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return self.map.fits_properties.object_name</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.get_unit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.get_unit">[docs]</a>
+    def get_unit(self):
+        &quot;&quot;&quot;
+        Return the map data unit.
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        return self.map.unit</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.get_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.get_data">[docs]</a>
+    def get_data(self):
+        &quot;&quot;&quot;
+        Return the map data.
+
+        Returns
+        -------
+        Observation2D
+        &quot;&quot;&quot;
+        return self.map</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.add_base">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.add_base">[docs]</a>
+    def add_base(self):
+        &quot;&quot;&quot;
+        Add the base to the observation map.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.base is not None:
+            self.map.add(self.base)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.smooth_to">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.smooth_to">[docs]</a>
+    def smooth_to(self, fwhm):
+        &quot;&quot;&quot;
+        Smooth the map to a given FWHM.
+
+        Parameters
+        ----------
+        fwhm : astropy.units.Quantity or Gaussian2D
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.map.smooth_to(fwhm)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.filter_source">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.filter_source">[docs]</a>
+    def filter_source(self, filter_fwhm, filter_blanking=None, use_fft=False):
+        &quot;&quot;&quot;
+        Apply source filtering.
+
+        Parameters
+        ----------
+        filter_fwhm : astropy.units.Quantity or Coordinate
+            The filtering FWHM for the source.
+        filter_blanking : float, optional
+            Only apply filtering within the optional range -filter_blanking -&gt;
+            +filter_blanking.
+        use_fft : bool, optional
+            If `True`, use FFTs to perform the filtering.  Otherwise, do full
+            convolutions.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if filter_blanking is not None and np.isfinite(filter_blanking):
+            significance = self.map.get_significance()
+            valid = significance.valid
+            significance_values = significance.data
+            valid &amp;= significance_values &lt;= filter_blanking
+            valid &amp;= significance_values &gt;= -filter_blanking
+        else:
+            valid = None
+
+        if use_fft:
+            log.debug(f&quot;Filtering source above {filter_fwhm} (FFT).&quot;)
+            self.map.fft_filter_above(filter_fwhm, valid=valid)
+        else:
+            log.debug(f&quot;Filtering source above {filter_fwhm}.&quot;)
+            self.map.filter_above(filter_fwhm, valid=valid)
+
+        self.map.set_filter_blanking(filter_blanking)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.set_filtering">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.set_filtering">[docs]</a>
+    def set_filtering(self, fwhm):
+        &quot;&quot;&quot;
+        Set the map filtering FWHM.
+
+        Parameters
+        ----------
+        fwhm : astropy.units.Quantity
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.map.update_filtering(fwhm)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.reset_filtering">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.reset_filtering">[docs]</a>
+    def reset_filtering(self):
+        &quot;&quot;&quot;
+        Reset the map filtering.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.map.reset_filtering()</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.filter_beam_correct">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.filter_beam_correct">[docs]</a>
+    def filter_beam_correct(self):
+        &quot;&quot;&quot;
+        Apply beam filter correction.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.map.filter_beam_correct()</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.mem_correct">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.mem_correct">[docs]</a>
+    def mem_correct(self, lg_multiplier):
+        &quot;&quot;&quot;
+        Apply maximum entropy correction to the map.
+
+        Parameters
+        ----------
+        lg_multiplier : float
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.map.mem_correct_observation(None, lg_multiplier)</div>
+
+
+<div class="viewcode-block" id="AstroIntensityMap.get_clean_local_copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.html#sofia_redux.scan.source_models.astro_intensity_map.AstroIntensityMap.get_clean_local_copy">[docs]</a>
+    def get_clean_local_copy(self, full=False):
+        &quot;&quot;&quot;
+        Get an unprocessed copy of the source model.
+
+        Parameters
+        ----------
+        full : bool, optional
+            If True, copy additional parameters for stand-alone reductions
+            that would otherwise be referenced.
+
+        Returns
+        -------
+        SourceModel
+        &quot;&quot;&quot;
+        model = super().get_clean_local_copy(full=full)
+        if not full:
+            return model
+        model.base = model.base.copy()
+        model.base.clear()
+        return model</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

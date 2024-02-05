@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.gui.widgets &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.gui.widgets</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Widgets and other useful classes for support of the Redux GUI.&quot;&quot;&quot;
+
+from contextlib import contextmanager
+from copy import deepcopy
+import html
+import logging
+import os
+import sys
+import traceback
+
+from astropy import log
+
+from sofia_redux.pipeline.parameters import Parameters, FALSY
+from sofia_redux.pipeline.gui import textview
+
+try:
+    from PyQt5 import QtWidgets, QtCore, QtGui
+    from sofia_redux.pipeline.gui.ui import ui_pipe_step
+    from sofia_redux.pipeline.gui.ui import ui_edit_param
+    from sofia_redux.pipeline.gui.ui import ui_remove_files
+    from sofia_redux.pipeline.gui.ui import ui_progress
+except ImportError:
+    HAS_PYQT5 = False
+    QtGui = None
+
+    # duck type parents to allow class definition
+    class QtWidgets:
+        class QWidget:
+            pass
+
+        class QDialog:
+            pass
+
+    class QtCore:
+        class QAbstractTableModel:
+            pass
+
+        class Qt:
+            class DisplayRole:
+                pass
+
+        class QObject:
+            pass
+
+        class QRunnable:
+            pass
+
+        @staticmethod
+        def pyqtSignal(x):
+            pass
+
+        @staticmethod
+        @contextmanager
+        def pyqtSlot():
+            pass
+
+    class ui_pipe_step:
+        class Ui_Form:
+            pass
+
+    class ui_progress:
+        class Ui_ProgressFrame:
+            pass
+
+    class ui_edit_param:
+        class Ui_Dialog:
+            pass
+
+    class ui_remove_files:
+        class Ui_Dialog:
+            pass
+
+else:
+    HAS_PYQT5 = True
+
+__all__ = [&#39;PipeStep&#39;, &#39;ProgressFrame&#39;, &#39;EditParam&#39;,
+           &#39;DataTableModel&#39;, &#39;CustomSignals&#39;, &#39;TextEditLogger&#39;,
+           &#39;RemoveFilesDialog&#39;, &#39;ConfigView&#39;, &#39;ParamView&#39;,
+           &#39;StepRunnable&#39;, &#39;LoadRunnable&#39;, &#39;GeneralRunnable&#39;]
+
+
+<div class="viewcode-block" id="PipeStep">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.PipeStep.html#sofia_redux.pipeline.gui.widgets.PipeStep">[docs]</a>
+class PipeStep(QtWidgets.QWidget, ui_pipe_step.Ui_Form):
+    &quot;&quot;&quot;
+    Reduction step widget.
+
+    Includes a Run and Edit button for the step.
+    &quot;&quot;&quot;
+    def __init__(self, parent=None, stepname=None, index=0):
+        &quot;&quot;&quot;
+        Build the widget.
+
+        Parameters
+        ----------
+        parent : QWidget, optional
+            Parent widget.
+        stepname : str, optional
+            Reduction step name to display.
+        index : int, optional
+            Reduction step index.
+        &quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for Redux GUI.&#39;)
+
+        # parent initialization
+        super().__init__(parent)
+
+        self.setupUi(self)
+
+        if stepname is not None:
+            self.pipeStepLabel.setText(stepname)
+        self.index = index
+        self.indexLabel.setText(&quot; {}. &quot;.format(index + 1))
+
+<div class="viewcode-block" id="PipeStep.connectRun">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.PipeStep.html#sofia_redux.pipeline.gui.widgets.PipeStep.connectRun">[docs]</a>
+    def connectRun(self, slot):
+        &quot;&quot;&quot;
+        Connect Run button to callback.
+
+        Parameters
+        ----------
+        slot : function
+            The `onRun` function from the main application.  Must accept
+            the step index as an argument.
+        &quot;&quot;&quot;
+        self.runButton.clicked.connect(lambda: slot(self.index))</div>
+
+
+<div class="viewcode-block" id="PipeStep.connectEdit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.PipeStep.html#sofia_redux.pipeline.gui.widgets.PipeStep.connectEdit">[docs]</a>
+    def connectEdit(self, slot):
+        &quot;&quot;&quot;
+        Connect Edit button to callback.
+
+        Parameters
+        ----------
+        slot : function
+            The `onEdit` function from the main application.  Must accept
+            the step index as an argument.
+        &quot;&quot;&quot;
+        self.editButton.clicked.connect(lambda: slot(self.index))</div>
+
+
+<div class="viewcode-block" id="PipeStep.enableRun">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.PipeStep.html#sofia_redux.pipeline.gui.widgets.PipeStep.enableRun">[docs]</a>
+    def enableRun(self, enable=True):
+        &quot;&quot;&quot;
+        Enable the Run button.
+
+        Parameters
+        ----------
+        enable : bool
+            If True, the button is enabled.  If False, it is disabled.
+        &quot;&quot;&quot;
+        self.runButton.setEnabled(enable)</div>
+
+
+<div class="viewcode-block" id="PipeStep.enableEdit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.PipeStep.html#sofia_redux.pipeline.gui.widgets.PipeStep.enableEdit">[docs]</a>
+    def enableEdit(self, enable=True):
+        &quot;&quot;&quot;
+        Enable the Edit button.
+
+        Parameters
+        ----------
+        enable : bool, optional
+            If True, the button is enabled.  If False, it is disabled.
+        &quot;&quot;&quot;
+        self.editButton.setEnabled(enable)</div>
+</div>
+
+
+
+<div class="viewcode-block" id="ProgressFrame">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.ProgressFrame.html#sofia_redux.pipeline.gui.widgets.ProgressFrame">[docs]</a>
+class ProgressFrame(QtWidgets.QWidget, ui_progress.Ui_ProgressFrame):
+    &quot;&quot;&quot;Progress bar widget for reduction steps.&quot;&quot;&quot;
+    def __init__(self, parent=None):
+        &quot;&quot;&quot;
+        Build the widget.
+
+        Parameters
+        ----------
+        parent : QWidget, optional
+            Parent widget.
+        &quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for Redux GUI.&#39;)
+
+        # parent initialization
+        super().__init__(parent)
+        self.setupUi(self)
+
+<div class="viewcode-block" id="ProgressFrame.setNStep">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.ProgressFrame.html#sofia_redux.pipeline.gui.widgets.ProgressFrame.setNStep">[docs]</a>
+    def setNStep(self, nsteps):
+        &quot;&quot;&quot;
+        Set the number of steps expected to run.
+
+        Parameters
+        ----------
+        nsteps : int
+            The total number of steps.
+        &quot;&quot;&quot;
+        self.progressBar.setMaximum(nsteps)</div>
+
+
+<div class="viewcode-block" id="ProgressFrame.setProgress">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.ProgressFrame.html#sofia_redux.pipeline.gui.widgets.ProgressFrame.setProgress">[docs]</a>
+    def setProgress(self, value):
+        &quot;&quot;&quot;
+        Set the progress value.
+
+        Parameters
+        ----------
+        value : int
+            Steps completed.
+        &quot;&quot;&quot;
+        self.progressBar.setValue(value)</div>
+
+
+<div class="viewcode-block" id="ProgressFrame.resetProgress">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.ProgressFrame.html#sofia_redux.pipeline.gui.widgets.ProgressFrame.resetProgress">[docs]</a>
+    def resetProgress(self):
+        &quot;&quot;&quot;Reset progress bar.&quot;&quot;&quot;
+        self.progressBar.setValue(0)
+        self.stopButton.setEnabled(True)</div>
+</div>
+
+
+
+<div class="viewcode-block" id="EditParam">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.EditParam.html#sofia_redux.pipeline.gui.widgets.EditParam">[docs]</a>
+class EditParam(QtWidgets.QDialog, ui_edit_param.Ui_Dialog):
+    &quot;&quot;&quot;Edit parameters for a reduction step.&quot;&quot;&quot;
+    def __init__(self, parent=None, name=None,
+                 current=None, default=None, directory=None):
+        &quot;&quot;&quot;
+        Build the dialog.
+
+        Parameters
+        ----------
+        parent : QWidget, optional
+            Parent widget.
+        name : str, optional
+            Reduction step display name.
+        current : `redux.parameters.ParameterSet`, optional
+            Current parameter definitions.
+        default : `redux.parameters.ParameterSet`, optional
+            Default parameter definitions.
+        directory : str
+            Base directory for pick_file and pick_directory
+            widgets.
+        &quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for Redux GUI.&#39;)
+
+        # parent initialization
+        super().__init__(parent)
+
+        self.setupUi(self)
+
+        # hook up the reset and restore buttons
+        reset = self.buttonBox.button(
+            QtWidgets.QDialogButtonBox.Reset)
+        reset.clicked.connect(self.reset)
+        restore = self.buttonBox.button(
+            QtWidgets.QDialogButtonBox.RestoreDefaults)
+        restore.clicked.connect(self.restore)
+
+        # store the initial parameters and base directory
+        self.parameters = current
+        self.default = default
+        self.directory = directory
+
+        # set the title
+        if name is not None:
+            self.setWindowTitle(&quot;Edit Parameters: {}&quot;.format(name))
+
+        # set the layout and load the widgets corresponding to
+        # the parameter definition
+        self.groupBox = self.container
+        self.setFormLayout()
+        self.setWidgets()
+
+<div class="viewcode-block" id="EditParam.addComboBox">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.EditParam.html#sofia_redux.pipeline.gui.widgets.EditParam.addComboBox">[docs]</a>
+    def addComboBox(self, key, param):
+        &quot;&quot;&quot;
+        Add a combo box widget to the form.
+
+        Parameters
+        ----------
+        key : str
+            Object name for the widget.
+        param : dict
+            Parameter dictionary.  Must have &#39;name&#39;, &#39;options&#39;,
+            and &#39;option_index&#39; defined.  If &#39;description&#39; is present,
+            it will be used as a tooltip.
+        &quot;&quot;&quot;
+        # expanding box
+        comboBox = QtWidgets.QComboBox(self.groupBox)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Expanding,
+            QtWidgets.QSizePolicy.Fixed)
+        comboBox.setSizePolicy(sizePolicy)
+        comboBox.setObjectName(key)
+        if param[&quot;description&quot;] is not None:
+            comboBox.setToolTip(param[&quot;description&quot;])
+
+        # set options in box
+        if param[&#39;options&#39;] is not None:
+            opt = [str(val) for val in param[&#39;options&#39;]]
+            comboBox.addItems(opt)
+        comboBox.setCurrentIndex(param[&#39;option_index&#39;])
+
+        # add to layout with label
+        self.groupBox.layout().addRow(param[&#39;name&#39;], comboBox)</div>
+
+
+<div class="viewcode-block" id="EditParam.addTextBox">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.EditParam.html#sofia_redux.pipeline.gui.widgets.EditParam.addTextBox">[docs]</a>
+    def addTextBox(self, key, param):
+        &quot;&quot;&quot;
+        Add a text box widget to the form.
+
+        Parameters
+        ----------
+        key : str
+            Object name for the widget.
+        param : dict
+            Parameter dictionary.  Must have &#39;name&#39; and
+            &#39;value&#39; defined.  If &#39;description&#39; is present,
+            it will be used as a tooltip.
+        &quot;&quot;&quot;
+        # new line edit
+        textBox = QtWidgets.QLineEdit(self.groupBox)
+        textBox.setObjectName(key)
+
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.MinimumExpanding,
+            QtWidgets.QSizePolicy.Fixed)
+        textBox.setSizePolicy(sizePolicy)
+        textBox.setMinimumWidth(200)
+
+        # set default value
+        textBox.setText(str(param[&#39;value&#39;]))
+        if param[&quot;description&quot;] is not None:
+            textBox.setToolTip(param[&quot;description&quot;])
+
+        # add to layout with label
+        self.groupBox.layout().addRow(param[&#39;name&#39;], textBox)</div>
+
+
+<div class="viewcode-block" id="EditParam.addRadioButtons">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.EditParam.html#sofia_redux.pipeline.gui.widgets.EditParam.addRadioButtons">[docs]</a>
+    def addRadioButtons(self, key, param):
+        &quot;&quot;&quot;
+        Add a set of radio buttons to the form.
+
+        Parameters
+        ----------
+        key : str
+            Object name for the widget.
+        param : dict
+            Parameter dictionary.  Must have &#39;name&#39;, &#39;options&#39;, and
+            &#39;option_index&#39; defined.  If &#39;description&#39; is present,
+            it will be used as a tooltip.
+        &quot;&quot;&quot;
+        groupBox = QtWidgets.QGroupBox(self.groupBox)
+        groupBox.setObjectName(key)
+        if param[&quot;description&quot;] is not None:
+            groupBox.setToolTip(param[&quot;description&quot;])
+
+        vbox = QtWidgets.QVBoxLayout(groupBox)
+        buttonGroup = QtWidgets.QButtonGroup(groupBox)
+        buttonGroup.setObjectName(&#39;radio&#39;)
+
+        if param[&#39;options&#39;] is not None:
+            for idx, option in enumerate(param[&#39;options&#39;]):
+                radio = QtWidgets.QRadioButton(groupBox)
+                radio.setText(str(option))
+                if idx == param[&#39;option_index&#39;]:
+                    radio.setChecked(True)
+                vbox.addWidget(radio)
+                buttonGroup.addButton(radio)
+                buttonGroup.setId(radio, idx)
+
+        self.groupBox.layout().addRow(param[&#39;name&#39;], groupBox)</div>
+
+
+<div class="viewcode-block" id="EditParam.addCheckBox">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.EditParam.html#sofia_redux.pipeline.gui.widgets.EditParam.addCheckBox">[docs]</a>
+    def addCheckBox(self, key, param):
+        &quot;&quot;&quot;
+        Add a check box widget.
+
+        Parameters
+        ----------
+        key : str
+            Object name for the widget.
+        param : dict
+            Parameter dictionary.  Must have &#39;name&#39; and &#39;value&#39;
+            defined.  If &#39;description&#39; is present,
+            it will be used as a tooltip.
+        &quot;&quot;&quot;
+        # new check box
+        checkBox = QtWidgets.QCheckBox(self.groupBox)
+        checkBox.setObjectName(key)
+        if str(param[&#39;value&#39;]).lower().strip() in FALSY:
+            val = False
+        else:
+            val = True
+        checkBox.setChecked(val)
+        if param[&quot;description&quot;] is not None:
+            checkBox.setToolTip(param[&quot;description&quot;])
+
+        # center the check box vertically
+        vbox = QtWidgets.QVBoxLayout()
+        vbox.addWidget(checkBox)
+        vbox.setAlignment(QtCore.Qt.AlignHCenter)
+
+        self.groupBox.layout().addRow(param[&#39;name&#39;], vbox)</div>
+
+
+<div class="viewcode-block" id="EditParam.addPick">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.EditParam.html#sofia_redux.pipeline.gui.widgets.EditParam.addPick">[docs]</a>
+    def addPick(self, key, param, pick_type=&#39;file&#39;):
+        &quot;&quot;&quot;
+        Add a pick file/directory button and text widget.
+
+        Parameters
+        ----------
+        key : str
+            Object name for the widget.
+        param : dict
+            Parameter dictionary.  Must have &#39;name&#39; and &#39;value&#39;
+            defined.  If &#39;description&#39; is present,
+            it will be used as a tooltip.
+        pick_type : {&#39;directory&#39;, &#39;file&#39;}
+            Type of file item to select.
+        &quot;&quot;&quot;
+        pickButton = QtWidgets.QPushButton(self.groupBox)
+        icon = QtGui.QIcon()
+        icon.addPixmap(QtGui.QPixmap(&quot;:/icons/Tango/16x16/document-open.png&quot;),
+                       QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        pickButton.setIcon(icon)
+        pickButton.setText(param[&#39;name&#39;])
+
+        # start a file dialog if clicked
+        if pick_type == &#39;directory&#39;:
+            pickButton.clicked.connect(lambda: self.pickDirectory(key))
+        else:
+            pickButton.clicked.connect(lambda: self.pickFile(key))
+
+        pickTextBox = QtWidgets.QLineEdit(self.groupBox)
+        pickTextBox.setObjectName(key)
+        pickTextBox.setText(str(param[&#39;value&#39;]))
+        if param[&quot;description&quot;] is not None:
+            pickTextBox.setToolTip(param[&quot;description&quot;])
+
+        self.groupBox.layout().addRow(pickButton, pickTextBox)</div>
+
+
+<div class="viewcode-block" id="EditParam.getValue">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.EditParam.html#sofia_redux.pipeline.gui.widgets.EditParam.getValue">[docs]</a>
+    def getValue(self):
+        &quot;&quot;&quot;Get new parameter values from all the widgets.&quot;&quot;&quot;
+        for param_key, param in self.parameters.items():
+            widget = self.container.findChild(QtWidgets.QWidget, param_key)
+            if widget is None or param[&#39;wtype&#39;] == &#39;group&#39;:
+                # for hidden parameters, no widget is made
+                # and no modification is needed
+                continue
+            elif param[&#39;wtype&#39;] == &#39;combo_box&#39;:
+                param[&#39;option_index&#39;] = widget.currentIndex()
+                value = widget.currentText()
+            elif param[&#39;wtype&#39;] == &#39;radio_button&#39;:
+                buttonGroup = widget.findChild(
+                    QtWidgets.QButtonGroup, &#39;radio&#39;)
+                param[&#39;option_index&#39;] = buttonGroup.checkedId()
+                value = buttonGroup.checkedButton().text()
+            elif param[&#39;wtype&#39;] == &#39;check_box&#39;:
+                value = widget.isChecked()
+            else:
+                value = widget.text()
+            param[&#39;value&#39;] = Parameters.fix_param_type(value, param[&#39;dtype&#39;])
+
+        return self.parameters</div>
+
+
+<div class="viewcode-block" id="EditParam.pickFile">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.EditParam.html#sofia_redux.pipeline.gui.widgets.EditParam.pickFile">[docs]</a>
+    def pickFile(self, key):
+        &quot;&quot;&quot;
+        Use a File Dialog to pick a set of files.
+
+        Parameters
+        ----------
+        key : str
+            Object name for the widget.
+        &quot;&quot;&quot;
+        newpath = QtWidgets.QFileDialog.getOpenFileNames(
+            self, caption=&quot;Select File(s)&quot;,
+            directory=self.directory)
+        if len(newpath[0]) == 0:
+            # do nothing if no files were selected.
+            return
+        else:
+            widget = self.container.findChild(QtWidgets.QWidget, key)
+            widget.setText(&#39;, &#39;.join(newpath[0]))
+            widget.repaint()</div>
+
+
+<div class="viewcode-block" id="EditParam.pickDirectory">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.EditParam.html#sofia_redux.pipeline.gui.widgets.EditParam.pickDirectory">[docs]</a>
+    def pickDirectory(self, key):
+        &quot;&quot;&quot;
+        Use a File Dialog to pick a directory.
+
+        Parameters
+        ----------
+        key : str
+            Object name for the widget.
+        &quot;&quot;&quot;
+        newpath = QtWidgets.QFileDialog.getExistingDirectory(
+            self, caption=&quot;Select Directory&quot;,
+            directory=self.directory)
+        if len(newpath) == 0:
+            return
+        else:
+            widget = self.container.findChild(QtWidgets.QWidget, key)
+            widget.setText(newpath)
+            widget.repaint()</div>
+
+
+<div class="viewcode-block" id="EditParam.reset">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.EditParam.html#sofia_redux.pipeline.gui.widgets.EditParam.reset">[docs]</a>
+    def reset(self):
+        &quot;&quot;&quot;Reset all parameter values to an initial set.&quot;&quot;&quot;
+        for param_key, param in self.parameters.items():
+            widget = self.container.findChild(QtWidgets.QWidget, param_key)
+            try:
+                if param[&#39;wtype&#39;] == &#39;combo_box&#39;:
+                    widget.setCurrentIndex(param[&#39;option_index&#39;])
+                elif param[&#39;wtype&#39;] == &#39;radio_button&#39;:
+                    button = widget.layout().itemAt(param[&#39;option_index&#39;])
+                    button.widget().setChecked(True)
+                elif param[&#39;wtype&#39;] == &#39;check_box&#39;:
+                    widget.setChecked(param[&#39;value&#39;])
+                else:
+                    widget.setText(str(param[&#39;value&#39;]))
+            except AttributeError:
+                # if the parameter set has changed for some reason,
+                # the widget may be None.  Pass this condition
+                # quietly.
+                continue
+            widget.repaint()</div>
+
+
+<div class="viewcode-block" id="EditParam.restore">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.EditParam.html#sofia_redux.pipeline.gui.widgets.EditParam.restore">[docs]</a>
+    def restore(self):
+        &quot;&quot;&quot;Restore all parameter values to a default set.&quot;&quot;&quot;
+        self.parameters = deepcopy(self.default)
+        self.reset()</div>
+
+
+<div class="viewcode-block" id="EditParam.setFormLayout">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.EditParam.html#sofia_redux.pipeline.gui.widgets.EditParam.setFormLayout">[docs]</a>
+    def setFormLayout(self):
+        &quot;&quot;&quot;Assign a form layout to the current groupBox.&quot;&quot;&quot;
+        layout = QtWidgets.QFormLayout()
+        layout.setFieldGrowthPolicy(QtWidgets.QFormLayout.ExpandingFieldsGrow)
+        self.groupBox.setLayout(layout)</div>
+
+
+<div class="viewcode-block" id="EditParam.setWidgets">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.EditParam.html#sofia_redux.pipeline.gui.widgets.EditParam.setWidgets">[docs]</a>
+    def setWidgets(self):
+        &quot;&quot;&quot;Add parameter widgets according to their definitions.&quot;&quot;&quot;
+        for param_key, param in self.parameters.items():
+            # special widget type for grouping parameters together
+            if param[&#39;wtype&#39;] == &#39;group&#39;:
+                self.groupBox = QtWidgets.QGroupBox(self.container)
+                self.container.layout().addWidget(self.groupBox)
+                self.setFormLayout()
+                self.groupBox.setObjectName(param_key)
+                if param[&quot;description&quot;] is not None:
+                    self.groupBox.setToolTip(param[&#39;description&#39;])
+                self.groupBox.setTitle(param[&#39;name&#39;])
+                continue
+
+            # don&#39;t make a widget if it&#39;s hidden from user
+            if param[&#39;hidden&#39;]:
+                continue
+
+            if param[&#39;wtype&#39;] == &#39;combo_box&#39;:
+                self.addComboBox(param_key, param)
+            elif param[&#39;wtype&#39;] == &#39;text_box&#39;:
+                self.addTextBox(param_key, param)
+            elif param[&#39;wtype&#39;] == &#39;radio_button&#39;:
+                self.addRadioButtons(param_key, param)
+            elif param[&#39;wtype&#39;] == &#39;check_box&#39;:
+                self.addCheckBox(param_key, param)
+            elif param[&#39;wtype&#39;] == &#39;pick_file&#39;:
+                self.addPick(param_key, param, pick_type=&#39;file&#39;)
+            elif param[&#39;wtype&#39;] == &#39;pick_directory&#39;:
+                self.addPick(param_key, param, pick_type=&#39;directory&#39;)
+            else:
+                log.warning(&#39;Unknown widget type: {}&#39;.format(param[&#39;wtype&#39;]))
+                continue
+
+        # adjust size to contents, then set minimum height and width
+        self.adjustSize()
+        self.setMinimumHeight(self.height())
+        self.setMinimumWidth(self.width())</div>
+</div>
+
+
+
+<div class="viewcode-block" id="DataTableModel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.DataTableModel.html#sofia_redux.pipeline.gui.widgets.DataTableModel">[docs]</a>
+class DataTableModel(QtCore.QAbstractTableModel):
+    &quot;&quot;&quot;Model for the File Information table view.&quot;&quot;&quot;
+    def __init__(self, data, parent=None):
+        &quot;&quot;&quot;
+        Initialize the data model.
+
+        Parameters
+        ----------
+        data : `OrderedDict`
+            Keys are the column headers; values are the row items.
+            Format is that of the `redux.reduction.Reduction` `data_id`
+            attribute.
+        parent : QWidget, optional
+            Parent widget.
+        &quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for Redux GUI.&#39;)
+
+        super().__init__(parent)
+        self._data = data
+        self._keys = list(data.keys())
+
+<div class="viewcode-block" id="DataTableModel.rowCount">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.DataTableModel.html#sofia_redux.pipeline.gui.widgets.DataTableModel.rowCount">[docs]</a>
+    def rowCount(self, parent=None):
+        &quot;&quot;&quot;
+        Return the total number of rows of data.
+
+        Parameters
+        ----------
+        parent : QWidget, optional
+            Parent widget.
+
+        Returns
+        -------
+        int
+            The number of rows in the table.
+        &quot;&quot;&quot;
+        return len(self._data[self._keys[0]])</div>
+
+
+<div class="viewcode-block" id="DataTableModel.columnCount">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.DataTableModel.html#sofia_redux.pipeline.gui.widgets.DataTableModel.columnCount">[docs]</a>
+    def columnCount(self, parent=None):
+        &quot;&quot;&quot;
+        Return the total number of columns of data.
+
+        Parameters
+        ----------
+        parent : QWidget, optional
+            Parent widget.
+
+        Returns
+        -------
+        int
+            The number of columns in the table.
+        &quot;&quot;&quot;
+        return len(self._keys)</div>
+
+
+<div class="viewcode-block" id="DataTableModel.data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.DataTableModel.html#sofia_redux.pipeline.gui.widgets.DataTableModel.data">[docs]</a>
+    def data(self, index, role=QtCore.Qt.DisplayRole):
+        &quot;&quot;&quot;
+        Retrieve table data by index.
+
+        Parameters
+        ----------
+        index : QModelIndex
+            Data index to retrieve.
+        role : int, optional
+            Qt display role.
+
+        Returns
+        -------
+        str or None
+            If index is valid, a string representation of the data at the
+            index value is returned.  If not, None is returned.
+        &quot;&quot;&quot;
+        if index.isValid():
+            if role == QtCore.Qt.DisplayRole:
+                return str(self._data[self._keys[index.column()]][index.row()])
+        return None</div>
+
+
+<div class="viewcode-block" id="DataTableModel.headerData">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.DataTableModel.html#sofia_redux.pipeline.gui.widgets.DataTableModel.headerData">[docs]</a>
+    def headerData(self, col, orientation, role=QtCore.Qt.DisplayRole):
+        &quot;&quot;&quot;
+        Retrieve column data.
+
+        Parameters
+        ----------
+        col : int
+            Column name to retrieve.
+        orientation : int
+            Qt orientation.
+        role : int, optional
+            Qt display role.
+
+        Returns
+        -------
+        str or None
+            Column name if orientation and role are valid; otherwise None.
+        &quot;&quot;&quot;
+        if orientation == QtCore.Qt.Horizontal and \
+                role == QtCore.Qt.DisplayRole:
+            return self._keys[col]
+        elif orientation == QtCore.Qt.Vertical and \
+                role == QtCore.Qt.DisplayRole:
+            return col + 1
+        return None</div>
+</div>
+
+
+
+<div class="viewcode-block" id="CustomSignals">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.CustomSignals.html#sofia_redux.pipeline.gui.widgets.CustomSignals">[docs]</a>
+class CustomSignals(QtCore.QObject):
+    &quot;&quot;&quot;Custom signals for widgets to emit.&quot;&quot;&quot;
+
+    finished = QtCore.pyqtSignal(object)
+    &quot;&quot;&quot;Signal to emit when finished.&quot;&quot;&quot;
+
+    progress = QtCore.pyqtSignal(object)
+    &quot;&quot;&quot;Signal to emit for intermediate progress.&quot;&quot;&quot;</div>
+
+
+
+<div class="viewcode-block" id="TextEditLogger">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.TextEditLogger.html#sofia_redux.pipeline.gui.widgets.TextEditLogger">[docs]</a>
+class TextEditLogger(logging.Handler):
+    &quot;&quot;&quot;
+    Log handler for a TextEdit-based logging window.
+
+    Uses `CustomSignals` to emit a &#39;finished&#39; signal to
+    a display slot.
+    &quot;&quot;&quot;
+    def __init__(self):
+        &quot;&quot;&quot;Initialize the logger.&quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for Redux GUI.&#39;)
+
+        super().__init__()
+        self.signals = CustomSignals()
+
+<div class="viewcode-block" id="TextEditLogger.emit">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.TextEditLogger.html#sofia_redux.pipeline.gui.widgets.TextEditLogger.emit">[docs]</a>
+    def emit(self, record):
+        &quot;&quot;&quot;
+        Emit a log message.
+
+        Messages are formatted to HTML with font colors for
+        the level string (green for DEBUG, orange for WARNING,
+        red for ERROR).  A finished signal (from `CustomSignals`)
+        is emitted, containing the formatted message.
+
+        Parameters
+        ----------
+        record : `logging.LogRecord`
+           The log record, with an additional &#39;origin&#39; attribute
+           attached by `astropy.log`.
+        &quot;&quot;&quot;
+        if not hasattr(record, &#39;origin&#39;):
+            record.origin = &#39;&#39;
+        if record.levelno == logging.INFO:
+            msg = html.escape(str(record.msg))
+        else:
+            if record.levelno &lt; logging.INFO:
+                color = &#39;limegreen&#39;
+            elif record.levelno &lt; logging.ERROR:
+                color = &#39;orange&#39;
+            else:
+                color = &#39;red&#39;
+            msg = &quot;&lt;font color={}&gt;{}&lt;/font&gt;: {} [{}]&quot;.format(
+                color, record.levelname,
+                html.escape(str(record.msg)), record.origin)
+
+        self.signals.finished.emit(msg)</div>
+</div>
+
+
+
+<div class="viewcode-block" id="RemoveFilesDialog">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.RemoveFilesDialog.html#sofia_redux.pipeline.gui.widgets.RemoveFilesDialog">[docs]</a>
+class RemoveFilesDialog(QtWidgets.QDialog,
+                        ui_remove_files.Ui_Dialog):
+    &quot;&quot;&quot;Dialog to select files for removal.&quot;&quot;&quot;
+    def __init__(self, parent=None, loaded_files=None):
+        &quot;&quot;&quot;
+        Build the dialog.
+
+        Parameters
+        ----------
+        parent : QWidget
+            Parent widget.
+        loaded_files : `list` of str, optional
+            List of file paths that are currently loaded.
+        &quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for Redux GUI.&#39;)
+
+        # parent initialization
+        QtWidgets.QDialog.__init__(self, parent)
+
+        # set up UI from Designer generated file
+        self.setupUi(self)
+
+        if loaded_files is not None:
+            if len(loaded_files) == 1:
+                common_path = os.path.dirname(loaded_files[0]) + os.sep
+            else:
+                common_path = os.path.commonpath(loaded_files) + os.sep
+            self.commonPath.setText(common_path + &#39; :&#39;)
+            for item in loaded_files:
+                basename = &#39;  &#39; + item.split(common_path)[-1]
+                self.listWidget.addItem(basename)
+
+<div class="viewcode-block" id="RemoveFilesDialog.getValue">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.RemoveFilesDialog.html#sofia_redux.pipeline.gui.widgets.RemoveFilesDialog.getValue">[docs]</a>
+    def getValue(self):
+        &quot;&quot;&quot;
+        Get the selected files from the widget.
+
+        Returns
+        -------
+        list of str
+            File paths to remove from the reduction.
+        &quot;&quot;&quot;
+        common_path = self.commonPath.text().rstrip(&#39; :&#39;)
+        items = self.listWidget.selectedItems()
+        remove_files = [common_path + str(i.text()).strip() for i in items]
+        return remove_files</div>
+</div>
+
+
+
+<div class="viewcode-block" id="ConfigView">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.ConfigView.html#sofia_redux.pipeline.gui.widgets.ConfigView">[docs]</a>
+class ConfigView(textview.TextView):
+    &quot;&quot;&quot;View and edit current configuration values.&quot;&quot;&quot;
+    def __init__(self, parent=None):
+        &quot;&quot;&quot;Build the widget.&quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for Redux GUI.&#39;)
+
+        super().__init__(parent=parent)
+
+        # hide table and filter buttons
+        self.tableButton.setVisible(False)
+        self.filterButton.setVisible(False)
+
+        # show save button
+        self.saveButton.setVisible(True)
+        self.saveButton.setFocus()
+
+        # make editable
+        self.textEdit.setReadOnly(False)
+        self.textEdit.textChanged.connect(self.update)
+
+<div class="viewcode-block" id="ConfigView.update">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.ConfigView.html#sofia_redux.pipeline.gui.widgets.ConfigView.update">[docs]</a>
+    def update(self):
+        self.text = self.textEdit.toPlainText().split(&#39;\n&#39;)
+        self.html = self.format()</div>
+</div>
+
+
+
+<div class="viewcode-block" id="ParamView">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.ParamView.html#sofia_redux.pipeline.gui.widgets.ParamView">[docs]</a>
+class ParamView(textview.TextView):
+    &quot;&quot;&quot;View and filter current parameter values.&quot;&quot;&quot;
+    def __init__(self, parent=None):
+        &quot;&quot;&quot;Build the widget.&quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for Redux GUI.&#39;)
+
+        super().__init__(parent=parent)
+
+        self.tableButton.setEnabled(True)
+        self.tableButton.clicked.connect(self.table)
+
+<div class="viewcode-block" id="ParamView.format">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.ParamView.html#sofia_redux.pipeline.gui.widgets.ParamView.format">[docs]</a>
+    def format(self):
+        &quot;&quot;&quot;
+        Format the parameter text.
+
+        Returns
+        -------
+        str
+            HTML-formatted text.
+        &quot;&quot;&quot;
+        # some useful strings
+        anchor = &#39;&lt;a name=&quot;anchor&quot;&gt;&lt;/a&gt;&#39;
+        br = &#39;&lt;br&gt;&#39;
+
+        # add anchors to pipeline step sections
+        text_strs = []
+        for line in self.text:
+            if line.startswith(&#39;[&#39;):
+                line = br + anchor + line
+            text_strs.append(line)
+
+        text_str = br.join(text_strs)
+        html = &#39;&lt;pre&gt;&#39; + anchor + text_str + br + &#39;&lt;/pre&gt;&#39; + anchor
+
+        return html</div>
+
+
+<div class="viewcode-block" id="ParamView.table">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.ParamView.html#sofia_redux.pipeline.gui.widgets.ParamView.table">[docs]</a>
+    def table(self):
+        &quot;&quot;&quot;
+        Format selected parameters into a table.
+
+        Uses comma-separated filter values as keys to display
+        from each parameter section.
+
+        Requires `pandas` to display.
+        &quot;&quot;&quot;
+        # read text to filter
+        # may be comma-separated keys (no substrings)
+        find_text = self.findText.text().strip()
+
+        if find_text == &#39;&#39;:
+            # clear previous filter / table
+            self.textEdit.setHtml(self.html)
+        else:
+            # check for pandas
+            try:
+                import pandas as pd
+            except ImportError:
+                msg = &#39;(install pandas for table display)&#39;
+                self.textEdit.setPlainText(msg)
+                return
+
+            # split field on commas for multiple keys
+            sep = find_text.upper().split(&#39;,&#39;)
+            sep = [s.strip() for s in sep]
+
+            # find keys in pipeline parameters
+            data = {&#39;Pipe step&#39;: []}
+            for key in sep:
+                data[key] = []
+            seen = {}
+            for line in self.text:
+                if line.startswith(&#39;#&#39;):
+                    continue
+                elif line.startswith(&#39;[&#39;):
+                    for key in sep:
+                        if key in seen and not seen[key]:
+                            data[key].append(None)
+                        seen[key] = False
+                    data[&#39;Pipe step&#39;].append(line.strip(&#39;[]&#39;))
+                else:
+                    try:
+                        testkey, val = line.split(&#39;=&#39;, 1)
+                    except ValueError:
+                        continue
+                    for key in sep:
+                        if not seen[key] and key == testkey.strip().upper():
+                            data[key].append(val)
+                            seen[key] = True
+            for key in sep:
+                if key in seen and not seen[key]:
+                    data[key].append(None)
+
+            # pandas dataframe for table display
+            df = pd.DataFrame(data, columns=[&#39;Pipe step&#39;] + sep)
+            htmltable = df.to_html(max_rows=None, max_cols=None, border=1)
+            htmltable = htmltable.replace(&#39;&lt;table&#39;,
+                                          &#39;&lt;table cellpadding=&quot;10&quot;&#39;, 1)
+            self.textEdit.setHtml(htmltable)
+
+        # repaint required for some versions of Qt/OS
+        self.textEdit.repaint()</div>
+</div>
+
+
+
+<div class="viewcode-block" id="StepRunnable">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.StepRunnable.html#sofia_redux.pipeline.gui.widgets.StepRunnable">[docs]</a>
+class StepRunnable(QtCore.QRunnable):
+    &quot;&quot;&quot;
+    Worker class to run a reduction step.
+
+    This class is intended to be the worker for running
+    reductions in a thread separate from the main GUI thread.
+    It uses `CustomSignals` to emit a &#39;progress&#39; signal after
+    each step and a &#39;finished&#39; signal when all steps are
+    complete.
+
+    Attributes
+    ----------
+    step : function
+        Reduction step function to run (`redux.Interface.step`).
+    nsteps : int
+        Number of steps to run before returning.
+    signals : `CustomSignals`
+        Signals to emit.
+    stop : bool
+        Flag to stop before processing the next step.  May be
+        set by the main GUI to interrupt reduction gracefully.
+    &quot;&quot;&quot;
+    def __init__(self, step_function, nsteps):
+        &quot;&quot;&quot;
+        Initialize the runner.
+
+        Parameters
+        ----------
+        step_function : function
+            Reduction step function to run (`redux.Interface.step`).
+        nsteps : int
+            Number of steps to run.
+        &quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for Redux GUI.&#39;)
+
+        super().__init__()
+        self.step = step_function
+        self.nsteps = nsteps
+        self.signals = CustomSignals()
+        self.stop = False
+
+<div class="viewcode-block" id="StepRunnable.run">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.StepRunnable.html#sofia_redux.pipeline.gui.widgets.StepRunnable.run">[docs]</a>
+    @QtCore.pyqtSlot()
+    def run(self):
+        &quot;&quot;&quot;Run the reduction steps.&quot;&quot;&quot;
+        result = &#39;&#39;
+        for step_num in range(self.nsteps):
+            if self.stop:
+                break
+            try:
+                result = self.step()
+            except Exception:
+                traceback.print_exc()
+                exctype, value = sys.exc_info()[:2]
+                self.signals.finished.emit((exctype, value,
+                                            traceback.format_exc()))
+                return
+            self.signals.progress.emit(step_num + 1)
+        self.signals.finished.emit(result)</div>
+</div>
+
+
+
+<div class="viewcode-block" id="LoadRunnable">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.LoadRunnable.html#sofia_redux.pipeline.gui.widgets.LoadRunnable">[docs]</a>
+class LoadRunnable(QtCore.QRunnable):
+    &quot;&quot;&quot;
+    Worker class to load reduction data.
+
+    This class is intended to be the worker for loading
+    reduction data in a thread separate from the main GUI thread.
+    It uses `CustomSignals` to emit a &#39;finished&#39; signal when the
+    data loading is complete.
+
+    Attributes
+    ----------
+    load : function
+        Reduction load function to run (`redux.Interface.start`).
+    data : list of str
+        Input data file names.
+    param : `redux.Parameters`
+        Parameters to save and pass to the new reduction object.
+    dirname : str
+        Output directory to save and pass to the new reduction
+        object.
+    &quot;&quot;&quot;
+    def __init__(self, load_function, data, param, dirname):
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for Redux GUI.&#39;)
+
+        super().__init__()
+        self.load = load_function
+        self.data = data
+        self.param = param
+        self.dirname = dirname
+        self.signals = CustomSignals()
+
+<div class="viewcode-block" id="LoadRunnable.run">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.LoadRunnable.html#sofia_redux.pipeline.gui.widgets.LoadRunnable.run">[docs]</a>
+    @QtCore.pyqtSlot()
+    def run(self):
+        &quot;&quot;&quot;Run the load function.&quot;&quot;&quot;
+        try:
+            self.load(self.data)
+        except Exception:
+            traceback.print_exc()
+            exctype, value = sys.exc_info()[:2]
+            self.signals.finished.emit((exctype, value,
+                                        traceback.format_exc()))
+            return
+
+        self.signals.finished.emit((self.param, self.dirname))</div>
+</div>
+
+
+
+<div class="viewcode-block" id="GeneralRunnable">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.GeneralRunnable.html#sofia_redux.pipeline.gui.widgets.GeneralRunnable">[docs]</a>
+class GeneralRunnable(QtCore.QRunnable):
+    &quot;&quot;&quot;
+    Worker class to run a general function.
+
+    This class is intended to be the worker for running any
+    function that does not require specific input or output
+    in a separate thread.  It uses `CustomSignals` to emit a
+    &#39;finished&#39; signal when the function is complete.
+
+    Attributes
+    ----------
+    run_function : function
+        Function to run.
+    &quot;&quot;&quot;
+    def __init__(self, run_function, *args, **kwargs):
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for Redux GUI.&#39;)
+
+        super().__init__()
+        self.run_function = run_function
+        self.signals = CustomSignals()
+        self.args = args
+        self.kwargs = kwargs
+
+<div class="viewcode-block" id="GeneralRunnable.run">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.widgets.GeneralRunnable.html#sofia_redux.pipeline.gui.widgets.GeneralRunnable.run">[docs]</a>
+    @QtCore.pyqtSlot()
+    def run(self):
+        &quot;&quot;&quot;Run the function.&quot;&quot;&quot;
+        try:
+            self.run_function(*self.args, **self.kwargs)
+        except Exception:
+            traceback.print_exc()
+            exctype, value = sys.exc_info()[:2]
+            self.signals.finished.emit((exctype, value,
+                                        traceback.format_exc()))
+        else:
+            self.signals.finished.emit(None)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

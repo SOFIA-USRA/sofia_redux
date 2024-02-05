@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.sofia.sofia_chooser &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.sofia.sofia_chooser</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Choose SOFIA reduction objects based on input data.&quot;&quot;&quot;
+
+import os
+
+from astropy import log
+from astropy.io import fits
+import configobj
+
+from sofia_redux.pipeline.reduction import Reduction
+from sofia_redux.pipeline.chooser import Chooser
+from sofia_redux.pipeline.sofia.sofia_exception import SOFIAImportError
+
+# attempt to import all available instruments
+try:
+    from sofia_redux.pipeline.sofia.forcast_imaging_reduction import \
+        FORCASTImagingReduction
+    from sofia_redux.pipeline.sofia.forcast_spectroscopy_reduction import \
+        FORCASTSpectroscopyReduction
+    from sofia_redux.pipeline.sofia.forcast_wavecal_reduction import \
+        FORCASTWavecalReduction
+    from sofia_redux.pipeline.sofia.forcast_spatcal_reduction import \
+        FORCASTSpatcalReduction
+    from sofia_redux.pipeline.sofia.forcast_slitcorr_reduction import \
+        FORCASTSlitcorrReduction
+except SOFIAImportError:  # pragma: no cover
+    FORCASTImagingReduction = Reduction
+    FORCASTSpectroscopyReduction = Reduction
+    FORCASTWavecalReduction = Reduction
+    FORCASTSpatcalReduction = Reduction
+    FORCASTSlitcorrReduction = Reduction
+    FORCAST_ERROR = None
+except ImportError as err:  # pragma: no cover
+    FORCASTImagingReduction = None
+    FORCASTSpectroscopyReduction = None
+    FORCASTWavecalReduction = None
+    FORCASTSpatcalReduction = None
+    FORCASTSlitcorrReduction = None
+    FORCAST_ERROR = err
+else:
+    FORCAST_ERROR = None
+
+try:
+    from sofia_redux.pipeline.sofia.hawc_reduction import HAWCReduction
+except SOFIAImportError:  # pragma: no cover
+    HAWCReduction = Reduction
+    HAWC_ERROR = None
+except ImportError as err:  # pragma: no cover
+    HAWCReduction = None
+    HAWC_ERROR = err
+else:
+    HAWC_ERROR = None
+
+try:
+    from sofia_redux.pipeline.sofia.fifils_reduction import FIFILSReduction
+except SOFIAImportError:  # pragma: no cover
+    FIFILSReduction = Reduction
+    FIFILS_ERROR = None
+except ImportError as err:  # pragma: no cover
+    FIFILSReduction = None
+    FIFILS_ERROR = err
+else:
+    FIFILS_ERROR = None
+
+try:
+    from sofia_redux.pipeline.sofia.flitecam_imaging_reduction import \
+        FLITECAMImagingReduction
+    from sofia_redux.pipeline.sofia.flitecam_spectroscopy_reduction import \
+        FLITECAMSpectroscopyReduction
+    from sofia_redux.pipeline.sofia.flitecam_wavecal_reduction import \
+        FLITECAMWavecalReduction
+    from sofia_redux.pipeline.sofia.flitecam_spatcal_reduction import \
+        FLITECAMSpatcalReduction
+    from sofia_redux.pipeline.sofia.flitecam_slitcorr_reduction import \
+        FLITECAMSlitcorrReduction
+except SOFIAImportError:  # pragma: no cover
+    FLITECAMImagingReduction = Reduction
+    FLITECAMSpectroscopyReduction = Reduction
+    FLITECAMWavecalReduction = Reduction
+    FLITECAMSpatcalReduction = Reduction
+    FLITECAMSlitcorrReduction = Reduction
+    FLITECAM_ERROR = None
+except ImportError as err:  # pragma: no cover
+    FLITECAMImagingReduction = None
+    FLITECAMSpectroscopyReduction = None
+    FLITECAMWavecalReduction = None
+    FLITECAMSpatcalReduction = None
+    FLITECAMSlitcorrReduction = None
+    FLITECAM_ERROR = err
+else:
+    FLITECAM_ERROR = None
+
+try:
+    from sofia_redux.pipeline.sofia.exes_reduction import EXESReduction
+except SOFIAImportError:  # pragma: no cover
+    EXESReduction = Reduction
+    EXES_ERROR = None
+except ImportError as err:  # pragma: no cover
+    EXESReduction = None
+    EXES_ERROR = err
+else:
+    EXES_ERROR = None
+
+__all__ = [&#39;SOFIAChooser&#39;]
+
+
+<div class="viewcode-block" id="SOFIAChooser">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.sofia_chooser.SOFIAChooser.html#sofia_redux.pipeline.sofia.sofia_chooser.SOFIAChooser">[docs]</a>
+class SOFIAChooser(Chooser):
+    &quot;&quot;&quot;
+    Choose SOFIA Redux reduction objects.
+
+    Currently, HAWC+, FORCAST, FIFI-LS, FLITECAM, and EXES instruments
+    are fully supported.
+
+    Input data that cannot be read as a FITS file by `astropy.io.fits`
+    is ignored.  If there is no good data to reduce, a null value
+    (no reduction object) is returned.
+
+    HAWC data is determined by the value of the INSTRUME keyword.
+    If it is set to &#39;HAWC_PLUS&#39;, a HAWCReduction object is
+    instantiated and returned.  This reduction object handles all
+    instrument modes for the HAWC DRP pipeline.
+
+    FORCAST data has keyword INSTRUME = &#39;FORCAST&#39;.  Imaging data is
+    determined from the value of the SPECTEL1 and 2 keywords: if
+    the primary filter is not a known grism, then the data is
+    assumed to be imaging.  In this case, a FORCASTImagingReduction
+    object is instantiated and returned.  Otherwise, a
+    FORCASTSpectroscopyReduction object is returned.
+
+    FIFI-LS data has keyword INSTRUME = &#39;FIFI-LS&#39;.  A FIFILSReduction
+    object is returned for all FIFI-LS data.
+
+    FLITECAM data has keyword INSTRUME = &#39;FLITECAM&#39;.  Imaging and
+    spectroscopy types are distinguished via the INSTCFG keyword,
+    and a FLITECAMImagingReduction or FLITECAMSpectroscopyReduction
+    object is returned, as appropriate.
+
+    EXES data has keyword INSTRUME = &#39;EXES&#39;.  An EXESReduction object
+    is returned for all EXES data.
+
+    If input data types do not match, or if no more specific
+    reduction object was found, a generic Reduction object is returned.
+    &quot;&quot;&quot;
+    def __init__(self):
+        &quot;&quot;&quot;Initialize the chooser.&quot;&quot;&quot;
+        super().__init__()
+
+        self.supported = {
+            &#39;FORCAST Imaging&#39;: FORCASTImagingReduction,
+            &#39;FORCAST Spectroscopy&#39;: FORCASTSpectroscopyReduction,
+            &#39;HAWC&#39;: HAWCReduction,
+            &#39;FIFI-LS&#39;: FIFILSReduction,
+            &#39;FLITECAM Imaging&#39;: FLITECAMImagingReduction,
+            &#39;FLITECAM Spectroscopy&#39;: FLITECAMSpectroscopyReduction,
+            &#39;EXES&#39;: EXESReduction,
+        }
+
+        # check for any failed imports
+        for instrument in self.supported:
+            if self.supported[instrument] == Reduction:  # pragma: no cover
+                log.warning(f&quot;{instrument} modules not found.  &quot;
+                            f&quot;{instrument} reductions will not &quot;
+                            f&quot;be available.&quot;)
+
+<div class="viewcode-block" id="SOFIAChooser.get_key_value">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.sofia_chooser.SOFIAChooser.html#sofia_redux.pipeline.sofia.sofia_chooser.SOFIAChooser.get_key_value">[docs]</a>
+    def get_key_value(self, header, key):
+        &quot;&quot;&quot;
+        Get a key value from a header.
+
+        Parameters
+        ----------
+        header : `astropy.io.fits.Header`
+            FITS header.
+        key : str
+            Key to retrieve.
+
+        Returns
+        -------
+        str
+            String representation of the value; UNKNOWN if not found.
+        &quot;&quot;&quot;
+        try:
+            value = str(header[key]).strip().upper()
+        except KeyError:
+            value = &#39;UNKNOWN&#39;
+        return value</div>
+
+
+<div class="viewcode-block" id="SOFIAChooser.choose_reduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.sofia_chooser.SOFIAChooser.html#sofia_redux.pipeline.sofia.sofia_chooser.SOFIAChooser.choose_reduction">[docs]</a>
+    def choose_reduction(self, data=None, config=None):
+        &quot;&quot;&quot;
+        Choose a reduction object.
+
+        Parameters
+        ----------
+        data : list of str, optional
+            Input FITS file paths.  If not provided, None will
+            be returned.
+        config : str, dict, or ConfigObj, optional
+            Configuration file or object.  May be any type
+            accepted by the `configobj.ConfigObj` constructor.
+            If present, may be used to choose specialized reductions
+            for some instruments.
+
+        Returns
+        -------
+        Reduction or None
+            The reduction object appropriate to the input data.
+        &quot;&quot;&quot;
+        reduction = Reduction()
+
+        # return generic reduction if no data provided
+        if data is None:
+            return reduction
+
+        # check for config object
+        if config is not None:
+            config = configobj.ConfigObj(config)
+
+        # loop over files, reading headers and collecting key values
+        test_params = None
+        if type(data) is not list:
+            data = [data]
+        for datafile in data:
+            # skip any input that isn&#39;t a file
+            # (eg. a number at the top of a manifest)
+            if not os.path.isfile(datafile):
+                continue
+
+            # skip any input that doesn&#39;t end in .fits
+            if not datafile.endswith(&#39;.fits&#39;):
+                continue
+
+            # try to open anything else as a FITS file
+            try:
+                with fits.open(datafile, mode=&#39;readonly&#39;,
+                               ignore_missing_end=True) as hdul:
+                    hdul.verify(&#39;silentfix&#39;)
+                    header = hdul[0].header
+            except (OSError, ValueError, fits.verify.VerifyError):
+                # silently continue -- this may be an auxiliary file
+                # that the pipeline will know how to handle
+                continue
+
+            # instrument and product type are needed for all files
+            instrume = self.get_key_value(header, &#39;INSTRUME&#39;)
+            prodtype = self.get_key_value(header, &#39;PRODTYPE&#39;)
+
+            if instrume == &#39;FORCAST&#39;:
+                # instrument and sky modes
+                detchan = self.get_key_value(header, &#39;DETCHAN&#39;)
+                instmode = self.get_key_value(header, &#39;INSTMODE&#39;)
+
+                # spectel1/2 depending on detector channel
+                # (0 / 1 or SW / LW, depending on date)
+                if detchan == &#39;1&#39; or detchan == &#39;LW&#39;:
+                    spectel = self.get_key_value(header, &#39;SPECTEL2&#39;)
+                else:
+                    spectel = self.get_key_value(header, &#39;SPECTEL1&#39;)
+
+                # grism options
+                spec_opt = [&#39;FOR_G063&#39;, &#39;FOR_G111&#39;,
+                            &#39;FOR_G227&#39;, &#39;FOR_G329&#39;]
+                if spectel in spec_opt:
+                    instmode = &#39;SPEC&#39;
+
+                # these keys have to match to return a consistent
+                # reduction object
+                param = [instrume, instmode, prodtype]
+
+            elif instrume == &#39;HAWC&#39; or \
+                    instrume == &#39;HAWC+&#39; or \
+                    instrume == &#39;HAWC_PLUS&#39;:
+                instrume = &#39;HAWC&#39;
+                param = [instrume, prodtype]
+
+            elif instrume == &#39;FIFI-LS&#39;:
+                obstype = self.get_key_value(header, &#39;OBSTYPE&#39;)
+                detchan = self.get_key_value(header, &#39;DETCHAN&#39;)
+                param = [instrume, prodtype, obstype, detchan]
+
+            elif instrume == &#39;EXES&#39;:
+                datatype = self.get_key_value(header, &#39;DATATYPE&#39;)
+
+                # allow mismatched prodtype only if input is a processed flat
+                if test_params is not None and prodtype != test_params[2]:
+                    if prodtype == &#39;FLAT&#39;:
+                        prodtype = test_params[2]
+                    elif test_params[2] == &#39;FLAT&#39;:
+                        test_params[2] = prodtype
+
+                param = [instrume, datatype, prodtype]
+
+            elif instrume == &#39;FLITECAM&#39;:
+                instcfg = self.get_key_value(header, &#39;INSTCFG&#39;)
+                param = [instrume, prodtype, instcfg]
+
+            else:
+                param = [instrume, prodtype]
+
+            if test_params is None:
+                test_params = param
+            else:
+                if param != test_params:
+                    log.warning(&#39;Files do not match; using &#39;
+                                &#39;generic reduction.&#39;)
+                    log.info(&#39;  File: {}&#39;.format(datafile))
+                    log.info(&#39;  Current parameters: {}&#39;.format(param))
+                    log.info(&#39;  Previous parameters: {}&#39;.format(test_params))
+                    return reduction
+
+        # return generic if no good files found
+        if test_params is None:
+            log.warning(&quot;No good files found; no reduction to run.&quot;)
+            return None
+
+        # make appropriate object
+        instrume = test_params[0]
+        if instrume == &#39;FORCAST&#39;:
+            if FORCAST_ERROR:  # pragma: no cover
+                raise FORCAST_ERROR
+            instmode, prodtype = test_params[1:]
+            if instmode == &#39;SPEC&#39;:
+                reduction = FORCASTSpectroscopyReduction()
+
+                # check for specialized mode
+                if config is not None:
+                    if &#39;wavecal&#39; in config and config[&#39;wavecal&#39;]:
+                        reduction = FORCASTWavecalReduction()
+                    elif &#39;spatcal&#39; in config and config[&#39;spatcal&#39;]:
+                        reduction = FORCASTSpatcalReduction()
+                    elif &#39;slitcorr&#39; in config and config[&#39;slitcorr&#39;]:
+                        reduction = FORCASTSlitcorrReduction()
+            else:
+                reduction = FORCASTImagingReduction()
+        elif instrume == &#39;HAWC&#39;:
+            if HAWC_ERROR:  # pragma: no cover
+                raise HAWC_ERROR
+            reduction = HAWCReduction()
+
+            # check for specialized mode
+            if config is not None:
+                if &#39;mode&#39; in config and config[&#39;mode&#39;]:
+                    reduction.override_mode = config[&#39;mode&#39;]
+
+        elif instrume == &#39;FIFI-LS&#39;:
+            if FIFILS_ERROR:  # pragma: no cover
+                raise FIFILS_ERROR
+            reduction = FIFILSReduction()
+
+        elif instrume == &#39;EXES&#39;:
+            # some functionality is borrowed from the
+            # forcast pipeline
+            if FORCAST_ERROR:  # pragma: no cover
+                raise FORCAST_ERROR
+            if EXES_ERROR:  # pragma: no cover
+                raise EXES_ERROR
+            reduction = EXESReduction()
+
+        elif instrume == &#39;FLITECAM&#39;:
+            # some functionality is borrowed from the
+            # forcast pipeline
+            if FORCAST_ERROR:  # pragma: no cover
+                raise FORCAST_ERROR
+            if FLITECAM_ERROR:  # pragma: no cover
+                raise FLITECAM_ERROR
+            prodtype, instcfg = test_params[1:]
+            if instcfg == &#39;IMAGING&#39;:
+                reduction = FLITECAMImagingReduction()
+            else:
+                reduction = FLITECAMSpectroscopyReduction()
+
+                # check for specialized mode
+                if config is not None:
+                    if &#39;wavecal&#39; in config and config[&#39;wavecal&#39;]:
+                        reduction = FLITECAMWavecalReduction()
+                    elif &#39;spatcal&#39; in config and config[&#39;spatcal&#39;]:
+                        reduction = FLITECAMSpatcalReduction()
+                    elif &#39;slitcorr&#39; in config and config[&#39;slitcorr&#39;]:
+                        reduction = FLITECAMSlitcorrReduction()
+
+        return reduction</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

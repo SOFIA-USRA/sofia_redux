@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.configuration &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.configuration</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Redux configuration.&quot;&quot;&quot;
+
+import os
+import tempfile
+
+from configobj import ConfigObj, ParseError
+
+from sofia_redux.pipeline.chooser import Chooser
+
+__all__ = [&#39;Configuration&#39;]
+
+
+<div class="viewcode-block" id="Configuration">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.configuration.Configuration.html#sofia_redux.pipeline.configuration.Configuration">[docs]</a>
+class Configuration(object):
+    &quot;&quot;&quot;
+    Set Redux configuration.
+
+    Configuration values are set as attributes of this object,
+    so that they can be accessed as ``config.value``.  If
+    the value is not set in the configuration, None will be
+    returned.
+
+    Subclasses should set the chooser attribute as appropriate.
+    If unset, this class will use the default `redux.Chooser`.
+
+    Attributes
+    ----------
+    config_file : str or dict-like
+        Initial configuration file.
+    config: `ConfigObj`
+        Loaded configuration object.
+    &quot;&quot;&quot;
+    def __init__(self, config_file=None):
+        &quot;&quot;&quot;
+        Initialize with an optional configuration file.
+
+        Parameters
+        ----------
+        config_file : str or dict-like, optional
+            File path to an INI-format configuration file.
+            May alternately be any object accepted by the
+            ConfigObj constructor (e.g. a dictionary of
+            configuration key-value pairs).
+        &quot;&quot;&quot;
+        self.chooser = Chooser()
+        self.config_file = None
+        self.config = ConfigObj()
+
+        if config_file is not None:
+            self.load(config_file)
+
+    def __getattr__(self, key):
+        &quot;&quot;&quot;Return chooser or value from config.&quot;&quot;&quot;
+        if self.config is not None and key in self.config:
+            return self.config[key]
+        else:
+            return None
+
+    def __setattr__(self, key, value):
+        &quot;&quot;&quot;Set value in config.&quot;&quot;&quot;
+        if key not in [&#39;chooser&#39;, &#39;config_file&#39;, &#39;config&#39;]:
+            if self.config is not None:
+                self.config[key] = value
+            else:
+                super().__setattr__(key, value)
+        else:
+            super().__setattr__(key, value)
+
+<div class="viewcode-block" id="Configuration.load">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.configuration.Configuration.html#sofia_redux.pipeline.configuration.Configuration.load">[docs]</a>
+    def load(self, config_file):
+        &quot;&quot;&quot;
+        Read config file into ConfigObj object.
+
+        Parameters
+        ----------
+        config_file : str, dict, or ConfigObj
+            File path to an INI-format configuration file.  Alternately,
+            may be a dict or ConfigObj that can be directly read by
+            the ConfigObj constructor, or it may be a string containing
+            INI formatted values.
+        &quot;&quot;&quot;
+        # allow command line strings for quick config
+        if isinstance(config_file, str) and not os.path.isfile(config_file):
+            # do nothing if config is set to &quot;None&quot;, for default specification
+            if config_file.lower().strip() == &#39;none&#39;:
+                self.config_file = None
+                co = ConfigObj(interpolation=False)
+            else:
+                # unescape anything escaped by the command line parser
+                unescaped = config_file.encode(
+                    &#39;utf-8&#39;).decode(&#39;unicode_escape&#39;)
+                # write to temporary file for configobj read in
+                with tempfile.NamedTemporaryFile() as cfg:
+                    cfg.write(unescaped.encode(&#39;utf-8&#39;))
+                    cfg.seek(0)
+                    try:
+                        co = ConfigObj(cfg, interpolation=False)
+                    except ParseError:
+                        raise IOError(f&#39;Unable to read configuration &#39;
+                                      f&#39;from: {config_file}&#39;) from None
+                self.config_file = None
+        else:
+            # otherwise load as file
+            co = config_file
+            self.config_file = config_file
+
+        self.config = ConfigObj(co, interpolation=False)
+
+        # fix any &quot;False&quot; top-level keys
+        for key in self.config:
+            if str(self.config[key]).lower().strip() == &#39;false&#39;:
+                self.config[key] = False</div>
+
+
+<div class="viewcode-block" id="Configuration.to_text">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.configuration.Configuration.html#sofia_redux.pipeline.configuration.Configuration.to_text">[docs]</a>
+    def to_text(self):
+        &quot;&quot;&quot;
+        Print the current configuration to a text list.
+
+        Returns
+        -------
+        list of str
+            The parameters in INI-formatted strings.
+        &quot;&quot;&quot;
+        if self.config is None:
+            return []
+        else:
+            return self.config.write()</div>
+
+
+<div class="viewcode-block" id="Configuration.update">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.configuration.Configuration.html#sofia_redux.pipeline.configuration.Configuration.update">[docs]</a>
+    def update(self, config_file):
+        &quot;&quot;&quot;
+        Update configuration from a new config file.
+
+        Parameters
+        ----------
+        config_file : str, dict, or ConfigObj
+            File path to an INI-format configuration file.  Alternately,
+            may be a dict or ConfigObj that can be directly read by
+            the ConfigObj constructor, or it may be a string containing
+            INI formatted values.
+        &quot;&quot;&quot;
+        new_config = ConfigObj(config_file, interpolation=False)
+        # fix any &quot;False&quot; top-level keys
+        for key in new_config:
+            if str(new_config[key]).lower().strip() == &#39;false&#39;:
+                new_config[key] = False
+        self.config.merge(new_config)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

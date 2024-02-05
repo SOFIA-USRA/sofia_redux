@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.sofia.flitecam_spectroscopy_reduction &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.sofia.flitecam_spectroscopy_reduction</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;FLITECAM Spectroscopy Reduction pipeline steps&quot;&quot;&quot;
+
+import os
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.pipeline.sofia.sofia_exception import SOFIAImportError
+try:
+    import sofia_redux.instruments.flitecam
+    assert sofia_redux.instruments.flitecam
+except ImportError:
+    raise SOFIAImportError(&#39;FLITECAM modules not installed&#39;)
+
+from sofia_redux.pipeline.reduction import Reduction
+from sofia_redux.pipeline.sofia.flitecam_reduction \
+    import FLITECAMReduction
+from sofia_redux.pipeline.sofia.parameters.flitecam_spectroscopy_parameters \
+    import FLITECAMSpectroscopyParameters
+from sofia_redux.pipeline.sofia.forcast_spectroscopy_reduction \
+    import FORCASTSpectroscopyReduction
+from sofia_redux.toolkit.utilities.fits import hdinsert, set_log_level
+
+__all__ = [&#39;FLITECAMSpectroscopyReduction&#39;]
+
+
+<div class="viewcode-block" id="FLITECAMSpectroscopyReduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.flitecam_spectroscopy_reduction.FLITECAMSpectroscopyReduction.html#sofia_redux.pipeline.sofia.flitecam_spectroscopy_reduction.FLITECAMSpectroscopyReduction">[docs]</a>
+class FLITECAMSpectroscopyReduction(FLITECAMReduction,
+                                    FORCASTSpectroscopyReduction):
+    &quot;&quot;&quot;
+    FLITECAM spectroscopy reduction steps.
+
+    Primary image reduction algorithms are defined in the flitecam
+    package (`sofia_redux.instruments.flitecam`).  Spectroscopy-related
+    algorithms are pulled from the `sofia_redux.spectroscopy` package, and
+    some utilities come from the `sofia_redux.toolkit` package.  This
+    reduction object requires that all three packages be installed.
+
+    This reduction object defines a method for each pipeline
+    step, that calls the appropriate algorithm from its source
+    packages.
+    &quot;&quot;&quot;
+    def __init__(self):
+        &quot;&quot;&quot;Initialize the reduction object.&quot;&quot;&quot;
+        FLITECAMReduction.__init__(self)
+
+        # descriptive attributes
+        self.mode = &#39;spectroscopy&#39;
+
+        # product type definitions for FLITECAM spectroscopy steps
+        self.prodtype_map.update(
+            {&#39;make_image&#39;: &#39;spectral_image&#39;,
+             &#39;stack_dithers&#39;: &#39;dithers_stacked&#39;,
+             &#39;make_profiles&#39;: &#39;rectified_image&#39;,
+             &#39;locate_apertures&#39;: &#39;apertures_located&#39;,
+             &#39;trace_continuum&#39;: &#39;continuum_traced&#39;,
+             &#39;set_apertures&#39;: &#39;apertures_set&#39;,
+             &#39;subtract_background&#39;: &#39;background_subtracted&#39;,
+             &#39;extract_spectra&#39;: &#39;spectra&#39;,
+             &#39;flux_calibrate&#39;: &#39;calibrated_spectrum&#39;,
+             &#39;combine_spectra&#39;: &#39;coadded_spectrum&#39;,
+             &#39;make_response&#39;: &#39;response_spectrum&#39;,
+             &#39;combine_response&#39;: &#39;instrument_response&#39;,
+             &#39;spectral_cube&#39;: &#39;spectral_cube&#39;,
+             &#39;combined_spectrum&#39;: &#39;combined_spectrum&#39;,
+             &#39;specmap&#39;: &#39;specmap&#39;})
+        self.prodnames.update(
+            {&#39;spectral_image&#39;: &#39;IMG&#39;,
+             &#39;dithers_stacked&#39;: &#39;SKD&#39;,
+             &#39;rectified_image&#39;: &#39;RIM&#39;,
+             &#39;apertures_located&#39;: &#39;LOC&#39;,
+             &#39;continuum_traced&#39;: &#39;TRC&#39;,
+             &#39;apertures_set&#39;: &#39;APS&#39;,
+             &#39;background_subtracted&#39;: &#39;BGS&#39;,
+             &#39;spectra&#39;: &#39;SPM&#39;,
+             &#39;calibrated_spectrum&#39;: &#39;CRM&#39;,
+             &#39;coadded_spectrum&#39;: &#39;COA&#39;,
+             &#39;response_spectrum&#39;: &#39;RSP&#39;,
+             &#39;instrument_response&#39;: &#39;IRS&#39;,
+             &#39;spectral_cube&#39;: &#39;SCB&#39;,
+             &#39;combined_spectrum&#39;: &#39;CMB&#39;,
+             &#39;specmap&#39;: &#39;SMP&#39;})
+
+        # invert the map for quick lookup of step from type
+        self.step_map = {v: k for k, v in self.prodtype_map.items()}
+
+        # default recipe and step names
+        self.recipe = [&#39;check_header&#39;, &#39;correct_linearity&#39;, &#39;make_image&#39;,
+                       &#39;stack_dithers&#39;, &#39;make_profiles&#39;, &#39;locate_apertures&#39;,
+                       &#39;trace_continuum&#39;, &#39;set_apertures&#39;,
+                       &#39;subtract_background&#39;, &#39;extract_spectra&#39;,
+                       &#39;flux_calibrate&#39;, &#39;combine_spectra&#39;, &#39;specmap&#39;]
+        self.processing_steps.update(
+            {&#39;make_image&#39;: &#39;Make Spectral Image&#39;,
+             &#39;stack_dithers&#39;: &#39;Stack Dithers&#39;,
+             &#39;make_profiles&#39;: &#39;Make Profiles&#39;,
+             &#39;locate_apertures&#39;: &#39;Locate Apertures&#39;,
+             &#39;trace_continuum&#39;: &#39;Trace Continuum&#39;,
+             &#39;set_apertures&#39;: &#39;Set Apertures&#39;,
+             &#39;subtract_background&#39;: &#39;Subtract Background&#39;,
+             &#39;extract_spectra&#39;: &#39;Extract Spectra&#39;,
+             &#39;flux_calibrate&#39;: &#39;Calibrate Flux&#39;,
+             &#39;combine_spectra&#39;: &#39;Combine Spectra&#39;,
+             &#39;make_response&#39;: &#39;Make Response&#39;,
+             &#39;combine_response&#39;: &#39;Combine Response&#39;,
+             &#39;specmap&#39;: &#39;Make Spectral Map&#39;})
+
+        # also define an alternate recipe for flux standards
+        self.default_recipe = self.recipe.copy()
+        self.response_recipe = self.recipe[:-1].copy()
+        self.response_recipe[-1] = &#39;make_response&#39;
+        self.response_recipe += [&#39;combine_response&#39;]
+        # and for 1D spectra (specmap only)
+        self.cmb_recipe = [&#39;combined_spectrum&#39;, &#39;specmap&#39;]
+
+<div class="viewcode-block" id="FLITECAMSpectroscopyReduction.load">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.flitecam_spectroscopy_reduction.FLITECAMSpectroscopyReduction.html#sofia_redux.pipeline.sofia.flitecam_spectroscopy_reduction.FLITECAMSpectroscopyReduction.load">[docs]</a>
+    def load(self, data, param_class=None):
+        &quot;&quot;&quot;
+        Load input data to make it available to reduction steps.
+
+        The process is:
+
+        - Call the parent load method to initialize data
+          reduction variables.
+        - Use the first loaded FITS header to determine and load
+          the configuration.
+        - Use the loaded configuration and the product type in the
+          base header to determine the data processing recipe.
+        - Load parameters for all steps.
+        - Load the data immediately if starting from an intermediate
+          step; otherwise, just load the raw headers and defer loading
+          the data from the FITS files.
+
+        After this step, the input attribute is populated as required
+        for the first pipeline step in the recipe.
+
+        Parameters
+        ----------
+        data : list of str or str
+            Input file paths to load.
+        param_class : class, optional
+            Parameters to instantiate, if not FLITECAMParameters.
+        &quot;&quot;&quot;
+        # imports for this step
+        from sofia_redux.instruments.flitecam.getcalpath import getcalpath
+        from sofia_redux.toolkit.utilities.fits import getheader
+
+        # call the parent method to initialize
+        # reduction variables
+        Reduction.load(self, data)
+
+        # read the first FITS header and use to configure reduction
+        self.basehead = getheader(self.raw_files[0])
+        self.calres = getcalpath(self.basehead)
+
+        log.debug(&#39;Full configuration:&#39;)
+        for key, value in self.calres.items():
+            log.debug(&#39;  {}: {}&#39;.format(key, value))
+
+        # get product type to determine recipe
+        intermediate = False
+        prodtype = self.basehead.get(&#39;PRODTYPE&#39;, default=&#39;UNKNOWN&#39;)
+
+        # check for an off-nominal recipe first
+        if str(self.calres[&#39;obstype&#39;]).lower() == &#39;standard_telluric&#39;:
+            # flux standard -- make response
+            log.info(&#39;Standard detected; using alternate recipe&#39;)
+            self.recipe = self.response_recipe
+        elif prodtype.lower() in self.spec1d_prodtype:
+            self.recipe = self.cmb_recipe
+            prodtype = &#39;combined_spectrum&#39;
+        else:
+            self.recipe = self.default_recipe
+
+        # get remaining recipe for input prodtype
+        if prodtype in self.prodtypes:
+            pidx = self.prodtypes.index(prodtype)
+            self.recipe = self.recipe[pidx + 1:]
+            if len(self.recipe) == 0:
+                msg = f&quot;No steps to run for prodtype &#39;{prodtype}&#39;.&quot;
+                log.error(msg)
+                raise ValueError(msg)
+
+        if str(prodtype).strip().upper() != &#39;UNKNOWN&#39;:
+            intermediate = True
+
+        if param_class is None:
+            self.parameters = FLITECAMSpectroscopyParameters(
+                config=self.calres,
+                pipecal_config=self.cal_conf)
+        else:  # pragma: no cover
+            # this option is not currently used
+            self.parameters = param_class(
+                config=self.calres,
+                pipecal_config=self.cal_conf)
+
+        # if not starting from raw data, load the files in
+        # immediately
+        if intermediate:
+            self.load_fits(intermediate=True)
+        else:
+            # just load headers
+            self.input = []
+            for datafile in self.raw_files:
+                self.input.append(getheader(datafile))</div>
+
+
+<div class="viewcode-block" id="FLITECAMSpectroscopyReduction.make_image">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.flitecam_spectroscopy_reduction.FLITECAMSpectroscopyReduction.html#sofia_redux.pipeline.sofia.flitecam_spectroscopy_reduction.FLITECAMSpectroscopyReduction.make_image">[docs]</a>
+    def make_image(self):
+        &quot;&quot;&quot;Pair subtract spectral images&quot;&quot;&quot;
+        from sofia_redux.instruments.flitecam.mkspecimg import mkspecimg
+
+        # get parameters
+        param = self.get_parameter_set()
+        flatfile = param.get_value(&#39;flatfile&#39;)
+        pair_sub = param.get_value(&#39;pair_sub&#39;)
+
+        if not os.path.isfile(flatfile):
+            if flatfile.strip() == &#39;&#39;:
+                flatfile = None
+            else:
+                msg = f&#39;Cannot find flat file: {flatfile}.&#39;
+                log.error(msg)
+                raise ValueError(msg)
+
+        # pair-subtract input
+        outimg, outnum = mkspecimg(self.input, flatfile=flatfile,
+                                   pair_subtract=pair_sub,
+                                   filenum=self.filenum)
+        self.filenum = outnum
+
+        results = []
+        for i, hdul in enumerate(outimg):
+            outname = self.update_output(
+                hdul, self.filenum[i], self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(hdul, outname)
+            results.append(hdul)
+
+        self.input = results
+        self.set_display_data()</div>
+
+
+<div class="viewcode-block" id="FLITECAMSpectroscopyReduction.flux_calibrate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.flitecam_spectroscopy_reduction.FLITECAMSpectroscopyReduction.html#sofia_redux.pipeline.sofia.flitecam_spectroscopy_reduction.FLITECAMSpectroscopyReduction.flux_calibrate">[docs]</a>
+    def flux_calibrate(self):
+        &quot;&quot;&quot;Calibrate spectral flux.&quot;&quot;&quot;
+        from sofia_redux.instruments.forcast.getatran import get_atran
+        from sofia_redux.spectroscopy.fluxcal import fluxcal
+        from sofia_redux.spectroscopy.radvel import radvel
+
+        # get parameters
+        param = self.get_parameter_set()
+        skipcal = param.get_value(&#39;skip_cal&#39;)
+        respfile = param.get_value(&#39;respfile&#39;)
+        resolution = param.get_value(&#39;resolution&#39;)
+        atrandir = param.get_value(&#39;atrandir&#39;)
+        snthresh = param.get_value(&#39;sn_threshold&#39;)
+        atranfile = param.get_value(&#39;atranfile&#39;)
+        auto_shift = param.get_value(&#39;auto_shift&#39;)
+        shift_limit = param.get_value(&#39;auto_shift_limit&#39;)
+        waveshift = param.get_value(&#39;waveshift&#39;)
+        model_order = param.get_value(&#39;model_order&#39;)
+
+        if skipcal:
+            log.info(&#39;No flux calibration performed.&#39;)
+            return
+
+        # get atran parameters
+        if str(atranfile).strip() == &#39;&#39;:
+            atranfile = None
+        if str(atrandir).strip() == &#39;&#39;:
+            atrandir = None
+        else:
+            # expand environment variables in path
+            atrandir = os.path.expandvars(atrandir)
+            if not os.path.exists(atrandir):
+                atrandir = None
+        default_atrandir = os.path.join(self.calres[&#39;pathcal&#39;],
+                                        &#39;grism&#39;, &#39;atran&#39;)
+        if atrandir is None:
+            atrandir = default_atrandir
+
+        # set waveshift to None if not provided
+        if str(waveshift).strip() == &#39;&#39; or np.allclose(waveshift, 0):
+            waveshift = None
+        else:
+            if auto_shift:
+                log.info(&#39;Disabling auto-shift since manual shift &#39;
+                         &#39;was specified.&#39;)
+                auto_shift = False
+
+        # get response data
+        syserr = None
+        resname = &#39;UNKNOWN&#39;
+        response = None
+        n_ord = 1
+        try:
+            with set_log_level(&#39;ERROR&#39;):
+                resp_hdul = fits.open(respfile)
+            rhead = resp_hdul[0].header
+            response_data = resp_hdul[0].data
+            resp_hdul.close()
+        except (OSError, ValueError, IndexError, TypeError):
+            if not param.get_value(&#39;making_response&#39;):
+                msg = &#39;Bad response file: {}&#39;.format(respfile)
+                log.error(msg)
+                raise ValueError(msg) from None
+        else:
+            syserr = rhead.get(&#39;SYSERR&#39;, 0.0)
+            resname = respfile.split(self.calres[&#39;pathcal&#39;])[-1]
+
+            # handle multiple apertures in the response file as
+            # orders, so they can be applied to apertures separately
+            if response_data.ndim &gt; 2:
+                n_ord = response_data.shape[0]
+            response = {}
+            for ord in range(n_ord):
+                response[ord + 1] = {&#39;wave&#39;: response_data[ord, 0, :],
+                                     &#39;response&#39;: response_data[ord, 1, :],
+                                     &#39;error&#39;: response_data[ord, 2, :]}
+
+            log.info(&#39;Using response file: {}&#39;.format(respfile))
+
+        valid = True
+        try:
+            resolution = float(resolution)
+        except ValueError:
+            valid = False
+        if not valid or np.allclose(resolution, -9999):
+            msg = &#39;Missing spectral resolution &#39; \
+                  &#39;for {}&#39;.format(self.calres[&#39;name&#39;])
+            log.error(msg)
+            raise ValueError(msg)
+        log.info(&#39;Using resolution: {}&#39;.format(resolution))
+
+        results = []
+        for i, hdul in enumerate(self.input):
+            log.info(&#39;&#39;)
+            log.info(hdul[0].header[&#39;FILENAME&#39;])
+
+            # retrieve data from input
+            header = hdul[0].header
+            image = hdul[&#39;FLUX&#39;].data
+            err = hdul[&#39;ERROR&#39;].data
+            wave = hdul[&#39;WAVEPOS&#39;].data
+            spec_flux = hdul[&#39;SPECTRAL_FLUX&#39;].data
+            spec_err = hdul[&#39;SPECTRAL_ERROR&#39;].data
+            apmask = np.abs(hdul[&#39;APERTURE_MASK&#39;].data)
+
+            # check s/n for auto shift
+            test_auto = auto_shift
+            if test_auto:
+                s2n = np.nanmedian(spec_flux / spec_err)
+                if s2n &lt; snthresh:
+                    log.warning(f&#39;S/N {s2n:.1f} too low to auto-shift &#39;
+                                f&#39;wavelengths. Disabling auto-shift.&#39;)
+                    test_auto = False
+
+            base_atran = get_atran(header, resolution, filename=atranfile,
+                                   wmin=1, wmax=6, atran_dir=atrandir)
+            if base_atran is None:
+                if atrandir == default_atrandir:
+                    msg = &#39;No matching ATRAN files.&#39;
+                    raise ValueError(msg)
+                else:
+                    # if not found, try the default directory
+                    base_atran = get_atran(header, resolution,
+                                           filename=atranfile,
+                                           wmin=1, wmax=6,
+                                           atran_dir=default_atrandir)
+                    if base_atran is None:
+                        msg = &#39;No matching ATRAN files.&#39;
+                        raise ValueError(msg)
+
+            atran = [base_atran]
+
+            n_ap = 1
+            if spec_flux.ndim &gt; 1:
+                n_ap = spec_flux.shape[0]
+
+            spectra = {}
+            if n_ord == 1:
+                spectra[1] = []
+            for ap in range(n_ap):
+                spec = {&#39;wave&#39;: wave, &#39;flux&#39;: image.copy(),
+                        &#39;error&#39;: err.copy(), &#39;spectral_flux&#39;: spec_flux[ap],
+                        &#39;spectral_error&#39;: spec_err[ap],
+                        &#39;wave_shift&#39;: waveshift}
+                if n_ord &gt; 1:
+                    # handle apertures as orders if the response file
+                    # had multiple apertures
+
+                    # get calibration regions from the aperture mask
+                    zap = (apmask &gt; ap) &amp; (apmask &lt;= (ap + 1))
+                    if ap == 0:
+                        # calibrate unspecified and background regions
+                        # with first aperture response
+                        zap |= np.isnan(apmask)
+                        zap |= (apmask == 0)
+                    spec[&#39;flux&#39;][~zap] = np.nan
+                    spec[&#39;error&#39;][~zap] = np.nan
+
+                    spectra[ap + 1] = [spec]
+                else:
+                    # otherwise handle apertures as spectra with
+                    # a common response function
+                    spectra[1].append(spec)
+
+            result = fluxcal(spectra, atran, response,
+                             auto_shift=test_auto,
+                             shift_limit=shift_limit,
+                             model_order=model_order)
+            if result is None:
+                msg = &#39;Problem in flux calibration.&#39;
+                log.error(msg)
+                raise ValueError(msg)
+
+            wave_shift = []
+            calflux = np.full_like(image, np.nan)
+            calerror = np.full_like(image, np.nan)
+            specflux = []
+            specerr = []
+            spectrans = []
+            specresp = []
+            specresperr = []
+            for ord in result:
+                spectra = result[ord]
+                for j, spec in enumerate(spectra):
+                    # waveshift information
+                    wave_shift.append(str(spec[&#39;wave_shift&#39;]))
+                    log.info(f&quot;Wavelength shift applied to &quot;
+                             f&quot;spectrum {ord + j}: &quot;
+                             f&quot;{spec[&#39;wave_shift&#39;]:.2f} pixels&quot;)
+
+                    # compose calibrated image
+                    calflux = np.nansum([calflux, spec[&#39;flux&#39;]], axis=0)
+                    calerror = np.nansum([calerror, spec[&#39;error&#39;]], axis=0)
+
+                    # gather calibrated spectra
+                    specflux.append(spec[&#39;spectral_flux&#39;])
+                    specerr.append(spec[&#39;spectral_error&#39;])
+                    spectrans.append(spec[&#39;transmission&#39;])
+                    specresp.append(spec[&#39;response&#39;])
+                    specresperr.append(spec[&#39;response_error&#39;])
+
+            # reduce dimensions if only one spectrum
+            if len(specflux) == 1:
+                specflux = specflux[0]
+                specerr = specerr[0]
+                spectrans = spectrans[0]
+                specresp = specresp[0]
+                specresperr = specresperr[0]
+
+            # update average calibration error in header
+            if syserr is not None:
+                calerr = syserr / np.nanmean(specresp)
+                hdinsert(header, &#39;CALERR&#39;, calerr,
+                         comment=&#39;Fractional flux calibration error&#39;)
+
+            # log ATRAN file and record wave shift as used
+            log.info(&#39;ATRAN file used: {}&#39;.format(header[&#39;ATRNFILE&#39;]))
+            hdinsert(header, &#39;WAVSHIFT&#39;, &#39;,&#39;.join(wave_shift),
+                     &#39;Wavelength shift (pix)&#39;)
+
+            # log response file and resolution
+            hdinsert(header, &#39;RSPNFILE&#39;, resname, &#39;Response file&#39;)
+            hdinsert(header, &#39;RP&#39;, resolution, &#39;Resolving power&#39;)
+
+            # update data
+            hdul[0].header = header
+            hdul[&#39;FLUX&#39;].data = calflux
+            hdul[&#39;ERROR&#39;].data = calerror
+            hdul[&#39;WAVEPOS&#39;].data = wave
+            hdul[&#39;SPECTRAL_FLUX&#39;].data = np.array(specflux)
+            hdul[&#39;SPECTRAL_ERROR&#39;].data = np.array(specerr)
+
+            # also append response and transmission curves
+            exthead = hdul[&#39;SPECTRAL_FLUX&#39;].header.copy()
+            if &#39;TRANSMISSION&#39; in hdul:
+                del hdul[&#39;TRANSMISSION&#39;]
+            hdul.append(fits.ImageHDU(spectrans, exthead,
+                                      name=&#39;TRANSMISSION&#39;))
+            hdul.append(fits.ImageHDU(specresp, exthead,
+                                      name=&#39;RESPONSE&#39;))
+            hdul.append(fits.ImageHDU(specresperr,
+                                      name=&#39;RESPONSE_ERROR&#39;))
+
+            # update BUNIT for all extensions
+            if response is not None:
+                hdul[0].header[&#39;PROCSTAT&#39;] = &#39;LEVEL_3&#39;
+            hdinsert(hdul[0].header, &#39;RAWUNITS&#39;, &#39;ct/s&#39;,
+                     &#39;Data units before calibration&#39;)
+            for ext in [&#39;FLUX&#39;, &#39;ERROR&#39;]:
+                hdinsert(hdul[ext].header, &#39;BUNIT&#39;, &#39;Jy/pixel&#39;, &#39;Data units&#39;)
+            for ext in [&#39;SPECTRAL_FLUX&#39;, &#39;SPECTRAL_ERROR&#39;]:
+                hdinsert(hdul[ext].header, &#39;BUNIT&#39;, &#39;Jy&#39;, &#39;Data units&#39;)
+            hdinsert(hdul[&#39;TRANSMISSION&#39;].header, &#39;BUNIT&#39;, &#39;&#39;, &#39;Data units&#39;)
+            hdinsert(hdul[&#39;RESPONSE&#39;].header, &#39;BUNIT&#39;, &#39;ct/s/Jy&#39;,
+                     &#39;Data units&#39;)
+            hdinsert(hdul[&#39;RESPONSE_ERROR&#39;].header, &#39;BUNIT&#39;, &#39;ct/s/Jy&#39;,
+                     &#39;Data units&#39;)
+
+            # add a barycentric and LSR velocity shift to the header
+            dw_bary, dw_lsr = radvel(hdul[0].header)
+            hdinsert(hdul[0].header, &#39;BARYSHFT&#39;, dw_bary,
+                     comment=&#39;Barycentric motion dl/l shift (unapplied)&#39;)
+            hdinsert(hdul[0].header, &#39;LSRSHFT&#39;, dw_lsr,
+                     comment=&#39;Additional dl/l shift to LSR (unapplied)&#39;)
+
+            # update output name
+            outname = self.update_output(hdul, self.filenum[i],
+                                         self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(hdul, outname)
+
+            if param.get_value(&#39;save_1d&#39;):
+                log.info(&#39;&#39;)
+                log.info(&#39;Saving 1D spectra:&#39;)
+                spec = self._make_1d(hdul)
+                specname = outname.replace(&#39;CRM&#39;, &#39;CAL&#39;)
+                spec[0].header[&#39;FILENAME&#39;] = os.path.basename(specname)
+                spec[0].header[&#39;PRODTYPE&#39;] = &#39;calibrated_spectrum_1d&#39;
+                self.write_output(spec, specname)
+
+            results.append(hdul)
+
+        log.info(&#39;&#39;)
+        self.input = results
+        self.set_display_data()</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

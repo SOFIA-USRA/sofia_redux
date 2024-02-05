@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.visualization.controller &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.visualization.controller</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Standalone front-end for Eye of SOFIA display tool.&quot;&quot;&quot;
+
+import os
+import sys
+import argparse
+from typing import List
+import warnings
+
+from sofia_redux.visualization import eye
+
+try:
+    from PyQt5 import QtWidgets, QtCore
+except ImportError:
+    HAS_PYQT5 = False
+    QtWidgets, QtCore = None, None
+else:
+    HAS_PYQT5 = True
+
+__all__ = [&#39;main&#39;, &#39;parse_args&#39;, &#39;check_args&#39;]
+
+
+<div class="viewcode-block" id="main">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.controller.main.html#sofia_redux.visualization.controller.main">[docs]</a>
+def main():
+    &quot;&quot;&quot;
+    The Eye of SOFIA spectral viewer.
+
+    Start the Eye front end as a standalone tool with the command::
+
+        eospec
+
+    Optionally, a list of files to load into the viewer may be provided
+    on the command line. From the GUI window, files may be loaded from the
+    File Choice control panel, using the Add File button.  When the filename
+    is displayed in the list, double-click it to display it in a plot pane.
+
+    Multiple spectra may be displayed together in a pane, as long as
+    their units are compatible.  Incompatible spectra may be displayed
+    in separate panes; use the Add Pane button in the Panes panel to
+    create a new plot window for display.
+
+    Plot display can be modified or updated with controls in the Orders,
+    Axis, and Plot control panels.
+
+    Additionally, when a plot window has focus, some keyboard controls
+    trigger display and analysis tasks.  In the plot window, press *x*, *y*,
+    or *z* to start zoom mode in the x-direction, y-direction, or box
+    mode, respectively. Click twice on the plot to set the new limits.
+    Press *w* to reset the plot limits to defaults. Press *f* to start
+    fitting mode, to fit a Gaussian + baseline to a spectral feature.
+    Press *c* to clear any current zoom modes or plot overlays.
+    &quot;&quot;&quot;
+    if not HAS_PYQT5:  # pragma: no cover
+        raise ImportError(&#39;PyQt5 package is required for the Eye.&#39;)
+
+    args = parse_args(sys.argv[1:])
+    args = check_args(args)
+
+    app = QtWidgets.QApplication(sys.argv)
+
+    # Start a timer to allow the python interpreter to run occasionally
+    # (without this, ctrl-c is swallowed by the event loop)
+    timer = QtCore.QTimer()
+    timer.start(200)
+    timer.timeout.connect(lambda: None)
+
+    eye_window = eye.Eye(args)
+    eye_window.open_eye()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter(&#39;ignore&#39;, UserWarning)
+        sys.exit(app.exec_())</div>
+
+
+
+<div class="viewcode-block" id="parse_args">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.controller.parse_args.html#sofia_redux.visualization.controller.parse_args">[docs]</a>
+def parse_args(args: List) -&gt; argparse.Namespace:
+    &quot;&quot;&quot;
+    Parse command line arguments.
+
+    Returns
+    -------
+    argparse.Namespace
+    &quot;&quot;&quot;
+    parser = argparse.ArgumentParser(&#39;eospec&#39;)
+    parser.add_argument(&#39;filenames&#39;, metavar=&#39;filenames&#39;, type=str, nargs=&#39;*&#39;,
+                        help=&#39;File names to display&#39;)
+    parser.add_argument(&#39;--log&#39;, dest=&#39;system_logs&#39;,
+                        action=&#39;store_true&#39;, default=False,
+                        help=&#39;Store system logs for debugging&#39;)
+    parser.add_argument(&#39;--level&#39;, dest=&#39;log_level&#39;,
+                        action=&#39;store&#39;, default=&#39;CRITICAL&#39;,
+                        help=&#39;Log level for terminal log&#39;)
+
+    args = parser.parse_args(args)
+    return args</div>
+
+
+
+<div class="viewcode-block" id="check_args">
+<a class="viewcode-back" href="../../../api/sofia_redux.visualization.controller.check_args.html#sofia_redux.visualization.controller.check_args">[docs]</a>
+def check_args(args: argparse.Namespace) -&gt; argparse.Namespace:
+    &quot;&quot;&quot;
+    Check arguments for validity.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command line arguments.
+
+    Returns
+    -------
+    argparse.Namespace
+    &quot;&quot;&quot;
+    args.filenames = [os.path.abspath(f) for f in args.filenames]
+    return args</div>
+
+
+
+if __name__ == &#39;__main__&#39;:  # pragma: no cover
+    main()
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

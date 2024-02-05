@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.exes.utils &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.exes.utils</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import re
+
+from astropy import log
+from astropy.io import fits
+from astropy.time import Time
+import numpy as np
+
+from sofia_redux.toolkit.utilities.fits import getdata
+from sofia_redux.toolkit.utilities.func import goodfile
+
+__all__ = [&#39;get_detsec&#39;, &#39;check_data_dimensions&#39;,
+           &#39;check_variance_dimensions&#39;, &#39;get_reset_dark&#39;,
+           &#39;set_elapsed_time&#39;, &#39;parse_central_wavenumber&#39;]
+
+
+<div class="viewcode-block" id="get_detsec">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.utils.get_detsec.html#sofia_redux.instruments.exes.utils.get_detsec">[docs]</a>
+def get_detsec(header_or_str):
+    &quot;&quot;&quot;
+    Parse the DETSEC keyword in a header or from a string.
+
+    DETSEC should be a string of the form &quot;[xstart,xstop,ystart,ystop]&quot;
+    where each entry marks the beginning and end indices of a 2D.
+    array (ny, nx).
+
+    Parameters
+    ----------
+    header_or_str : fits.Header or str
+        Either a header containing the DETSEC keyword/value or a string
+        containing the value.
+
+    Returns
+    -------
+    xstart, xstop, ystart, ystop : int, int, int, int
+        The start and stop indices marking an area of a 2D array.
+    &quot;&quot;&quot;
+    if isinstance(header_or_str, fits.Header):
+        detsec = header_or_str.get(&#39;DETSEC&#39;, &#39;UNKNOWN&#39;)
+        nx = header_or_str.get(&#39;NSPAT&#39;)
+        ny = header_or_str.get(&#39;NSPEC&#39;)
+    else:
+        detsec = header_or_str
+        nx, ny = None, None
+
+    if not isinstance(detsec, str):
+        raise TypeError(&quot;Must supply a FITS header or string&quot;)
+
+    if detsec == &#39;UNKNOWN&#39; and None not in [nx, ny]:
+        xstart = 0
+        xstop = nx
+        ystart = 0
+        ystop = ny
+    else:
+        try:
+            detsec = [int(x) for x in re.split(r&#39;[\[\]\s:,]&#39;, detsec)
+                      if x != &#39;&#39;]
+        except ValueError:
+            raise ValueError(&quot;DETSEC must be of the format [#,#,#,#]&quot;)
+        if len(detsec) != 4:
+            raise ValueError(&quot;DETSEC must be of the format [#,#,#,#]&quot;)
+        xstart, xstop, ystart, ystop = detsec
+        xstart -= 1
+        ystart -= 1
+
+    if xstart &lt; 0 or ystart &lt; 0:
+        raise ValueError(
+            &quot;Starting indices for DETSEC in x and y must be positive nonzero&quot;)
+
+    return xstart, xstop, ystart, ystop</div>
+
+
+
+<div class="viewcode-block" id="check_data_dimensions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.utils.check_data_dimensions.html#sofia_redux.instruments.exes.utils.check_data_dimensions">[docs]</a>
+def check_data_dimensions(**kwargs):
+    &quot;&quot;&quot;
+    Check the data dimensions and return number of frames.
+
+    Input data should be 2 or 3 dimensions, matching specified
+    x and y sizes.
+
+    Parameters
+    ----------
+    kwargs : dict
+        May contain a &#39;params&#39; key, containing a dict with &#39;data&#39;,
+        &#39;nx&#39;, &#39;ny&#39; input.  Otherwise, it may contain &#39;data&#39;, &#39;nx&#39;,
+        and &#39;ny&#39; directly specified.  The &#39;data&#39; key should contain
+        an array; &#39;nx&#39; and &#39;ny&#39; should specify its expected x and y
+        dimensions, respectively.
+
+    Returns
+    -------
+    nz : int
+        The number of frames in the input data cube. Returns 1 if
+        the input has 2 dimensions.
+    &quot;&quot;&quot;
+    params = kwargs.get(&#39;params&#39;)
+    if params is None:
+        data = kwargs.get(&#39;data&#39;)
+        nx = kwargs.get(&#39;nx&#39;)
+        ny = kwargs.get(&#39;ny&#39;)
+    else:
+        data = params[&#39;data&#39;]
+        nx = params[&#39;nx&#39;]
+        ny = params[&#39;ny&#39;]
+    if data.ndim &lt;= 2:
+        nz = 1
+    else:
+        nz = data.shape[0]
+    if data.ndim == 2:
+        check = data.shape != (ny, nx)
+    elif data.ndim == 3:
+        check = data.shape != (nz, ny, nx)
+    else:
+        check = True
+    if check:
+        raise RuntimeError
+    return nz</div>
+
+
+
+<div class="viewcode-block" id="check_variance_dimensions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.utils.check_variance_dimensions.html#sofia_redux.instruments.exes.utils.check_variance_dimensions">[docs]</a>
+def check_variance_dimensions(variance, nx, ny, nz):
+    &quot;&quot;&quot;
+    Check variance dimensions for expected shape.
+
+    Parameters
+    ----------
+    variance : numpy.ndarray
+        2D or 3D variance array to check.
+    nx : int
+        Expected x dimension.
+    ny : int
+        Expected y dimension.
+    nz : int
+        Expected z dimension (number of frames).
+
+    Returns
+    -------
+    valid : bool
+        True if variance matches expected dimensions.
+    &quot;&quot;&quot;
+    if variance is None:
+        return False
+    if variance.ndim &lt;= 2:
+        nvz = 1
+    else:
+        nvz = variance.shape[0]
+    if variance.ndim == 2:
+        check = variance.shape != (ny, nx)
+    elif variance.ndim == 3:
+        check = variance.shape != (nz, ny, nx)
+    else:
+        check = True
+    if check or nvz != nz:
+        raise RuntimeError
+    return True</div>
+
+
+
+<div class="viewcode-block" id="get_reset_dark">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.utils.get_reset_dark.html#sofia_redux.instruments.exes.utils.get_reset_dark">[docs]</a>
+def get_reset_dark(header):
+    &quot;&quot;&quot;
+    Get a reset dark image from a file on disk.
+
+    Dark files are expected to be single-extension FITS images
+    containing raw dark data. If the input file contains multiple frames,
+    the first one is returned as the reset dark.
+
+    If a detector section is specified in the input header, the
+    corresponding section is extracted from the full dark image.
+
+    Parameters
+    ----------
+    header : fits.Header
+        FITS header containing a DRKFILE key, specifying the dark
+        file to read.
+
+    Returns
+    -------
+    dark1s : numpy.ndarray
+        The 2D dark image.
+    &quot;&quot;&quot;
+    darkfile = str(header.get(&#39;DRKFILE&#39;, &#39;UNKNOWN&#39;))
+    if not goodfile(darkfile, verbose=False):
+        raise ValueError(f&#39;Cannot open dark file {darkfile}&#39;)
+    log.info(f&#39;Using reset dark file {darkfile}&#39;)
+    dark = getdata(darkfile)
+
+    # Take the shortest dark frame as the &#39;bias&#39;
+    xstart, xstop, ystart, ystop = get_detsec(header)
+    try:
+        if dark.ndim == 2:
+            dark1s = dark[ystart:ystop, xstart:xstop]
+        else:
+            dark1s = dark[0, ystart:ystop, xstart:xstop]
+    except (ValueError, IndexError):
+        raise ValueError(f&quot;Dark file has wrong dimensions &quot;
+                         f&quot;{repr(dark.shape)}.&quot;) from None
+
+    return dark1s</div>
+
+
+
+<div class="viewcode-block" id="set_elapsed_time">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.utils.set_elapsed_time.html#sofia_redux.instruments.exes.utils.set_elapsed_time">[docs]</a>
+def set_elapsed_time(header):
+    &quot;&quot;&quot;
+    Set the TOTTIME key in the header to the total elapsed time.
+
+    Uses UTCSTART, UTCEND, and DATE-OBS keywords.
+
+    Parameters
+    ----------
+    header : fits.Header
+        Header to update.
+    &quot;&quot;&quot;
+    # start/end is time only
+    utcstart = header.get(&#39;UTCSTART&#39;, &#39;UNKNOWN&#39;)
+    utcend = header.get(&#39;UTCEND&#39;, &#39;UNKNOWN&#39;)
+
+    # get date from date-obs
+    date = header.get(&#39;DATE-OBS&#39;, &#39;UNKNOWN&#39;)
+
+    try:
+        ymd = date.split(&#39;T&#39;)[0]
+        start_time = Time(f&#39;{ymd}T{utcstart}&#39;, scale=&#39;utc&#39;, format=&#39;isot&#39;).unix
+        end_time = Time(f&#39;{ymd}T{utcend}&#39;, scale=&#39;utc&#39;, format=&#39;isot&#39;).unix
+        tottime = float(end_time - start_time)
+    except (ValueError, TypeError):
+        log.warning(&#39;UTCSTART/END not understood&#39;)
+        return
+
+    if tottime &gt; 0:
+        header[&#39;TOTTIME&#39;] = tottime
+    else:
+        log.warning(&#39;UTCSTART/END not understood&#39;)
+        return</div>
+
+
+
+<div class="viewcode-block" id="parse_central_wavenumber">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.utils.parse_central_wavenumber.html#sofia_redux.instruments.exes.utils.parse_central_wavenumber">[docs]</a>
+def parse_central_wavenumber(header):
+    &quot;&quot;&quot;
+    Parse the central wavenumber from the input header.
+
+    Typically, the WAVENO0 keyword is set in the raw data by
+    the instrument control software according to the planned
+    observation settings. However, it is usually insufficiently
+    accurate for wavelength calibration purposes, so it may
+    be overridden by a more accurate value in the WNO0 keyword.
+
+    If WNO0 is set to a float value greater than zero, it
+    is used as the central wavenumber.  If not, WAVENO0 is
+    used as the central wavenumber.
+
+    Parameters
+    ----------
+    header : astropy.io.fits.Header
+        The FITS header containing wavenumber keys.
+
+    Returns
+    -------
+    central_waveno : float
+        The wavenumber determined from the input header.
+    &quot;&quot;&quot;
+    waveno0 = header.get(&#39;WAVENO0&#39;)
+    wno0 = header.get(&#39;WNO0&#39;)
+    try:
+        wno0 = float(wno0)
+    except (ValueError, TypeError):
+        wnoc = waveno0
+    else:
+        if wno0 == -9999 or wno0 &lt;= 0 and waveno0 is not None:
+            wnoc = waveno0
+        else:
+            wnoc = np.abs(wno0)
+    return wnoc</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

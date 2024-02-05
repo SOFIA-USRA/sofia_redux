@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.getapertures &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.getapertures</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+from astropy.stats import sigma_clipped_stats
+import numpy as np
+from scipy.optimize import curve_fit
+
+from sofia_redux.toolkit.utilities.func import gaussian_model
+
+__all__ = [&#39;get_apertures&#39;]
+
+
+<div class="viewcode-block" id="get_apertures">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.getapertures.get_apertures.html#sofia_redux.spectroscopy.getapertures.get_apertures">[docs]</a>
+def get_apertures(profiles, apertures, refit_fwhm=True, get_bg=True,
+                  bg_threshold=3.0, min_bg_pts=3):
+    &quot;&quot;&quot;
+    Determine aperture radii for extraction.
+
+    Profiles expected are the median profiles produced by
+    `sofia_redux.spectroscopy.mkspatprof`.  Aperture positions may
+    be produced by `sofia_redux.spectroscopy.findapertures`.  The
+    `positions` dictionary will be copied to the return value and
+    updated with appropriate values for the aperture radii:
+
+        ``&quot;&quot;aperture_radius&quot;``
+            The aperture radius, used as the integration radius
+            in optimal extraction.
+        ``&quot;psf_radius&quot;``
+            The position at which the flux drops to zero.  Used
+            as the total flux weighting radius for optimal extraction.
+            For standard extraction, is used as the full integration
+            radius.
+
+    Background regions, if requested, are specified for the whole order,
+    rather than for an individual aperture.
+
+    Parameters
+    ----------
+    profiles : dict
+        order (int) -&gt; profile (numpy.ndarray)
+            (2, n_spatial) spatial profile where profile[0] = spatial
+            coordinate and profile[1] = median spatial profile.
+    apertures : dict
+        Apertures to update.  Keys are orders, values are list of dict.
+        Required keys are:
+
+        ``&quot;position&quot;``
+            Aperture position (float)
+        ``&quot;fwhm&quot;``
+            Aperture FWHM (float)
+        ``&quot;sign&quot;``
+            Aperture sign ({1, -1})
+
+        The dictionaries may optionally contain &#39;aperture_radius&#39;
+        and &#39;psf_radius&#39;: if present, these values are treated as fixed.
+    refit_fwhm : bool, optional
+        If set, the peak will be fit to re-determine the spatial FWHM
+        of the aperture.
+    get_bg : bool, optional
+        If set, background regions will be determined from the non-aperture
+        regions.
+
+    Returns
+    -------
+    aperture_regions : dict
+        order (int) -&gt; dict
+            Keys and values are as follows:
+
+            ``&quot;apertures&quot;``
+                List of dict with keys:
+
+                ``&quot;position&quot;``
+                    Aperture position (float)
+                ``&quot;fwhm&quot;``
+                    Aperture FWHM (float)
+                ``&quot;sign&quot;``
+                    Aperture sign ({1, -1})
+                ``&quot;aperture_radius&quot;``
+                    Aperture radius (float)
+                ``&quot;psf_radius&quot;``
+                    PSF radius (float)
+                ``&quot;mask&quot;``
+                    Aperture mask (numpy.ndarray)
+
+            ``&quot;background&quot;``
+                Dict with keys:
+
+                ``&quot;regions&quot;``
+                    List of tuple.
+                    Values are (start, stop) positions in
+                    arcsec up the slit.
+                ``&quot;mask&quot;``
+                    Background mask (numpy.ndarray)
+
+    &quot;&quot;&quot;
+    orders = np.unique(list(apertures.keys())).astype(int)
+    aperture_regions = {}
+    for order in orders:
+        space = profiles[order][0]
+        profile = profiles[order][1]
+
+        # do clipped stats on profile to get background level, std. dev
+        prof_mean, prof_med, prof_std = sigma_clipped_stats(
+            profile, sigma=bg_threshold)
+        bg_est = prof_med
+
+        ds = np.mean(space[1:] - space[:-1])
+        slit_max = np.max(space)
+        aperture_regions[order] = {}
+
+        # sort apertures by position: work up the slit
+        aperture_set = sorted(apertures[order], key=lambda j: j[&#39;position&#39;])
+        order_aps = []
+        for i, aperture in enumerate(aperture_set):
+            fwhm = aperture[&#39;fwhm&#39;]
+            pos = aperture[&#39;position&#39;]
+            sign = aperture[&#39;sign&#39;]
+
+            if (&#39;psf_radius&#39; not in aperture
+                    or &#39;aperture_radius&#39; not in aperture):
+                if refit_fwhm:
+                    # refit the aperture within a window of 8 * fwhm,
+                    # with tight bounds on the center
+                    limit = 8. * fwhm
+                    window = (space &gt; (pos - limit)) \
+                        &amp; (space &lt; (pos + limit))
+                    x = space[window]
+                    y = profile[window]
+
+                    # params are x0, amplitude, fwhm, y0
+                    try:
+                        param, _ = curve_fit(
+                            gaussian_model, x, y,
+                            p0=[pos, sign * np.max(np.abs(y)),
+                                fwhm, bg_est],
+                            bounds=([pos - ds, -np.inf, 1.0, -np.inf],
+                                    [pos + ds, np.inf, limit, np.inf]))
+                        fit_fwhm = param[2]
+                    except ValueError:
+                        log.warning(&#39;Refit failed; using input FWHM&#39;)
+                        fit_fwhm = fwhm
+                else:
+                    fit_fwhm = fwhm
+
+                # set aperture radius to the fit FWHM*0.7 -- this
+                # should give close to optimal S/N for a Moffat or
+                # Gaussian profile.
+                # set psfradius to three times the aperture radius,
+                # plus 20% to make sure to catch the profile wings
+                if &#39;aperture_radius&#39; in aperture:
+                    aprad = aperture[&#39;aperture_radius&#39;]
+                else:
+                    aprad = fit_fwhm * 0.7
+                if &#39;psf_radius&#39; in aperture:
+                    psfrad = aperture[&#39;psf_radius&#39;]
+                else:
+                    psfrad = fit_fwhm * 2.15
+            else:
+                aprad = aperture[&#39;aperture_radius&#39;]
+                psfrad = aperture[&#39;psf_radius&#39;]
+                fit_fwhm = aperture[&#39;fwhm&#39;]
+
+            # check psfrad
+            low = pos - psfrad
+            if low &lt; 0:
+                log.warning(&#39;PSF radius overlaps the low edge of the slit &#39;
+                            f&#39;for order {order}, aperture center &#39;
+                            f&#39;{pos}. Reducing radius.&#39;)
+                psfrad = pos
+            high = pos + psfrad
+            if high &gt; slit_max:
+                log.warning(&#39;PSF radius overlaps the high edge of the slit &#39;
+                            f&#39;for order {order}, aperture center &#39;
+                            f&#39;{pos}. Reducing radius.&#39;)
+                psfrad = slit_max - pos
+
+            # modify aprad if necessary
+            if aprad &gt; psfrad:
+                log.warning(&#39;Aperture radius overlaps the PSF radius &#39;
+                            f&#39;for order {order}, aperture center &#39;
+                            f&#39;{pos}. Reducing radius.&#39;)
+                aprad = psfrad
+
+            # test the number of pixels extracted
+            extract_pix = (space &gt; (pos - psfrad)) &amp; (space &lt; (pos + psfrad))
+            if np.sum(extract_pix) &lt; 1:
+                msg = &#39;PSF radius too small. Auto-set failed &#39; \
+                      f&#39;for order {order}, &#39; \
+                      f&#39;aperture center {pos}&#39;
+                log.error(msg)
+                raise ValueError(msg)
+
+            # check for overlap with previous aperture
+            if i &gt; 0:
+                prev_ap = order_aps[i - 1]
+                pmask = prev_ap[&#39;mask&#39;]
+                overlap = pmask &amp; extract_pix
+                if np.any(overlap):
+                    log.warning(&#39;Apertures overlap. Reducing radii.&#39;)
+                    opix = int(np.ceil(np.sum(overlap) / 2)) + 1.5
+                    prad = prev_ap[&#39;psf_radius&#39;]
+                    ppos = prev_ap[&#39;position&#39;]
+
+                    prad -= opix * ds
+                    psfrad -= opix * ds
+
+                    # test the number of pixels extracted,
+                    # for previous aperture
+                    pmask = (space &gt; (ppos - prad)) &amp; (space &lt; (ppos + prad))
+                    if np.sum(pmask) &lt; 1:
+                        msg = f&#39;Auto-set failed for order {order}, &#39; \
+                              f&#39;aperture center {ppos}&#39;
+                        log.error(msg)
+                        raise ValueError(msg)
+
+                    prev_ap[&#39;psf_radius&#39;] = prad
+                    prev_ap[&#39;mask&#39;] = pmask
+                    if prev_ap[&#39;aperture_radius&#39;] &gt; prad:
+                        prev_ap[&#39;aperture_radius&#39;] = prad
+
+                    # modify aprad if necessary
+                    if aprad &gt; psfrad:
+                        log.warning(&#39;Aperture radius overlaps the PSF radius &#39;
+                                    f&#39;for order {order}, aperture center &#39;
+                                    f&#39;{pos}. Reducing radius.&#39;)
+                        aprad = psfrad
+
+                    # test the number of pixels extracted again,
+                    # for current aperture
+                    extract_pix = (space &gt; (pos - psfrad)) \
+                        &amp; (space &lt; (pos + psfrad))
+                    if np.sum(extract_pix) &lt; 1:
+                        msg = f&#39;Auto-set failed for order {order}, &#39; \
+                              f&#39;aperture center {pos}&#39;
+                        log.error(msg)
+                        raise ValueError(msg)
+
+                    # verify no further overlap
+                    assert not np.any(pmask &amp; extract_pix)
+
+            order_ap = aperture.copy()
+            order_ap[&#39;fwhm&#39;] = fit_fwhm
+            order_ap[&#39;aperture_radius&#39;] = aprad
+            order_ap[&#39;psf_radius&#39;] = psfrad
+            order_ap[&#39;mask&#39;] = extract_pix
+
+            order_aps.append(order_ap)
+
+        aperture_regions[order][&#39;apertures&#39;] = order_aps
+
+        # identify background regions from nearby non-aperture positions
+        if get_bg:
+            apmask = np.full(space.shape, False)
+            localmask = np.full(space.shape, False)
+            local_mult = 3
+            for aperture in order_aps:
+                apmask |= aperture[&#39;mask&#39;]
+
+                pos = aperture[&#39;position&#39;]
+                psfrad = aperture[&#39;psf_radius&#39;]
+                local_test = \
+                    (space &gt; (pos - local_mult * psfrad)) \
+                    &amp; (space &lt; (pos + local_mult * psfrad))
+                localmask |= local_test
+
+            # find non-aperture regions within threshold of
+            # median profile value
+            bg_mask = ~apmask
+            bg_mask &amp;= localmask
+            bg_mask &amp;= (np.abs(profile - bg_est) &lt;= bg_threshold * prof_std)
+
+            # check for contiguous regions of reasonable length
+            background = []
+            if np.sum(bg_mask) &gt; min_bg_pts:
+                # find jumps in background regions
+                bg_idx = np.where(bg_mask)[0]
+                break_points = np.where(bg_idx[1:] - bg_idx[:-1] &gt; 1)[0]
+                firsts = np.hstack([[bg_idx[0]], bg_idx[break_points + 1]])
+                lasts = np.hstack([bg_idx[break_points], [bg_idx[-1]]])
+
+                # keep good size regions
+                for first, last in zip(firsts, lasts):
+                    if last - first &gt; min_bg_pts:
+                        background.append((space[first], space[last]))
+
+            aperture_regions[order][&#39;background&#39;] = \
+                {&#39;regions&#39;: background, &#39;mask&#39;: bg_mask}
+
+    return aperture_regions</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.exes.diff_arr &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.exes.diff_arr</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+&quot;&quot;&quot;
+Subtract sky frames or nod pairs.
+&quot;&quot;&quot;
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.instruments.exes import utils
+
+__all__ = [&#39;diff_arr&#39;]
+
+
+<div class="viewcode-block" id="diff_arr">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.diff_arr.diff_arr.html#sofia_redux.instruments.exes.diff_arr.diff_arr">[docs]</a>
+def diff_arr(data, header, abeams, bbeams, variance, mask=None, dark=None,
+             black_dark=False):
+    &quot;&quot;&quot;
+    Subtract sky frames, nod pairs, or a dark frame.
+
+    If header[&#39;INSTMODE&#39;] is &#39;MAP&#39;, then the B beams are assumed to be
+    sky frames.  They are averaged, and the resulting frame is
+    subtracted from each designated A frame.  Otherwise, B beams are
+    subtracted pair-wise from neighboring A beams.
+
+    The output array has a number of frames equal to the number of input
+    A nods. If an input bad pixel mask is provided, pixels are marked bad
+    in the output mask if there were any bad pixels at that location in
+    the subtracted frames, i.e. the input A and B masks are or-combined.
+
+    If a dark frame is provided and `black_dark` is True, then the dark is
+    subtracted from identified B nods instead of performing A-B subtraction.
+    This is intended to provide clean sky frames for calibration purposes.
+    In this case, the output data has a number of frames equal to the number
+    of input B nods.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        3D data cube [nframe, nspec, nspat].
+    header : fits.Header
+        Header of FITS file.
+    abeams : array-like of int
+        Index numbers of A frames in data cube.
+    bbeams : array-like of int
+        Index numbers of B frames in data cube.
+    variance : numpy.ndarray
+        3D variance cube [nframe, nspec, nspat].
+    mask : numpy.ndarray, optional
+        Bad pixel array [nspec, nspat] indicating valid data
+        (True=good, False=bad).
+    dark : numpy.ndarray, optional
+        If provided, and `black_dark` is True, this array is subtracted
+        from the B nods instead of performing nod-subtraction.
+    black_dark : bool, optional
+        If True, the `dark` array is subtracted instead of performing
+        nod subtraction.
+
+    Returns
+    -------
+    diff_data, diff_var, diff_mask : 3-tuple of numpy.ndarray
+        The differenced data, associated variance, and propagated bad
+        pixel mask. All have dimensions [ndiff, nspec, nspat]. In the mask,
+        True=good, False=bad.
+    &quot;&quot;&quot;
+
+    nx = header[&#39;NSPAT&#39;]
+    ny = header[&#39;NSPEC&#39;]
+
+    try:
+        nz = utils.check_data_dimensions(data=data, nx=nx, ny=ny)
+    except RuntimeError:
+        log.error(f&#39;Data has wrong dimensions {data.shape}. &#39;
+                  f&#39;Not subtracting frames.&#39;)
+        return data, variance, mask
+
+    try:
+        do_var = utils.check_variance_dimensions(variance, nx, ny, nz)
+    except RuntimeError:
+        log.error(f&#39;Variance has wrong dimensions {variance.shape}. &#39;
+                  f&#39;Not subtracting frames.&#39;)
+        return data, variance, mask
+
+    try:
+        b_info = _check_beams(abeams, bbeams, header, data, variance,
+                              do_var, nz, black_dark, mask)
+    except RuntimeError:
+        log.error(&#39;A and B beams must be specified. &#39;
+                  &#39;Not subtracting frames.&#39;)
+        return data, variance, mask
+
+    diff_data, diff_var, diff_mask = _apply_beams(
+        data, variance, header, abeams, bbeams,
+        nx, ny, do_var, b_info, black_dark,
+        dark, mask)
+
+    diff_data, diff_var = _replace_small_values(diff_data, diff_var,
+                                                header, do_var)
+
+    return diff_data, diff_var, diff_mask</div>
+
+
+
+def _check_beams(abeams, bbeams, header, data, variance, do_var,
+                 nz, black_dark, mask):
+    &quot;&quot;&quot;Check input data and beam identification.&quot;&quot;&quot;
+    if len(abeams) == 0 or len(bbeams) == 0:
+        raise RuntimeError
+    instmode = str(header.get(&#39;INSTMODE&#39;, &#39;UNKNOWN&#39;)).strip().upper()
+    if (not black_dark
+            and instmode != &#39;MAP&#39;
+            and (len(abeams) != len(bbeams) or len(abeams) != nz // 2)):
+        raise RuntimeError
+
+    b_data, b_var, b_mask = None, None, None
+    b_average, b_var_average = None, None
+    if instmode == &#39;MAP&#39;:
+        # Combine B beams
+        b_data = data[bbeams]
+        b_average = np.nanmean(b_data, axis=0)
+        if do_var:
+            b_var = variance[bbeams]
+            b_var_average = np.nanmean(b_var, axis=0)
+        if mask is not None:
+            b_mask = np.any(mask[bbeams], axis=0).astype(int)
+    b = {&#39;data&#39;: b_data, &#39;data_avg&#39;: b_average,
+         &#39;var&#39;: b_var, &#39;var_avg&#39;: b_var_average,
+         &#39;mask&#39;: b_mask}
+    return b
+
+
+def _apply_beams(data, variance, header, abeams, bbeams, nx, ny, do_var,
+                 b_info, black_dark, dark, mask):
+    &quot;&quot;&quot;Subtract specified beams.&quot;&quot;&quot;
+    if black_dark:
+        nz = len(bbeams)
+    else:
+        nz = len(abeams)
+    do_mask = (mask is not None)
+    diff_data = np.zeros((nz, ny, nx), dtype=float)
+    diff_var = np.zeros_like(diff_data)
+    diff_mask = np.zeros((nz, ny, nx), dtype=int)
+    b_var, b_mask = None, None
+    for i in range(nz):
+        if header[&#39;INSTMODE&#39;] == &#39;MAP&#39; and not black_dark:
+            b_data = b_info[&#39;data_avg&#39;]
+            if do_var:
+                b_var = b_info[&#39;var_avg&#39;]
+            if do_mask:
+                b_mask = b_info[&#39;mask&#39;]
+        else:
+            b_data = data[bbeams[i]]
+            if do_var:
+                b_var = variance[bbeams[i]]
+            if do_mask:
+                b_mask = mask[bbeams[i]]
+
+        if black_dark:
+            # use B beams only for dark subtraction:
+            # used for making sky spectra
+            diff_data[i] = b_data - dark
+            if do_var:
+                diff_var[i] = b_var
+            if do_mask:
+                diff_mask[i] = b_mask
+        else:
+            diff_data[i] = data[abeams[i]] - b_data
+
+            # Note: source code does this differently, taking 2x the
+            # minimum of the a and b variances
+            if do_var:
+                diff_var[i] = variance[abeams[i]] + b_var
+            if do_mask:
+                diff_mask[i] = np.any([mask[abeams[i]], b_mask],
+                                      axis=0).astype(int)
+
+    return diff_data, diff_var, diff_mask
+
+
+def _replace_small_values(diff_data, diff_var, header, do_var):
+    &quot;&quot;&quot;Replace small values with a reasonable minimum value.&quot;&quot;&quot;
+    gain = float(header[&#39;PAGAIN&#39;])
+    beamtime = float(header[&#39;BEAMTIME&#39;])
+    data_min = 1 / (beamtime * np.abs(gain))
+    diff_data[diff_data == 0] = data_min
+    if do_var:
+        var_min = 16. / (beamtime * gain)**2
+        diff_var[diff_var &lt; var_min] = var_min
+    return diff_data, diff_var
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

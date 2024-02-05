@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.fifi_ls.channels.channels &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.fifi_ls.channels.channels</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.scan.custom.sofia.channels.camera import SofiaCamera
+from sofia_redux.scan.channels.modality.correlated_modality import (
+    CorrelatedModality)
+
+__all__ = [&#39;FifiLsChannels&#39;]
+
+
+<div class="viewcode-block" id="FifiLsChannels">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.html#sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels">[docs]</a>
+class FifiLsChannels(SofiaCamera):
+
+    def __init__(self, parent=None, info=None, size=0, name=&#39;fifi_ls&#39;):
+        &quot;&quot;&quot;
+        Initialize FIFI-LS channels.
+
+        Parameters
+        ----------
+        parent : object, optional
+            The owner of the channels such as a Reduction, Scan or Integration.
+        info : HawcPlusInfo, optional
+            The info object relating to these channels.
+        size : int, optional
+            The intended size of the channels (number of total data channels).
+        name : str, optional
+            The name for the channels.
+        &quot;&quot;&quot;
+        super().__init__(name=name, parent=parent, info=info, size=size)
+        self.n_store_channels = self.detector.pixels
+
+<div class="viewcode-block" id="FifiLsChannels.copy">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.html#sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the FIFI-LS channels.
+
+        Returns
+        -------
+        FifiLsChannels
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+    @property
+    def detector(self):
+        &quot;&quot;&quot;
+        Return the detector info.
+
+        Returns
+        -------
+        FifiLsDetectorArrayInfo
+        &quot;&quot;&quot;
+        return self.info.detector_array
+
+    @property
+    def pixel_sizes(self):
+        &quot;&quot;&quot;
+        Return the (x,y) pixel size.
+
+        Returns
+        -------
+        pixel_sizes : Coordinate2D
+            The x, y pixel size in arc seconds.
+        &quot;&quot;&quot;
+        return self.info.detector_array.pixel_sizes
+
+<div class="viewcode-block" id="FifiLsChannels.init_divisions">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.html#sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.init_divisions">[docs]</a>
+    def init_divisions(self):
+        &quot;&quot;&quot;
+        Initializes channel divisions.
+
+        Divisions contain sets of channel groups.
+
+        The FIFI-LS channel adds divisions consisting of groups where
+        each contains a unique value of a certain data field.  For example,
+        the &quot;rows&quot; division contains a group for row 1, a group for row 2, etc.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().init_divisions()
+        dead_blind = self.flagspace.flags.DEAD | self.flagspace.flags.BLIND
+
+        for division_name, field in [(&#39;spexels&#39;, &#39;spexel&#39;),
+                                     (&#39;spaxels&#39;, &#39;spaxel&#39;),
+                                     (&#39;rows&#39;, &#39;row&#39;),
+                                     (&#39;cols&#39;, &#39;col&#39;)]:
+            self.add_division(self.get_division(
+                name=division_name, field=field, discard_flag=dead_blind))</div>
+
+
+<div class="viewcode-block" id="FifiLsChannels.init_modalities">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.html#sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.init_modalities">[docs]</a>
+    def init_modalities(self):
+        &quot;&quot;&quot;
+        Initializes channel modalities.
+
+        A modality is based of a channel division and contains a mode for each
+        channel group in the channel division.
+
+        The FIFI-LS modalities simply contain additional correlated modes
+        based on the additional channel fields.  A new coupled modality
+        is also created according to polarization arrays.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().init_modalities()
+
+        flags = self.flagspace.flags
+        builds = [(&#39;spexels&#39;, &#39;S&#39;, &#39;spexels&#39;, &#39;spexel_gain&#39;, flags.SPEXEL),
+                  (&#39;spaxels&#39;, &#39;s&#39;, &#39;spaxels&#39;, &#39;spaxel_gain&#39;, flags.SPAXEL),
+                  (&#39;rows&#39;, &#39;r&#39;, &#39;rows&#39;, &#39;row_gain&#39;, flags.ROW),
+                  (&#39;cols&#39;, &#39;c&#39;, &#39;cols&#39;, &#39;col_gain&#39;, flags.COL)]
+
+        for name, identity, division_name, gain_field, gain_flag in builds:
+            division = self.divisions.get(division_name)
+            if division is None:  # pragma: no cover
+                log.warning(f&quot;Channel division {division_name} not found.&quot;)
+                continue
+            modality = CorrelatedModality(name=name,
+                                          identity=identity,
+                                          channel_division=division,
+                                          gain_provider=gain_field)
+            modality.set_gain_flag(gain_flag)
+            self.add_modality(modality)</div>
+
+
+<div class="viewcode-block" id="FifiLsChannels.load_channel_data">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.html#sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.load_channel_data">[docs]</a>
+    def load_channel_data(self):
+        &quot;&quot;&quot;
+        Load the channel data.
+
+        The channel data is read in directly from the HDU list, not a pixel
+        file.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+
+        # self.detector.initialize_channel_data(self.data)
+        # self.set_nominal_pixel_positions()
+        # super().load_channel_data()
+
+<div class="viewcode-block" id="FifiLsChannels.set_nominal_pixel_positions">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.html#sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.set_nominal_pixel_positions">[docs]</a>
+    def set_nominal_pixel_positions(self):
+        &quot;&quot;&quot;
+        Set the channel pixel positions.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.data.position = (
+            self.info.detector_array.pixel_offsets[self.data.spaxel])</div>
+
+
+<div class="viewcode-block" id="FifiLsChannels.max_pixels">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.html#sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.max_pixels">[docs]</a>
+    def max_pixels(self):
+        &quot;&quot;&quot;
+        Return the maximum pixels in the detector array.
+
+        Returns
+        -------
+        count : int
+        &quot;&quot;&quot;
+        return self.detector.pixels</div>
+
+
+<div class="viewcode-block" id="FifiLsChannels.read_data">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.html#sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.read_data">[docs]</a>
+    def read_data(self, hdul):
+        &quot;&quot;&quot;
+        Read a FITS HDU list to populate channel data.
+
+        Parameters
+        ----------
+        hdul : fits.HDUList
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.data.read_hdul(hdul)</div>
+
+
+<div class="viewcode-block" id="FifiLsChannels.get_si_pixel_size">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.html#sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.get_si_pixel_size">[docs]</a>
+    def get_si_pixel_size(self):
+        &quot;&quot;&quot;
+        Return the science instrument pixel size
+
+        Returns
+        -------
+        x, y : Coordinate2D
+            The (x, y) pixel sizes
+        &quot;&quot;&quot;
+        return self.detector.pixel_sizes</div>
+
+
+<div class="viewcode-block" id="FifiLsChannels.write_flat_field">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.html#sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.write_flat_field">[docs]</a>
+    def write_flat_field(self, filename, include_nonlinear=False):
+        &quot;&quot;&quot;
+        Write a flat field file used for chop-nod pipelines.
+
+        Parameters
+        ----------
+        filename : str
+            The filename to write to.
+        include_nonlinear : bool, optional
+            If `True`, include the nonlinear responses.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        shape = self.detector.n_spexel, self.detector.n_spaxel
+
+        # Set defaults
+        gain = np.ones(shape, dtype=float)
+        flags = np.full(shape, False)
+        flagged = self.data.is_flagged()
+
+        gains = self.data.gain * self.data.coupling
+        inverse_gains = np.zeros_like(gains)
+        nzi = gains != 0
+        inverse_gains[nzi] = 1 / gains[nzi]
+
+        inds = self.data.spexel, self.data.spaxel
+        gain[inds] = inverse_gains
+        flags[inds] = flagged
+
+        hdul = fits.HDUList()
+        hdul.append(fits.ImageHDU(gain, name=&#39;Channel gain&#39;))
+        hdul.append(fits.ImageHDU(flags.astype(int), name=&#39;Bad pixel mask&#39;))
+        if include_nonlinear:
+            nonlinear = np.zeros(shape, dtype=float)
+            nonlinear[inds] = self.data.nonlinearity
+            hdul.append(fits.ImageHDU(nonlinear, name=&#39;Channel nonlinearity&#39;))
+
+        hdul.writeto(filename, overwrite=True)
+        hdul.close()
+
+        log.info(f&quot;Written flat field to {filename}.&quot;)</div>
+
+
+<div class="viewcode-block" id="FifiLsChannels.add_hdu">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.html#sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.add_hdu">[docs]</a>
+    def add_hdu(self, hdul, hdu, extname):
+        &quot;&quot;&quot;
+        Add a FITS HDU to the HDUList.
+
+        Parameters
+        ----------
+        hdul : fits.HDUList
+            The HDUList to append to.
+        hdu : fits.ImageHDU or fits.PrimaryHDU or fits.BinTableHDU
+            The fits HDU to append.
+        extname : str
+            The name of the HDU extension.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        hdu.header[&#39;EXTNAME&#39;] = extname, &#39;image content ID&#39;
+        self.info.edit_header(hdu.header)
+        hdul.append(hdu)</div>
+
+
+<div class="viewcode-block" id="FifiLsChannels.calculate_overlaps">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.html#sofia_redux.scan.custom.fifi_ls.channels.channels.FifiLsChannels.calculate_overlaps">[docs]</a>
+    def calculate_overlaps(self, point_size=None):
+        &quot;&quot;&quot;
+        Calculate channel overlaps.
+
+        Parameters
+        ----------
+        point_size : Coordinate2D1, optional
+            The overlap point size (beam FWHM for example).  The default
+            is the instrument spatial and spectral resolution.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if point_size is None:
+            point_size = self.info.instrument.get_point_size()
+
+        if point_size == self.overlap_point_size:
+            return  # don&#39;t need to do anything if already calculated.
+
+        self.data.calculate_overlaps(point_size)
+        self.overlap_point_size = point_size</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;FORCAST Imaging parameter sets.&quot;&quot;&quot;
+
+from copy import deepcopy
+
+from astropy.io import fits
+
+from sofia_redux.pipeline.sofia.parameters.forcast_parameters import \
+    FORCASTParameters, DEFAULT
+
+__all__ = [&#39;FORCASTImagingParameters&#39;]
+
+
+# Store default values for all parameters here.
+# They could equivalently be read from a file, or
+# constructed programmatically.  All keys are optional;
+# defaults are specified in the ParameterSet object.
+# All &#39;key&#39; values should be unique.
+IMAGE_DEFAULT = {
+    &#39;stack&#39;: [
+        {&#39;key&#39;: &#39;save&#39;,
+         &#39;name&#39;: &#39;Save output&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;Save output data to disk&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;add_frames&#39;,
+         &#39;name&#39;: &quot;Add all frames instead of subtracting&quot;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;Generates a sky image, for diagnostic purposes.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;jbclean&#39;,
+         &#39;name&#39;: &quot;Apply &#39;jailbar&#39; correction&quot;,
+         &#39;value&#39;: True,
+         &#39;description&#39;: &#39;If set, the jailbar pattern will be &#39;
+                        &#39;removed after stacking.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;bgscale&#39;,
+         &#39;name&#39;: &#39;Scale frames to common level&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;If set, a multiplicative scaling will be applied.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;bgsub&#39;,
+         &#39;name&#39;: &#39;Subtract residual background&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;If set, an additive background level &#39;
+                        &#39;will be removed.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;secctr&#39;,
+         &#39;name&#39;: &#39;Background section center&#39;,
+         &#39;value&#39;: &#39;&#39;,
+         &#39;description&#39;: &quot;Specify the center point in integers as &#39;x,y&#39;.&quot;,
+         &#39;dtype&#39;: &#39;str&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;secsize&#39;,
+         &#39;name&#39;: &#39;Background section size&#39;,
+         &#39;value&#39;: &#39;&#39;,
+         &#39;description&#39;: &quot;Specify in integers as &#39;size_x,size_y&#39;.&quot;,
+         &#39;dtype&#39;: &#39;str&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;bgstat&#39;,
+         &#39;name&#39;: &#39;Residual background statistic&#39;,
+         &#39;wtype&#39;: &#39;combo_box&#39;,
+         &#39;options&#39;: [&#39;median&#39;, &#39;mode&#39;],
+         &#39;option_index&#39;: 0,
+         &#39;description&#39;: &#39;Select the statistic to use to calculate &#39;
+                        &#39;the residual background.&#39;},
+    ],
+    &#39;undistort&#39;: [
+        {&#39;key&#39;: &#39;save&#39;,
+         &#39;name&#39;: &#39;Save output&#39;,
+         &#39;value&#39;: True,
+         &#39;description&#39;: &#39;Save output data to disk&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;pinfile&#39;,
+         &#39;name&#39;: &#39;Pinhole locations&#39;,
+         &#39;value&#39;: &#39;&#39;,
+         &#39;description&#39;: &#39;Text file containing x,y locations to model&#39;,
+         &#39;dtype&#39;: &#39;str&#39;,
+         &#39;wtype&#39;: &#39;pick_file&#39;},
+        {&#39;key&#39;: &#39;extrapolate&#39;,
+         &#39;name&#39;: &#39;Extrapolate solution&#39;,
+         &#39;value&#39;: True,
+         &#39;description&#39;: &#39;If not set, edges of the image beyond known &#39;
+                        &#39;model inputs will be set to NaN.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;skip_undistort&#39;,
+         &#39;name&#39;: &#39;Skip distortion correction&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;If set, no distortion correction will be &#39;
+                        &#39;applied.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+
+    ],
+    &#39;merge&#39;: [
+        {&#39;key&#39;: &#39;save&#39;,
+         &#39;name&#39;: &#39;Save output&#39;,
+         &#39;value&#39;: True,
+         &#39;description&#39;: &#39;Save output data to disk&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;cormerge&#39;,
+         &#39;name&#39;: &#39;Merging algorithm&#39;,
+         &#39;wtype&#39;: &#39;combo_box&#39;,
+         &#39;options&#39;: [&#39;Header shifts&#39;, &#39;Centroid&#39;, &#39;Cross-correlation&#39;,
+                     &#39;No shift&#39;],
+         &#39;option_index&#39;: 3,
+         &#39;description&#39;: &#39;Select the merging style. \nCentroid &#39;
+                        &#39;is default for flux standards; no shift &#39;
+                        &#39;is recommended for most other data.&#39;},
+        {&#39;key&#39;: &#39;skip_rotation&#39;,
+         &#39;name&#39;: &#39;Skip rotation&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;If set, rotation by sky angle &#39;
+                        &#39;will not be applied.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;}
+    ],
+    &#39;register&#39;: [
+        {&#39;key&#39;: &#39;save&#39;,
+         &#39;name&#39;: &#39;Save output&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;Save output data to disk&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;corcoadd&#39;,
+         &#39;name&#39;: &#39;Registration algorithm&#39;,
+         &#39;wtype&#39;: &#39;combo_box&#39;,
+         &#39;options&#39;: [&#39;Header shifts&#39;, &#39;Centroid&#39;, &#39;Cross-correlation&#39;,
+                     &#39;Use first WCS (no image shift)&#39;, &#39;Use WCS as is&#39;],
+         &#39;option_index&#39;: 4,
+         &#39;description&#39;: &#39;Select the registration style.&#39;},
+        {&#39;key&#39;: &#39;offsets&#39;,
+         &#39;name&#39;: &#39;Override offsets for all images&#39;,
+         &#39;value&#39;: &#39;&#39;,
+         &#39;description&#39;: &quot;Specify semi-colon separated offsets, as x,y.\n&quot;
+                        &quot;For example, for three input images, &quot;
+                        &quot;specify &#39;0,0;2,0;0,2&#39;\nto leave the first as is,&quot;
+                        &quot;shift the second two pixels to the right\nin x, &quot;
+                        &quot;and shift the third two pixels up in y.&quot;,
+         &#39;dtype&#39;: &#39;str&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;mfwhm&#39;,
+         &#39;name&#39;: &#39;Expected FWHM for centroiding (pix)&#39;,
+         &#39;value&#39;: &#39;&#39;,
+         &#39;description&#39;: &quot;Specify the expected FWHM in pixels, for &quot;
+                        &quot;the centroiding algorithm.&quot;,
+         &#39;dtype&#39;: &#39;str&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;xyshift&#39;,
+         &#39;name&#39;: &#39;Maximum shift for cross-correlation&#39;,
+         &#39;value&#39;: &#39;&#39;,
+         &#39;description&#39;: &quot;Specify the maximum allowed shift in x and y &quot;
+                        &quot;for the cross-correlation algorithm.&quot;,
+         &#39;dtype&#39;: &#39;str&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+    ],
+    &#39;tellcor&#39;: [
+        {&#39;key&#39;: &#39;save&#39;,
+         &#39;name&#39;: &#39;Save output&#39;,
+         &#39;value&#39;: True,
+         &#39;description&#39;: &#39;Save output data to disk&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;use_wv&#39;,
+         &#39;name&#39;: &#39;Use WV values&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;If set, water vapor values from the header will &#39;
+                        &#39;be used \n&#39;
+                        &#39;to choose the correct response, instead of altitude.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+    ],
+    &#39;coadd&#39;: [
+        {&#39;key&#39;: &#39;save&#39;,
+         &#39;name&#39;: &#39;Save output&#39;,
+         &#39;value&#39;: True,
+         &#39;description&#39;: &#39;Save output data to disk&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;skip_coadd&#39;,
+         &#39;name&#39;: &#39;Skip coaddition&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;Set to skip coadd of input files &#39;
+                        &#39;and propagate separate images instead.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;skip_rotation&#39;,
+         &#39;name&#39;: &#39;Skip rotation&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;Set to skip rotation before coadding.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;reference&#39;,
+         &#39;name&#39;: &#39;Reference coordinate system&#39;,
+         &#39;wtype&#39;: &#39;combo_box&#39;,
+         &#39;options&#39;: [&#39;First image&#39;, &#39;Target position&#39;],
+         &#39;option_index&#39;: 1,
+         &#39;description&#39;: &#39;Select the reference coordinate system.&#39;},
+        {&#39;key&#39;: &#39;method&#39;,
+         &#39;name&#39;: &#39;Combination method&#39;,
+         &#39;wtype&#39;: &#39;combo_box&#39;,
+         &#39;options&#39;: [&#39;mean&#39;, &#39;median&#39;, &#39;resample&#39;],
+         &#39;option_index&#39;: 1,
+         &#39;description&#39;: &#39;Select the combination method.&#39;},
+        {&#39;key&#39;: &#39;weighted&#39;,
+         &#39;name&#39;: &#39;Use weighted mean&#39;,
+         &#39;value&#39;: True,
+         &#39;description&#39;: &#39;If set, the average of the data will be &#39;
+                        &#39;weighted by the variance.  &#39;
+                        &#39;Ignored for method=median.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;robust&#39;,
+         &#39;name&#39;: &#39;Robust combination&#39;,
+         &#39;value&#39;: True,
+         &#39;description&#39;: &#39;If set, data will be sigma-clipped &#39;
+                        &#39;before combination for mean or median &#39;
+                        &#39;methods.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;threshold&#39;,
+         &#39;name&#39;: &#39;Outlier rejection threshold (sigma)&#39;,
+         &#39;value&#39;: 8.0,
+         &#39;description&#39;: &#39;Specify the number of sigma to use in &#39;
+                        &#39;sigma clip for robust algorithms.&#39;,
+         &#39;dtype&#39;: &#39;float&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;maxiters&#39;,
+         &#39;name&#39;: &#39;Maximum sigma-clipping iterations&#39;,
+         &#39;value&#39;: 5,
+         &#39;description&#39;: &#39;Specify the maximum number of outlier &#39;
+                        &#39;rejection iterations to use if robust=True.&#39;,
+         &#39;dtype&#39;: &#39;int&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;smoothing&#39;,
+         &#39;name&#39;: &#39;Gaussian width for smoothing (pixels)&#39;,
+         &#39;value&#39;: 1.0,
+         &#39;description&#39;: &#39;Specify the width of the smoothing kernel &#39;
+                        &#39;(resample method only).&#39;,
+         &#39;dtype&#39;: &#39;float&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+    ],
+    &#39;fluxcal&#39;: [
+        {&#39;key&#39;: &#39;save&#39;,
+         &#39;name&#39;: &#39;Save output&#39;,
+         &#39;value&#39;: True,
+         &#39;description&#39;: &#39;Save output data to disk&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;rerun_phot&#39;,
+         &#39;name&#39;: &#39;Re-run photometry for standards&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;If set, photometry will be re-calculated on the\n&#39;
+                        &#39;input image, using below parameters.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;srcpos&#39;,
+         &#39;name&#39;: &#39;Source position (x,y in pix)&#39;,
+         &#39;value&#39;: &#39;&#39;,
+         &#39;description&#39;: &#39;Initial guess position for source photometry.&#39;,
+         &#39;dtype&#39;: &#39;str&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;fitsize&#39;,
+         &#39;name&#39;: &#39;Photometry fit size (pix)&#39;,
+         &#39;description&#39;: &#39;Subimage size for profile fits.&#39;,
+         &#39;dtype&#39;: &#39;int&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;fwhm&#39;,
+         &#39;name&#39;: &#39;Initial FWHM (pix)&#39;,
+         &#39;description&#39;: &#39;Starting value for FWHM in profile fits.&#39;,
+         &#39;dtype&#39;: &#39;float&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;profile&#39;,
+         &#39;name&#39;: &#39;Profile type&#39;,
+         &#39;wtype&#39;: &#39;combo_box&#39;,
+         &#39;options&#39;: [&#39;Moffat&#39;, &#39;Gaussian&#39;],
+         &#39;option_index&#39;: 0,
+         &#39;description&#39;: &#39;Select the profile type to fit.&#39;},
+    ],
+    &#39;imgmap&#39;: [
+        {&#39;key&#39;: &#39;colormap&#39;,
+         &#39;name&#39;: &#39;Color map&#39;,
+         &#39;value&#39;: &#39;plasma&#39;,
+         &#39;description&#39;: &#39;Matplotlib color map name.&#39;,
+         &#39;dtype&#39;: &#39;str&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;scale&#39;,
+         &#39;name&#39;: &#39;Flux scale for image&#39;,
+         &#39;value&#39;: [0.25, 99.9],
+         &#39;description&#39;: &#39;Specify a low and high percentile value for &#39;
+                        &#39;the image scale, e.g. [0,99].&#39;,
+         &#39;dtype&#39;: &#39;floatlist&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;n_contour&#39;,
+         &#39;name&#39;: &#39;Number of contours&#39;,
+         &#39;value&#39;: 0,
+         &#39;description&#39;: &#39;Set to 0 to turn off countours.&#39;,
+         &#39;dtype&#39;: &#39;int&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;contour_color&#39;,
+         &#39;name&#39;: &#39;Contour color&#39;,
+         &#39;value&#39;: &#39;gray&#39;,
+         &#39;description&#39;: &#39;Matplotlib color name.&#39;,
+         &#39;dtype&#39;: &#39;str&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;fill_contours&#39;,
+         &#39;name&#39;: &#39;Filled contours&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;If set, contours will be filled instead of overlaid.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;grid&#39;,
+         &#39;name&#39;: &#39;Overlay grid&#39;,
+         &#39;value&#39;: False,
+         &#39;description&#39;: &#39;If set, a coordinate grid will be overlaid.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;beam&#39;,
+         &#39;name&#39;: &#39;Beam marker&#39;,
+         &#39;value&#39;: True,
+         &#39;description&#39;: &#39;If set, a beam marker will be added to the plot.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+        {&#39;key&#39;: &#39;watermark&#39;,
+         &#39;name&#39;: &#39;Watermark text&#39;,
+         &#39;value&#39;: &#39;&#39;,
+         &#39;description&#39;: &#39;Text to add to image as a watermark.&#39;,
+         &#39;dtype&#39;: &#39;str&#39;,
+         &#39;wtype&#39;: &#39;text_box&#39;},
+        {&#39;key&#39;: &#39;crop_border&#39;,
+         &#39;name&#39;: &#39;Crop NaN border&#39;,
+         &#39;value&#39;: True,
+         &#39;description&#39;: &#39;If set, any remaining NaN or zero-valued border &#39;
+                        &#39;will be cropped out of plot.&#39;,
+         &#39;dtype&#39;: &#39;bool&#39;,
+         &#39;wtype&#39;: &#39;check_box&#39;},
+    ],
+}
+
+
+<div class="viewcode-block" id="FORCASTImagingParameters">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters.FORCASTImagingParameters.html#sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters.FORCASTImagingParameters">[docs]</a>
+class FORCASTImagingParameters(FORCASTParameters):
+    &quot;&quot;&quot;Reduction parameters for the FORCAST Imaging pipeline.&quot;&quot;&quot;
+    def __init__(self, default=None, drip_cal_config=None,
+                 drip_config=None, pipecal_config=None):
+        &quot;&quot;&quot;
+        Initialize parameters with default values.
+
+        The various config files are used to override certain
+        parameter defaults for particular observation modes,
+        or dates, etc.
+
+        Parameters
+        ----------
+        drip_cal_config : dict-like, optional
+            Reduction mode and auxiliary file configuration mapping,
+            as returned from the sofia_redux.instruments.forcast
+            `getcalpath` function.
+        drip_config : dict-like, optional
+            DRIP configuration, as loaded by the
+            sofia_redux.instruments.forcast `configuration` function.
+        pipecal_config : dict-like, optional
+            Flux calibration and atmospheric correction configuration,
+            as returned from the pipecal `pipecal_config` function.
+        &quot;&quot;&quot;
+        if default is None:
+            default = DEFAULT.copy()
+            default.update(IMAGE_DEFAULT)
+
+        super().__init__(default=default,
+                         drip_cal_config=drip_cal_config,
+                         drip_config=drip_config)
+
+        self.pipecal_config = pipecal_config
+
+        # merge/register option strings as expected
+        # by sofia_redux.instruments.forcast configuration
+        self.merge_opt = [&#39;HEADER&#39;, &#39;CENTROID&#39;, &#39;XCOR&#39;,
+                          &#39;NOSHIFT&#39;, &#39;WCS&#39;, &#39;USER&#39;]
+
+<div class="viewcode-block" id="FORCASTImagingParameters.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters.FORCASTImagingParameters.html#sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters.FORCASTImagingParameters.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the parameters.
+
+        Overrides default copy to add in config attributes.
+
+        Returns
+        -------
+        Parameters
+        &quot;&quot;&quot;
+        new = super().copy()
+        new.drip_cal_config = deepcopy(self.drip_cal_config)
+        new.drip_config = deepcopy(self.drip_config)
+        new.pipecal_config = deepcopy(self.pipecal_config)
+        return new</div>
+
+
+<div class="viewcode-block" id="FORCASTImagingParameters.undistort">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters.FORCASTImagingParameters.html#sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters.FORCASTImagingParameters.undistort">[docs]</a>
+    def undistort(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the undistort step.
+
+        Sets default pinfile, using `drip_cal_config`.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        if (self.drip_cal_config is not None
+                and &#39;pinfile&#39; in self.drip_cal_config):
+            self.current[step_index].set_value(
+                &#39;pinfile&#39;, self.drip_cal_config[&#39;pinfile&#39;])</div>
+
+
+<div class="viewcode-block" id="FORCASTImagingParameters.merge">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters.FORCASTImagingParameters.html#sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters.FORCASTImagingParameters.merge">[docs]</a>
+    def merge(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the merge step.
+
+        Sets the merging algorithm default (cormerge) using
+        `drip_config` and `drip_cal_config`.
+
+        If the observation is a flux standard, the merging
+        algorithm is set to centroiding, by default. Otherwise,
+        the default is read from the DRIP config file.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        if (self.drip_config is not None
+                and self.drip_cal_config is not None):
+            from sofia_redux.instruments.forcast.getpar import getpar
+            header = fits.Header()
+
+            cormerge = getpar(header, &#39;CORMERGE&#39;, dtype=str,
+                              default=&#39;NOSHIFT&#39;)
+
+            # modify by obstype or chop/nod mode
+            if self.drip_cal_config[&#39;obstype&#39;] == &#39;STANDARD_FLUX&#39; \
+                    or &#39;npc&#39; in (self.drip_cal_config[&#39;cnmode&#39;].lower()):
+                cormerge = &#39;CENTROID&#39;
+
+            # set parameter values in current set
+            if cormerge.upper() in self.merge_opt:
+                idx = self.merge_opt.index(cormerge)
+                self.current[step_index].set_value(&#39;cormerge&#39;,
+                                                   option_index=idx)</div>
+
+
+<div class="viewcode-block" id="FORCASTImagingParameters.register">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters.FORCASTImagingParameters.html#sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters.FORCASTImagingParameters.register">[docs]</a>
+    def register(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the register step.
+
+        Sets the cross-correlation parameter xyshift and
+        the centroiding parameter mfwhm from `drip_config`.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        if self.drip_config is not None:
+            from sofia_redux.instruments.forcast.getpar import getpar
+            header = fits.Header()
+            xyshift = getpar(header, &#39;XYSHIFT&#39;, dtype=float)
+            mfwhm = getpar(header, &#39;MFWHM&#39;, dtype=float)
+
+            # set parameter values in current set
+            self.current[step_index].set_value(&#39;xyshift&#39;, xyshift)
+            self.current[step_index].set_value(&#39;mfwhm&#39;, mfwhm)</div>
+
+
+<div class="viewcode-block" id="FORCASTImagingParameters.coadd">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters.FORCASTImagingParameters.html#sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters.FORCASTImagingParameters.coadd">[docs]</a>
+    def coadd(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the coadd step.
+
+        Skips coadd for spectroscopic acquisition images.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        if self.drip_config is not None:
+            if (&#39;boresight&#39; in self.drip_cal_config
+                    and &#39;SLIT&#39; in self.drip_cal_config[&#39;boresight&#39;]):
+                self.current[step_index].set_value(&#39;skip_coadd&#39;, True)</div>
+
+
+<div class="viewcode-block" id="FORCASTImagingParameters.fluxcal">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters.FORCASTImagingParameters.html#sofia_redux.pipeline.sofia.parameters.forcast_imaging_parameters.FORCASTImagingParameters.fluxcal">[docs]</a>
+    def fluxcal(self, step_index):
+        &quot;&quot;&quot;
+        Modify parameters for the fluxcal step.
+
+        Sets the photometry parameters fitsize and fwhm
+        from `pipecal_config`.
+
+        Default values for these parameters, by instrument and mode,
+        are defined in pipecal configuration files.
+
+        Parameters
+        ----------
+        step_index : int
+            Reduction recipe index for the step.
+        &quot;&quot;&quot;
+        if self.pipecal_config is not None:
+            self.current[step_index].set_value(
+                &#39;fitsize&#39;, self.pipecal_config[&#39;fitsize&#39;])
+            self.current[step_index].set_value(
+                &#39;fwhm&#39;, self.pipecal_config[&#39;fwhm&#39;])</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

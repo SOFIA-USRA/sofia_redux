@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.binspec &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.binspec</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+from sofia_redux.toolkit.resampling.resample_utils import fasttrapz
+from scipy.interpolate import interp1d
+
+__all__ = [&#39;binspec&#39;]
+
+
+<div class="viewcode-block" id="binspec">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.binspec.binspec.html#sofia_redux.spectroscopy.binspec.binspec">[docs]</a>
+def binspec(x, y, delta, xout=None, lmin=None, lmax=None, average=False):
+    &quot;&quot;&quot;
+    Bin a spectrum between lmin and lmax with bins delta wide
+
+    Output wavelength bins are calculated from input lmin/lmax/dl.
+    Flux values at edges of bins are interpolated, and values
+    between the edges are summed.  If desired, the summed flux is
+    divided by the bin size.  If either lmin or lmax is None, and
+    xout is provided, the bins are assumed to be uneven and may have
+    gaps.
+
+    Parameters
+    ----------
+    x : array_like of (int or float)
+        Independent variable
+    y : array_like of (int or float)
+        Dependent variable
+    delta : int or float or (array_like of (int or float))
+        Bin width.  May be a scalar value or 1-D array (N_out,) matching
+        the output data array size of the second dimension.
+    xout : int or float or array_like of (int or float), optional
+        Output locations
+    lmin : int or float, optional
+        Minimum value of independent variable
+    lmax : int or float, optional
+        Maximum value of independent variable
+    average : bool, optional
+        If True, average the y over the bin (to conserve flux)
+
+    Returns
+    -------
+    numpy.ndarray
+        (2, N) where [0, :] = x out, and [1, :] = y out
+    &quot;&quot;&quot;
+    try:
+        x = np.array(x).astype(float)
+    except (ValueError, TypeError):
+        log.error(&quot;Invalid input x data type&quot;)
+        return
+    try:
+        y = np.array(y).astype(float)
+    except (ValueError, TypeError):
+        log.error(&quot;Invalid input y data type&quot;)
+        return
+    if x.size &lt; 2:
+        log.error(&quot;At least two input points are required&quot;)
+        return
+    if x.shape != y.shape:
+        log.error(&quot;X and Y arrays have different dimensions&quot;)
+        return
+    if xout is not None:
+        try:
+            if not hasattr(xout, &#39;__len__&#39;):
+                xout = [xout]
+            xout = np.array(xout).astype(float)
+        except (ValueError, TypeError):
+            log.error(&quot;Invalid output x data type&quot;)
+            return
+    try:
+        if not hasattr(delta, &#39;__len__&#39;):
+            delta = [delta]
+        delta = np.array(delta).astype(float)
+        ndelta = delta.size
+    except (ValueError, TypeError):
+        log.error(&quot;Invalid delta data type&quot;)
+        return
+
+    if (lmin is None or lmax is None) and xout is not None:
+        # Assume we have a set of output central wavelengths to match
+        nxout = xout.size
+        if ndelta != nxout:
+            if hasattr(delta, &#39;__len__&#39;):
+                delta = delta[0]
+            delta = np.full(len(xout), delta)
+        xledg = xout - delta / 2
+        xhedg = xout + delta / 2
+    elif ndelta == 1:
+        # single value for delta (constant dl)
+        lmin = x.min() if lmin is None else lmin
+        lmax = x.max() if lmax is None else lmax
+        nedgs = int((lmax - lmin) / delta) + 1
+        xledg = np.arange(nedgs) * delta + lmin
+        xhedg = xledg.copy() + delta
+        xout = xledg + delta / 2
+        nxout = xout.size
+        delta = np.full(nxout, delta[0])
+    else:
+        lmin = x.min() if lmin is None else lmin
+        lmax = x.max() if lmax is None else lmax
+        nbins = ndelta
+
+        xlow = lmin
+        idx = 0
+        xledg = []
+        xhedg = []
+        while idx &lt; nbins:
+            xupp = xlow + delta[idx]
+            if xupp &lt;= lmax:
+                xledg.append(xlow)
+                xhedg.append(xupp)
+            else:  # pragma: no cover
+                # this clause is covered in tests,
+                # but coverage doesn&#39;t count it
+                break
+            xlow = xupp
+            idx += 1
+        xledg = np.array(xledg)
+        xhedg = np.array(xhedg)
+
+        xout = (xledg + xhedg) / 2
+        nxout = xout.size
+        delta = xhedg - xledg
+
+    nout = len(xout)
+    yout = np.zeros(nxout) if nxout &gt; nout else np.zeros(nout)
+    # interpolate values at edges of bins
+    xedgarr = list(xledg)
+    xedgarr.append(xhedg[-1])
+    finterp = interp1d(x, y, fill_value=&#39;extrapolate&#39;)
+    yedgarr = finterp(xedgarr)
+
+    for i, (lower, upper) in enumerate(zip(xledg, xhedg)):
+        idx = np.array((x &gt; lower) &amp; (x &lt;= upper))
+
+        area = fasttrapz(y[idx], x[idx])
+        # add on edges
+        if idx.sum() != 0:
+            iidx = np.nonzero(idx)[0]
+            i0, i1 = iidx[0], iidx[-1]
+            x0, x1 = x[i0], x[i1]
+            y0, y1 = y[i0], y[i1]
+            if lower &lt; x0:
+                area += (x0 - lower) * (yedgarr[i] + y0) / 2.0
+            if upper &gt; x1:
+                area += (upper - x1) * (yedgarr[i + 1] + y1) / 2.0
+
+        yout[i] = area
+
+    if average:
+        yout /= delta
+    return np.stack((xout, yout))</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

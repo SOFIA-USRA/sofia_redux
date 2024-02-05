@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steploadaux &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steploadaux</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Pipeline step that loads auxiliary data.&quot;&quot;&quot;
+
+import os
+import glob
+import re
+import time
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.instruments.hawc.datafits import DataFits
+from sofia_redux.instruments.hawc.datatext import DataText
+from sofia_redux.instruments.hawc.stepparent import StepParent
+
+__all__ = [&#39;StepLoadAux&#39;]
+
+
+<div class="viewcode-block" id="StepLoadAux">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.steploadaux.StepLoadAux.html#sofia_redux.instruments.hawc.steploadaux.StepLoadAux">[docs]</a>
+class StepLoadAux(StepParent):
+    &quot;&quot;&quot;
+    Pipeline step parent class with auxiliary data support.
+
+    This class provides a pipe step with a simple mechanism to search
+    auxiliary files and match them to input data. An initial list of
+    potential aux files is determined from a path/filename string
+    (a glob); the final file(s) is determined by matching header
+    keywords between the auxiliary files and the step input data.
+
+    This object does not have a conventional setup function
+    since it is intended to be inherited by other steps. Steps that
+    inherit from this class should call the loadauxsetup function explicitly
+    inside their setup functions, in order to set up the auxiliary data
+    parameters.
+    &quot;&quot;&quot;
+    def __init__(self):
+        # placeholder for auxiliary parameter name
+        self.auxpar = None
+
+        super().__init__()
+
+<div class="viewcode-block" id="StepLoadAux.loadauxsetup">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.steploadaux.StepLoadAux.html#sofia_redux.instruments.hawc.steploadaux.StepLoadAux.loadauxsetup">[docs]</a>
+    def loadauxsetup(self, auxpar=&#39;aux&#39;):
+        &quot;&quot;&quot;
+        Load parameters for auxiliary file identification.
+
+         This function should be called within the setup function
+         for a pipeline step, after self.paramlist has been initialized.
+
+         Parameters
+         ----------
+         auxpar : str, optional
+             The auxiliary file type. This string will appear in the
+             names of the parameters added to the step.
+        &quot;&quot;&quot;
+        if self.config is None:
+            self.config = {}
+
+        # Set name of the auxfile parameter
+        self.auxpar = auxpar
+
+        # Append parameters
+        self.paramlist.append([auxpar + &#39;file&#39;, &#39;%sfolder/*.fits&#39; % auxpar,
+                               &#39;Filename for auxiliary file(s). &#39;
+                               &#39;Can contain * and ? &#39;
+                               &#39;wildcards to match multiple files &#39;
+                               &#39;to be selected using fitkeys &#39;
+                               &#39;(default = %sfolder/*.fits)&#39; % auxpar])
+        self.paramlist.append([&#39;bkup&#39; + auxpar, &#39;bkup%sfolder/*.fits&#39; % auxpar,
+                               &#39;Back up filename for auxiliary &#39;
+                               &#39;file(s). Can contain * and ? &#39;
+                               &#39;wildcards to match multiple files &#39;
+                               &#39;to be selected using fitkeys &#39;
+                               &#39;(default = bkup%sfolder/*.fits)&#39; % auxpar])
+        self.paramlist.append([auxpar + &#39;fitkeys&#39;, [],
+                               &#39;List of header keys that need to match &#39;
+                               &#39;auxiliary data file &#39;
+                               &#39;(default = []) - only used if &#39;
+                               &#39;multiple files match %sfile&#39; % auxpar])
+        self.paramlist.append([&#39;daterange&#39;, 1.0,
+                               &#39;If DATE-OBS is in fitkeys, files are &#39;
+                               &#39;matched within this many days.&#39;])</div>
+
+
+<div class="viewcode-block" id="StepLoadAux.getdataobj">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.steploadaux.StepLoadAux.html#sofia_redux.instruments.hawc.steploadaux.StepLoadAux.getdataobj">[docs]</a>
+    def getdataobj(self, filename):
+        &quot;&quot;&quot;
+        Retrieve the DataParent child appropriate to the data.
+
+        Checks the filename to determine if it is likely to be a FITS
+        file. If not, data is assumed to be text.
+
+        The returned object is initialized with self.config, but data
+        from the input file is not loaded.
+
+        Parameters
+        ----------
+        filename : str
+            Path to the file to test.
+
+        Returns
+        -------
+        DataFits or DataText
+            The data object. Data is not loaded from the filename.
+        &quot;&quot;&quot;
+        if re.search(DataFits.filenamefit, filename):
+            data = DataFits(config=self.config)
+        else:
+            data = DataText(config=self.config)
+        return data</div>
+
+
+<div class="viewcode-block" id="StepLoadAux.loadauxname">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.steploadaux.StepLoadAux.html#sofia_redux.instruments.hawc.steploadaux.StepLoadAux.loadauxname">[docs]</a>
+    def loadauxname(self, auxpar=&#39;&#39;, data=None, multi=False):
+        &quot;&quot;&quot;
+        Search for files matching auxfile.
+
+        If only one match is found, that file is returned. Otherwise,
+        the header keywords listed in auxfitkeys are matched between the
+        data and any auxfiles found. The first auxfile for which these
+        keyword values match the data values is selected. The filename
+        of the best match is returned.
+
+        Parameters
+        ----------
+        auxpar : str, optional
+            A name for the aux file parameter to use. This
+            allows loadauxfiles to be used multiple times
+            in a given pipe step (for example for darks and
+            flats). Default value is self.auxpar which is set
+            by loadauxsetup().
+        data : DataFits or DataText, optional
+            A data object to match the auxiliary file to.
+            If no data is specified, self.datain is used (for
+            Multi Input steps self.datain[0]).
+        multi : bool, optional
+            If set, a list of file names is returned instead of a single
+            file name.
+
+        Returns
+        -------
+        str or list of str
+            The matching auxiliary file(s).
+        &quot;&quot;&quot;
+        # Set auxpar
+        if len(auxpar) == 0:
+            auxpar = self.auxpar
+
+        # Get parameters
+        auxfile = os.path.expandvars(self.getarg(auxpar + &#39;file&#39;))
+        return self._loadauxnamefile(auxfile, auxpar, data, multi)</div>
+
+
+    def _loadauxnamefile(self, auxfile, auxpar, data, multi, backup=True):
+        # This function is now separated out in order to allow sub-classes
+        # to manipulate the auxfile parameter before loading.
+
+        fitkeys = self.getarg(auxpar + &#39;fitkeys&#39;)
+        if len(fitkeys) == 1 and len(fitkeys[0]) == 0:
+            fitkeys = []
+
+        # Look for files - return in special cases
+
+        # Glob the list of files
+        auxlist = sorted(glob.glob(auxfile))
+
+        # Throw exception if no file found
+        if len(auxlist) &lt; 1:
+            if backup:
+                log.warning(&#39;No files found under %s - &#39;
+                            &#39;looking in backup&#39; % auxfile)
+                auxfile = os.path.expandvars(self.getarg(&#39;bkup&#39; + auxpar))
+                auxlist = sorted(glob.glob(auxfile))
+            if len(auxlist) &lt; 1:
+                msg = &#39;No %s files found under %s&#39; % (auxpar, auxfile)
+                log.error(msg)
+                raise ValueError(msg)
+
+        # Get datain object (depends on step being SingleInput or MultiInput)
+        if data is None:
+            if isinstance(self.datain, list):
+                data = self.datain[0]
+            else:
+                data = self.datain
+
+        # Return unique file, or all files if fitkeys is empty
+        if len(auxlist) == 1 or len(fitkeys) == 0:
+            if len(auxlist) == 1:
+                log.info(f&#39;LoadAuxName: Found unique &#39;
+                         f&#39;file = {auxlist[0]}&#39;)
+            elif multi:
+                log.info(f&#39;LoadAuxName: No fitkeys: return all &#39;
+                         f&#39;{auxpar}files = {auxlist}&#39;)
+            else:
+                log.info(&#39;LoadAuxName: No fitkeys: Return &#39;
+                         &#39;first %sfile match = %s&#39; %
+                         (self.auxpar, auxlist[0]))
+            data.setheadval(&#39;HISTORY&#39;, &#39;%s: Best %sfile = %s&#39; %
+                            (self.name, self.auxpar,
+                             os.path.split(auxlist[0])[1], ))
+            if multi:
+                return auxlist
+            else:
+                return auxlist[0]
+
+        # Select files with Fitkeys
+
+        # check format (make first element uppercase)
+        try:
+            fitkeys[0].upper()
+        except AttributeError:
+            # AttributeError if it&#39;s not a string
+            log.error(&#39;LoadAuxFile: fitkeys config parameter is &#39;
+                      &#39;incorrect format - need list of strings&#39;)
+            raise TypeError(&#39;fitkeys config parameter is incorrect format&#39;
+                            &#39; - need list of strings&#39;)
+
+        # Load all headers from auxlist into a auxheadlist (pipedata objects)
+        auxheadlist = []
+        for auxnam in auxlist:
+            auxdata = self.getdataobj(auxnam)
+            auxdata.loadhead(auxnam)
+            auxheadlist.append(auxdata)
+
+        # Look through keywords, only keep auxfiles which fit keys
+        newheadlist = []
+        for key in fitkeys:
+            newheadlist = []
+
+            # Look through auxfiles, transfer good ones
+            if key == &#39;DATE-OBS&#39;:
+                # SPECIAL CASE DATE-OBS:
+                # get time for data
+                datime = time.mktime(time.strptime(data.getheadval(&#39;DATE-OBS&#39;),
+                                                   &#39;%Y-%m-%dT%H:%M:%S.%f&#39;))
+                # get time offset (from data) for each auxfile
+                auxtimes = []
+                for auxhead in auxheadlist:
+                    auxtime = time.mktime(
+                        time.strptime(auxhead.getheadval(&#39;DATE-OBS&#39;),
+                                      &#39;%Y-%m-%dT%H:%M:%S.%f&#39;))
+                    auxtimes.append(abs(auxtime - datime))
+
+                # only keep auxfiles which are within
+                # daterange of closest auxfile
+                mindiff = min(auxtimes)
+                timerange = self.getarg(&#39;daterange&#39;) * 86400
+                sort_times = []
+                for auxi in range(len(auxheadlist)):
+                    if auxtimes[auxi] - mindiff &lt; timerange:
+                        newheadlist.append(auxheadlist[auxi])
+                        sort_times.append(auxtimes[auxi])
+                if len(newheadlist) &gt; 0:
+                    newheadlist = np.array(newheadlist)[np.argsort(sort_times)]
+
+            else:
+                # Normal Keyword compare
+                for auxhead in auxheadlist:
+                    # Check if the auxfile fits (compare with data)
+                    if auxhead.getheadval(key) == data.getheadval(key):
+                        # it fits -&gt; add to newheadlist
+                        newheadlist.append(auxhead)
+
+            # break key loop if no files left
+            if len(newheadlist) == 0:
+                break
+            else:
+                auxheadlist = newheadlist
+
+        # Select file to return
+        if multi:
+            # Return all filenames
+            auxname = [aux.filename for aux in auxheadlist]
+
+            # Return message
+            listnames = &#39;, &#39;.join(auxname)
+            if len(newheadlist) &gt; 0:
+                log.info(&#39;LoadAuxName: Matching %s found are &lt;%s&gt;&#39; %
+                         (auxpar, listnames))
+            else:
+                log.warning(&#39;LoadAuxName: NO MATCH finding aux files&#39;)
+                log.warning(&#39;Returning files &lt;%s&gt;&#39; % listnames)
+        else:
+            # Return first filename
+            auxname = auxheadlist[0].filename
+            # Select best file
+            if len(newheadlist) &gt; 0:
+                log.info(&#39;LoadAuxName: Matching %s found is &lt;%s&gt;&#39; %
+                         (auxpar, auxname))
+            else:
+                log.warning(&#39;LoadAuxName: NO MATCH finding aux file&#39;)
+                log.warning(&#39;Returning first file &lt;%s&gt;&#39; % auxname)
+            listnames = auxname
+        data.setheadval(&#39;HISTORY&#39;, &#39;%s: Best %s = %s&#39; %
+                        (self.name, auxpar, listnames))
+        # Return selected file
+        return auxname
+
+<div class="viewcode-block" id="StepLoadAux.loadauxfile">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.steploadaux.StepLoadAux.html#sofia_redux.instruments.hawc.steploadaux.StepLoadAux.loadauxfile">[docs]</a>
+    def loadauxfile(self, auxpar=&#39;&#39;, data=None, multi=False):
+        &quot;&quot;&quot;
+        Load an auxiliary file into a pipeline data object.
+
+        Uses `loadauxname` to search for files matching auxfile.
+
+        auxpar : str, optional
+            A name for the aux file parameter to use. This
+            allows loadauxfiles to be used multiple times
+            in a given pipe step (for example for darks and
+            flats). Default value is self.auxpar which is set
+            by loadauxsetup().
+        data : DataFits or DataText, optional
+            A data object to match the auxiliary file to.
+            If no data is specified, self.datain is used (for
+            Multi Input steps self.datain[0]).
+        multi : bool, optional
+            If set, a list of file names is returned instead of a single
+            file name.
+
+        Returns
+        -------
+        DataFits or DataText, or a list of DataFits or DataText
+            A data object with the best match is returned.
+        &quot;&quot;&quot;
+        # Get auxname
+        auxname = self.loadauxname(auxpar, data, multi)
+
+        # Load auxdata
+        if multi:
+            auxdata = []
+            for auxnam in auxname:
+                data = self.getdataobj(auxnam)
+                data.load(auxnam)
+                auxdata.append(data)
+        else:
+            auxdata = self.getdataobj(auxname)
+            auxdata.load(auxname)
+
+        # Return selected file
+        return auxdata</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.visualization.models.high_model &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.visualization.models.high_model</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import uuid
+from typing import List, Dict, Optional, TypeVar, Union
+from copy import deepcopy
+import astropy.io.fits as pf
+import numpy as np
+
+from sofia_redux.visualization import log
+from sofia_redux.visualization.models import mid_model, low_model
+from sofia_redux.visualization.utils.eye_error import EyeError
+
+__all__ = [&#39;HighModel&#39;, &#39;Grism&#39;, &#39;MultiOrder&#39;]
+
+MidModels = TypeVar(&#39;MidModels&#39;, mid_model.Order, mid_model.Book)
+LowModels = TypeVar(&#39;LowModels&#39;, low_model.Image, low_model.Spectrum)
+LowerModels = Union[MidModels, LowModels, np.ndarray]
+
+
+<div class="viewcode-block" id="HighModel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.HighModel.html#sofia_redux.visualization.models.high_model.HighModel">[docs]</a>
+class HighModel(object):
+    &quot;&quot;&quot;
+    Abstract class for high-level models.
+
+    These models correspond to a single FITS file which contain
+    one or more mid-level models. They also define the methods
+    by which the Eye interacts with models.
+
+    This class does not contain method implementations.  It should
+    be subclassed before using. Currently implemented subclasses are
+    `Grism` and `MultiOrder`.
+
+    Parameters
+    ----------
+    hdul : astropy.io.fits.HDUList
+        FITS HDU list to load.
+
+    Attributes
+    ----------
+    filename : str
+        Filename associated with the HDU list.
+    id : uuid.uuid4
+        Unique id (uuid4) associated with each HDU list. Note that it is
+        different from the id in low_model (filename).
+    index : int
+        Model index number.
+    enabled: bool
+        Indicates if a high model is enabled and thus visible in plots or not.
+    default_ndims: int
+        Default number of dimensions depending on the type of dataset.
+    books : list
+        List of mid_model.Book objects.
+    orders : list
+        List of mid_model.Order objects based on the number of apertures
+        (orders) in a dataset.
+
+    &quot;&quot;&quot;
+    def __init__(self, hdul: pf.HDUList) -&gt; None:
+        self.hdul = hdul
+        try:
+            filename = hdul.filename()
+        except TypeError:  # pragma: no cover
+            filename = hdul[0].header.get(&#39;FILENAME&#39;, None)
+        if not filename:
+            filename = hdul[0].header.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;)
+
+        self.filename = filename
+        self.id = uuid.uuid4()
+        self.index = 0
+        self.enabled = True
+        self.default_ndims = 0
+        self.num_aperture = 0
+        self.num_orders = 0
+        self.books = list()
+        self.orders = list()
+
+        self.spectral_data_prodtypes = {
+            &#39;flitecam&#39;: [&#39;spectra&#39;, &#39;spectra_1d&#39;, &#39;calibrated_spectrum&#39;,
+                         &#39;calibrated_spectrum_1d&#39;,
+                         &#39;coadded_spectrum&#39;, &#39;combined_spectrum&#39;,
+                         &#39;response_spectrum&#39;, &#39;instrument_response&#39;,
+                         &#39;combspec&#39;, &#39;calspec&#39;, &#39;mrgspec&#39;, &#39;mrgordspec&#39;
+                         ],
+            &#39;forcast&#39;: [&#39;spectra&#39;, &#39;merged_spectrum&#39;, &#39;calibrated_spectrum&#39;,
+                        &#39;calibrated_spectrum_1d&#39;, &#39;spectra_1d&#39;,
+                        &#39;coadded_spectrum&#39;, &#39;combined_spectrum&#39;,
+                        &#39;response_spectrum&#39;, &#39;instrument_response&#39;,
+                        &#39;merged_spectrum_1d&#39;, &#39;combspec&#39;,
+                        &#39;calspec&#39;, &#39;mrgspec&#39;, &#39;mrgordspec&#39;
+                        ],
+            &#39;exes&#39;: [&#39;calibrated_spectrum_1d&#39;, &#39;calspec&#39;, &#39;coadded_spectrum&#39;,
+                     &#39;combined_spectrum&#39;, &#39;combined_spectrum_1d&#39;, &#39;combspec&#39;,
+                     &#39;merged_spectrum_1d&#39;, &#39;mrgordspec&#39;, &#39;mrgspec&#39;,
+                     &#39;orders_merged&#39;, &#39;orders_merged_1d&#39;,
+                     &#39;sky_calibrated_spectrum_1d&#39;, &#39;sky_coadded_spectrum&#39;,
+                     &#39;sky_combined_spectrum&#39;, &#39;sky_combined_spectrum_1d&#39;,
+                     &#39;sky_combspec&#39;, &#39;sky_merged_spectrum_1d&#39;,
+                     &#39;sky_mrgordspec&#39;, &#39;sky_orders_merged&#39;,
+                     &#39;sky_orders_merged_1d&#39;, &#39;sky_spec&#39;, &#39;sky_specmap&#39;,
+                     &#39;sky_spectra&#39;, &#39;sky_spectra_1d&#39;, &#39;sky_wavecal_refined&#39;,
+                     &#39;sky_wavecal_refined_1d&#39;, &#39;spec&#39;, &#39;specmap&#39;, &#39;spectra&#39;,
+                     &#39;spectra_1d&#39;, &#39;wavecal_refined&#39;, &#39;wavecal_refined_1d&#39;]
+        }
+
+    def __copy__(self):
+        cls = self.__class__
+        new = cls.__new__(cls)
+        new.__dict__.update(self.__dict__)
+        return new
+
+    def __deepcopy__(self, memodict):
+        cls = self.__class__
+        new = cls.__new__(cls)
+        memodict[id(self)] = new
+        for k, v in self.__dict__.items():
+            if k == &#39;hdul&#39;:
+                # pass hdul by reference, since it is
+                # not modified from initial read
+                setattr(new, k, v)
+            else:
+                setattr(new, k, deepcopy(v, memodict))
+        return new
+
+<div class="viewcode-block" id="HighModel.load_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.HighModel.html#sofia_redux.visualization.models.high_model.HighModel.load_data">[docs]</a>
+    def load_data(self) -&gt; None:
+        &quot;&quot;&quot;Load the data into the model.&quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="HighModel.retrieve">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.HighModel.html#sofia_redux.visualization.models.high_model.HighModel.retrieve">[docs]</a>
+    def retrieve(self, **kwargs) -&gt; None:
+        &quot;&quot;&quot;Retrieve data from the model.&quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="HighModel.list_enabled">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.HighModel.html#sofia_redux.visualization.models.high_model.HighModel.list_enabled">[docs]</a>
+    def list_enabled(self) -&gt; Dict[str, List]:
+        &quot;&quot;&quot;
+        Return a list of enabled med-level objects.
+
+        Returns
+        -------
+        full_enabled : dict
+            Dictionary that lists the enabled Orders and Books.
+            Keys are &#39;orders&#39;, &#39;books&#39;, and &#39;apertures&#39;; values
+            are lists of mid-level model objects.
+        &quot;&quot;&quot;
+        full_enabled = {&#39;orders&#39;: self._enabled_orders(),
+                        &#39;books&#39;: self._enabled_books(),
+                        &#39;apertures&#39;: self._enabled_apertures()}
+        log.debug(f&#39;Current enabled fields: {full_enabled}&#39;)
+        return full_enabled</div>
+
+
+<div class="viewcode-block" id="HighModel.enabled_state">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.HighModel.html#sofia_redux.visualization.models.high_model.HighModel.enabled_state">[docs]</a>
+    def enabled_state(self) -&gt; Dict[str, Union[bool, Dict[str, bool]]]:
+        &quot;&quot;&quot;
+        Return the enabled status for all loaded data.
+
+        Returns
+        -------
+        enabled : dict
+            Keys are &#39;high&#39; or the mid-level model names; values
+            are either boolean flags or sub-dictionaries with the
+            same structure with field name keys.
+        &quot;&quot;&quot;
+        enabled = {&#39;high&#39;: self.enabled}
+        for collection in [self.orders, self.books]:
+            for mid in collection:
+                enabled[mid.name] = {&#39;enabled&#39;: mid.enabled}
+                for field, low in mid.data.items():
+                    enabled[mid.name][field] = low.enabled
+        return enabled</div>
+
+
+<div class="viewcode-block" id="HighModel.set_enabled_state">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.HighModel.html#sofia_redux.visualization.models.high_model.HighModel.set_enabled_state">[docs]</a>
+    def set_enabled_state(self, state: Dict[str, Union[bool, Dict[str, bool]]]
+                          ) -&gt; None:
+        &quot;&quot;&quot;
+        Set a mid-level model to a new enabled state.
+
+        Parameters
+        ----------
+        state : dict
+            Keys are &#39;high&#39; or the mid-level model names; values
+            are either boolean flags or sub-dictionaries with the
+            same structure with field name keys.
+
+        Returns
+        -------
+
+        &quot;&quot;&quot;
+        self.enabled = state[&#39;high&#39;]
+        for order in self.orders:
+            order.set_enabled_state(state[order.name])
+        for book in self.books:
+            book.set_enabled_state(state[book.name])</div>
+
+
+    def _enabled_orders(self) -&gt; List[int]:
+        &quot;&quot;&quot;Return order enabled status.&quot;&quot;&quot;
+        enabled = [order.number for order in self.orders
+                   if order.enabled]
+        return list(set(enabled))
+
+    def _enabled_books(self) -&gt; List[int]:
+        &quot;&quot;&quot;Return book enabled status.&quot;&quot;&quot;
+        enabled = [book.number for book in self.books
+                   if book.enabled]
+        return enabled
+
+    def _enabled_apertures(self) -&gt; List[int]:
+        &quot;&quot;&quot;Return aperture enabled status.&quot;&quot;&quot;
+        enabled = [order.aperture for order in self.orders
+                   if order.enabled]
+        return list(set(enabled))
+
+<div class="viewcode-block" id="HighModel.valid_field">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.HighModel.html#sofia_redux.visualization.models.high_model.HighModel.valid_field">[docs]</a>
+    def valid_field(self, field: str) -&gt; bool:
+        &quot;&quot;&quot;
+        Determine if a field is valid for the loaded data.
+
+        Parameters
+        ----------
+        field : str
+            Name of field.
+
+        Returns
+        -------
+        check : bool
+            True if the field is valid, False otherwise.
+        &quot;&quot;&quot;
+        raise NotImplementedError</div>
+
+
+<div class="viewcode-block" id="HighModel.enable_orders">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.HighModel.html#sofia_redux.visualization.models.high_model.HighModel.enable_orders">[docs]</a>
+    def enable_orders(self, order_flags: List[int],
+                      enable: Optional[bool] = True,
+                      aperture: Optional[bool] = False) -&gt; None:
+        &quot;&quot;&quot;
+        Enable or disable specified orders.
+
+        Parameters
+        ----------
+        order_flags : list of int
+            Orders to update.
+        enable : bool, optional
+            If True, specified orders are enabled. If False, they
+            are disabled.
+        aperture : bool, optional
+            If True, apertures are expected. Currently has no effect.
+        &quot;&quot;&quot;
+        log.debug(f&#39;{&quot;Enable&quot; if enable else &quot;Disable&quot;} {order_flags}&#39;)
+        for order in self.orders:
+            if self.num_orders &gt; 1 and self.num_aperture == 1:
+                flag = order.number
+            elif self.num_orders == 1 and self.num_aperture &gt; 1:
+                flag = order.aperture
+            elif self.num_orders == 1 and self.num_aperture == 1:
+                flag = order.number
+            else:
+                flag = order.number
+            # if aperture:
+            #     flag = order.aperture
+            # else:
+            #     flag = order.number
+            if flag in order_flags:
+                log.debug(f&#39;Setting Order {order.number}, Aperture &#39;
+                          f&#39;{order.aperture} to &#39;
+                          f&#39;{&quot;enable&quot; if enable else &quot;disable&quot;}&#39;)
+                order.set_visibility(enable)
+            else:
+                log.debug(f&#39;Setting Order {order.number}, Aperture &#39;
+                          f&#39;{order.aperture} to &#39;
+                          f&#39;{&quot;enable&quot; if not enable else &quot;disable&quot;}&#39;)
+                order.set_visibility(not enable)</div>
+
+
+<div class="viewcode-block" id="HighModel.extensions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.HighModel.html#sofia_redux.visualization.models.high_model.HighModel.extensions">[docs]</a>
+    def extensions(self):
+        &quot;&quot;&quot;
+        Retrieve all loaded extension names.
+
+        Returns
+        -------
+        extensions : list of str
+            All extension names present in self.hdul.
+        &quot;&quot;&quot;
+        ext = list()
+        for hdu in self.hdul:
+            ext.append(hdu.name)
+        return ext</div>
+
+
+<div class="viewcode-block" id="HighModel.ap_order_count">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.HighModel.html#sofia_redux.visualization.models.high_model.HighModel.ap_order_count">[docs]</a>
+    def ap_order_count(self):
+        &quot;&quot;&quot;
+        Retrieve the number of apertures and orders loaded.
+
+        Returns
+        -------
+        num_aperture, num_order : int, int
+            The aperture and order count.
+        &quot;&quot;&quot;
+        return self.num_aperture, self.num_orders</div>
+
+
+<div class="viewcode-block" id="HighModel.spectral_data_check">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.HighModel.html#sofia_redux.visualization.models.high_model.HighModel.spectral_data_check">[docs]</a>
+    def spectral_data_check(self) -&gt; bool:
+        &quot;&quot;&quot;
+        Check if an input data file contains spectral data.
+
+        This test is based on specific product types known to contain
+        spectral data.
+
+        Returns
+        -------
+        bool
+            True if spectral data is present; False otherwise.
+        &quot;&quot;&quot;
+        instrument = self.hdul[0].header.get(&#39;INSTRUME&#39;)
+        prodtype = self.hdul[0].header.get(&#39;PRODTYPE&#39;)
+        if instrument is None or prodtype is None:
+            return True
+        else:
+            instrument = str(instrument).lower()
+            prodtype = str(prodtype).lower()
+
+        if instrument == &#39;general&#39;:
+            return True
+
+        try:
+            result = prodtype in self.spectral_data_prodtypes[instrument]
+        except KeyError:
+            return True
+        else:
+            if not result:
+                raise EyeError(f&#39;{prodtype} files for &#39;
+                               f&#39;{instrument.upper()} do not contain &#39;
+                               f&#39;spectral data&#39;)
+            else:
+                return True</div>
+
+
+<div class="viewcode-block" id="HighModel.spectral_test">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.HighModel.html#sofia_redux.visualization.models.high_model.HighModel.spectral_test">[docs]</a>
+    def spectral_test(self):
+        &quot;&quot;&quot;
+        Check if an input data file contains spectral data.
+
+        This test is based on the file and data structure. There
+        are two possible conditions for spectral data files:
+
+           - a &#39;SPECTRAL_FLUX*&#39; extension is present
+           - the first extension contains at least 1 row of data
+             and not more than 5 rows of data
+
+        Returns
+        -------
+        bool
+            True if spectral data is present; False otherwise.
+        &quot;&quot;&quot;
+        for hdu in self.hdul:
+            extname = str(hdu.header.get(&#39;EXTNAME&#39;, &#39;UNKNOWN&#39;)).lower()
+            if &#39;spectral_flux&#39; in extname:
+                return True
+
+        header = self.hdul[0].header
+        xdim = header.get(&#39;NAXIS1&#39;, 0)
+        ydim = header.get(&#39;NAXIS2&#39;, 0)
+        if xdim &gt; 0 and ydim &lt; 6:
+            return True
+        else:
+            return False</div>
+</div>
+
+
+
+<div class="viewcode-block" id="Grism">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.Grism.html#sofia_redux.visualization.models.high_model.Grism">[docs]</a>
+class Grism(HighModel):
+    &quot;&quot;&quot;
+    High level model describing a Grism data file.
+
+    Parameters
+    ----------
+    hdul : astropy.io.fits.HDUList
+        The HDU list from a Grism FITS file.
+
+    Attributes
+    ----------
+    default_field : str
+        Default field for the high model, usually &#39;spectral_flux&#39;.
+    default_ndims : int
+        Default expected data dimensionality.
+    num_orders : int
+        Number of orders loaded.
+    &quot;&quot;&quot;
+
+    def __init__(self, hdul: pf.HDUList) -&gt; None:
+        super().__init__(hdul)
+        self.default_field = &#39;spectral_flux&#39;
+        self.default_ndims = 1
+        self.num_orders = 1
+
+        self.load_data()
+        log.debug(f&#39;Initialized Grism with {len(self.books)} &#39;
+                  f&#39;Books and {len(self.orders)} Orders.&#39;)
+
+<div class="viewcode-block" id="Grism.load_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.Grism.html#sofia_redux.visualization.models.high_model.Grism.load_data">[docs]</a>
+    def load_data(self) -&gt; None:
+        &quot;&quot;&quot;
+        Parse the contents of the HDUL into appropriate classes.
+
+        A file is read in either on the basis of its name or the instrument.
+        Some Grism files only have one extension, without associated
+        image data. In this case, the `Book` object is not instantiated.
+        &quot;&quot;&quot;
+        spectrum_present = self.spectral_test()
+        if not spectrum_present:
+            raise EyeError(&#39;No spectral data present&#39;)
+        if self._spectra_only():
+            self._load_order()
+        elif self._image_only():
+            self._load_book()
+        elif self._general_only():
+            self._load_order()
+        else:
+            self._load_order()
+            self._load_book()</div>
+
+
+    def _image_only(self) -&gt; bool:
+        &quot;&quot;&quot;Determine if there are only images in the file.&quot;&quot;&quot;
+
+        # TODO - this check is not reliable.
+        file_codes = [&#39;CLN&#39;, &#39;DRP&#39;, &#39;LNZ&#39;, &#39;STK&#39;,
+                      &#39;LOC&#39;, &#39;TRC&#39;, &#39;APS&#39;, &#39;BGS&#39;]
+        for code in file_codes:
+            if f&#39;_{code}_&#39; in self.filename:
+                return True
+        return False
+
+    def _spectra_only(self) -&gt; bool:
+        &quot;&quot;&quot;Determine if there are only spectra in the file.&quot;&quot;&quot;
+        file_codes = [&#39;CMB&#39;, &#39;MRG&#39;, &#39;SPC&#39;, &#39;CAL&#39;, &#39;RSP&#39;, &#39;IRS&#39;]
+        for code in file_codes:
+            if f&#39;_{code}&#39; in self.filename:
+                return True
+        if self.filename == &#39;UNKNOWN&#39;:
+            return True
+        return False
+
+    def _general_only(self) -&gt; bool:
+        &quot;&quot;&quot;Identify data in non-traditional FITS or non-FITS files.&quot;&quot;&quot;
+        if &#39;fits&#39; not in self.filename:
+            return True
+
+        if (&#39;fits&#39; in self.filename
+                and self.hdul[0].header[&#39;instrume&#39;] == &#39;General&#39;):
+            return True
+        return False
+
+    def _load_order(self) -&gt; None:
+        &quot;&quot;&quot;
+        Load all orders.
+
+        A grism observation will only have one `Order`
+        in it. `num_orders` should be one at the end.
+        The order might be split across several
+        extensions or combined in one. Both cases
+        are handled by the `Order` class.
+
+        &quot;&quot;&quot;
+        # technically, these are apertures, but we&#39;ll handle them as orders
+        # for display purposes
+        self.num_aperture = self._aperture_test()
+        log.debug(f&#39;Loading {self.num_aperture} apertures &#39;
+                  f&#39;from {self.filename}&#39;)
+        for i in range(self.num_aperture):
+            self.orders.append(mid_model.Order(self.hdul, self.filename, 0, i))
+
+    def _load_book(self) -&gt; None:
+        &quot;&quot;&quot;
+        Load all books.
+
+        A grism observation will only have one `Book`
+        in it. The book might be split across several
+        extensions or combined in one. Both cases
+        are handled by the `Book` class.
+        &quot;&quot;&quot;
+        self.books = [mid_model.Book(self.hdul, self.filename, 0)]
+
+    def _aperture_test(self) -&gt; int:
+        &quot;&quot;&quot;
+        Determine the number of apertures in the spectral data.
+
+        Returns
+        -------
+        n_ap : int
+            Number of apertures found
+        &quot;&quot;&quot;
+        n_ap = 1
+        if len(self.hdul) == 1:
+            data_ = self.hdul[0].data
+            if data_.ndim == 3:
+                n_ap = data_.shape[0]
+        elif self.default_field in self.hdul:
+            data_ = self.hdul[self.default_field].data
+            ndim = data_.ndim
+            if ndim == 2:
+                n_ap = data_.shape[0]
+        return n_ap
+
+<div class="viewcode-block" id="Grism.retrieve">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.Grism.html#sofia_redux.visualization.models.high_model.Grism.retrieve">[docs]</a>
+    def retrieve(self, book: Optional[int] = None, field: str = &#39;&#39;,
+                 level: str = &#39;raw&#39;, order: Optional[int] = None,
+                 aperture: Optional[int] = None) -&gt; Optional[LowerModels]:
+        &quot;&quot;&quot;
+        Access contents of lower level models.
+
+        Parameters
+        ----------
+        book : int, optional
+            Book number to be returned.
+        field : str, optional
+            The field to retrieve. Required for &#39;low&#39; and &#39;raw&#39; levels.
+        level : {&#39;high&#39;, &#39;low&#39;, &#39;raw&#39;}, optional
+            The level of the data to return.
+        order : int, optional
+            Order number to be returned.
+        aperture : int, optional
+            Aperture number to be returned.
+
+        Returns
+        -------
+        data : low_model.LowModel or mid_model.MidModel or array-like
+            The requested data set. Can be a `Book`, `Order`,
+            `Image`, `Spectrum`, or numpy array. If the
+            parameters are not valid (i.e. no loaded data matches
+            them) then None is returned.
+        &quot;&quot;&quot;
+        if book is not None and (order is None and aperture is None):
+            identifier = &#39;book&#39;
+        elif book is None and (order is not None or aperture is not None):
+            identifier = &#39;order&#39;
+        else:
+            raise RuntimeError(f&#39;Invalid identifier choices &#39;
+                               f&#39;(book, order) = ({book}, {order}). &#39;
+                               f&#39;Only one can be provided&#39;)
+        if level not in [&#39;high&#39;, &#39;low&#39;, &#39;raw&#39;]:
+            raise RuntimeError(f&#39;Invalid level choice {level}. Options are: &#39;
+                               f&#39;&quot;high&quot;, &quot;low&quot;, &quot;raw&quot;&#39;)
+
+        if identifier == &#39;book&#39;:
+            if not self.books:
+                return None
+            elif level == &#39;high&#39;:
+                return self.books[0]
+            else:  # pragma: no cover
+                return self.books[0].retrieve(field=field, level=level)
+        else:
+            if isinstance(order, str):
+                try:
+                    order, aperture = order.split(&#39;.&#39;)
+                except ValueError:
+                    order = int(order)
+                    try:
+                        aperture = int(aperture)
+                    except (TypeError, ValueError):
+                        aperture = 0
+            if aperture is not None:
+                index = int(order) * self.num_aperture + int(aperture)
+            else:
+                index = int(order)
+            if not self.orders:
+                return None
+            elif level == &#39;high&#39;:
+                return self.orders[index]
+            else:
+                if field:
+                    try:
+                        return self.orders[index].retrieve(field=field,
+                                                           level=level)
+                    except IndexError:
+                        return None
+                else:
+                    log.debug(&#39;Need to provide field for low or raw &#39;
+                              &#39;retrievals&#39;)
+                    return None</div>
+
+
+<div class="viewcode-block" id="Grism.valid_field">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.Grism.html#sofia_redux.visualization.models.high_model.Grism.valid_field">[docs]</a>
+    def valid_field(self, field: str) -&gt; bool:
+        &quot;&quot;&quot;
+        Determine if a field is valid.
+
+        Parameters
+        ----------
+        field : str
+            Name of field, e.g. &#39;wavepos&#39; or &#39;flux&#39;.
+
+        Returns
+        -------
+        check : bool
+            True if the field is valid, False otherwise.
+        &quot;&quot;&quot;
+        book_check = [book.valid_field(field) for book in self.books]
+        order_check = [order.valid_field(field) for order in self.orders]
+        check = any(book_check + order_check)
+        if check:
+            log.debug(f&#39;Field {field} is valid&#39;)
+        else:
+            log.debug(f&#39;Field {field} is not valid&#39;)
+        return check</div>
+
+
+<div class="viewcode-block" id="Grism.list_enabled">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.Grism.html#sofia_redux.visualization.models.high_model.Grism.list_enabled">[docs]</a>
+    def list_enabled(self) -&gt; Dict[str, List[int]]:
+        &quot;&quot;&quot;
+        List the enabled Books and Orders.
+
+        Returns
+        -------
+        full_enabled : dict
+            Dictionary listing the enabled books and orders.
+        &quot;&quot;&quot;
+        return super().list_enabled()</div>
+</div>
+
+
+
+<div class="viewcode-block" id="MultiOrder">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.MultiOrder.html#sofia_redux.visualization.models.high_model.MultiOrder">[docs]</a>
+class MultiOrder(HighModel):
+    &quot;&quot;&quot;
+    High-level model for FITS files with multiple independent spectra.
+
+    Parameters
+    ----------
+    hdul : astropy.io.fits.HDUList
+        The HDU list from a spectral FITS file.
+
+    Attributes
+    ----------
+    default_ndim : int
+        Default number of dimensions.
+    num_orders : int
+        Number of orders in a dataset.
+    books : list
+        List of mid_model.Book objects.
+    orders : list
+        List of mid_model.Order objects.
+    &quot;&quot;&quot;
+
+    def __init__(self, hdul: pf.HDUList, general: Optional[bool] = False
+                 ) -&gt; None:
+        super().__init__(hdul)
+
+        self.default_ndims = 1
+        self.num_orders = 0
+        self.books = list()
+        self.orders = list()
+
+        self.load_data(general)
+
+<div class="viewcode-block" id="MultiOrder.load_data">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.MultiOrder.html#sofia_redux.visualization.models.high_model.MultiOrder.load_data">[docs]</a>
+    def load_data(self, general: Optional[bool] = False) -&gt; None:
+        &quot;&quot;&quot;
+        Parse the input Orders.
+
+        Parameters
+        ----------
+        general : bool, optional
+           If set, the input data is handled in a generic way,
+           assuming all extra spectral dimensions are orders rather
+           than apertures.
+        &quot;&quot;&quot;
+        count = self._determine_aperture_count(general)
+        if general:
+            self.num_orders = count
+            self.num_aperture = 1
+        else:
+            self.num_orders = int(self.hdul[0].header.get(&#39;NORDERS&#39;, 1))
+            self.num_aperture = count
+
+            spectrum_present = self.spectral_test()
+            if not spectrum_present:
+                raise EyeError(&#39;No spectral data present&#39;)
+
+        log.debug(f&#39;Loading {self.num_orders} orders and &#39;
+                  f&#39;{self.num_aperture} apertures from {self.filename}&#39;)
+        order_only_prodtypes = [&#39;mrgordspec&#39;, &#39;orders_merged_1d&#39;,
+                                &#39;combined_spectrum_1d&#39;, &#39;spectra_1d&#39;,
+                                &#39;sky_orders_merged_1d&#39;, &#39;general&#39;,
+                                &#39;sky_combined_spectrum_1d&#39;, &#39;sky_spectra_1d&#39;]
+        prodtype = str(self.hdul[0].header.get(&#39;PRODTYPE&#39;)).lower()
+        log.debug(f&#39;Len hdul: {len(self.hdul)}&#39;)
+        if len(self.hdul) == 1:
+            data = self.hdul[0].data
+            header = self.hdul[0].header
+            if self.num_orders == 1 and self.num_aperture == 1:
+                # Case for EXES data where all orders have been
+                # merged into a single array
+                self.orders.append(
+                    mid_model.Order(self.hdul, self.filename, 0))
+                if prodtype not in order_only_prodtypes:
+                    self.books.append(mid_model.Book(self.hdul,
+                                                     self.filename, 0))
+            elif data.shape[0] == self.num_orders:
+                # Case for each order being a different slice of
+                # the data array
+                # if general:
+                #     for i in range(self.num_aperture):
+                #         self.orders.append(
+                #             mid_model.Order(self.hdul, self.filename, 0, i))
+                # else:
+                for i in range(self.num_orders):
+                    hdul = pf.HDUList(pf.ImageHDU(data[i], header))
+                    self.orders.append(mid_model.Order(hdul, self.filename, i))
+
+            elif self.num_orders * self.num_aperture == data.shape[0]:
+                # Case for each order and each aperture being a different
+                # slice of the data array
+                for i in range(data.shape[0]):
+                    order_number = i // self.num_aperture
+                    ap_number = i % self.num_aperture
+                    hdul = pf.HDUList(pf.ImageHDU(data[i], header))
+                    self.orders.append(mid_model.Order(hdul, self.filename,
+                                                       number=order_number,
+                                                       aperture=ap_number))
+        else:
+            if self.num_orders == 1 and self.num_aperture == 1:
+                # Case for EXES data where there&#39;s only one
+                # order but it&#39;s been split into multiple extensions
+                self.orders.append(mid_model.Order(self.hdul,
+                                                   self.filename, 0))
+                self.books.append(mid_model.Book(self.hdul, self.filename, 0))
+            else:
+                # Case for EXES data where each order gets its
+                # own extension whose name ends with the order number
+                for i in range(self.num_orders):
+                    order_hdus = [hdu for hdu in self.hdul
+                                  if hdu.name.endswith(f&#39;_{i + 1:02d}&#39;)]
+                    if len(order_hdus) == 0:
+                        # Some files are split into multiple extensions
+                        # but don&#39;t have the order number in their name
+                        # As a last resort, try to pull extensions by name
+                        # directly.
+                        names = [&#39;wavepos&#39;, &#39;spectral_flux&#39;, &#39;spectral_error&#39;,
+                                 &#39;transmission&#39;, &#39;response&#39;]
+                        order_hdus = list()
+                        for name in names:
+                            try:
+                                order_hdus.append(self.hdul[name])
+                            except KeyError:
+                                continue
+                    if len(order_hdus) == 0:  # pragma: no cover
+                        continue
+                    args = {&#39;hdul&#39;: order_hdus, &#39;filename&#39;: self.filename,
+                            &#39;number&#39;: i}
+                    if self.num_aperture &gt; 1:
+                        for ap in range(self.num_aperture):
+                            args[&#39;aperture&#39;] = ap
+                            args[&#39;num_apertures&#39;] = self.num_aperture
+                            self.orders.append(mid_model.Order(**args))
+                            self.books.append(mid_model.Book(**args))
+                    else:
+                        self.orders.append(mid_model.Order(**args))
+                        self.books.append(mid_model.Book(**args))
+
+        if len(self.orders) == 0:  # pragma: no cover
+            raise EyeError(&#39;No spectral data found in HDUL&#39;)</div>
+
+
+    def _determine_aperture_count(self, general: Optional[bool] = False
+                                  ) -&gt; int:
+        log.debug(&#39;Determining number of apertures&#39;)
+        try:
+            count = self.hdul[0].header[&#39;NAPS&#39;]
+            log.debug(f&#39;Retrieved {self.num_aperture} from NAPS&#39;)
+        except KeyError:
+            # There is no way to reliably determine the number of apertures
+            # from the header. It must be determined from the data
+            # Try accessing &#39;spectral_flux_order_01&#39; and getting the
+            # aperture count from the number of columns.
+            # No clue how to do this for FORCAST data which does not use
+            # this naming structure.
+            if general:
+                extension = &#39;Primary&#39;
+            else:
+                extension = &#39;SPECTRAL_FLUX_ORDER_01&#39;
+            try:
+                data = self.hdul[extension].data
+            except KeyError:
+                try:
+                    data = self.hdul[&#39;SPECTRAL_FLUX&#39;].data
+                except KeyError:
+                    data = None
+            if data is not None:
+                if np.squeeze(data).ndim == 1:
+                    count = 1
+                else:
+                    if general:
+                        count = data.shape[0]
+                    else:
+                        count = min(data.shape)
+                log.debug(f&#39;Pulled {count} from data shape ({data.shape})&#39;)
+            else:
+                try:
+                    positions = self.hdul[0].header[&#39;APPOSO01&#39;]
+                except KeyError:
+                    count = 1
+                    log.debug(&#39;Defaulting to 1 aperture&#39;)
+                else:
+                    count = len(str(positions).strip().split(&#39;,&#39;))
+                    log.debug(f&#39;Pulled {count} from APPOSO01 ({positions})&#39;)
+        return count
+
+<div class="viewcode-block" id="MultiOrder.retrieve">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.MultiOrder.html#sofia_redux.visualization.models.high_model.MultiOrder.retrieve">[docs]</a>
+    def retrieve(self, order: int = 0, field: str = &#39;&#39;,
+                 level: str = &#39;raw&#39;, aperture: Optional[int] = None
+                 ) -&gt; Optional[LowerModels]:
+        &quot;&quot;&quot;
+        Access contents of lower level models.
+
+        Parameters
+        ----------
+        order : int
+            Order number to be returned.
+        field : str
+            Name of the field to pull data for.
+        level : {&#39;high&#39;, &#39;low&#39;, &#39;raw&#39;}
+            Sets the level to return. &#39;High&#39; will return
+            the Order object, &#39;low&#39;, will return the
+            Spectrum object, and &#39;raw&#39; will return the
+            raw numerical data.
+        aperture: int, optional
+            Aperture number to retrieve (zero-based indexing). If
+            not included, assume the data only has a single aperture.
+
+        Returns
+        -------
+        data : low_model.LowModel or mid_model.MidModel or array-like
+            The requested data set. Can be a `Book`, `Order`,
+            `Image`, `Spectrum`, or numpy array. If the
+            parameters are not valid (i.e. no loaded data matches
+            them) then None is returned.
+        &quot;&quot;&quot;
+        try:
+            float(order)
+        except ValueError:
+            raise TypeError(&#39;Identifier for MultiOrder must be &#39;
+                            &#39;a number&#39;)
+        if not self.orders:
+            return None
+
+        if isinstance(order, str):
+            try:
+                order, aperture = order.split(&#39;.&#39;)
+            except ValueError:
+                order = int(order)
+                try:
+                    aperture = int(aperture)
+                except (TypeError, ValueError):
+                    aperture = 0
+        if aperture is not None:
+            index = int(order) * self.num_aperture + int(aperture)
+        else:
+            index = int(order)
+        if level == &#39;high&#39;:
+            return self.orders[index]
+        else:
+            if field:
+                return self.orders[index].retrieve(field, level=level)
+            else:
+                log.debug(&#39;Need to provide field for low or raw retrievals&#39;)
+                return None</div>
+
+
+<div class="viewcode-block" id="MultiOrder.valid_field">
+<a class="viewcode-back" href="../../../../api/sofia_redux.visualization.models.high_model.MultiOrder.html#sofia_redux.visualization.models.high_model.MultiOrder.valid_field">[docs]</a>
+    def valid_field(self, field: str) -&gt; bool:
+        &quot;&quot;&quot;
+        Determine if a field is valid for the loaded data.
+
+        Parameters
+        ----------
+        field : str
+            Name of field.
+
+        Returns
+        -------
+        check : bool
+            True if the field is valid, False otherwise.
+        &quot;&quot;&quot;
+        order_check = [order.valid_field(field)
+                       for order in self.orders]
+        log.debug(f&#39;Valid field check for {field}: {any(order_check)}&#39;)
+        return any(order_check)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

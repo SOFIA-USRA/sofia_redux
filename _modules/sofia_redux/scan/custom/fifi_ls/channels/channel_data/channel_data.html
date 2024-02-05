@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units
+import numpy as np
+import pandas as pd
+from scipy.sparse import csr_matrix
+from scipy.sparse import SparseEfficiencyWarning
+from sklearn.neighbors import radius_neighbors_graph
+import warnings
+
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.custom.fifi_ls.flags.channel_flags import (
+    FifiLsChannelFlags)
+from sofia_redux.scan.custom.sofia.channels.channel_data.channel_data import (
+    SofiaChannelData)
+from sofia_redux.scan.channels.channel_data.single_color_channel_data import (
+    SingleColorChannelData)
+from sofia_redux.scan.utilities.range import Range
+from sofia_redux.scan.custom.fifi_ls.channels.channel_numba_functions import\
+    get_relative_channel_weights
+
+__all__ = [&#39;FifiLsChannelData&#39;]
+
+um = units.Unit(&#39;um&#39;)
+
+
+<div class="viewcode-block" id="FifiLsChannelData">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.html#sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData">[docs]</a>
+class FifiLsChannelData(SingleColorChannelData, SofiaChannelData):
+
+    flagspace = FifiLsChannelFlags
+
+    def __init__(self, channels=None):
+        &quot;&quot;&quot;
+        Initialize the channel data for the FIFI-LS instrument.
+
+        Parameters
+        ----------
+        channels : FifiLsChannels, optional
+            The full channel object on which to base the data.
+        &quot;&quot;&quot;
+        super().__init__(channels=channels)
+        self.spexel = None
+        self.spaxel = None
+        self.wavelength = None
+        self.uncorrected_wavelength = None
+        self.response = None
+        self.atran = None
+        self.spexel_gain = None
+        self.spaxel_gain = None
+        self.col_gain = None
+        self.row_gain = None
+
+<div class="viewcode-block" id="FifiLsChannelData.copy">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.html#sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the channel data.
+
+        Returns
+        -------
+        FifiLsChannelData
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+    @property
+    def default_field_types(self):
+        &quot;&quot;&quot;
+        Return the defaults for the various channel data parameters.
+
+        Returns
+        -------
+        defaults : dict
+        &quot;&quot;&quot;
+        result = super().default_field_types
+        result.update({&#39;spexel&#39;: -1,
+                       &#39;spaxel&#39;: -1,
+                       &#39;spexel_gain&#39;: 1.0,
+                       &#39;spaxel_gain&#39;: 1.0,
+                       &#39;col_gain&#39;: 1.0,
+                       &#39;row_gain&#39;: 1.0,
+                       &#39;independent&#39;: False,
+                       })
+        return result
+
+    @property
+    def info(self):
+        &quot;&quot;&quot;
+        Return the instrument information object.
+
+        Returns
+        -------
+        sofia_redux.scan.custom.fifi_ls.info.info.FifiLsInfo
+        &quot;&quot;&quot;
+        return super().info
+
+    @property
+    def central_wavelength(self):
+        &quot;&quot;&quot;
+        Return the central wavelength in the channel data.
+
+        Returns
+        -------
+        wave_center : units.Quantity
+        &quot;&quot;&quot;
+        if self.size == 0 or self.wavelength is None:
+            return np.nan * um
+
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            return np.nanmean(self.wavelength)
+
+    @property
+    def spectral_fwhm(self):
+        &quot;&quot;&quot;
+        Return the spectral FWHM for the wavelength.
+
+        Returns
+        -------
+        fwhm : units.Quantity
+        &quot;&quot;&quot;
+        wave = self.central_wavelength
+        return wave / self.info.instrument.spectral_resolution
+
+<div class="viewcode-block" id="FifiLsChannelData.set_uniform_gains">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.html#sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.set_uniform_gains">[docs]</a>
+    def set_uniform_gains(self, field=None):
+        &quot;&quot;&quot;
+        Sets the gain and coupling to 1.0 for all channels.
+
+        Parameters
+        ----------
+        field : str, optional
+            If supplied, sets all values of the requested field to unity.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_uniform_gains(field=field)
+        if field is None:
+            self.spexel_gain = np.full(self.size, 1.0)
+            self.spaxel_gain = np.full(self.size, 1.0)
+            self.col_gain = np.full(self.size, 1.0)
+            self.row_gain = np.full(self.size, 1.0)</div>
+
+
+<div class="viewcode-block" id="FifiLsChannelData.to_string">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.html#sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.to_string">[docs]</a>
+    def to_string(self, indices=None, frame=False):
+        &quot;&quot;&quot;
+        Return a string representation of channels.
+
+        Parameters
+        ----------
+        indices : numpy.ndarray or slice, optional
+            The channel indices (not fixed) to return.  The default is all
+            channels.
+        frame : bool, optional
+            If `True`, returns a :class:`pd.DataFrame` instead of a string
+            representation.
+
+        Returns
+        -------
+        str or pd.DataFrame
+        &quot;&quot;&quot;
+        df = super().to_string(indices=indices, frame=True)
+        if indices is None:
+            indices = slice(None)
+
+        df[&#39;eff&#39;] = list(map(lambda x: &quot;%.3f&quot; % x, self.coupling[indices]))
+        df[&#39;Gspex&#39;] = list(
+            map(lambda x: &quot;%.3f&quot; % x, self.spexel_gain[indices]))
+        df[&#39;Gspax&#39;] = list(
+            map(lambda x: &quot;%.3f&quot; % x, self.spaxel_gain[indices]))
+        df[&#39;idx&#39;] = list(map(lambda x: str(x), self.fixed_index[indices]))
+        df[&#39;spex&#39;] = list(map(lambda x: str(x), self.spexel[indices]))
+        df[&#39;spax&#39;] = list(map(lambda x: str(x), self.spaxel[indices]))
+        if frame:
+            return df
+        else:
+            return df.to_csv(sep=&#39;\t&#39;, index=False)</div>
+
+
+<div class="viewcode-block" id="FifiLsChannelData.validate_pixel_data">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.html#sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.validate_pixel_data">[docs]</a>
+    def validate_pixel_data(self):
+        &quot;&quot;&quot;
+        Validates data read from the pixel data file.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().validate_pixel_data()
+
+        gain_range = self.configuration.get_range(
+            &#39;pixels.gain.range&#39;, default=Range(0.3, 3.0))
+        coupling_range = self.configuration.get_range(
+            &#39;pixels.coupling.range&#39;, default=Range(0.3, 3.0))
+        exclude_gain = self.configuration.get_float_list(
+            &#39;pixels.gain.exclude&#39;, default=None)
+        exclude_coupling = self.configuration.get_float_list(
+            &#39;pixels.coupling.exclude&#39;, default=None)
+
+        bad_channels = ~gain_range.in_range(self.gain)
+        bad_channels |= ~coupling_range.in_range(self.coupling)
+        if exclude_gain is not None:
+            for gain_value in exclude_gain:
+                bad_channels |= self.gain == gain_value
+        if exclude_coupling is not None:
+            for coupling_value in exclude_coupling:
+                bad_channels |= self.coupling == coupling_value
+
+        self.coupling[bad_channels] = 0.0
+        self.set_flags(&#39;DEAD&#39;, indices=bad_channels)</div>
+
+
+<div class="viewcode-block" id="FifiLsChannelData.initialize_from_detector">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.html#sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.initialize_from_detector">[docs]</a>
+    def initialize_from_detector(self, detector):
+        &quot;&quot;&quot;
+        Apply detector information to create and populate the channel data.
+
+        The following attributes are determined from the detector::
+
+          - col: The column on the array
+          - row: The row on the array
+          - spexel: The spexel index
+          - spaxel: The spaxel index
+          - position: The spaxel offset on the array (arcseconds)
+          - wavelength : The spexel wavelength (um). Set to NaN.
+
+        Additionally, the channel string ID is set to::
+
+          &lt;CHANNEL&gt;[&lt;spexel&gt;,&lt;spaxel&gt;]
+
+        where spexel and spaxel are described above and CHANNEL may be one of
+        {B, R} for the RED and BLUE channels respectively.
+
+        Parameters
+        ----------
+        detector : FifiLsDetectorArrayInfo
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        detector.initialize_channel_data(self)</div>
+
+
+<div class="viewcode-block" id="FifiLsChannelData.read_channel_data_file">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.html#sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.read_channel_data_file">[docs]</a>
+    @classmethod
+    def read_channel_data_file(cls, filename):
+        &quot;&quot;&quot;
+        Read a channel data file and return the information within.
+
+        Returns a `pandas` DataFrame with the following columns:
+        {gain, weight, flag, coupling, mux_gain, idx, sub, row, col, unknown}.
+
+        Parameters
+        ----------
+        filename : str
+            The path to a channel data file.
+
+        Returns
+        -------
+        channel_info : pandas.DataFrame
+        &quot;&quot;&quot;
+        column_names = [&#39;gain&#39;, &#39;weight&#39;, &#39;flag&#39;, &#39;coupling&#39;, &#39;spexel_gain&#39;,
+                        &#39;spaxel_gain&#39;, &#39;row_gain&#39;, &#39;col_gain&#39;, &#39;fixed_id&#39;,
+                        &#39;spexel&#39;, &#39;spaxel&#39;]
+        data_types = {&#39;gain&#39;: float, &#39;weight&#39;: np.float64,
+                      &#39;coupling&#39;: np.float64, &#39;spexel_gain&#39;: np.float64,
+                      &#39;spaxel_gain&#39;: np.float64, &#39;row_gain&#39;: np.float64,
+                      &#39;col_gain&#39;: np.float64}
+        converters = {&#39;flag&#39;: lambda x: cls.flagspace.parse_string(x).value}
+        pixel_info = pd.read_csv(filename, delim_whitespace=True, comment=&#39;#&#39;,
+                                 names=column_names, dtype=data_types,
+                                 converters=converters).to_dict(&#39;index&#39;)
+        return pixel_info</div>
+
+
+<div class="viewcode-block" id="FifiLsChannelData.set_channel_data">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.html#sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.set_channel_data">[docs]</a>
+    def set_channel_data(self, index, channel_info):
+        &quot;&quot;&quot;
+        Set the channel info for a selected index.
+
+        Parameters
+        ----------
+        index : int
+            The channel index for which to set new data.
+        channel_info : dict
+            A dictionary of the form {field: value} where.  The attribute
+            field at &#39;index&#39; will be set to value.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_channel_data(index, channel_info)
+        if channel_info is None:
+            return
+        self.coupling[index] = channel_info[&#39;coupling&#39;]
+        self.spexel_gain[index] = channel_info[&#39;spexel_gain&#39;]
+        self.spaxel_gain[index] = channel_info[&#39;spaxel_gain&#39;]
+        self.row_gain[index] = channel_info[&#39;row_gain&#39;]
+        self.col_gain[index] = channel_info[&#39;col_gain&#39;]</div>
+
+
+<div class="viewcode-block" id="FifiLsChannelData.calculate_overlaps">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.html#sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.calculate_overlaps">[docs]</a>
+    def calculate_overlaps(self, point_size, maximum_radius=2.0):
+        &quot;&quot;&quot;
+        Calculates the overlaps between channels.
+
+        The overlap array (in the `overlaps` attribute) is a csr_sparse array
+        of shape (n_channels, n_channels) where overlaps[i, j] givens the
+        overlap value of channel j from the channel i.
+
+        Parameters
+        ----------
+        point_size : Coordinate2D1
+            The point size for calculating the overlaps.  Typically, the beam
+            FWHM.
+        maximum_radius : float, optional
+            The maximum radius in units of `point_size` to search for channel
+            overlaps.  Will be overwritten by any values present in the
+            overlaps.radius configuration section.
+
+        Returns
+        -------
+        overlap_indices : scipy.sparse.csr.csr_matrix (bool)
+            A Compressed Sparse Row (CSR) matrix of shape (channels, channels)
+            where a `True` value for overlap_indices[i, j] signals that
+            channel `i` overlaps with the channel `j`.
+        &quot;&quot;&quot;
+        maximum_radius = self.configuration.get_float(
+            &#39;overlaps.radius.spatial&#39;, default=maximum_radius)
+        radius = point_size.x * maximum_radius
+        spatial_position = self.position.coordinates / radius
+        px, py = spatial_position.decompose().value
+
+        scalings = np.full(3, maximum_radius, dtype=float)
+
+        wave_fwhm = point_size.z
+        wave_center = self.central_wavelength
+        coordinates = [px, py]
+        if not np.isnan(wave_fwhm):
+            pz = ((self.wavelength - wave_center)
+                  / wave_fwhm).decompose().value
+            n_fwhms = self.configuration.get_float(
+                &#39;overlaps.radius.spectral&#39;, default=maximum_radius)
+            pz /= n_fwhms
+            coordinates.append(pz)
+            scalings[2] = n_fwhms
+
+        coordinates = np.asarray(coordinates)
+        overlap_indices = radius_neighbors_graph(coordinates.T, 1,
+                                                 include_self=False,
+                                                 mode=&#39;connectivity&#39;)
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, SparseEfficiencyWarning)
+            overlap_indices.eliminate_zeros()
+
+        matrix_rows, matrix_cols = overlap_indices.nonzero()
+
+        fwhms = coordinates * scalings[:len(coordinates), None]
+
+        dx = fwhms[0][matrix_rows] - fwhms[0][matrix_cols]
+        dy = fwhms[1][matrix_rows] - fwhms[1][matrix_cols]
+        deltas = [dx, dy]
+        if fwhms.shape[0] == 3:
+            deltas.append(fwhms[2][matrix_rows] - fwhms[2][matrix_cols])
+        deltas = np.asarray(deltas)
+        distances = np.linalg.norm(deltas, axis=0)
+
+        good_positions = np.isfinite(distances)
+        overlap_distances = csr_matrix((distances[good_positions],
+                                       (matrix_rows[good_positions],
+                                        matrix_cols[good_positions])),
+                                       shape=overlap_indices.shape)
+
+        # The distances are FWHM normalized
+        point_size = 1 * units.dimensionless_unscaled
+        self.calculate_overlap_values(overlap_distances, point_size)</div>
+
+
+<div class="viewcode-block" id="FifiLsChannelData.read_hdul">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.html#sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.read_hdul">[docs]</a>
+    def read_hdul(self, hdul):
+        &quot;&quot;&quot;
+        Read an HDU list and apply to the channel data.
+
+        Parameters
+        ----------
+        hdul : astropy.io.fits.HDUList
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.info.detector_array.initialize_channel_data(self)
+        idx = self.spexel, self.spaxel
+        do_uncorrected = self.configuration.get_bool(&#39;fifi_ls.uncorrected&#39;)
+        if do_uncorrected and &#39;UNCORRECTED_LAMBDA&#39; in hdul:
+            self.wavelength = hdul[&#39;UNCORRECTED_LAMBDA&#39;].data[idx] * um
+        else:
+            self.wavelength = hdul[&#39;LAMBDA&#39;].data[idx] * um
+
+        if &#39;XS&#39; in hdul and &#39;YS&#39; in hdul:
+            self.populate_positions(hdul[&#39;XS&#39;].data, hdul[&#39;YS&#39;].data)
+
+        self.apply_hdul_weights(hdul[&#39;STDDEV&#39;].data)
+
+        for hdu in hdul:
+            extname = hdu.header.get(&#39;EXTNAME&#39;, &#39;UNKNOWN&#39;).strip().upper()
+            if extname == &#39;UNCORRECTED_LAMBDA&#39;:
+                self.uncorrected_wavelength = hdu.data[idx] * um
+            elif extname == &#39;ATRAN&#39;:
+                self.atran = hdu.data[idx]
+            elif extname == &#39;RESPONSE&#39;:
+                self.response = hdu.data[idx]</div>
+
+
+<div class="viewcode-block" id="FifiLsChannelData.apply_hdul_weights">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.html#sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.apply_hdul_weights">[docs]</a>
+    def apply_hdul_weights(self, stddev):
+        &quot;&quot;&quot;
+        Read in the weights from the HDU list.
+
+        Parameters
+        ----------
+        stddev : numpy.ndarray (float)
+            The error values from the HDU list of shape
+            (n_frames, n_spexels, n_spaxels).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        variance = (stddev ** 2)[:, self.spexel, self.spaxel]
+        self.weight = get_relative_channel_weights(variance)</div>
+
+
+<div class="viewcode-block" id="FifiLsChannelData.populate_positions">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.html#sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.populate_positions">[docs]</a>
+    def populate_positions(self, xs, ys):
+        &quot;&quot;&quot;
+        Populate the pixel positions from HDUList data.
+
+        Parameters
+        ----------
+        xs : numpy.ndarray (float)
+            The pixel x-positions of shape (n_frames, n_spexel, n_spaxel) in
+            arcseconds.
+        ys : numpy.ndarray (float)
+            The pixel y-positions of shape (n_frames, n_spexel, n_spaxel) in
+            arcseconds.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        # All spexel positions should contain the same coordinates
+        xy = Coordinate2D([xs, ys], unit=&#39;arcsec&#39;)
+        self.position = self.info.detector_array.find_pixel_positions(xy)</div>
+
+
+<div class="viewcode-block" id="FifiLsChannelData.geometric_rows">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.html#sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.geometric_rows">[docs]</a>
+    def geometric_rows(self):
+        &quot;&quot;&quot;
+        Return the number of geometric rows in the detector array.
+
+        Returns
+        -------
+        rows : int
+        &quot;&quot;&quot;
+        return self.info.detector_array.spaxel_rows</div>
+
+
+<div class="viewcode-block" id="FifiLsChannelData.geometric_cols">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.html#sofia_redux.scan.custom.fifi_ls.channels.channel_data.channel_data.FifiLsChannelData.geometric_cols">[docs]</a>
+    def geometric_cols(self):
+        &quot;&quot;&quot;
+        Return the number of geometric columns in the detector array.
+
+        Returns
+        -------
+        cols : int
+        &quot;&quot;&quot;
+        return self.info.detector_array.spaxel_cols</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

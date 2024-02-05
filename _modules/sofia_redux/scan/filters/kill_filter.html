@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.filters.kill_filter &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.filters.kill_filter</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units
+import numpy as np
+
+from sofia_redux.scan.filters.fixed_filter import FixedFilter
+from sofia_redux.scan.utilities.range import Range
+from sofia_redux.scan.utilities import utils
+
+__all__ = [&#39;KillFilter&#39;]
+
+
+<div class="viewcode-block" id="KillFilter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.kill_filter.KillFilter.html#sofia_redux.scan.filters.kill_filter.KillFilter">[docs]</a>
+class KillFilter(FixedFilter):
+
+    def __init__(self, integration=None, data=None):
+        &quot;&quot;&quot;
+        Initializes a kill filter.
+
+        The kill filter fully rejects or allows a response at a given
+        frequency.
+
+        Parameters
+        ----------
+        integration : Integration, optional
+        data : numpy.ndarray (float), optional
+            An array of shape (nt, n_channels) where nt is the nearest power of
+            2 integer above the number of integration frames. i.e., if
+            n_frames=5, nt=8, or if n_frames=13, nt=16.  If not provided will
+            be set to frame_data * frame_relative_weight.
+        &quot;&quot;&quot;
+        self.reject = None
+        super().__init__(integration=integration, data=data)
+
+<div class="viewcode-block" id="KillFilter.get_reject_mask">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.kill_filter.KillFilter.html#sofia_redux.scan.filters.kill_filter.KillFilter.get_reject_mask">[docs]</a>
+    def get_reject_mask(self):
+        &quot;&quot;&quot;
+        Return the rejection mask for the kill filter.
+
+        Returns
+        -------
+        mask : numpy.ndarray (bool)
+        &quot;&quot;&quot;
+        return self.reject</div>
+
+
+<div class="viewcode-block" id="KillFilter.set_integration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.kill_filter.KillFilter.html#sofia_redux.scan.filters.kill_filter.KillFilter.set_integration">[docs]</a>
+    def set_integration(self, integration):
+        &quot;&quot;&quot;
+        Set the filter integration.
+
+        Parameters
+        ----------
+        integration : Integration
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_integration(integration)
+        self.reject = np.full(self.nf + 1, False)</div>
+
+
+<div class="viewcode-block" id="KillFilter.kill">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.kill_filter.KillFilter.html#sofia_redux.scan.filters.kill_filter.KillFilter.kill">[docs]</a>
+    def kill(self, frequency_range):
+        &quot;&quot;&quot;
+        Sets the kill response of
+
+        Parameters
+        ----------
+        frequency_range : Range
+            The range of frequencies to kill.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        min_f = frequency_range.min
+        max_f = frequency_range.max
+        if isinstance(min_f, units.Quantity):
+            min_f = min_f.decompose().value
+            max_f = max_f.decompose().value
+
+        from_f = np.clip(int(min_f / self.df), 0, None)
+        to_f = np.clip(int(np.ceil(max_f / self.df)), None, self.nf)
+        if from_f &gt; to_f:
+            return
+        self.reject[from_f:to_f + 1] = True
+        self.auto_dft()</div>
+
+
+<div class="viewcode-block" id="KillFilter.update_config">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.kill_filter.KillFilter.html#sofia_redux.scan.filters.kill_filter.KillFilter.update_config">[docs]</a>
+    def update_config(self):
+        &quot;&quot;&quot;
+        Apply settings from the integration configuration.
+
+        Sets the rejection response for the kill filter between two frequencies
+        specified in the configuration key &quot;filter.kill.bands&quot;.  The
+        configuration value should be of the form &quot;f1:f2&quot; where f1 and f2 are
+        the start and end frequencies (in Hz).   Multiple frequency rejection
+        bands may be specified with a comma in the configuration::
+
+            filter.kill.bands = &lt;f1&gt;:&lt;f2&gt;,&lt;f3&gt;:&lt;f4&gt;
+
+        The above lines will reject frequencies between f1 and f2, and also
+        between f3 and f4.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().update_config()
+        if not self.has_option(&#39;bands&#39;):
+            return
+
+        ranges = utils.get_string_list(self.option(&#39;bands&#39;))
+        for band_range in ranges:
+            frequency_range = Range.from_spec(band_range, is_positive=True)
+            self.kill(frequency_range)</div>
+
+
+<div class="viewcode-block" id="KillFilter.auto_dft">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.kill_filter.KillFilter.html#sofia_redux.scan.filters.kill_filter.KillFilter.auto_dft">[docs]</a>
+    def auto_dft(self):
+        &quot;&quot;&quot;
+        Determine whether to use a full or discrete FFT.
+
+        The DFT assumes 51 ops per datum, per rejected frequency.
+        The FFT assumes 2 * FFT (back and forth) with 31 ops in each loop,
+        9.5 ops per datum, 34.5 ops per datum rearrange.  The type of transform
+        is determined by the fewest operations.
+
+        This is surprisingly accurate.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        dft_freq = int(51 * self.count_parms() * self.size)
+        fft_freq = utils.round_values(
+            np.log10(self.nt) / np.log10(2)) * self.nt
+        fft_freq = 2 * ((31 * fft_freq) + (44 * self.nt))
+        self.set_dft(dft_freq &lt; fft_freq)</div>
+
+
+<div class="viewcode-block" id="KillFilter.response_at">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.kill_filter.KillFilter.html#sofia_redux.scan.filters.kill_filter.KillFilter.response_at">[docs]</a>
+    def response_at(self, fch):
+        &quot;&quot;&quot;
+        Return the response at a given frequency channel(s).
+
+        Parameters
+        ----------
+        fch : int or numpy.ndarray (int)
+            The frequency channel or channels in question.
+
+        Returns
+        -------
+        response : float or numpy.ndarray (float)
+        &quot;&quot;&quot;
+        if not isinstance(fch, np.ndarray) or fch.shape == ():
+            if fch == self.reject.size:
+                return 0.0 if self.reject[1] else 1.0
+            else:
+                return self.reject[fch]
+
+        fch_roll = fch.copy()
+        fch_roll[fch == self.reject.size] = 1
+        return np.logical_not(self.reject[fch_roll]).astype(float)</div>
+
+
+<div class="viewcode-block" id="KillFilter.count_parms">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.kill_filter.KillFilter.html#sofia_redux.scan.filters.kill_filter.KillFilter.count_parms">[docs]</a>
+    def count_parms(self):
+        &quot;&quot;&quot;
+        Return the total dependent count of the filter.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        if self.reject is None:
+            return 0
+        return np.sum(self.reject[self.get_high_pass_index():])</div>
+
+
+<div class="viewcode-block" id="KillFilter.get_id">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.kill_filter.KillFilter.html#sofia_redux.scan.filters.kill_filter.KillFilter.get_id">[docs]</a>
+    def get_id(self):
+        &quot;&quot;&quot;
+        Return the filter ID.
+
+        Returns
+        -------
+        filter_id : str
+        &quot;&quot;&quot;
+        return &#39;K&#39;</div>
+
+
+<div class="viewcode-block" id="KillFilter.get_config_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.kill_filter.KillFilter.html#sofia_redux.scan.filters.kill_filter.KillFilter.get_config_name">[docs]</a>
+    def get_config_name(self):
+        &quot;&quot;&quot;
+        Return the configuration name.
+
+        Returns
+        -------
+        config_name : str
+        &quot;&quot;&quot;
+        return &#39;filter.kill&#39;</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.gui.qad.qad_main_panel &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.gui.qad.qad_main_panel</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Main GUI window for the QAD standalone tool.&quot;&quot;&quot;
+
+import os
+import signal
+import subprocess
+import sys
+
+from astropy.io import fits
+from astropy import log
+import configobj
+
+from sofia_redux.pipeline.gui.qad import qad_dialogs
+from sofia_redux.pipeline.gui.qad import qad_headview
+from sofia_redux.pipeline.gui.qad import qad_imview
+from sofia_redux.pipeline.gui.widgets import GeneralRunnable
+
+try:
+    from PyQt5 import QtWidgets, QtCore, QtGui
+    from sofia_redux.pipeline.gui.qad.ui import ui_qad_main
+except ImportError:
+    HAS_PYQT5 = False
+    QtCore, QtGui = None, None
+
+    # duck type parents to allow class definition
+    class QtWidgets:
+        class QMainWindow:
+            pass
+
+    class ui_qad_main:
+        class Ui_MainWindow:
+            pass
+else:
+    HAS_PYQT5 = True
+
+__all__ = [&#39;QADMainWindow&#39;]
+
+
+<div class="viewcode-block" id="QADMainWindow">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow">[docs]</a>
+class QADMainWindow(QtWidgets.QMainWindow, ui_qad_main.Ui_MainWindow):
+    &quot;&quot;&quot;
+    QAD Qt5 GUI main window.
+
+    All attributes and methods for this class are intended for
+    internal use, to support the main GUI event loop and operations.
+    This class is normally instantiated from the
+    `sofia_redux.pipeline.gui.qad.main` function; all methods are
+    triggered by user interaction only.
+
+    The UI for this application is built in Qt Designer: see the
+    `designer` folder for the Designer input files; the compiled
+    Python scripts are in the `ui` module.  All `ui_*.py` files
+    should not be edited manually, as they are automatically generated.
+    See the `designer/compile_ui` file for the sequence of commands
+    required to rebuild the UI from Designer files.
+    &quot;&quot;&quot;
+    def __init__(self):
+        &quot;&quot;&quot;Build the QAD GUI window.&quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for QAD.&#39;)
+
+        # parent initialization
+        QtWidgets.QMainWindow.__init__(self)
+
+        # set up UI from Designer generated file
+        self.setupUi(self)
+
+        # Establish signal handler to catch ctrl-C
+        signal.signal(signal.SIGINT, self.cleanup)
+
+        # connect GUI signals to slots
+
+        # menu and toolbar
+        self.actionOpenDirectory.triggered.connect(self.onOpen)
+        self.actionGoPrevious.triggered.connect(self.onPrevious)
+        self.actionGoNext.triggered.connect(self.onNext)
+        self.actionGoHome.triggered.connect(self.onHome)
+        self.actionImExam.triggered.connect(self.onImExam)
+        self.actionDisplayHeader.triggered.connect(self.onDisplayHeader)
+        self.actionSaveSettings.triggered.connect(self.onSaveSettings)
+        self.actionDisplaySettings.triggered.connect(self.onDisplaySettings)
+        self.actionPhotometrySettings.triggered.connect(
+            self.onPhotometrySettings)
+        self.actionPlotSettings.triggered.connect(
+            self.onPlotSettings)
+
+        # other widgets
+        self.fileFilterBox.editingFinished.connect(self.onFilter)
+        self.treeView.doubleClicked.connect(self.onRow)
+
+        # set directory model in tree view widget
+        self.model = QtWidgets.QFileSystemModel(self)
+        self.treeView.setModel(self.model)
+        self.treeView.sortByColumn(0, 0)
+
+        # for file browser tree:
+        # default root is current working directory
+        # default file filter is *.fits
+        self.file_filter = [&#39;*.fits&#39;]
+        self.fileFilterBox.setText(self.file_filter[0])
+        self.setFilter()
+
+        if len(sys.argv) &gt; 1 and os.path.isdir(sys.argv[1]):
+            self.rootpath = sys.argv[1].rstrip(os.path.sep)
+        else:
+            self.rootpath = os.path.abspath(QtCore.QDir.currentPath())
+        self.lastpath = []
+        self.setRoot()
+
+        # placeholder for header display
+        self.headviewer = None
+
+        # startup imviewer
+        self.imviewer = None
+        self.startupImViewer()
+
+        # read settings if available
+        self.cfg_dir = os.path.join(os.path.expanduser(&#39;~&#39;), &#39;.qad&#39;)
+        os.makedirs(self.cfg_dir, exist_ok=True)
+
+        if self.imviewer is not None:
+            disp_cfg = os.path.join(self.cfg_dir, &#39;display.cfg&#39;)
+            if os.path.isfile(disp_cfg):
+                config = configobj.ConfigObj(disp_cfg, unrepr=True)
+                self.imviewer.disp_parameters.update(config.dict())
+            phot_cfg = os.path.join(self.cfg_dir, &#39;photometry.cfg&#39;)
+            if os.path.isfile(phot_cfg):
+                config = configobj.ConfigObj(phot_cfg, unrepr=True)
+                self.imviewer.phot_parameters.update(config.dict())
+            plot_cfg = os.path.join(self.cfg_dir, &#39;plot.cfg&#39;)
+            if os.path.isfile(plot_cfg):
+                config = configobj.ConfigObj(plot_cfg, unrepr=True)
+                self.imviewer.plot_parameters.update(config.dict())
+
+        # placeholder for imexam runnable
+        self.imexam_worker = None
+
+        # set status bar message
+        self.setStatus(&#39;QAD Ready.&#39;)
+
+    # override functions
+
+<div class="viewcode-block" id="QADMainWindow.closeEvent">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.closeEvent">[docs]</a>
+    def closeEvent(self, event):
+        &quot;&quot;&quot;
+        Clean up processes, then close the application.
+
+        Parameters
+        ----------
+        event : QEvent
+            Close event.
+        &quot;&quot;&quot;
+        self.cleanup()</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.keyPressEvent">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.keyPressEvent">[docs]</a>
+    def keyPressEvent(self, event):
+        &quot;&quot;&quot;
+        Handle keyboard shortcuts.
+
+        Parameters
+        ----------
+        event : QEvent
+            Keypress event.
+        &quot;&quot;&quot;
+        if type(event) == QtGui.QKeyEvent:
+            if (self.treeView.hasFocus()
+                    and event.key() == QtCore.Qt.Key_Return):
+                self.onRow()</div>
+
+
+    # event handlers
+
+<div class="viewcode-block" id="QADMainWindow.onDisplayHeader">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.onDisplayHeader">[docs]</a>
+    def onDisplayHeader(self):
+        &quot;&quot;&quot;
+        Start up header display window and set text.
+
+        This method uses the display settings to determine
+        which extension(s) to retrieve headers for.  If a
+        particular extension is selected, only that header will be
+        displayed.  If all extensions are selected (either for cube
+        or multi-frame display), all extension headers will be
+        displayed.
+        &quot;&quot;&quot;
+        index = self.treeView.selectionModel().selectedRows()
+        headers = {}
+        title = None
+        for i in index:
+            fpath = os.path.abspath(self.model.filePath(i))
+            if os.path.isfile(fpath) and fpath.endswith(&#39;.fits&#39;):
+                try:
+                    hdul = fits.open(fpath)
+                except (OSError, ValueError, TypeError):
+                    log.error(f&#39;Cannot load {fpath} as FITS; ignoring&#39;)
+                else:
+                    headers[fpath] = []
+                    # check the display settings -- if a particular extension
+                    # is specified, only retrieve its header.  Otherwise,
+                    # get them all
+                    try:
+                        exten = self.imviewer.get_extension_param()
+                    except (ValueError, TypeError, IndexError,
+                            AttributeError, KeyError):
+                        exten = &#39;all&#39;
+
+                    if str(exten) != &#39;all&#39;:
+                        try:
+                            headers[fpath].append(hdul[exten].header)
+                        except (ValueError, IndexError, TypeError,
+                                AttributeError, KeyError):
+                            log.warning(f&#39;No extension {exten} found for &#39;
+                                        f&#39;{fpath}; displaying all headers&#39;)
+                            exten = &#39;all&#39;
+                    if str(exten) == &#39;all&#39;:
+                        for hdu in hdul:
+                            headers[fpath].append(hdu.header)
+
+                    title = os.path.basename(fpath)
+
+        if len(headers) == 0:
+            self.setStatus(&quot;No FITS files selected.&quot;)
+            return
+        elif len(headers) &gt; 1:
+            title += &#39;...&#39;
+
+        if self.headviewer is None or not self.headviewer.isVisible():
+            self.headviewer = qad_headview.HeaderViewer(self)
+
+        self.headviewer.load(headers)
+        self.headviewer.show()
+        self.headviewer.raise_()
+        self.headviewer.setTitle(&quot;Header for: {}&quot;.format(title))
+        self.setStatus(&quot;FITS headers displayed.&quot;)</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.onDisplaySettings">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.onDisplaySettings">[docs]</a>
+    def onDisplaySettings(self):
+        &quot;&quot;&quot;Set general display parameters from user dialog.&quot;&quot;&quot;
+        if self.imviewer is None:
+            self.setStatus(&#39;Cannot modify settings without ImView.&#39;)
+            return
+        current = self.imviewer.disp_parameters
+        default = self.imviewer.default_parameters(&#39;display&#39;)
+        dialog = qad_dialogs.DispSettingsDialog(self, current, default)
+        retval = dialog.exec_()
+        if retval == 1:
+            self.imviewer.disp_parameters = dialog.getValue()</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.onFilter">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.onFilter">[docs]</a>
+    def onFilter(self):
+        &quot;&quot;&quot;
+        Filter displayed files.
+
+        Multiple filters may be specified in a comma-separated list.
+        The wildcard &#39;*&#39; may be used in any filter.  An empty filter
+        box will display all files.
+        &quot;&quot;&quot;
+        self.file_filter = self.fileFilterBox.text().split(&#39;,&#39;)
+        self.file_filter = [str(f).strip() for f in self.file_filter]
+        if (len(self.file_filter) == 1
+                and str(self.file_filter[0]).strip() == &#39;&#39;):
+            self.file_filter[0] = &#39;*&#39;
+        self.setFilter()</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.onHome">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.onHome">[docs]</a>
+    def onHome(self):
+        &quot;&quot;&quot;Set the home directory as the root.&quot;&quot;&quot;
+        self.rootpath = os.path.expanduser(&#39;~&#39;)
+        self.lastpath = []
+        self.setRoot()</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.onImExam">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.onImExam">[docs]</a>
+    def onImExam(self):
+        &quot;&quot;&quot;Start imexam in a new thread.&quot;&quot;&quot;
+        self.actionImExam.setEnabled(False)
+        self.setStatus(&quot;Starting imexam in DS9; press &#39;q&#39; to quit.&quot;)
+        self.imviewer.break_loop = False
+        threadpool = QtCore.QThreadPool.globalInstance()
+        self.imexam_worker = GeneralRunnable(self.imviewer.imexam)
+        self.imexam_worker.signals.finished.connect(self.imexamFinish)
+        threadpool.start(self.imexam_worker)</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.imexamFinish">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.imexamFinish">[docs]</a>
+    def imexamFinish(self, status):
+        &quot;&quot;&quot;
+        ImExam callback.
+
+        Parameters
+        ----------
+        status : None or tuple
+            If not None, contains an error message to log.
+        &quot;&quot;&quot;
+        if status is not None:
+            # log the error
+            log.error(&quot;\n{}&quot;.format(status[2]))
+        self.imexam_worker = None
+        self.imviewer.break_loop = True
+        self.setStatus(&#39;&#39;)
+        self.actionImExam.setEnabled(True)</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.onNext">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.onNext">[docs]</a>
+    def onNext(self):
+        &quot;&quot;&quot;Set the last recorded directory as the root.&quot;&quot;&quot;
+        if len(self.lastpath) &gt; 0:
+            self.rootpath = self.lastpath.pop()
+            self.setRoot()</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.onOpen">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.onOpen">[docs]</a>
+    def onOpen(self):
+        &quot;&quot;&quot;Select a new directory as the root.&quot;&quot;&quot;
+        newpath = os.path.abspath(
+            QtWidgets.QFileDialog.getExistingDirectory(
+                self, &#39;Select Directory&#39;))
+        if newpath.strip() != &#39;&#39;:
+            self.lastpath = []
+            self.rootpath = newpath
+            self.resetModel()</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.onPhotometrySettings">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.onPhotometrySettings">[docs]</a>
+    def onPhotometrySettings(self):
+        &quot;&quot;&quot;Set parameters for photometry from a user dialog.&quot;&quot;&quot;
+        if self.imviewer is None:
+            self.setStatus(&#39;Cannot modify settings without ImView.&#39;)
+            return
+        current = self.imviewer.phot_parameters
+        default = self.imviewer.default_parameters(&#39;photometry&#39;)
+        dialog = qad_dialogs.PhotSettingsDialog(self, current, default)
+        retval = dialog.exec_()
+        if retval == 1:
+            self.imviewer.phot_parameters = dialog.getValue()</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.onPlotSettings">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.onPlotSettings">[docs]</a>
+    def onPlotSettings(self):
+        &quot;&quot;&quot;Set parameters for plots from a user dialog.&quot;&quot;&quot;
+        if self.imviewer is None:
+            self.setStatus(&#39;Cannot modify settings without ImView.&#39;)
+            return
+        current = self.imviewer.plot_parameters
+        default = self.imviewer.default_parameters(&#39;plot&#39;)
+        dialog = qad_dialogs.PlotSettingsDialog(self, current, default)
+        retval = dialog.exec_()
+        if retval == 1:
+            self.imviewer.plot_parameters = dialog.getValue()</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.onPrevious">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.onPrevious">[docs]</a>
+    def onPrevious(self):
+        &quot;&quot;&quot;Set the enclosing directory as the root.&quot;&quot;&quot;
+        if self.rootpath != &#39;/&#39;:
+            self.lastpath.append(self.rootpath)
+            self.rootpath = os.path.dirname(self.rootpath)
+            self.setRoot()</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.onRow">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.onRow">[docs]</a>
+    def onRow(self):
+        &quot;&quot;&quot;Determine the selected files and schedule them for display.&quot;&quot;&quot;
+        # check for an open imexam first
+        if self.imexam_worker is not None:
+            QtWidgets.QMessageBox.warning(
+                self, &#39;Load Files&#39;,
+                &#39;Please quit ImExam before loading new files.&#39;)
+            return
+
+        index = self.treeView.selectionModel().selectedRows()
+        nsel = len(index)
+        files_to_open = []
+        if nsel == 1 and os.path.isdir(self.model.filePath(index[0])):
+            self.lastpath = []
+            self.rootpath = os.path.abspath(self.model.filePath(index[0]))
+            self.setRoot()
+        else:
+            for i in index:
+                fpath = self.model.filePath(i)
+                if os.path.isfile(fpath):
+                    files_to_open.append(os.path.abspath(fpath))
+        if len(files_to_open) &gt; 0:
+            self.openFiles(files_to_open)</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.onSaveSettings">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.onSaveSettings">[docs]</a>
+    def onSaveSettings(self):
+        &quot;&quot;&quot;
+        Save current parameters to disk.
+
+        Parameters are saved to files in the hidden .qad
+        folder in the user&#39;s home directory.  On startup, these
+        files are read and used as the default QAD settings.
+        &quot;&quot;&quot;
+        if self.imviewer is None:
+            self.setStatus(&#39;Cannot save settings without ImView.&#39;)
+            return
+        if self.cfg_dir is None or not os.path.isdir(self.cfg_dir):
+            log.error(&#39;No config directory available; not saving parameters&#39;)
+            return
+
+        # display parameters
+        config = configobj.ConfigObj(self.imviewer.disp_parameters,
+                                     unrepr=True)
+        config.filename = os.path.join(self.cfg_dir, &#39;display.cfg&#39;)
+        config.write()
+
+        # photometry parameters
+        config = configobj.ConfigObj(self.imviewer.phot_parameters,
+                                     unrepr=True)
+        config.filename = os.path.join(self.cfg_dir, &#39;photometry.cfg&#39;)
+        config.write()
+
+        # plot parameters
+        config = configobj.ConfigObj(self.imviewer.plot_parameters,
+                                     unrepr=True)
+        config.filename = os.path.join(self.cfg_dir, &#39;plot.cfg&#39;)
+        config.write()
+
+        self.setStatus(&#39;Settings saved to {:s}&#39;.format(self.cfg_dir))</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.cleanup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.cleanup">[docs]</a>
+    def cleanup(self, *args):
+        &quot;&quot;&quot;Close the application.&quot;&quot;&quot;
+        # make sure any dangling imexam threads close
+        if self.imviewer is not None:
+            self.imviewer.break_loop = True
+            self.imviewer.quit()
+        QtWidgets.QApplication.quit()</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.openFiles">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.openFiles">[docs]</a>
+    def openFiles(self, filelist):
+        &quot;&quot;&quot;
+        Display selected files.
+
+        This method dispatches FITS files, DS9 region files, and
+        data arrays to the QAD image viewer.  Any other files are
+        opened with the system default application for their file type.
+
+        Parameters
+        ----------
+        filelist : list of str
+            Full paths to files for display.
+        &quot;&quot;&quot;
+        fits_files = []
+        reg_files = []
+        other_files = []
+        for fpath in filelist:
+            if fpath.endswith(&#39;.reg&#39;):
+                # ds9 region files: pass to imviewer
+                reg_files.append(fpath)
+            elif fpath.endswith(&#39;.fits&#39;):
+                # FITS files: pass to imviewer
+                fits_files.append(fpath)
+            else:
+                # other files: pass to OS
+                other_files.append(fpath)
+
+        if len(fits_files) &gt; 0:
+            # make sure imexam loop is broken before new load
+            if self.imviewer is not None:
+                self.imviewer.break_loop = True
+            try:
+                self.imviewer.load(fits_files, regfiles=reg_files)
+                self.setStatus(&#39;Loaded FITS files&#39;)
+            except (ValueError, AttributeError):
+                self.setStatus(&#39;Cannot open ImViewer&#39;)
+                return
+
+        if len(other_files) &gt; 0:
+            # if not FITS related, try open (for Mac only)
+            from sys import platform
+            if platform == &#39;darwin&#39;:
+                cmd = [&#39;open&#39;]
+            else:
+                cmd = None
+
+            if len(other_files) &gt; 0 and cmd is not None:
+                for fname in other_files:
+                    try:
+                        subprocess.call(cmd + [fname])
+                    except Exception:
+                        # ignore it if anything goes wrong
+                        pass</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.setFilter">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.setFilter">[docs]</a>
+    def setFilter(self):
+        &quot;&quot;&quot;Set the file filter in the TreeView model.&quot;&quot;&quot;
+        self.model.setNameFilters(self.file_filter)
+        self.model.setNameFilterDisables(False)</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.resetModel">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.resetModel">[docs]</a>
+    def resetModel(self):
+        &quot;&quot;&quot;Reset the TreeView model.&quot;&quot;&quot;
+        self.model = QtWidgets.QFileSystemModel(self)
+        self.treeView.setModel(self.model)
+        self.setFilter()
+        self.setRoot()</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.setRoot">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.setRoot">[docs]</a>
+    def setRoot(self):
+        &quot;&quot;&quot;Set the TreeView model root path.&quot;&quot;&quot;
+        # set model root
+        self.model.setRootPath(self.rootpath)
+
+        # set tree root and hide unnecessary columns
+        self.treeView.setRootIndex(self.model.index(self.rootpath))
+        self.treeView.hideColumn(1)
+        self.treeView.hideColumn(2)
+
+        # resize to contents
+        self.treeView.header().setSectionResizeMode(
+            0, QtWidgets.QHeaderView.ResizeToContents)
+        self.treeView.resizeColumnToContents(0)
+
+        # enable/disable next button
+        if len(self.lastpath) &gt; 0:
+            self.actionGoNext.setEnabled(True)
+        else:
+            self.actionGoNext.setEnabled(False)
+
+        # set current directory name
+        self.dirLabel.setText(self.rootpath)
+        self.dirLabel.repaint()
+
+        # set status message
+        self.setStatus(&#39;Opened {:s}&#39;.format(self.rootpath))</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.setStatus">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.setStatus">[docs]</a>
+    def setStatus(self, msg):
+        &quot;&quot;&quot;
+        Set a status message.
+
+        Parameters
+        ----------
+        msg : str
+            Message to display.
+        &quot;&quot;&quot;
+        self.statusBar.showMessage(msg, 5000)</div>
+
+
+<div class="viewcode-block" id="QADMainWindow.startupImViewer">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.html#sofia_redux.pipeline.gui.qad.qad_main_panel.QADMainWindow.startupImViewer">[docs]</a>
+    def startupImViewer(self):
+        &quot;&quot;&quot;Start the DS9 image viewer.&quot;&quot;&quot;
+        try:
+            self.imviewer = qad_imview.QADImView()
+        except (ValueError, OSError) as e:
+            log.error(e)
+            self.setStatus(&#39;Cannot start ImViewer&#39;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

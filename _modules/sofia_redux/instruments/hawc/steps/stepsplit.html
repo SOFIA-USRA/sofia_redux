@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.steps.stepsplit &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.steps.stepsplit</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Data splitting pipeline step.&quot;&quot;&quot;
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.instruments.hawc.stepparent import StepParent
+from sofia_redux.instruments.hawc.datafits import DataFits
+
+__all__ = [&#39;StepSplit&#39;]
+
+
+<div class="viewcode-block" id="StepSplit">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepsplit.StepSplit.html#sofia_redux.instruments.hawc.steps.stepsplit.StepSplit">[docs]</a>
+class StepSplit(StepParent):
+    &quot;&quot;&quot;
+    Split the data by nod, HWP angle, and by additive and difference signals.
+
+    This pipeline step takes demodulated R and T data and splits the
+    data by HWP angle and Left/Right nod position. Then, it subtracts
+    the T array from the R array, storing R-T data for each HWP and nod
+    position. It also adds the T array to the R array, storing R+T
+    data for each HWP and nod position. It also identifies and flags
+    for later use any widow pixels: pixels that are good in R, but bad
+    in T, or vice versa.
+
+    The Nod Index and HWP Index columns in the demodulated data table
+    are used to identify nod and HWP transition points for splitting.
+    Variances in R and T are propagated to variance arrays for R+T and
+    R-T, and are also stored directly for each nod/HWP combination,
+    for later use in computing covariances.
+
+    Input data for this step must contain R Array and T Array images
+    with associated variances, and a DEMODULATED DATA table, containing
+    Nod Index and HWP Index columns. This step is typically run after
+    `sofia_redux.instruments.hawc.steps.StepShift`.
+
+    For each HWP angle *M* and Nod *N* this step creates six
+    images: DATA R-T HWP M NOD N, DATA R+T HWP M NOD N, VAR
+    R-T HWP M NOD N, VAR R+T HWP M NOD N, VAR R HWP M NOD N, and
+    VAR T HWP M NOD N. In addition, it creates a table containing the
+    rows corresponding to a given HWP and Nod, named TABLE HWP M NOD N.
+    Finally, it adds a single bad pixel mask image.
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="StepSplit.setup">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepsplit.StepSplit.html#sofia_redux.instruments.hawc.steps.stepsplit.StepSplit.setup">[docs]</a>
+    def setup(self):
+        &quot;&quot;&quot;
+        Set parameters and metadata for the pipeline step.
+
+        Output files have PRODTYPE = &#39;split&#39;, and are named with
+        the step abbreviation &#39;SPL&#39;.
+
+        Parameters defined for this step are:
+
+        nod_tol : float
+            Nod tolerance, as the percent difference allowed in number
+            of chop cycles between 1st and 2nd left nods, and between
+            left and right nods.
+        rtarrays : str
+            Use both R and T arrays (&#39;RT&#39;), or only R (&#39;R&#39;) or only T (&#39;T&#39;).
+        &quot;&quot;&quot;
+        # Name of the pipeline reduction step
+        self.name = &#39;split&#39;
+        self.description = &#39;Split By Nod/HWP&#39;
+
+        # Shortcut for pipeline reduction step and identifier for
+        # saved file names.
+        self.procname = &#39;spl&#39;
+
+        # Clear Parameter list
+        self.paramlist = []
+
+        # Append parameters
+        self.paramlist.append([&#39;nod_tol&#39;, 30.0,
+                               &#39;Nod tolerance, as the percent difference &#39;
+                               &#39;allowed in number of chop cycles between &#39;
+                               &#39;1st and 2nd left, and between left and right&#39;])
+        self.paramlist.append([&#39;rtarrays&#39;, &#39;RT&#39;,
+                               &#39;Use both R and T arrays (RT), &#39;
+                               &#39;or only R (R) or only T (T)&#39;])</div>
+
+
+    def _subtable(self, table, mask):
+        &quot;&quot;&quot;
+        Create a new table with only certain rows specified by a mask.
+
+        Parameters
+        ----------
+        table : fits.FITS_rec
+            The table to pull from.
+        mask : array-like
+            The row indices to keep.
+
+        Returns
+        -------
+        BinTableHDU
+            The subtable.
+        &quot;&quot;&quot;
+
+        names = table.names
+        formats = table.columns.formats
+        dims = table.columns.dims
+        units = table.columns.units
+        cols = []
+
+        for n, f, d, u in zip(names, formats, dims, units):
+            cols.append(fits.Column(name=n, format=f, dim=d, unit=u,
+                                    array=table.field(n)[mask]))
+        tbhdu = fits.BinTableHDU.from_columns(fits.ColDefs(cols))
+        return tbhdu
+
+<div class="viewcode-block" id="StepSplit.run">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.instruments.hawc.steps.stepsplit.StepSplit.html#sofia_redux.instruments.hawc.steps.stepsplit.StepSplit.run">[docs]</a>
+    def run(self):
+        &quot;&quot;&quot;
+        Run the data reduction algorithm.
+
+        Because this step is single-in, single-out (SISO),
+        self.datain must be a DataFits object. The output
+        is also a DataFits object, stored in self.dataout.
+
+        The process is:
+
+        1. Find transition points between nod beams and HWP angles.
+        2. For each set of nod and angle combination, compute R+T
+           and R-T.
+        3. Identify widow pixels and multiply their fluxes by 2 to
+           account for the missing data.
+        4. Store the data in separate extensions for each combination.
+
+        Raises
+        ------
+        ValueError
+            If zero chop cycles are found in any of the nod positions.
+        &quot;&quot;&quot;
+        rdata = self.datain.imageget(&#39;R array&#39;)
+        tdata = self.datain.imageget(&#39;T array&#39;)
+        rvar = self.datain.imageget(&#39;R array VAR&#39;)
+        tvar = self.datain.imageget(&#39;T array VAR&#39;)
+        table = self.datain.tableget(&#39;demodulated data&#39;)
+        rbadmask = self.datain.imageget(&#39;R Bad Pixel Mask&#39;).astype(np.int32)
+        tbadmask = self.datain.imageget(&#39;T Bad Pixel Mask&#39;).astype(np.int32)
+
+        hwpidx = table[&#39;HWP Index&#39;]
+        nodidx = table[&#39;Nod Index&#39;]
+        nhwp = self.datain.getheadval(&#39;nhwp&#39;)
+
+        # check nod tolerance
+        nod_tol = self.getarg(&#39;nod_tol&#39;)
+        nodpatt = self.datain.getheadval(&#39;nodpatt&#39;)
+        nnod = len(set(nodpatt))
+        if nodpatt == &#39;ABBA&#39;:
+            for hwp in range(nhwp):
+                left1 = len(np.where((hwpidx == hwp) &amp; (nodidx == 0))[0])
+                right = len(np.where((hwpidx == hwp) &amp; (nodidx == 1))[0])
+                left2 = len(np.where((hwpidx == hwp) &amp; (nodidx == 2))[0])
+                if left1 == 0:
+                    msg = &#39;HWP %d: Zero chops in 1st left!&#39; % hwp
+                    log.error(msg)
+                    raise ValueError(msg)
+                elif left2 == 0:
+                    msg = &#39;HWP %d: Zero chops in 2nd left!&#39; % hwp
+                    log.error(msg)
+                    raise ValueError(msg)
+                elif right == 0:
+                    msg = &#39;HWP %d: Zero chops in right!&#39; % hwp
+                    log.error(msg)
+                    raise ValueError(msg)
+
+                diff1 = 100 * 2 * (abs(left1 - left2)
+                                   / float(left1 + left2))
+                diff2 = 100 * 2 * (abs(right - left1 - left2)
+                                   / float(right + left1 + left2))
+                if diff1 &gt; nod_tol:
+                    log.warning(&#39;HWP %d: Number of chops between 1st and &#39;
+                                &#39;2nd left differ by %f%% (max %f%%)&#39; %
+                                (hwp, diff1, nod_tol))
+                if diff2 &gt; nod_tol:
+                    log.warning(&#39;HWP %d: Number of chops between &#39;
+                                &#39;left and right differ by &#39;
+                                &#39;%f%% (max %f%%)&#39; %
+                                (hwp, diff2, nod_tol))
+
+            # Note: we assume that we are doing a LRRL
+            # nod pattern, and thus the second left,
+            # with nodidx = 2, should be set to 0, so we can
+            # pick it up below and only compute a Left and a Right Nod.
+            mask = np.where(nodidx == 2)
+            nodidx[mask] = 0
+
+        elif nnod == 1:
+            pass
+        else:
+            # unknown nod pattern
+            msg = &#39;Can only process data with ABBA nod pattern&#39;
+            log.error(msg)
+            raise ValueError(msg)
+
+        # Make sure all pixels in the missing sub-array (T1) are assigned
+        # as bad pixels. This will allow the pixels in R1 to be considered
+        # as widow pixels (and the flux will be multiplied by 2,
+        # see steps below)
+        tbadmask[:, 32:] = 2
+
+        # Flag to use only R or only T array (by setting
+        # all the pixels in the other array as bad pixels)
+        rtarrays = self.getarg(&#39;rtarrays&#39;)
+        if rtarrays == &#39;R&#39;:
+            tbadmask[:, :] = 2
+        elif rtarrays == &#39;T&#39;:
+            rbadmask[:, :] = 1
+
+        # If any bad pixel in the T bad pixel
+        # mask is assigned with any number &gt;= 1,
+        # then change it to 2. In the same way,
+        # if any bad pixel in the R bad pixel
+        # mask is assigned with any number &gt;= 1,
+        # then change it to 1.
+        tbadmask[np.where(tbadmask &gt;= 1)] = 2
+        rbadmask[np.where(rbadmask &gt;= 1)] = 1
+
+        # identify bad pixels
+        # R pixels bad in bit 1 (bitwise AND) (0 or 1)
+        tmp_r = rbadmask &amp; 1
+        # T pixels bad in bit 2 (bitwise AND) (0 or 2)
+        tmp_t = tbadmask &amp; 2
+
+        # set fluxes of tmp_r and tmp_t pixels to zero.
+        # This is needed if we later fill in the fluxes.
+        # first broadcast to 3-D so we select the right pixels in r and t
+        tmp_r = np.ones((rdata.shape[0], 1, 1), dtype=np.int32) * tmp_r
+        tmp_t = np.ones((tdata.shape[0], 1, 1), dtype=np.int32) * tmp_t
+        rdata[tmp_r == 1] = 0
+        tdata[tmp_t == 2] = 0
+        rvar[tmp_r == 1] = 0
+        tvar[tmp_t == 2] = 0
+
+        # If using only R or only T, set data in bad pixels to NaN
+        if rtarrays == &#39;R&#39;:
+            rdata[tmp_r == 1] = np.nan
+            rvar[tmp_r == 1] = np.nan
+        elif rtarrays == &#39;T&#39;:
+            tdata[tmp_t == 2] = np.nan
+            tvar[tmp_t == 2] = np.nan
+
+        # Note: it seems silly to compute R-T if nhwp = 1, but we use the R-T
+        # data for chauvenet&#39;s criterion in stepcombine. By using R-T, we
+        # mostly remove sky noise and thus get a more reliable outlier
+        # rejection.
+        # R - T
+        rmt = rdata - tdata
+        # R + T
+        rpt = rdata + tdata
+        rptvar = rvar + tvar
+
+        # multiply flux of widow pixels by two. This way, later equations in
+        # stepstokes can compute correct stokes parameters for these widow
+        # pixels.
+        # this should make a boolean array of the widow pixels
+        widow = ((tmp_r == 1) &amp; (tmp_t == 0)) + ((tmp_r == 0) &amp; (tmp_t == 2))
+        rmt[widow] = 2 * rmt[widow]
+        rpt[widow] = 2 * rpt[widow]
+        rptvar[widow] = 4 * rptvar[widow]
+
+        # build output pipedata object by splitting on HWP angle and Nod
+        self.dataout = DataFits(config=self.datain.config)
+        self.dataout.filename = self.datain.filename
+        self.dataout.setheader(self.datain.header)
+        masks = []
+        for hwp in range(nhwp):
+            for nod in range(nnod):
+                mask = np.where((hwpidx == hwp) &amp; (nodidx == nod))
+                masks.append(mask)
+                self.dataout.imageset(
+                    rmt[mask], &#39;DATA R-T HWP%d NOD%d&#39; % (hwp, nod))
+                self.dataout.imageset(
+                    rpt[mask], &#39;DATA R+T HWP%d NOD%d&#39; % (hwp, nod))
+                self.dataout.imageset(
+                    rptvar[mask], &#39;VAR R-T HWP%d NOD%d&#39; % (hwp, nod))
+                self.dataout.imageset(
+                    rptvar[mask], &#39;VAR R+T HWP%d NOD%d&#39; % (hwp, nod))
+                self.dataout.imageset(
+                    rvar[mask], &#39;VAR R HWP%d NOD%d&#39; % (hwp, nod))
+                self.dataout.imageset(
+                    tvar[mask], &#39;VAR T HWP%d NOD%d&#39; % (hwp, nod))
+                tbhdu = self._subtable(table, mask)
+                self.dataout.tableset(
+                    tbhdu.data, &#39;TABLE HWP%d NOD%d&#39; % (hwp, nod),
+                    tbhdu.header)
+
+        # Merge R and T masks
+        bad = rbadmask | tbadmask
+
+        # write out combined bad pixel mask
+        self.dataout.imageset(bad, &#39;Bad Pixel Mask&#39;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

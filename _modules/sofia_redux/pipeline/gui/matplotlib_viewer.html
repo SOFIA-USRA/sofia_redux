@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.gui.matplotlib_viewer &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.gui.matplotlib_viewer</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Basic Matplotlib viewer for image/plot display.&quot;&quot;&quot;
+
+import warnings
+
+from astropy import log
+from matplotlib.cm import get_cmap
+from matplotlib.figure import Figure
+import matplotlib.style as mplstyle
+import numpy as np
+
+from sofia_redux.pipeline.viewer import Viewer
+
+try:
+    from PyQt5 import QtWidgets, QtGui, QtCore
+    from matplotlib.backends.backend_qt5agg import \
+        FigureCanvasQTAgg as FigureCanvas
+    from matplotlib.backends.backend_qt5agg import \
+        NavigationToolbar2QT as NavigationToolbar
+except ImportError:
+    HAS_PYQT5 = False
+    QtGui, QtCore, FigureCanvas, NavigationToolbar = None, None, None, None
+
+    # duck type parents to allow class definition
+    class QtWidgets:
+        class QDialog:
+            pass
+else:
+    HAS_PYQT5 = True
+
+__all__ = [&#39;MatplotlibPlot&#39;, &#39;MatplotlibViewer&#39;]
+
+
+<div class="viewcode-block" id="MatplotlibPlot">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.matplotlib_viewer.MatplotlibPlot.html#sofia_redux.pipeline.gui.matplotlib_viewer.MatplotlibPlot">[docs]</a>
+class MatplotlibPlot(QtWidgets.QDialog):
+    &quot;&quot;&quot;Show plot data in a separate window.&quot;&quot;&quot;
+    def __init__(self, parent=None, title=None):
+        &quot;&quot;&quot;
+        Build the matplotlib widget.
+
+        Parameters
+        ----------
+        parent : QWidget, optional
+            Parent widget
+        &quot;&quot;&quot;
+        if not HAS_PYQT5:  # pragma: no cover
+            raise ImportError(&#39;PyQt5 package is required for Redux GUI.&#39;)
+
+        super().__init__(parent)
+
+        # plot configuration
+        self.plot_layout = &#39;grid&#39;
+        self.max_plot = None
+        self.min_width = 5.0
+        self.min_height = 3.0
+        self.share_axes = &#39;both&#39;
+
+        # set the layout
+        layout = QtWidgets.QVBoxLayout()
+        self.setLayout(layout)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # set fast style
+        mplstyle.use(&#39;fast&#39;)
+
+        # Matplotlib figure
+        self.figure = Figure((self.min_width, self.min_height),
+                             dpi=100, tight_layout=True)
+
+        # Qt Canvas Widget
+        csize = (int(100 * self.min_width),
+                 int(100 * self.min_height))
+        self.canvas = FigureCanvas(self.figure)
+        self.canvas.setMinimumSize(*csize)
+
+        # navigation widget
+        self.toolbar = NavigationToolbar(self.canvas, self)
+        layout.addWidget(self.toolbar)
+
+        # add a scroll window
+        self.scroll = QtWidgets.QScrollArea(self)
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setGeometry(0, 0, *csize)
+
+        self.scroll.setWidget(self.canvas)
+        layout.addWidget(self.scroll)
+
+        # make sure there&#39;s a close button
+        self.setWindowFlags(QtCore.Qt.Window
+                            | QtCore.Qt.WindowMaximizeButtonHint
+                            | QtCore.Qt.WindowMinimizeButtonHint
+                            | QtCore.Qt.WindowCloseButtonHint)
+
+        # window title
+        if title is not None:
+            self.setWindowTitle(title)
+
+<div class="viewcode-block" id="MatplotlibPlot.plot">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.matplotlib_viewer.MatplotlibPlot.html#sofia_redux.pipeline.gui.matplotlib_viewer.MatplotlibPlot.plot">[docs]</a>
+    def plot(self, data):
+        &quot;&quot;&quot;
+        Plot the data in the widget.
+
+        Each primary list element in `data` will appear in
+        a separate subplot. The dictionary values should contain &#39;args&#39;
+        and &#39;kwargs&#39; to pass to the plot function.
+
+        If the dictionary contains an &#39;overplot&#39; key with a list of
+        dicts containing their own &#39;args&#39; values, the nested plots will be
+        plotted on top of the primary plot.  Overplots may specify a
+        &#39;plot_type&#39; which translates to matplotlib functions as follows:
+
+            - vline : axes.axvline
+            - plot : axes.plot
+
+        Primary plot kwargs are set in the axes (via axes.set); overplot
+        kwargs are passed to the overplot function directly.
+
+        Parameters
+        ----------
+        data : `list` of dict
+            Data sets to plot.
+        &quot;&quot;&quot;
+        # clear the figure
+        self.figure.clear()
+
+        # determine layout for subplots
+        n = len(data)
+        if self.max_plot is not None and n &gt; self.max_plot:
+            n = self.max_plot
+            log.warning(&quot;Too many plots to display; &quot;
+                        &quot;showing first {}.&quot;.format(n))
+        if n &gt; 0:
+            if self.plot_layout == &#39;grid&#39;:
+                ncol = int(np.ceil(np.sqrt(n)))
+                nrow = int(np.ceil(float(n) / ncol))
+            elif self.plot_layout == &#39;columns&#39;:
+                ncol = n
+                nrow = 1
+            else:
+                # rows
+                ncol = 1
+                nrow = n
+            width = self.min_width * ncol
+            height = self.min_height * nrow
+        else:
+            ncol = 0
+            nrow = 0
+            width = self.min_width
+            height = self.min_height
+
+        # put each data set in a new subplot
+        ax0 = None
+        for i in range(n):
+            dataset = data[i]
+
+            # create an axis
+            if i == 0:
+                ax = self.figure.add_subplot(nrow, ncol, i + 1)
+                ax.autoscale(enable=True, tight=True)
+                ax0 = ax
+            else:
+                if self.share_axes == &#39;both&#39;:
+                    ax = self.figure.add_subplot(nrow, ncol, i + 1,
+                                                 sharex=ax0, sharey=ax0)
+                elif self.share_axes == &#39;x&#39;:
+                    ax = self.figure.add_subplot(nrow, ncol, i + 1, sharex=ax0)
+                elif self.share_axes == &#39;y&#39;:
+                    ax = self.figure.add_subplot(nrow, ncol, i + 1, sharey=ax0)
+                else:
+                    ax = self.figure.add_subplot(nrow, ncol, i + 1)
+
+            if &#39;kwargs&#39; in dataset:
+                kwargs = dataset[&#39;kwargs&#39;].copy()
+            else:
+                kwargs = {}
+            if &#39;colormap&#39; in kwargs:
+                colormap = kwargs.pop(&#39;colormap&#39;)
+                cmap = get_cmap(colormap)
+                if cmap.N &lt; 100:
+                    n = cmap.N
+                else:
+                    n = 20
+                color = cmap(np.linspace(0, 1, n))
+                ax.set_prop_cycle(&#39;color&#39;, color)
+            if &#39;title&#39; in kwargs and &#39;titlesize&#39; in kwargs:
+                title = kwargs.pop(&#39;title&#39;)
+                titlesize = kwargs.pop(&#39;titlesize&#39;)
+                ax.set_title(title, fontsize=titlesize)
+
+            # plot data as specified
+            ax.plot(*dataset[&#39;args&#39;], **dataset[&#39;plot_kwargs&#39;])
+            if kwargs:
+                try:
+                    ax.set(**kwargs)
+                except AttributeError:
+                    log.warning(&#39;Bad argument to matplotlib plot.&#39;)
+                    log.debug((&#39;Provided kwargs for ax.set:&#39;, kwargs))
+
+            if &#39;overplot&#39; in dataset:
+                for oplot in dataset[&#39;overplot&#39;]:
+                    ptype = oplot.get(&#39;plot_type&#39;, &#39;plot&#39;)
+                    kwargs = oplot.get(&#39;kwargs&#39;, {})
+                    if ptype == &#39;vline&#39;:
+                        func = ax.axvline
+                    elif ptype == &#39;hline&#39;:
+                        func = ax.axhline
+                    elif ptype == &#39;line&#39;:
+                        func = ax.axline
+                    elif ptype == &#39;scatter&#39;:
+                        func = ax.scatter
+                    elif ptype == &#39;histogram&#39;:
+                        func = ax.hist
+                    elif ptype == &#39;text&#39;:
+                        func = ax.text
+                    elif ptype == &#39;legend&#39;:
+                        func = ax.legend
+                    else:
+                        func = ax.plot
+                    try:
+                        func(*oplot[&#39;args&#39;], **kwargs)
+                    except (AttributeError, ValueError):
+                        log.warning(f&#39;Bad argument to matplotlib {ptype}.&#39;)
+                        log.debug((&#39;Provided kwargs for overplot:&#39;, kwargs))
+
+        # resize figure and canvas
+        current_size = self.scroll.size()
+        new_size = (max(int(width * 100), current_size.width()),
+                    max(int(height * 100), current_size.height()))
+        self.figure.set_size_inches(((new_size[0]) / 100,
+                                     (new_size[1]) / 100),
+                                    forward=True)
+        self.canvas.resize(*new_size)
+        self.canvas.setMinimumSize(int(width * 100),
+                                   int(height * 100))
+
+        # redraw
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, UserWarning)
+            self.canvas.draw_idle()</div>
+
+
+<div class="viewcode-block" id="MatplotlibPlot.set_scroll">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.matplotlib_viewer.MatplotlibPlot.html#sofia_redux.pipeline.gui.matplotlib_viewer.MatplotlibPlot.set_scroll">[docs]</a>
+    def set_scroll(self, location=&#39;bottom&#39;):
+        if location == &#39;top&#39;:
+            top = self.scroll.verticalScrollBar().minimum()
+            self.scroll.verticalScrollBar().setValue(top)
+        elif location == &#39;left&#39;:
+            left = self.scroll.horizontalScrollBar().minimum()
+            self.scroll.horizontalScrollBar().setValue(left)
+        elif location == &#39;right&#39;:
+            right = self.scroll.horizontalScrollBar().maximum()
+            self.scroll.horizontalScrollBar().setValue(right)
+        else:
+            bottom = self.scroll.verticalScrollBar().maximum()
+            self.scroll.verticalScrollBar().setValue(bottom)</div>
+
+
+<div class="viewcode-block" id="MatplotlibPlot.clear">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.matplotlib_viewer.MatplotlibPlot.html#sofia_redux.pipeline.gui.matplotlib_viewer.MatplotlibPlot.clear">[docs]</a>
+    def clear(self):
+        self.figure.clear()
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, UserWarning)
+            self.canvas.draw_idle()</div>
+</div>
+
+
+
+<div class="viewcode-block" id="MatplotlibViewer">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.matplotlib_viewer.MatplotlibViewer.html#sofia_redux.pipeline.gui.matplotlib_viewer.MatplotlibViewer">[docs]</a>
+class MatplotlibViewer(Viewer):
+    def __init__(self, title=None):
+        &quot;&quot;&quot;Basic Matplotlib viewer.&quot;&quot;&quot;
+        super().__init__()
+        self.name = &quot;MatplotlibViewer&quot;
+        self.embedded = False
+
+        self.plotter = None
+        self.layout = &#39;grid&#39;
+        self.max_plot = None
+        self.title = title
+        self.share_axes = &#39;both&#39;
+
+<div class="viewcode-block" id="MatplotlibViewer.display">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.matplotlib_viewer.MatplotlibViewer.html#sofia_redux.pipeline.gui.matplotlib_viewer.MatplotlibViewer.display">[docs]</a>
+    def display(self):
+        &quot;&quot;&quot;Display a plot in a Matplotlib canvas.&quot;&quot;&quot;
+        if not self.display_data:
+            self.close()
+            return
+
+        if self.plotter is None or not self.plotter.isVisible():
+            self.plotter = MatplotlibPlot(title=self.title)
+            self.plotter.plot_layout = self.layout
+            self.plotter.max_plot = self.max_plot
+            self.plotter.share_axes = self.share_axes
+
+        self.plotter.plot(self.display_data)
+        self.plotter.show()
+        self.plotter.raise_()</div>
+
+
+<div class="viewcode-block" id="MatplotlibViewer.close">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.gui.matplotlib_viewer.MatplotlibViewer.html#sofia_redux.pipeline.gui.matplotlib_viewer.MatplotlibViewer.close">[docs]</a>
+    def close(self):
+        &quot;&quot;&quot;Close the viewer.&quot;&quot;&quot;
+        if self.plotter is not None:
+            log.debug(&quot;Closing Matplotlib plot.&quot;)
+            self.plotter.close()
+            self.plotter = None</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

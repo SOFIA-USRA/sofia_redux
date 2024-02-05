@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.chopper.chopper_numba_functions &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.chopper.chopper_numba_functions</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import math
+import numba as nb
+import numpy as np
+
+
+nb.config.THREADING_LAYER = &#39;threadsafe&#39;
+
+__all__ = [&#39;find_transitions&#39;]
+
+
+<div class="viewcode-block" id="find_transitions">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.chopper.chopper_numba_functions.find_transitions.html#sofia_redux.scan.chopper.chopper_numba_functions.find_transitions">[docs]</a>
+@nb.njit(cache=True, nogil=False, parallel=False, fastmath=False)
+def find_transitions(x, y, threshold):  # pragma: no cover
+    &quot;&quot;&quot;
+    Given (x, y) chopper positions, find the transitions and other parameters.
+
+    Given a chopper position in (x, y) coordinates, centered about (0, 0),
+    return the index on (x, y) marking the `start` of the first transition,
+    the index marking the `end` of the last transition, the number of
+    `transitions`, the calculated `angle` between the two chop positions, and
+    the `distance` from the center while chopping.
+
+    This algorithm assumes that there are two chopping positions present in the
+    (x, y) data (on and off) that are relative to a central (0, 0) nominal chop
+    position.  A chop transition is marked when the absolute x or y position
+    is greater than `tolerance` and of the opposite sign to the last detected
+    chop transition.  Once a transition has been detected in both the x and
+    y directions, the distance will be calculated as:
+
+        d = sqrt(x^2 + y^2)
+
+    for each subsequent (x, y) position.  The returned angle is weighted by
+    distance (d) from the center and is given by:
+
+        a = sum(d * arctan(s * y, s * x)) / sum(d)
+
+    where s is given by:
+
+        s = sign(y); x = 0
+        s = sign(x); otherwise
+
+    It is up to the user on how to best extract the chop amplitude from the
+    data given the chop profile.  For a standard box-step chop profile, a
+    median on the distances should suffice, while more advanced analysis
+    should be applied to other patterns.
+
+    Parameters
+    ----------
+    x : numpy.ndarray (float)
+        The x-direction chopper position of shape (n,).
+    y : numpy.ndarray (float)
+        The y-direction chopper position of shape (n,).
+    threshold : float
+        The distance away from the center (x, y) = (0, 0) that would be
+        considered representing a single chopper transition
+        (chopper amplitude).
+
+    Returns
+    -------
+    start, end, transitions, angle, distance : int, int, int, float, np.ndarray
+    &quot;&quot;&quot;
+    n = x.size
+    x_positive = False
+    y_positive = False
+    x_transitions = 0
+    y_transitions = 0
+    x_from = -1
+    y_from = -1
+    x_to = -1
+    y_to = -1
+    sum_a = 0.0
+    sum_w = 0.0
+    started = False
+    distance = np.empty(n, dtype=np.float64)
+    count = 0
+    start = 0
+    end = 0
+    transitions = 0
+    for i in range(n):
+
+        dx = x[i]
+        dy = y[i]
+        if not started:
+            x_positive = dx &gt; 0.0
+            y_positive = dy &gt; 0.0
+            started = True
+            continue
+
+        if ((x_positive and dx &lt; threshold)
+                or (not x_positive and dx &gt; threshold)):
+            x_positive = not x_positive
+            if x_transitions == 0:
+                x_from = i
+            else:
+                x_to = i
+            x_transitions += 1
+
+        if ((y_positive and dy &lt; threshold)
+                or (not y_positive and dy &gt; threshold)):
+            y_positive = not y_positive
+            if y_transitions == 0:
+                y_from = i
+            else:
+                y_to = i
+            y_transitions += 1
+
+        if x_transitions &gt; 0 and y_transitions &gt; 0:
+            d = math.hypot(dx, dy)
+            if d &gt; threshold:
+                if dx == 0.0:
+                    sign = -1 if dy &lt; 0.0 else 1
+                else:
+                    sign = -1 if dx &lt; 0.0 else 1
+                sum_a += d * math.atan2(sign * dy, sign * dx)
+                sum_w += d
+            distance[count] = d
+            count += 1
+
+        if x_transitions &gt; y_transitions:
+            start = x_from
+            end = x_to
+            transitions = x_transitions
+        else:
+            start = y_from
+            end = y_to
+            transitions = y_transitions
+
+    if sum_w &gt; 0:
+        angle_radians = sum_a / sum_w
+    else:
+        angle_radians = 0.0
+
+    return start, end, transitions, angle_radians, distance[:count]</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

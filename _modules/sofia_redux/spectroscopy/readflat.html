@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.readflat &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.readflat</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+from sofia_redux.toolkit.utilities.fits import gethdul
+from sofia_redux.toolkit.fitting.polynomial import poly1d
+from sofia_redux.toolkit.image.adjust import rotate90
+
+__all__ = [&#39;readflat&#39;]
+
+
+<div class="viewcode-block" id="readflat">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.readflat.readflat.html#sofia_redux.spectroscopy.readflat.readflat">[docs]</a>
+def readflat(filename):
+    &quot;&quot;&quot;
+    Reads a Spextool flat field FITS image
+
+    Reads data and metadata from an FSpextool-processed flat field
+    FITS image.
+
+    Parameters
+    ----------
+    filename : str
+        Filename for the processed flat image
+
+    Returns
+    -------
+    dict
+        ``&quot;image&quot;``
+            (numpy.ndarray) -&gt; (nrow, ncol) image array
+        ``&quot;variance&quot;``
+            (numpy.ndarray) -&gt; (nrow, ncol) variance array
+        ``&quot;flags&quot;``
+            (numpy.ndarray) -&gt; (nrow, ncol) flags array
+        ``&quot;ncols&quot;``
+            (int) -&gt; Number of columns in the image
+        ``&quot;nrows&quot;``
+            (int) -&gt; Number of rows in the image
+        ``&quot;modename&quot;``
+            (str) -&gt; The observing mode of the flat
+        ``&quot;slth_pix&quot;``
+            (float) -&gt; The approximate slit height in pixels
+        ``&quot;slth_arc&quot;``
+            (float) -&gt; The slit height in arcseconds
+        ``&quot;sltw_pix&quot;``
+            (float) -&gt; The slit width in pixels
+        ``&quot;sltw_arc&quot;``
+            (float) -&gt; The slit width in arcseconds
+        ``&quot;ps&quot;``
+            (float) -&gt; The plate scale in arcseconds per pixel
+        ``&quot;rp&quot;``
+            (int) -&gt; The resolving power
+        ``&quot;norders&quot;``
+            (int) -&gt; Number of orders on the array
+        ``&quot;orders&quot;``
+            (list of int) -&gt; The order numbers
+        ``&quot;edgecoeffs&quot;``
+            (numpy.ndarray) -&gt; (norders, 2, degree+1) array of
+            polynomial coefficients which define the edges of the
+            orders.  edgecoeffs[0,0,:] are the coefficients of the
+            bottom edge of the first order and edgecoeffs[0,1,:] are
+            the coefficients of the top edge of the first order.
+            Note that these coefficients are in the order required
+            by numpy.poly1d (opposite order to IDL style coefficient
+            ordering).
+        ``&quot;xranges&quot;``
+            (numpy.ndarray) -&gt; (norders, 2) array of columns numbers
+            between which the orders are completely on the array.
+        ``&quot;rms&quot;``
+            (numpy.ndarray) -&gt; (norders,) An array of RMS deviations for
+            each order
+        ``&quot;rotation&quot;``
+            (int) -&gt; The rotation direction (not angle) for
+            `sofia_redux.toolkit.image.adjust.rotate90`.
+        ``&quot;edgedeg&quot;``
+            (int) -&gt; The degree of the edge coefficients
+    &quot;&quot;&quot;
+    hdul = gethdul(filename, verbose=True)
+    if hdul is None:
+        return
+
+    if len(hdul) &gt; 3:
+        ishell = True
+        image = hdul[1].data.copy()
+        var = hdul[2].data.copy()
+        flags = hdul[3].data.copy()
+    else:
+        ishell = False
+        image, var, flags = hdul[0].data.copy(), None, None
+        if image.ndim == 3:
+            var = image[1].copy()
+            flags = image[2].copy() if image.shape[0] &gt;= 3 else None
+            image = image[0].copy()
+
+    hdr = hdul[0].header.copy()
+    nrows, ncols = image.shape[:2]
+    ps = float(hdr.get(&#39;PLTSCALE&#39;, 0))
+    rp = int(hdr.get(&#39;RP&#39;, 0))
+    slith_arc = float(hdr.get(&#39;SLTH_ARC&#39;, 0))
+    slith_pix = float(hdr.get(&#39;SLTH_PIX&#39;, 0))
+    slitw_arc = float(hdr.get(&#39;SLTW_ARC&#39;, 0))
+    slitw_pix = float(hdr.get(&#39;SLTW_PIX&#39;, 0))
+    rotation = int(hdr.get(&#39;ROTATION&#39;, 0))
+    edgedeg = int(hdr.get(&#39;EDGEDEG&#39;, 0))
+    modename = str(hdr.get(&#39;MODENAME&#39;)).strip()
+    norders = int(hdr.get(&#39;NORDERS&#39;, 0))
+    orders = np.array(
+        [x for x in hdr.get(&#39;ORDERS&#39;, &#39;0&#39;).split(&#39;,&#39;)
+         if x != &#39;&#39;]).astype(int)
+    if rotation not in [None, 0]:
+        image = rotate90(image, rotation)
+        if var is not None:
+            var = rotate90(var, rotation)
+        if flags is not None:
+            flags = rotate90(flags, rotation)
+
+    prefix, nz = (&#39;OR&#39;, 3) if ishell else (&#39;ODR&#39;, 2)
+    edgecoeffs = np.zeros((norders, 2, edgedeg + 1))
+    rms = np.zeros((norders,))
+    xranges = np.full((norders, 2), 0)
+    yranges = np.full((norders, 2), 0)
+    ordermask = np.full((nrows, ncols), 0)
+    for orderi in range(norders):
+        order = orders[orderi]
+        name = prefix + str(order).zfill(nz)
+        coeff_t = np.array(list(hdr[&#39;%s_T*&#39; % name].values()))
+        coeff_b = np.array(list(hdr[&#39;%s_B*&#39; % name].values()))
+        edgecoeffs[orderi, 0] = coeff_b
+        edgecoeffs[orderi, 1] = coeff_t
+        xranges[orderi] = np.array(
+            hdr[&#39;%s_XR&#39; % name].split(&#39;,&#39;)).astype(int)
+        rms[orderi] = hdr[&#39;%sRMS&#39; % name]
+
+        # Calculate the order mask
+        x = np.arange(xranges[orderi, 0], xranges[orderi, 1] + 1)
+        botedge = poly1d(x, coeff_b)
+        topedge = poly1d(x, coeff_t)
+        bi, ti = botedge.astype(int), topedge.astype(int) + 1
+        z = (botedge &gt;= -0.5) &amp; (topedge &lt;= (nrows - 0.5))
+        for j in range(int(np.ptp(xranges[orderi])) + 1):
+            if z[j]:
+                ordermask[bi[j]: ti[j], x[j]] = order
+        yranges[orderi] = np.array([min(bi), max(ti)])
+
+    if slith_pix &gt; 0:
+        ds = slith_arc / slith_pix
+    else:
+        log.warning(&#39;Slit height in pixels is 0.&#39;)
+        ds = 1.0
+
+    result = {&#39;image&#39;: image, &#39;variance&#39;: var, &#39;flags&#39;: flags,
+              &#39;nrows&#39;: nrows, &#39;ncols&#39;: ncols,
+              &#39;omask&#39;: ordermask, &#39;edgedeg&#39;: edgedeg,
+              &#39;norders&#39;: norders, &#39;orders&#39;: orders,
+              &#39;edgecoeffs&#39;: edgecoeffs,
+              &#39;xranges&#39;: xranges, &#39;yranges&#39;: yranges,
+              &#39;ps&#39;: ps, &#39;rp&#39;: rp, &#39;rotation&#39;: rotation,
+              &#39;slith_arc&#39;: slith_arc, &#39;slith_pix&#39;: slith_pix,
+              &#39;slitw_arc&#39;: slitw_arc, &#39;slitw_pix&#39;: slitw_pix,
+              &#39;ds&#39;: ds,
+              &#39;modename&#39;: modename, &#39;rms&#39;: rms}
+
+    return result</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

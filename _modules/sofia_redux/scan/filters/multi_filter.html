@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.filters.multi_filter &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.filters.multi_filter</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import inspect
+import numpy as np
+import scipy
+
+from sofia_redux.scan.filters.varied_filter import VariedFilter
+from sofia_redux.scan.filters.filter import Filter
+
+__all__ = [&#39;MultiFilter&#39;]
+
+
+<div class="viewcode-block" id="MultiFilter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter">[docs]</a>
+class MultiFilter(VariedFilter):
+
+    def __init__(self, integration=None, data=None):
+        &quot;&quot;&quot;
+        Initialize an integration multi-filter.
+
+        The multi-filter contains multiple sub-filters that operate on an
+        integration in sequence.
+
+        Parameters
+        ----------
+        integration : Integration, optional
+        data : numpy.ndarray (float), optional
+            An array of shape (nt, n_channels) where nt is the nearest power of
+            2 integer above the number of integration frames. i.e., if
+            n_frames=5, nt=8, or if n_frames=13, nt=16.  If not provided will
+            be set to frame_data * frame_relative_weight.
+        &quot;&quot;&quot;
+        self.filters = []
+        self.n_enabled = 0
+        super().__init__(integration=integration, data=data)
+
+<div class="viewcode-block" id="MultiFilter.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the filter.
+
+        All attributes are copied aside from the integration and channels which
+        are referenced only.
+
+        Returns
+        -------
+        Filter
+        &quot;&quot;&quot;
+        new = super().copy()
+        new.filters = []
+        if self.filters is None:
+            new.filters = None
+            return new
+        for sub_filter in self.filters:
+            new.filters.append(sub_filter.copy())
+        return new</div>
+
+
+    @property
+    def size(self):
+        &quot;&quot;&quot;
+        Return the number of sub-filters in the multi-filter.
+
+        Returns
+        -------
+        n_filters : int
+        &quot;&quot;&quot;
+        if self.filters is None:
+            return 0
+        return len(self.filters)
+
+    def __contains__(self, filter_or_name):
+        &quot;&quot;&quot;
+        Return whether the multi-filter contains a filter.
+
+        Parameters
+        ----------
+        filter_or_name : Filter or str
+            A filter object or class or name of the filter to check.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self[filter_or_name] is not None
+
+    def __getitem__(self, filter_or_name):
+        &quot;&quot;&quot;
+        Return a given filter from the multi-filter
+
+        Parameters
+        ----------
+        filter_or_name : Filter or str or int
+            A filter object, class, name, label, or filter index of the
+            filter to retrieve.
+
+        Returns
+        -------
+        Filter or None
+        &quot;&quot;&quot;
+        if self.size == 0:
+            return None
+        if isinstance(filter_or_name, Filter):
+            if filter_or_name in self.filters:
+                return filter_or_name
+        elif inspect.isclass(filter_or_name):
+            for filter_object in self.filters:
+                if filter_object.__class__ == filter_or_name:
+                    return filter_object
+        elif isinstance(filter_or_name, str):
+            check_name = filter_or_name.strip().lower()
+            for filter_object in self.filters:
+                name = filter_object.get_config_name().split(&#39;.&#39;)[-1].lower()
+                if name == check_name:
+                    return filter_object
+                label = filter_object.get_id().lower()
+                if label == check_name:
+                    return filter_object
+        elif isinstance(filter_or_name, int):
+            if filter_or_name &lt; self.size:
+                return self.filters[filter_or_name]
+        return None
+
+<div class="viewcode-block" id="MultiFilter.reindex">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.reindex">[docs]</a>
+    def reindex(self):
+        &quot;&quot;&quot;
+        Reindex the channel groups to be consistent with parent channels.
+
+        In addition to the main multi-filter, all sub-filters are re-indexed
+        too.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().reindex()
+        if self.filters is not None:
+            for sub_filter in self.filters:
+                sub_filter.reindex()</div>
+
+
+<div class="viewcode-block" id="MultiFilter.get_filters">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.get_filters">[docs]</a>
+    def get_filters(self):
+        &quot;&quot;&quot;
+        Return all sub-filters of the multi-filter.
+
+        Returns
+        -------
+        filters : list (Filter)
+        &quot;&quot;&quot;
+        return self.filters</div>
+
+
+<div class="viewcode-block" id="MultiFilter.set_integration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.set_integration">[docs]</a>
+    def set_integration(self, integration):
+        &quot;&quot;&quot;
+        Set the filter integration.
+
+        Parameters
+        ----------
+        integration : Integration
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_integration(integration)
+        if self.data is None:
+            self.make_temp_data()
+        if self.filters is not None:
+            for sub_filter in self.filters:
+                sub_filter.set_temp_data(self.data)
+                sub_filter.set_integration(integration)
+        self.update_source_profile()</div>
+
+
+<div class="viewcode-block" id="MultiFilter.set_channels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.set_channels">[docs]</a>
+    def set_channels(self, channels):
+        &quot;&quot;&quot;
+        Set the filter channels.
+
+        The channels attribute will be set to a ChannelGroup type.
+
+        Parameters
+        ----------
+        channels : Channels or ChannelData or ChannelGroup
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_channels(channels)
+        if self.filters is not None:
+            for sub_filter in self.filters:
+                sub_filter.set_channels(channels)</div>
+
+
+<div class="viewcode-block" id="MultiFilter.add_filter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.add_filter">[docs]</a>
+    def add_filter(self, sub_filter):
+        &quot;&quot;&quot;
+        Add a sub-filter to the list of filters in the multi-filter.
+
+        The sub-filter integration is set to the multi-filter integration.  If
+        an integration already exists for the sub-filter, it must be the same
+        as the multi-filter integration.  The sub-filter channels are also set
+        to the multi-filter channels.
+
+        Parameters
+        ----------
+        sub_filter : Filter
+            The filter to add.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if sub_filter.integration is None:
+            sub_filter.set_integration(self.integration)
+        elif sub_filter.integration is not self.integration:
+            raise ValueError(&quot;Cannot compound filter from a different &quot;
+                             &quot;integration.&quot;)
+        sub_filter.set_channels(self.get_channels())
+        if self.filters is None:
+            self.filters = [sub_filter]
+        else:
+            self.filters.append(sub_filter)</div>
+
+
+<div class="viewcode-block" id="MultiFilter.set_filter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.set_filter">[docs]</a>
+    def set_filter(self, filter_index, sub_filter):
+        &quot;&quot;&quot;
+        Insert a sub-filter into the list of filters in the multi-filter.
+
+        The sub-filter integration is set to the multi-filter integration.  If
+        an integration already exists for the sub-filter, it must be the same
+        as the multi-filter integration.  The sub-filter channels are also set
+        to the multi-filter channels.
+
+        If the filter index is greater than the number of filters, pads the
+        filters list with `None` until the length of the filters is able to
+        support the requested index.
+
+        Parameters
+        ----------
+        filter_index : int
+            The index at which to insert the sub-filter.
+        sub_filter : Filter
+            The filter to insert.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if sub_filter.integration is None:
+            sub_filter.set_integration(self.integration)
+        elif sub_filter.integration is not self.integration:
+            raise ValueError(&quot;Cannot compound filter from a different &quot;
+                             &quot;integration.&quot;)
+        sub_filter.set_channels(self.channels)
+        if self.filters is None:
+            self.filters = []
+        add_blanks = filter_index - self.size
+        if add_blanks &gt; 0:
+            self.filters.extend([None] * (add_blanks + 1))
+        self.filters[filter_index] = sub_filter</div>
+
+
+<div class="viewcode-block" id="MultiFilter.remove_filter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.remove_filter">[docs]</a>
+    def remove_filter(self, filter_or_name):
+        &quot;&quot;&quot;
+        Remove a sub-filter from the list of multi-filter sub-filters.
+
+        Parameters
+        ----------
+        filter_or_name : Filter or str or int
+            A filter object or class or name or filter index of the filter to
+            retrieve.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if isinstance(filter_or_name, int):
+            if filter_or_name &lt; self.size:
+                del self.filters[filter_or_name]
+                return
+
+        filter_object = self[filter_or_name]
+        if filter_object is not None:
+            for filter_index, sub_filter in enumerate(self.filters):
+                if sub_filter is filter_object:
+                    del self.filters[filter_index]
+                    return</div>
+
+
+<div class="viewcode-block" id="MultiFilter.update_config">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.update_config">[docs]</a>
+    def update_config(self):
+        &quot;&quot;&quot;
+        Determine whether the filter is configuration and if it&#39;s pedantic.
+
+        Will also perform the same operation for all sub-filters.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().update_config()
+        for sub_filter in self.filters:
+            sub_filter.is_sub_filter = True
+            sub_filter.update_config()</div>
+
+
+<div class="viewcode-block" id="MultiFilter.is_enabled">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.is_enabled">[docs]</a>
+    def is_enabled(self):
+        &quot;&quot;&quot;
+        Return whether the filter is enabled.
+
+        In addition to the multi-filter being enabled, a `True` result requires
+        that at least one sub-filter is also enabled.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        if not super().is_enabled():
+            return False
+        self.n_enabled = 0
+        for f in self.filters:
+            if f.is_enabled():
+                self.n_enabled += 1
+        return self.n_enabled &gt; 0</div>
+
+
+<div class="viewcode-block" id="MultiFilter.pre_filter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.pre_filter">[docs]</a>
+    def pre_filter(self):
+        &quot;&quot;&quot;
+        Perform the pre-filtering steps.
+
+        The pre-filtering is also performed for all enabled sub-filters.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().pre_filter()
+        for sub_filter in self.filters:
+            if sub_filter.is_enabled():
+                sub_filter.pre_filter()</div>
+
+
+<div class="viewcode-block" id="MultiFilter.post_filter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.post_filter">[docs]</a>
+    def post_filter(self):
+        &quot;&quot;&quot;
+        Perform the post-filtering steps.
+
+        The post-filtering is also performed for all enabled sub-filters.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for sub_filter in self.filters:
+            if sub_filter.is_enabled():
+                sub_filter.post_filter()
+        super().post_filter()</div>
+
+
+<div class="viewcode-block" id="MultiFilter.fft_filter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.fft_filter">[docs]</a>
+    def fft_filter(self, channels=None):
+        &quot;&quot;&quot;
+        Apply the FFT filter to the temporary data.
+
+        Converts data into a rejected (un-levelled) signal
+
+        Parameters
+        ----------
+        channels : ChannelGroup, optional
+            The channels for which to apply the filter.  If not supplied,
+            defaults to the stored filtering channels.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if channels is None:
+            channels = self.get_channels()
+
+        data = self.get_temp_data().copy()
+
+        data = scipy.fft.rfft(data, axis=1)
+
+        # Remove the mean
+        data[:, 0].real = 0.0
+        n_freq = data.shape[1]
+        f_channels = np.arange(n_freq)
+
+        filtered = np.zeros_like(data)
+
+        # Apply the filters sequentially
+        for sub_filter in self.filters:
+            if not sub_filter.is_enabled():
+                continue
+            log.debug(f&quot;FFT filtering {sub_filter.get_config_name()}.&quot;)
+
+            # Make sure that the filter uses the spectrum from the master array
+            if sub_filter.data is not data:
+                sub_filter.set_temp_data(data)
+
+            sub_filter.points = self.points
+            sub_filter.pre_filter_channels(channels=channels)
+            sub_filter.update_profile(channels=channels)
+
+            response = sub_filter.response_at(f_channels)
+            rejection = 1.0 - response
+            filtered = data * rejection
+            data *= response
+
+            sub_filter.post_filter_channels(channels=channels)
+
+        # Convert to rejected signal
+        filtered = scipy.fft.irfft(filtered, axis=1)
+        self.set_temp_data(filtered)</div>
+
+
+<div class="viewcode-block" id="MultiFilter.response_at">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.response_at">[docs]</a>
+    def response_at(self, fch):
+        &quot;&quot;&quot;
+        Return the response at a given frequency channel(s).
+
+        Parameters
+        ----------
+        fch : int or numpy.ndarray (int or bool) or slice
+            The frequency channel or channels in question.
+
+        Returns
+        -------
+        response : float or numpy.ndarray (float)
+        &quot;&quot;&quot;
+        if not isinstance(fch, np.ndarray) or fch.shape == ():
+            full_response = 1.0
+            singular = True
+        else:
+            full_response = np.ones(fch.size, dtype=float)
+            singular = False
+
+        if self.filters is None:
+            return full_response
+        for sub_filter in self.filters:
+            if not sub_filter.is_enabled():
+                continue
+
+            sub_response = sub_filter.response_at(fch)
+            sub_singular = (not (isinstance(sub_response, np.ndarray))
+                            or sub_response.shape == ())
+            if sub_singular or singular or (
+                    sub_response.ndim == full_response.ndim):
+                full_response = full_response * sub_response
+            elif full_response.ndim == 2:  # pragma: no cover
+                # In case other types of filters are added.
+                full_response = full_response * sub_response[None]
+            else:
+                full_response = full_response[None] * sub_response
+
+        return full_response</div>
+
+
+<div class="viewcode-block" id="MultiFilter.get_id">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.get_id">[docs]</a>
+    def get_id(self):
+        &quot;&quot;&quot;
+        Return the filter ID.
+
+        Returns
+        -------
+        filter_id : str
+        &quot;&quot;&quot;
+        filter_id = &#39;&#39;
+        if self.filters is None:
+            return filter_id
+        for sub_filter in self.filters:
+            if sub_filter.is_enabled():
+                if len(filter_id) &gt; 0:
+                    filter_id += &#39;:&#39;
+                filter_id += sub_filter.get_id()
+        return filter_id</div>
+
+
+<div class="viewcode-block" id="MultiFilter.get_config_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.get_config_name">[docs]</a>
+    def get_config_name(self):
+        &quot;&quot;&quot;
+        Return the configuration name.
+
+        Returns
+        -------
+        config_name : str
+        &quot;&quot;&quot;
+        return &#39;filter&#39;</div>
+
+
+<div class="viewcode-block" id="MultiFilter.dft_filter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.multi_filter.MultiFilter.html#sofia_redux.scan.filters.multi_filter.MultiFilter.dft_filter">[docs]</a>
+    def dft_filter(self, channels=None):
+        &quot;&quot;&quot;
+        Return the filter rejection using a discrete FFT.
+
+        UNSUPPORTED FOR THE MULTI-FILTER.
+
+        Parameters
+        ----------
+        channels : ChannelGroup, optional
+            The channel group for which the filtering applied.  By default,
+            set to the filtering channels.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().dft_filter(channels=channels)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

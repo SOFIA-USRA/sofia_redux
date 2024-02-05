@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.coordinate_systems.grid.grid_2d &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.coordinate_systems.grid.grid_2d</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import abstractmethod
+from astropy import log, units
+import numpy as np
+import re
+
+from sofia_redux.scan.coordinate_systems.grid.grid import Grid
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.coordinate_2d1 import Coordinate2D1
+from sofia_redux.scan.coordinate_systems.horizontal_coordinates import \
+    HorizontalCoordinates
+from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
+    EquatorialCoordinates
+from sofia_redux.scan.coordinate_systems.ecliptic_coordinates import \
+    EclipticCoordinates
+from sofia_redux.scan.coordinate_systems.galactic_coordinates import \
+    GalacticCoordinates
+from sofia_redux.scan.coordinate_systems.super_galactic_coordinates import \
+    SuperGalacticCoordinates
+from sofia_redux.scan.utilities.utils import round_values
+
+__all__ = [&#39;Grid2D&#39;]
+
+
+<div class="viewcode-block" id="Grid2D">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D">[docs]</a>
+class Grid2D(Grid):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize a 2-dimensional abstract grid.
+
+        The grid is used to convert from 2D coordinates to offsets in relation
+        to a specified reference onto a regular grid, and the reverse
+        operation.
+
+        Forward transform: grid projection -&gt; offsets -&gt; coordinates
+        Reverse transform: coordinates -&gt; offsets -&gt; grid projection
+        &quot;&quot;&quot;
+        super().__init__()
+        self._projection = None
+        self._reference_index = Coordinate2D(np.zeros(2, dtype=float))
+        self.m = None
+        self.i = None
+        self.set_defaults()
+
+<div class="viewcode-block" id="Grid2D.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the Grid2D.
+
+        Returns
+        -------
+        Grid2D
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+    def __eq__(self, other):
+        &quot;&quot;&quot;
+        Check if this grid is equal to another.
+
+        Parameters
+        ----------
+        other : Grid2D
+
+        Returns
+        -------
+        equal : bool
+        &quot;&quot;&quot;
+        if self is other:
+            return True
+        if not super().__eq__(other):
+            return False
+        if self.projection != other.projection:
+            return False
+        if self.reference_index != other.reference_index:
+            return False
+        # The uncovered statements are covered, but not picked up by coverage
+        if self.m is not None:
+            if other.m is None:  # pragma: no cover
+                return False
+            if not np.allclose(self.m, other.m):
+                return False
+        elif other.m is not None:  # pragma: no cover
+            return False
+        if self.i is not None:
+            if other.i is None:  # pragma: no cover
+                return False
+            if not np.allclose(self.i, other.i):
+                return False
+        elif other.i is not None:  # pragma: no cover
+            return False
+        return True
+
+<div class="viewcode-block" id="Grid2D.get_dimensions">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_dimensions">[docs]</a>
+    def get_dimensions(self):
+        &quot;&quot;&quot;
+        Return the number of grid dimensions.
+
+        Returns
+        -------
+        n_dimensions : int
+        &quot;&quot;&quot;
+        return 2</div>
+
+
+<div class="viewcode-block" id="Grid2D.set_defaults">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.set_defaults">[docs]</a>
+    def set_defaults(self):
+        &quot;&quot;&quot;
+        Set the default values for the grid.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.m = np.eye(2, dtype=float)
+        self.i = np.eye(2, dtype=float)
+        self.reference_index.zero()</div>
+
+
+    @property
+    def reference_index(self):
+        &quot;&quot;&quot;
+        Return the reference index for the grid.
+
+        Returns
+        -------
+        Coordinate2D
+        &quot;&quot;&quot;
+        return self.get_reference_index()
+
+    @reference_index.setter
+    def reference_index(self, value):
+        &quot;&quot;&quot;
+        Set the reference index for the grid.
+
+        Parameters
+        ----------
+        value : Coordinate2D
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_reference_index(value)
+
+    @property
+    def projection(self):
+        &quot;&quot;&quot;
+        Return the grid projection.
+
+        Returns
+        -------
+        Projection2D
+        &quot;&quot;&quot;
+        return self.get_projection()
+
+    @projection.setter
+    def projection(self, value):
+        &quot;&quot;&quot;
+        Set the grid projection.
+
+        Parameters
+        ----------
+        value : Projection2D
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_projection(value)
+
+    @property
+    def transform(self):
+        &quot;&quot;&quot;
+        Return the transform matrix for the grid.
+
+        Returns
+        -------
+        m : numpy.ndarray or units.Quantity
+        &quot;&quot;&quot;
+        return self.get_transform()
+
+    @property
+    def inverse_transform(self):
+        &quot;&quot;&quot;
+        Return the inverse transform matrix for the grid.
+
+        Returns
+        -------
+        i : numpy.ndarray or units.Quantity
+        &quot;&quot;&quot;
+        return self.get_inverse_transform()
+
+    @property
+    def rectilinear(self):
+        &quot;&quot;&quot;
+        Return whether the grid is rectilinear.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self.m[0, 1] == 0 and self.m[1, 0] == 0
+
+    @property
+    def x_axis(self):
+        &quot;&quot;&quot;
+        Return the x-axis of the grid.
+
+        Returns
+        -------
+        CoordinateAxis
+        &quot;&quot;&quot;
+        return self.coordinate_system.axes[0]
+
+    @property
+    def y_axis(self):
+        &quot;&quot;&quot;
+        Return the y-axis of the grid.
+
+        Returns
+        -------
+        CoordinateAxis
+        &quot;&quot;&quot;
+        return self.coordinate_system.axes[1]
+
+    @property
+    def fits_x_unit(self):
+        &quot;&quot;&quot;
+        Return the unit for the X axis data.
+
+        Returns
+        -------
+        units.Unit
+        &quot;&quot;&quot;
+        return self.x_axis.unit
+
+    @property
+    def fits_y_unit(self):
+        &quot;&quot;&quot;
+        Return the unit for the Y axis data.
+
+        Returns
+        -------
+        units.Unit
+        &quot;&quot;&quot;
+        return self.y_axis.unit
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Return a string representation of the grid.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return self.to_string()
+
+    def __repr__(self):
+        &quot;&quot;&quot;
+        Return a representation of the grid and underlying object.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return f&#39;{object.__repr__(self)}\n{self.to_string()}&#39;
+
+<div class="viewcode-block" id="Grid2D.to_coordinate2d">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.to_coordinate2d">[docs]</a>
+    @staticmethod
+    def to_coordinate2d(value):
+        &quot;&quot;&quot;
+        Convert a value to a Coordinate2D object.
+
+        Parameters
+        ----------
+        value : int or float or numpy.ndarray or units.Quantity or Coordinate2D
+
+        Returns
+        -------
+        Coordinate2D
+        &quot;&quot;&quot;
+        if not isinstance(value, Coordinate2D):
+            if isinstance(value, (units.Quantity, np.ndarray)):
+                value = np.atleast_1d(value)
+                if value.size == 1:
+                    if isinstance(value, units.Quantity):
+                        value = np.full(
+                            2, value[0].value, dtype=float) * value.unit
+                    else:
+                        value = np.full(2, value[0])
+            else:
+                value = np.full(2, value)
+
+            value = Coordinate2D(value)
+        return value</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_coordinate_instance_for">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_coordinate_instance_for">[docs]</a>
+    @classmethod
+    def get_coordinate_instance_for(cls, name):
+        &quot;&quot;&quot;
+        Return a coordinate instance for the given name.
+
+        Parameters
+        ----------
+        name : str
+
+        Returns
+        -------
+        Coordinate2D
+        &quot;&quot;&quot;
+        return Coordinate2D.get_instance(name)</div>
+
+
+    # @classmethod
+    # def get_default_unit(cls):
+    #     &quot;&quot;&quot;
+    #     Return the default unit for the grid.
+    #
+    #     Returns
+    #     -------
+    #     None or units.Unit
+    #     &quot;&quot;&quot;
+    #     return None
+
+<div class="viewcode-block" id="Grid2D.get_default_unit">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_default_unit">[docs]</a>
+    def get_default_unit(self):
+        &quot;&quot;&quot;
+        Return the default unit for the grid.
+
+        Returns
+        -------
+        None or units.Unit
+        &quot;&quot;&quot;
+        unit = None
+        resolution = self.resolution
+        if isinstance(resolution, Coordinate2D):
+            unit = resolution.unit
+        elif isinstance(resolution, Coordinate2D1):
+            unit = resolution.xy_unit
+        elif isinstance(resolution, units.Quantity):  # pragma: no cover
+            unit = resolution.unit
+
+        if unit is None:
+            return units.Unit(&#39;pixel&#39;)
+        else:
+            return unit</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_default_coordinate_instance">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_default_coordinate_instance">[docs]</a>
+    @classmethod
+    def get_default_coordinate_instance(cls):
+        &quot;&quot;&quot;
+        Return a coordinate for the dimensions of the grid.
+
+        Returns
+        -------
+        Coordinate2D
+        &quot;&quot;&quot;
+        return Coordinate2D()</div>
+
+
+<div class="viewcode-block" id="Grid2D.from_header">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.from_header">[docs]</a>
+    @classmethod
+    def from_header(cls, header, alt=&#39;&#39;):
+        &quot;&quot;&quot;
+        Create a grid instance from a header.
+
+        Parameters
+        ----------
+        header : fits.Header
+            The FITS header from which to create the grid.
+        alt : str, optional
+            The alternate coordinate system designation.
+
+        Returns
+        -------
+        Grid2D
+        &quot;&quot;&quot;
+        ctype_1 = header.get(f&#39;CTYPE1{alt}&#39;)
+        ctype_2 = header.get(f&#39;CTYPE2{alt}&#39;)
+
+        grid = cls.get_grid_2d_instance_for(ctype_1, ctype_2)
+        grid.parse_header(header)
+        return grid</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_grid_2d_instance_for">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_grid_2d_instance_for">[docs]</a>
+    @classmethod
+    def get_grid_2d_instance_for(cls, ctype_1, ctype_2):
+        &quot;&quot;&quot;
+        Return a Grid2D instance for the given FITS coordinate types.
+
+        A suitable grid instance will be returned depending on the provided
+        CTYPE values.  If any CTYPE value is not recognized, a FlatGrid2D
+        instance will be returned.  In cases where a spherical system is
+        recognized, a SphericalGrid will be returned.
+
+        CTYPE values should be 8 characters in length, divided into 2 segments
+        of 4 characters each.  The first set should give the type of world
+        coordinates, and the second set should provide the type of projection
+        geometry.  The first set is left justified, with hyphens filling in any
+        blank characters to the right, and the second set should be right
+        justified with hyphens filling in any blank characters to the left.
+        For example, &#39;RA---TAN&#39; or &#39;GLON-AIT&#39;.
+
+        Note that in addition to the standard FITS CTYPE standards, the LON and
+        LAT coordinate systems are also recognized.  E.g., &#39;LAT--TAN&#39;.
+        xLON, xyLN, xLAT, xyLT coordinate systems are also recognized, where
+        x and y indicate arbitrary (but matching across longitude and latitude)
+        characters.
+
+        Parameters
+        ----------
+        ctype_1 : str or None
+            The type of the first world coordinate axis.
+        ctype_2 : str or None
+            The type of the second world coordinate axis.
+
+        Returns
+        -------
+        Grid2D
+        &quot;&quot;&quot;
+        if ctype_1 is None or ctype_2 is None:
+            return cls.get_grid_instance(&#39;flat_grid_2d&#39;)
+        elif len(ctype_1) &lt; 6 or len(ctype_2) &lt; 6:
+            return cls.get_grid_instance(&#39;flat_grid_2d&#39;)
+
+        tokens_x = re.split(r&#39;[-]+&#39;, ctype_1.lower())
+        tokens_y = re.split(r&#39;[-]+&#39;, ctype_2.lower())
+        if len(tokens_x) != 2 or len(tokens_y) != 2:
+            return cls.get_grid_instance(&#39;flat_grid_2d&#39;)
+
+        x_type, proj_x = tokens_x
+        y_type, proj_y = tokens_y
+
+        if (x_type, y_type) in [(&#39;ra&#39;, &#39;dec&#39;), (&#39;dec&#39;, &#39;ra&#39;),
+                                (&#39;lon&#39;, &#39;lat&#39;), (&#39;lat&#39;, &#39;lon&#39;)]:
+            return cls.get_grid_instance(&#39;spherical_grid&#39;)
+
+        if x_type[0] != y_type[0]:
+            return cls.get_grid_instance(&#39;flat_grid_2d&#39;)
+
+        # Check for things like GLON, GLAT
+        x_type, y_type = x_type[1:], y_type[1:]
+        if (x_type, y_type) in [(&#39;lat&#39;, &#39;lon&#39;), (&#39;lon&#39;, &#39;lat&#39;)]:
+            return cls.get_grid_instance(&#39;spherical_grid&#39;)
+
+        if x_type[0] != y_type[0]:
+            return cls.get_grid_instance(&#39;flat_grid_2d&#39;)
+
+        # Check for things like ..LN, ..LT
+        x_type, y_type = x_type[1:], y_type[1:]
+        if (x_type, y_type) in [(&#39;lt&#39;, &#39;ln&#39;), (&#39;ln&#39;, &#39;lt&#39;)]:
+            return cls.get_grid_instance(&#39;spherical_grid&#39;)
+
+        return cls.get_grid_instance(&#39;flat_grid_2d&#39;)</div>
+
+
+<div class="viewcode-block" id="Grid2D.to_string">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.to_string">[docs]</a>
+    def to_string(self):
+        &quot;&quot;&quot;
+        Return a string representation of the grid.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        projection_name = self.reference.__class__.__name__.split(
+            &#39;Coordinates&#39;)[0]
+        reference_str = f&#39;{projection_name}: {self.reference}&#39;
+        projection_str = (f&#39;{self.projection.get_full_name()} &#39;
+                          f&#39;({self.projection.get_fits_id()})&#39;)
+        dx, dy = self.resolution.coordinates
+        if isinstance(dx, units.Quantity):
+            dx = dx.value
+        spacing_str = f&#39;{dx} x {dy}&#39;
+        crpix_str = f&#39;{self.reference_index} C-style, 0-based&#39;
+        return (f&#39;{reference_str}\n&#39;
+                f&#39;Projection: {projection_str}\n&#39;
+                f&#39;Grid Spacing: {spacing_str}\n&#39;
+                f&#39;Reference Pixel: {crpix_str}&#39;)</div>
+
+
+<div class="viewcode-block" id="Grid2D.for_resolution">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.for_resolution">[docs]</a>
+    def for_resolution(self, resolution):
+        &quot;&quot;&quot;
+        Return a Grid2D for a given resolution.
+
+        Parameters
+        ----------
+        resolution : astropy.units.Quantity or numpy.ndarray or Coordinate2D
+
+        Returns
+        -------
+        grid : Grid2D
+        &quot;&quot;&quot;
+        resolution = self.to_coordinate2d(resolution)
+        grid = self.copy()
+        grid.set_resolution(resolution)
+        x_factor = self.resolution.x / resolution.x
+        y_factor = self.resolution.y / resolution.y
+        if isinstance(x_factor, units.Quantity):
+            x_factor = x_factor.decompose().value
+            y_factor = y_factor.decompose().value
+
+        grid.reference_index.scale_x(x_factor)
+        grid.reference_index.scale_y(y_factor)
+        return grid</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_pixel_area">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_pixel_area">[docs]</a>
+    def get_pixel_area(self):
+        &quot;&quot;&quot;
+        Return the area of one pixel on the grid.
+
+        Returns
+        -------
+        area : float or units.Quantity
+        &quot;&quot;&quot;
+        return np.abs(np.linalg.det(self.m))</div>
+
+
+<div class="viewcode-block" id="Grid2D.set_resolution">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.set_resolution">[docs]</a>
+    def set_resolution(self, resolution):
+        &quot;&quot;&quot;
+        Set the grid resolution.
+
+        Parameters
+        ----------
+        resolution : Coordinate2D or float or numpy.ndarray or units.Quantity
+            The resolution to set.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        resolution = self.to_coordinate2d(resolution)
+        dx, dy = resolution.x, resolution.y
+        if isinstance(dx, units.Quantity):
+            unit = dx.unit
+            dx, dy = dx.value, dy.value
+        else:
+            unit = None
+        self.m = np.array([[dx, 0.0], [0.0, dy]])
+        if unit is not None:
+            self.m = self.m * unit
+        self.calculate_inverse_transform()</div>
+
+
+<div class="viewcode-block" id="Grid2D.calculate_inverse_transform">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.calculate_inverse_transform">[docs]</a>
+    def calculate_inverse_transform(self):
+        &quot;&quot;&quot;
+        Calculate the inverse transform for the grid (calculate i from m).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if np.isnan(self.m).any():
+            self.i = np.zeros_like(self.m)
+        else:
+            self.i = np.linalg.pinv(self.m)</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_transform">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_transform">[docs]</a>
+    def get_transform(self):
+        &quot;&quot;&quot;
+        Return the transform matrix for the grid.
+
+        Returns
+        -------
+        m : numpy.ndarray or units.Quantity
+        &quot;&quot;&quot;
+        return self.m.copy()</div>
+
+
+<div class="viewcode-block" id="Grid2D.set_transform">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.set_transform">[docs]</a>
+    def set_transform(self, m):
+        &quot;&quot;&quot;
+        Set the transform matrix for the grid.
+
+        Parameters
+        ----------
+        m : numpy.ndarray or units.Quantity
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if m.shape != (2, 2):
+            raise ValueError(&quot;Coordinate transform should have shape (2, 2).&quot;)
+        self.m = m.copy()
+        self.calculate_inverse_transform()</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_inverse_transform">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_inverse_transform">[docs]</a>
+    def get_inverse_transform(self):
+        &quot;&quot;&quot;
+        Return the inverse transform matrix for the grid.
+
+        Returns
+        -------
+        i : numpy.ndarray or units.Quantity
+        &quot;&quot;&quot;
+        return self.i.copy()</div>
+
+
+<div class="viewcode-block" id="Grid2D.is_horizontal">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.is_horizontal">[docs]</a>
+    def is_horizontal(self):
+        &quot;&quot;&quot;
+        Return whether the reference coordinate is a horizontal coordinate.
+
+        Returns
+        -------
+        horizontal : bool
+        &quot;&quot;&quot;
+        return isinstance(self.reference, HorizontalCoordinates)</div>
+
+
+<div class="viewcode-block" id="Grid2D.is_equatorial">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.is_equatorial">[docs]</a>
+    def is_equatorial(self):
+        &quot;&quot;&quot;
+        Return whether the reference coordinate is an equatorial coordinate.
+
+        Returns
+        -------
+        equatorial : bool
+        &quot;&quot;&quot;
+        return isinstance(self.reference, EquatorialCoordinates)</div>
+
+
+<div class="viewcode-block" id="Grid2D.is_ecliptic">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.is_ecliptic">[docs]</a>
+    def is_ecliptic(self):
+        &quot;&quot;&quot;
+        Return whether the reference coordinate is an ecliptic coordinate.
+
+        Returns
+        -------
+        ecliptic : bool
+        &quot;&quot;&quot;
+        return isinstance(self.reference, EclipticCoordinates)</div>
+
+
+<div class="viewcode-block" id="Grid2D.is_galactic">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.is_galactic">[docs]</a>
+    def is_galactic(self):
+        &quot;&quot;&quot;
+        Return whether the reference coordinate is a Galactic coordinate.
+
+        Returns
+        -------
+        galactic : bool
+        &quot;&quot;&quot;
+        return isinstance(self.reference, GalacticCoordinates)</div>
+
+
+<div class="viewcode-block" id="Grid2D.is_super_galactic">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.is_super_galactic">[docs]</a>
+    def is_super_galactic(self):
+        &quot;&quot;&quot;
+        Return whether the reference coordinate is a super Galactic coordinate.
+
+        Returns
+        -------
+        super_galactic : bool
+        &quot;&quot;&quot;
+        return isinstance(self.reference, SuperGalacticCoordinates)</div>
+
+
+<div class="viewcode-block" id="Grid2D.local_affine_transform">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.local_affine_transform">[docs]</a>
+    def local_affine_transform(self, grid_indices):
+        &quot;&quot;&quot;
+        Perform a local affine transform using the forward m matrix.
+
+        The transformed coordinates are of the form:
+
+        new = (m @ coordinates) - reference_index
+
+        Parameters
+        ----------
+        grid_indices: Coordinate2D
+
+        Returns
+        -------
+        transformed_indices : numpy.ndarray or units.Quantity
+        &quot;&quot;&quot;
+        if isinstance(self.m, units.Quantity):
+            if grid_indices.unit is None:
+                raise ValueError(&quot;Grid indices should be quantities.&quot;)
+            m = self.m.to(grid_indices.unit).value
+        else:
+            m = self.m
+
+        if grid_indices.singular:
+            coordinates = grid_indices.coordinates[..., None]
+        else:
+            coordinates = grid_indices.coordinates
+
+        transformed = (m @ coordinates)
+        transformed[0] -= self.reference_index.x
+        transformed[1] -= self.reference_index.y
+        if grid_indices.singular:
+            tx, ty = transformed[:, 0]
+        else:
+            tx, ty = transformed
+
+        t_indices = grid_indices.empty_copy()
+        t_indices.set_x(tx)
+        t_indices.set_y(ty)
+        return t_indices</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_resolution">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_resolution">[docs]</a>
+    def get_resolution(self):
+        &quot;&quot;&quot;
+        Return the grid resolution in (x, y).
+
+        Returns
+        -------
+        resolution : Coordinate2D
+        &quot;&quot;&quot;
+        return Coordinate2D(np.diag(self.m))</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_pixel_size">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_pixel_size">[docs]</a>
+    def get_pixel_size(self):
+        &quot;&quot;&quot;
+        Return the pixel size in (x, y).
+
+        Returns
+        -------
+        resolution : Coordinate2D
+        &quot;&quot;&quot;
+        return self.get_resolution()</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_pixel_size_x">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_pixel_size_x">[docs]</a>
+    def get_pixel_size_x(self):
+        &quot;&quot;&quot;
+        Return the pixel size in the x-direction.
+
+        Returns
+        -------
+        size : float or units.Quantity
+        &quot;&quot;&quot;
+        return self.m[0, 0]</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_pixel_size_y">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_pixel_size_y">[docs]</a>
+    def get_pixel_size_y(self):
+        &quot;&quot;&quot;
+        Return the pixel size in the y-direction.
+
+        Returns
+        -------
+        size : float or units.Quantity
+        &quot;&quot;&quot;
+        return self.m[1, 1]</div>
+
+
+<div class="viewcode-block" id="Grid2D.rotate">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.rotate">[docs]</a>
+    def rotate(self, angle):
+        &quot;&quot;&quot;
+        Rotate the grid by a given angle.
+
+        This effectively rotates the transformation matrices (m and i).
+
+        Parameters
+        ----------
+        angle : units.Quantity
+            The angle of rotation.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        c = np.cos(angle)
+        s = np.sin(angle)
+        if isinstance(angle, units.Quantity):
+            c, s = c.value, s.value
+
+        a = self.m.copy()
+        self.m[0, 0] = (c * a[0, 0]) - (s * a[1, 0])
+        self.m[0, 1] = (c * a[0, 1]) - (s * a[1, 1])
+        self.m[1, 0] = (s * a[0, 0]) + (c * a[1, 0])
+        self.m[1, 1] = (s * a[0, 1]) + (c * a[1, 1])
+        self.calculate_inverse_transform()</div>
+
+
+<div class="viewcode-block" id="Grid2D.is_reverse_x">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.is_reverse_x">[docs]</a>
+    def is_reverse_x(self):
+        &quot;&quot;&quot;
+        Returns if the x-axis is reversed.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self.x_axis.reverse</div>
+
+
+<div class="viewcode-block" id="Grid2D.is_reverse_y">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.is_reverse_y">[docs]</a>
+    def is_reverse_y(self):
+        &quot;&quot;&quot;
+        Returns if the y-axis is reversed.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self.y_axis.reverse</div>
+
+
+<div class="viewcode-block" id="Grid2D.parse_header">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.parse_header">[docs]</a>
+    def parse_header(self, header):
+        &quot;&quot;&quot;
+        Parse a FITS header and apply to the grid.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        alt = self.fits_id
+        c_type = header.get(f&#39;CTYPE1{alt}&#39;)
+        try:
+            self.parse_projection(header)
+        except Exception as err:  # pragma: no cover
+            log.warning(f&#39;Unknown projection {c_type}&#39;)
+            log.error(err)
+
+        default_unit = self.get_default_unit()
+        x_unit = header.get(f&#39;CUNIT1{alt}&#39;)
+        y_unit = header.get(f&#39;CUNIT2{alt}&#39;)
+        if x_unit is None:
+            x_unit = 1.0 if default_unit is None else default_unit
+        else:
+            x_unit = units.Unit(x_unit)
+        if y_unit is None:
+            y_unit = 1.0 if default_unit is None else default_unit
+        else:
+            y_unit = units.Unit(y_unit)
+
+        if isinstance(x_unit, units.UnitBase):
+            self.x_axis.unit = x_unit
+        if isinstance(y_unit, units.UnitBase):
+            self.y_axis.unit = y_unit
+
+        cd_keys = [f&#39;CD1_1{alt}&#39;, f&#39;CD1_2{alt}&#39;, f&#39;CD2_1{alt}&#39;, f&#39;CD2_2{alt}&#39;]
+        for key in cd_keys:
+            if key not in header:
+                dx = float(header.get(f&#39;CDELT1{alt}&#39;, 1.0)) * x_unit
+                dy = float(header.get(f&#39;CDELT2{alt}&#39;, 1.0)) * y_unit
+                m11 = float(header.get(f&#39;PC1_1{alt}&#39;, 1.0)) * dx
+                m12 = float(header.get(f&#39;PC1_2{alt}&#39;, 0.0)) * dx
+                m21 = float(header.get(f&#39;PC2_1{alt}&#39;, 0.0)) * dy
+                m22 = float(header.get(f&#39;PC2_2{alt}&#39;, 1.0)) * dy
+                break
+        else:
+            m11 = float(header.get(f&#39;CD1_1{alt}&#39;)) * x_unit
+            m12 = float(header.get(f&#39;CD1_2{alt}&#39;)) * x_unit
+            m21 = float(header.get(f&#39;CD2_1{alt}&#39;)) * y_unit
+            m22 = float(header.get(f&#39;CD2_2{alt}&#39;)) * y_unit
+
+        self.m = np.empty((2, 2), dtype=float) * x_unit
+        self.m[0, 0] = m11
+        self.m[0, 1] = m12
+        self.m[1, 0] = m21
+        self.m[1, 1] = m22
+
+        # The rotation of the latitude axis.
+        if f&#39;CROTA2{alt}&#39; in header:
+            self.rotate(header[f&#39;CROTA2{alt}&#39;] * units.Unit(&#39;degree&#39;))
+
+        if self.is_reverse_x():
+            self.m[:, 0] *= -1
+        if self.is_reverse_y():
+            self.m[0, 0] *= -1
+            self.m[1, 1] *= -1
+
+        reference_index = self.reference_index
+
+        if isinstance(reference_index, Coordinate2D1):
+            one = Coordinate2D1([1.0, 1.0, 1.0])  # FITS origin is at (1, 1)
+        else:
+            one = Coordinate2D([1.0, 1.0])
+
+        reference_index.parse_header(
+            header, key_stem=&#39;CRPIX&#39;, alt=&#39;&#39;, default=one)
+        reference_index.subtract(one)
+        self.reference_index = reference_index
+
+        reference = self.get_coordinate_instance_for(c_type)
+        if isinstance(reference, Coordinate2D1):
+            reference.xy_coordinates.parse_header(
+                header, key_stem=&#39;CRVAL&#39;, alt=alt,
+                default=Coordinate2D([0.0, 0.0]))
+
+        else:
+            reference.parse_header(header, key_stem=&#39;CRVAL&#39;, alt=alt,
+                                   default=Coordinate2D([0.0, 0.0]))
+        self.set_reference(reference)
+        self.calculate_inverse_transform()</div>
+
+
+<div class="viewcode-block" id="Grid2D.edit_header">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit a FITS header with the grid information.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        alt = self.get_fits_id()
+        self.projection.edit_header(header, alt=alt)
+        header[f&#39;CRPIX1{alt}&#39;] = (self.reference_index.x + 1,
+                                  &quot;Reference grid index&quot;)
+        header[f&#39;CRPIX2{alt}&#39;] = (self.reference_index.y + 1,
+                                  &quot;Reference grid index&quot;)
+        self.projection.reference.edit_header(header,
+                                              key_stem=&#39;CRVAL&#39;, alt=alt)
+
+        # Change from native to apparent for reversed axes.
+        a = self.m.copy()
+        if self.is_reverse_x():
+            a[0] *= -1
+        if self.is_reverse_y():
+            a[1] *= -1
+
+        nd = units.dimensionless_unscaled
+
+        fits_x_unit = self.fits_x_unit
+        fits_y_unit = self.fits_y_unit
+        unit = a.unit if isinstance(a, units.Quantity) else None
+        if unit == nd:
+            a = a.value
+            unit = None
+
+        if fits_x_unit == nd or fits_x_unit is None:
+            fits_x_unit = unit
+        if fits_y_unit == nd or fits_y_unit is None:
+            fits_y_unit = unit
+
+        if unit is None and fits_x_unit is not None:
+            a = a * fits_x_unit
+            unit = fits_x_unit
+
+        x_unit = f&#39; ({fits_x_unit})&#39; if fits_x_unit is not None else &#39;&#39;
+        y_unit = f&#39; ({fits_y_unit})&#39; if fits_y_unit is not None else &#39;&#39;
+
+        if unit is not None:
+            a00, a01 = a[0].to(fits_x_unit).value
+            a10, a11 = a[1].to(fits_y_unit).value
+        else:
+            a00, a01, a10, a11 = a.ravel()
+
+        if self.m[0, 1] == 0 and self.m[1, 0] == 0:
+            header[f&#39;CDELT1{alt}&#39;] = a00, f&#39;Grid spacing{x_unit}&#39;
+            header[f&#39;CDELT2{alt}&#39;] = a11, f&#39;Grid spacing{y_unit}&#39;
+        else:
+            header[f&#39;CD1_1{alt}&#39;] = a00, &#39;Transformation matrix element&#39;
+            header[f&#39;CD1_2{alt}&#39;] = a01, &#39;Transformation matrix element&#39;
+            header[f&#39;CD2_1{alt}&#39;] = a10, &#39;Transformation matrix element&#39;
+            header[f&#39;CD2_2{alt}&#39;] = a11, &#39;Transformation matrix element&#39;
+
+        if x_unit != &#39;&#39;:
+            header[f&#39;CUNIT1{alt}&#39;] = (fits_x_unit.name, &#39;Coordinate axis unit&#39;)
+            header[f&#39;CUNIT2{alt}&#39;] = (fits_y_unit.name, &#39;Coordinate axis unit&#39;)</div>
+
+
+<div class="viewcode-block" id="Grid2D.index_of">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.index_of">[docs]</a>
+    def index_of(self, coordinates, grid_indices=None):
+        &quot;&quot;&quot;
+        Return the index of a coordinate on the grid.
+
+        Parameters
+        ----------
+        coordinates : Coordinate2D
+            The &quot;true&quot; coordinates.
+        grid_indices : Coordinate2D, optional
+            The output coordinates that will hold the result.
+
+        Returns
+        -------
+        grid_indices : Coordinate2D
+        &quot;&quot;&quot;
+        if grid_indices is None:
+            grid_indices = Coordinate2D()
+        # Convert to offsets
+        grid_indices = self.projection.project(
+            coordinates, projected=grid_indices)
+        grid_indices = self.offset_to_index(grid_indices, in_place=True)
+        return grid_indices</div>
+
+
+<div class="viewcode-block" id="Grid2D.offset_to_index">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.offset_to_index">[docs]</a>
+    def offset_to_index(self, offset, in_place=False):
+        &quot;&quot;&quot;
+        Convert an offset to a grid location.
+
+        Parameters
+        ----------
+        offset : Coordinate2D
+        in_place : bool, optional
+            If `True`, updates `offset` in-place.  Otherwise, a new instance is
+            returned.
+
+        Returns
+        -------
+        index : Coordinate2D
+        &quot;&quot;&quot;
+        if isinstance(self.i, units.Quantity):
+            if offset.unit is None:
+                raise ValueError(&quot;Offsets should be quantities.&quot;)
+            im = self.i.to(1 / offset.unit).value
+        else:
+            im = self.i
+
+        if offset.singular:
+            coordinates = offset.coordinates[..., None]
+            singular = True
+        else:
+            coordinates = offset.coordinates
+            singular = False
+        singular &amp;= self.reference_index.singular
+        if isinstance(self.i, units.Quantity):
+            coordinates = coordinates.value
+
+        i00, i01, i10, i11 = im.ravel()
+        rx, ry = self.reference_index.x, self.reference_index.y
+        ix = (i00 * coordinates[0]) + (i01 * coordinates[1]) + rx
+        iy = (i10 * coordinates[0]) + (i11 * coordinates[1]) + ry
+
+        if singular:
+            ix, iy = ix[0], iy[0]
+
+        if not in_place:
+            indices = Coordinate2D()
+        else:
+            indices = offset
+            indices.unit = None
+            indices.coordinates = None
+
+        indices.set([ix, iy])
+        return indices</div>
+
+
+<div class="viewcode-block" id="Grid2D.index_to_offset">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.index_to_offset">[docs]</a>
+    def index_to_offset(self, grid_indices, in_place=False):
+        &quot;&quot;&quot;
+        Convert grid indices to offset positions.
+
+        Parameters
+        ----------
+        grid_indices : Coordinate2D
+        in_place : bool, optional
+            If `True`, updates `offset` in-place.  Otherwise, a new instance is
+            returned.
+
+        Returns
+        -------
+        offset : Coordinate2D
+        &quot;&quot;&quot;
+        m = self.m
+
+        if grid_indices.singular:
+            indices = grid_indices.coordinates[..., None]
+        else:
+            indices = grid_indices.coordinates
+
+        di = indices[0] - self.reference_index.x
+        dj = indices[1] - self.reference_index.y
+        x = (m[0, 0] * di) + (m[0, 1] * dj)
+        y = (m[1, 0] * di) + (m[1, 1] * dj)
+        if grid_indices.singular and self.reference_index.singular:
+            x, y = x[0], y[0]
+
+        if in_place:
+            offset = grid_indices
+            offset.coordinates = None
+            offset.unit = None
+        else:
+            offset = Coordinate2D()
+        offset.set([x, y])
+        return offset</div>
+
+
+<div class="viewcode-block" id="Grid2D.coordinates_at">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.coordinates_at">[docs]</a>
+    def coordinates_at(self, grid_indices, coordinates=None):
+        &quot;&quot;&quot;
+        Return the coordinates at given grid indices.
+
+        Parameters
+        ----------
+        grid_indices : Coordinate2D
+            The grid indices for which to find coordinates.
+        coordinates : Coordinate2D, optional
+            Optional output coordinates to hold the result.
+
+        Returns
+        -------
+        Coordinate2D
+        &quot;&quot;&quot;
+        if coordinates is None:
+            coordinates = self.projection.get_coordinate_instance()
+        offset = self.index_to_offset(grid_indices, in_place=False)
+        return self.projection.deproject(offset, coordinates=coordinates)</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_reference">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_reference">[docs]</a>
+    def get_reference(self):
+        &quot;&quot;&quot;
+        Return the reference position of the grid.
+
+        Returns
+        -------
+        reference : Coordinate2D
+        &quot;&quot;&quot;
+        if self.projection is None:
+            return None
+        return self.projection.get_reference()</div>
+
+
+<div class="viewcode-block" id="Grid2D.set_reference">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.set_reference">[docs]</a>
+    def set_reference(self, value):
+        &quot;&quot;&quot;
+        Set the reference position of the grid.
+
+        Parameters
+        ----------
+        value : Coordinate2D
+            The reference coordinate to set.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.projection.set_reference(value)</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_reference_index">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_reference_index">[docs]</a>
+    def get_reference_index(self):
+        &quot;&quot;&quot;
+        Return the reference index of the reference position on the grid.
+
+        Returns
+        -------
+        index : Coordinate2D
+        &quot;&quot;&quot;
+        return self._reference_index</div>
+
+
+<div class="viewcode-block" id="Grid2D.set_reference_index">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.set_reference_index">[docs]</a>
+    def set_reference_index(self, value):
+        &quot;&quot;&quot;
+        Set the reference index of the reference position on the grid.
+
+        Parameters
+        ----------
+        value : Coordinate2D
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self._reference_index = value</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_projection">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_projection">[docs]</a>
+    def get_projection(self):
+        &quot;&quot;&quot;
+        Return the grid projection.
+
+        Returns
+        -------
+        projection : Projection2D
+        &quot;&quot;&quot;
+        return self._projection</div>
+
+
+<div class="viewcode-block" id="Grid2D.set_projection">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.set_projection">[docs]</a>
+    def set_projection(self, value):
+        &quot;&quot;&quot;
+        Set the grid projection.
+
+        Parameters
+        ----------
+        value : Projection2D
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self._projection = value</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_coordinate_index">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_coordinate_index">[docs]</a>
+    def get_coordinate_index(self, coordinates, indices=None):
+        &quot;&quot;&quot;
+        Get the indices of the given coordinates.
+
+        Parameters
+        ----------
+        coordinates : Coordinate2D
+            The coordinates for which to find grid indices.
+        indices : Coordinate2D, optional
+            Optional output coordinates to return.  If not created, a fresh
+            Coordinate2D instance will be used.
+
+        Returns
+        -------
+        indices : Coordinate2D
+            The grid indices.
+        &quot;&quot;&quot;
+        indices = self.projection.project(coordinates, projected=indices)
+        return self.offset_to_index(indices, in_place=True)</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_offset_index">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_offset_index">[docs]</a>
+    def get_offset_index(self, offsets, indices=None):
+        &quot;&quot;&quot;
+        Get the grid indices of the given offsets.
+
+        Parameters
+        ----------
+        offsets : Coordinate2D
+            The offsets for which to find indices.
+        indices : Coordinate2D
+            Optional coordinates in which to place the results.
+
+        Returns
+        -------
+        indices : Coordinate2D
+            The grid indices.
+        &quot;&quot;&quot;
+        offset_indices = self.offset_to_index(offsets, in_place=False)
+        i_xy = round_values(np.stack([offset_indices.x, offset_indices.y]))
+        if indices is None:
+            indices = Coordinate2D()
+        indices.set(i_xy)
+        return indices</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_coordinates">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_coordinates">[docs]</a>
+    def get_coordinates(self, indices, coordinates=None):
+        &quot;&quot;&quot;
+        Get the coordinates at the given grid indices.
+
+        Parameters
+        ----------
+        indices : Coordinate2D
+        coordinates : Coordinate2D, optional
+            Optional coordinates in which to store the output coordinates.
+
+        Returns
+        -------
+        coordinates : Coordinates2D
+        &quot;&quot;&quot;
+        if coordinates is None:
+            coordinates = self.projection.get_coordinate_instance()
+        index_offsets = self.index_to_offset(indices, in_place=False)
+        return self.projection.deproject(index_offsets,
+                                         coordinates=coordinates)</div>
+
+
+<div class="viewcode-block" id="Grid2D.get_offset">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.get_offset">[docs]</a>
+    def get_offset(self, indices, offset=None):
+        &quot;&quot;&quot;
+        Get coordinate offsets from the given grid indices.
+
+        Parameters
+        ----------
+        indices : Coordinate2D
+            The grid indices.
+        offset : Coordinate2D, optional
+            Optional coordinates in which to store the results.
+
+        Returns
+        -------
+        offset : Coordinate2D
+        &quot;&quot;&quot;
+        if offset is None:
+            offset = Coordinate2D()
+        offset.copy_coordinates(indices)
+        return self.index_to_offset(offset, in_place=True)</div>
+
+
+<div class="viewcode-block" id="Grid2D.toggle_native">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.toggle_native">[docs]</a>
+    def toggle_native(self, offset, in_place=True):
+        &quot;&quot;&quot;
+        Reverse the x and y axis of native offsets if axes are reversed.
+
+        Scales reversed axis by -1.
+
+        Parameters
+        ----------
+        offset : Coordinate2D
+        in_place : bool, optional
+            If `True`, toggle in-place, otherwise return a copy.
+
+        Returns
+        -------
+        Coordinate2D
+        &quot;&quot;&quot;
+        if not in_place:
+            offset = offset.copy()
+        if self.is_reverse_x():
+            offset.scale_x(-1)
+        if self.is_reverse_y():
+            offset.scale_y(-1)
+        return offset</div>
+
+
+<div class="viewcode-block" id="Grid2D.parse_projection">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.html#sofia_redux.scan.coordinate_systems.grid.grid_2d.Grid2D.parse_projection">[docs]</a>
+    @abstractmethod
+    def parse_projection(self, header):  # pragma: no cover
+        &quot;&quot;&quot;
+        Parse the projection from the header.
+
+        Parameters
+        ----------
+        header : fits.Header
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pass</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

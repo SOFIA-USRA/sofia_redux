@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.coordinate_systems.projection.parabolic_projection &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.coordinate_systems.projection.parabolic_projection</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.spherical_coordinates import \
+    SphericalCoordinates
+from sofia_redux.scan.coordinate_systems.projection.cylindrical_projection \
+    import CylindricalProjection
+
+__all__ = [&#39;ParabolicProjection&#39;]
+
+
+<div class="viewcode-block" id="ParabolicProjection">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.parabolic_projection.ParabolicProjection.html#sofia_redux.scan.coordinate_systems.projection.parabolic_projection.ParabolicProjection">[docs]</a>
+class ParabolicProjection(CylindricalProjection):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize a parabolic projection.
+
+        The parabolic projection is an equal-area pseudo-cylindrical projection
+        where a meridian follows a section of a parabolic curve, and the
+        projected equator and central meridian are straight lines.  Parallels
+        are unequally spaced straight lines, with spacing decreasing away from
+        the equator.
+        &quot;&quot;&quot;
+        super().__init__()
+
+<div class="viewcode-block" id="ParabolicProjection.get_fits_id">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.parabolic_projection.ParabolicProjection.html#sofia_redux.scan.coordinate_systems.projection.parabolic_projection.ParabolicProjection.get_fits_id">[docs]</a>
+    @classmethod
+    def get_fits_id(cls):
+        &quot;&quot;&quot;
+        Return the FITS ID for the projection.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &quot;PAR&quot;</div>
+
+
+<div class="viewcode-block" id="ParabolicProjection.get_full_name">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.parabolic_projection.ParabolicProjection.html#sofia_redux.scan.coordinate_systems.projection.parabolic_projection.ParabolicProjection.get_full_name">[docs]</a>
+    @classmethod
+    def get_full_name(cls):
+        &quot;&quot;&quot;
+        Return the full name of the projection.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;Parabolic Projection&#39;</div>
+
+
+<div class="viewcode-block" id="ParabolicProjection.get_phi_theta">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.parabolic_projection.ParabolicProjection.html#sofia_redux.scan.coordinate_systems.projection.parabolic_projection.ParabolicProjection.get_phi_theta">[docs]</a>
+    @classmethod
+    def get_phi_theta(cls, offset, phi_theta=None):
+        &quot;&quot;&quot;
+        Return the phi (longitude) and theta (latitude) coordinates.
+
+        The phi and theta coordinates refer to the inverse projection
+        (deprojection) of projected offsets about the native pole.  phi is
+        the deprojected longitude, and theta is the deprojected latitude of
+        the offsets.  For the parabolic projection these are given as:
+
+            y0 = y / pi
+            phi = x / (1 - 4(y0^2))
+            theta = 3 * arcsin(y0)
+
+        Parameters
+        ----------
+        offset : Coordinate2D
+        phi_theta : SphericalCoordinates, optional
+            An optional output coordinate system in which to place the results.
+
+        Returns
+        -------
+        coordinates : SphericalCoordinates
+        &quot;&quot;&quot;
+        if phi_theta is None:
+            phi_theta = SphericalCoordinates(unit=&#39;degree&#39;)
+
+        x, y = cls.offset_to_xy_radians(offset)
+
+        y0 = (y / cls.pi).decompose().value
+        theta = 3 * cls.asin(y0)
+        phi = x / (1 - (4 * y0 * y0))
+        phi_theta.set_native([phi, theta])
+        return phi_theta</div>
+
+
+<div class="viewcode-block" id="ParabolicProjection.get_offsets">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.coordinate_systems.projection.parabolic_projection.ParabolicProjection.html#sofia_redux.scan.coordinate_systems.projection.parabolic_projection.ParabolicProjection.get_offsets">[docs]</a>
+    @classmethod
+    def get_offsets(cls, theta, phi, offsets=None):
+        &quot;&quot;&quot;
+        Get the offsets given theta and phi.
+
+        Takes the theta (latitude) and phi (longitude) coordinates about the
+        celestial pole and converts them to offsets from a reference position.
+        For the parabolic projection, this is given by:
+
+            x = phi * 2 * cos(cos(2 * theta) / 3) - 1
+            y = pi * sin(theta / 3)
+
+        Parameters
+        ----------
+        theta : units.Quantity
+            The theta (latitude) angle.
+        phi : units.Quantity
+            The phi (longitude) angle.
+        offsets : Coordinate2D, optional
+            An optional coordinate system in which to place the results.
+
+        Returns
+        -------
+        offsets : Coordinate2D
+        &quot;&quot;&quot;
+        if offsets is None:
+            offsets = Coordinate2D(unit=&#39;degree&#39;)
+
+        phi, theta = cls.phi_theta_to_radians(phi, theta)
+        x0 = (2 * np.cos(2 * theta / 3)).decompose().value - 1
+        x = phi * x0
+        y = cls.pi * np.sin(theta / 3)
+        offsets.set([x, y])
+        return offsets</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

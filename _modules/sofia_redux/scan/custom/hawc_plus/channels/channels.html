@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.hawc_plus.channels.channels &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.hawc_plus.channels.channels</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.scan.custom.hawc_plus.channels.gain_provider.pol_imbalance \
+    import HawcPlusPolImbalance
+from sofia_redux.scan.custom.hawc_plus.channels.mode.los_response import (
+    LosResponse)
+from sofia_redux.scan.custom.hawc_plus.channels.mode.roll_response import (
+    RollResponse)
+from sofia_redux.scan.custom.sofia.channels.camera import SofiaCamera
+from sofia_redux.scan.channels.modality.coupled_modality import (
+    CoupledModality)
+from sofia_redux.scan.channels.modality.correlated_modality import (
+    CorrelatedModality)
+from sofia_redux.scan.channels.modality.modality import Modality
+
+__all__ = [&#39;HawcPlusChannels&#39;]
+
+
+<div class="viewcode-block" id="HawcPlusChannels">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels">[docs]</a>
+class HawcPlusChannels(SofiaCamera):
+
+    def __init__(self, parent=None, info=None, size=0, name=&#39;hawc_plus&#39;):
+        &quot;&quot;&quot;
+        Initialize HAWC+ channels.
+
+        Parameters
+        ----------
+        parent : object, optional
+            The owner of the channels such as a Reduction, Scan or Integration.
+        info : HawcPlusInfo, optional
+            The info object relating to these channels.
+        size : int, optional
+            The intended size of the channels (number of total data channels).
+        name : str, optional
+            The name for the channels.
+        &quot;&quot;&quot;
+        super().__init__(name=name, parent=parent, info=info, size=size)
+        self.subarray_groups = None
+        self.subarray_gain_renorm = None
+
+<div class="viewcode-block" id="HawcPlusChannels.copy">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the HAWC+ channels.
+
+        Returns
+        -------
+        HawcPlusChannels
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+    @property
+    def detector(self):
+        &quot;&quot;&quot;
+        Return the detector info.
+
+        Returns
+        -------
+        HawcPlusDetectorArrayInfo
+        &quot;&quot;&quot;
+        return self.info.detector_array
+
+    @property
+    def band_id(self):
+        &quot;&quot;&quot;
+        Return the HAWC_PLUS Band
+
+        Returns
+        -------
+        band : str
+        &quot;&quot;&quot;
+        return self.info.instrument.band_id
+
+    @property
+    def pixel_sizes(self):
+        &quot;&quot;&quot;
+        Return the (x,y) pixel size.
+
+        Returns
+        -------
+        numpy.ndarray (astropy.units.Quantity)
+            An array of size 2 containing the x, y pixel size in arc seconds.
+        &quot;&quot;&quot;
+        return self.info.detector_array.pixel_sizes
+
+    @property
+    def dark_squid_lookup(self):
+        &quot;&quot;&quot;
+        Return the dark squid lookup array.
+
+        The lookup array is of the form lookup[sub, col] = fixed_index.
+        Invalid values are marked with values of -1 (good pixels).
+
+        Returns
+        -------
+        lookup : numpy.ndarray (int)
+        &quot;&quot;&quot;
+        return self.info.detector_array.dark_squid_lookup
+
+<div class="viewcode-block" id="HawcPlusChannels.init_groups">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.init_groups">[docs]</a>
+    def init_groups(self):
+        &quot;&quot;&quot;
+        Initializes channel groups for HAWC+.
+
+        Each group contains a subset of the channel data, referenced by index.
+
+        The HAWC_PLUS groups contain additional groups based on sub-array.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().init_groups()
+        self.subarray_groups = [None] * self.info.detector_array.subarrays
+        sub_index = 0
+        for pol_array in range(self.info.detector_array.pol_arrays):
+            for pol_sub_array in range(self.info.detector_array.pol_subarrays):
+                indices = np.nonzero(self.data.sub == sub_index)[0]
+                pol_id = self.info.detector_array.POL_ID[pol_array]
+                group = self.create_channel_group(
+                    indices=indices,
+                    name=f&#39;{pol_id}{pol_sub_array}&#39;)
+                self.add_group(group)
+                self.subarray_groups[sub_index] = group
+                sub_index += 1</div>
+
+
+<div class="viewcode-block" id="HawcPlusChannels.init_divisions">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.init_divisions">[docs]</a>
+    def init_divisions(self):
+        &quot;&quot;&quot;
+        Initializes channel divisions.
+
+        Divisions contain sets of channel groups.
+
+        The HAWC_PLUS channel adds divisions consisting of groups where
+        each contains a unique value of a certain data field.  For example,
+        the &quot;rows&quot; division contains a group for row 1, a group for row 2, etc.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().init_divisions()
+        dead_blind = self.flagspace.flags.DEAD | self.flagspace.flags.BLIND
+
+        for division_name, field in [
+            (&#39;polarrays&#39;, &#39;pol&#39;),
+            (&#39;subarrays&#39;, &#39;sub&#39;),
+            (&#39;bias&#39;, &#39;bias_line&#39;),
+            (&#39;series&#39;, &#39;series_array&#39;)
+        ]:
+            self.add_division(self.get_division(
+                name=division_name, field=field, discard_flag=dead_blind))
+
+        if self.configuration.get_bool(&#39;darkcorrect&#39;):
+            bad_mux_flag = self.flagspace.flags.DEAD
+        else:
+            bad_mux_flag = dead_blind
+
+        mux_division = self.get_division(name=&#39;mux&#39;, field=&#39;mux&#39;,
+                                         discard_flag=bad_mux_flag)
+
+        # I don&#39;t know why, but order channels in pin (row) order.
+        for group in mux_division.groups:
+            group.indices = group.indices[np.argsort(group.row)]
+
+        self.add_division(mux_division)
+        self.add_division(self.get_division(
+            name=&#39;rows&#39;, field=&#39;row&#39;, discard_flag=bad_mux_flag))</div>
+
+
+<div class="viewcode-block" id="HawcPlusChannels.init_modalities">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.init_modalities">[docs]</a>
+    def init_modalities(self):
+        &quot;&quot;&quot;
+        Initializes channel modalities.
+
+        A modality is based of a channel division and contains a mode for each
+        channel group in the channel division.
+
+        The HAWC_PLUS modalities simply contain additional correlated modes
+        based on the additional channel fields.  A new coupled modality
+        is also created according to polarization arrays.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().init_modalities()
+
+        obs_modality = self.modalities.get(&#39;obs-channels&#39;)
+        if obs_modality is not None:
+            self.add_modality(
+                CoupledModality(modality=obs_modality,
+                                name=&#39;polarrays&#39;,
+                                identity=&#39;p&#39;,
+                                gain_provider=HawcPlusPolImbalance()))
+
+        flags = self.flagspace.flags
+        builds = [(&#39;subarrays&#39;, &#39;S&#39;, &#39;subarrays&#39;, &#39;sub_gain&#39;, flags.SUB),
+                  (&#39;bias&#39;, &#39;b&#39;, &#39;bias&#39;, &#39;bias_gain&#39;, flags.BIAS),
+                  (&#39;series&#39;, &#39;s&#39;, &#39;series&#39;, &#39;series_gain&#39;, flags.SERIES_ARRAY),
+                  (&#39;mux&#39;, &#39;m&#39;, &#39;mux&#39;, &#39;mux_gain&#39;, flags.MUX),
+                  (&#39;rows&#39;, &#39;r&#39;, &#39;rows&#39;, &#39;pin_gain&#39;, flags.ROW)]
+
+        for name, identity, division_name, gain_field, gain_flag in builds:
+            division = self.divisions.get(division_name)
+            if division is None:  # pragma: no cover
+                log.warning(f&quot;Channel division {division_name} not found.&quot;)
+                continue
+            modality = CorrelatedModality(name=name,
+                                          identity=identity,
+                                          channel_division=division,
+                                          gain_provider=gain_field)
+            modality.set_gain_flag(gain_flag)
+            self.add_modality(modality)
+
+        detector_division = self.divisions.get(&#39;detectors&#39;)
+
+        los_response = Modality(name=&#39;los&#39;, identity=&#39;L&#39;,
+                                channel_division=detector_division,
+                                gain_provider=&#39;los_gain&#39;,
+                                mode_class=LosResponse)
+        los_response.set_gain_flag(flags.LOS_RESPONSE)
+        self.add_modality(los_response)
+
+        roll_response = Modality(name=&#39;roll&#39;, identity=&#39;R&#39;,
+                                 channel_division=detector_division,
+                                 gain_provider=&#39;roll_gain&#39;,
+                                 mode_class=RollResponse)
+        roll_response.set_gain_flag(flags.ROLL_RESPONSE)
+        self.add_modality(roll_response)</div>
+
+
+<div class="viewcode-block" id="HawcPlusChannels.load_channel_data">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.load_channel_data">[docs]</a>
+    def load_channel_data(self):
+        &quot;&quot;&quot;
+        Load the channel data.
+
+        The pixel data and wiring data files should be defined in the
+        configuration.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.detector.load_detector_configuration()
+        self.detector.initialize_channel_data(self.data)
+
+        self.set_nominal_pixel_positions(self.info.detector_array.pixel_sizes)
+        super().load_channel_data()
+        if self.configuration.has_option(&#39;jumpdata&#39;):
+            self.read_jump_levels(self.configuration.get_filepath(&#39;jumpdata&#39;))</div>
+
+
+<div class="viewcode-block" id="HawcPlusChannels.read_jump_levels">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.read_jump_levels">[docs]</a>
+    def read_jump_levels(self, filename):
+        &quot;&quot;&quot;
+        Read the jump levels from a data file.
+
+        Parameters
+        ----------
+        filename : str
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if filename is None:
+            return
+        log.info(f&quot;Loading jump levels from {filename}&quot;)
+        hdul = fits.open(filename)
+        self.data.read_jump_hdu(hdul[0])
+        self.info.register_config_file(filename)
+        hdul.close()</div>
+
+
+<div class="viewcode-block" id="HawcPlusChannels.normalize_array_gains">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.normalize_array_gains">[docs]</a>
+    def normalize_array_gains(self):
+        &quot;&quot;&quot;
+        Normalize the relative channel gains in observing channels.
+
+        Returns
+        -------
+        average_gain : float
+            The average gain prior to normalization.
+        &quot;&quot;&quot;
+        log.debug(&quot;Normalizing subarray gains.&quot;)
+        sub_arrays = CorrelatedModality(
+            name=&#39;subs&#39;, identity=&#39;S&#39;,
+            channel_division=self.divisions.get(&#39;subarrays&#39;),
+            gain_provider=&#39;gain&#39;)
+        self.subarray_gain_renorm = np.full(
+            self.info.detector_array.subarrays, np.nan)
+        for mode in sub_arrays.modes:
+            sub_value = mode.channel_group.sub[0]
+            self.subarray_gain_renorm[sub_value] = mode.normalize_gains()
+            sub_id = self.info.detector_array.get_subarray_id(sub_value)
+            sub_gain = self.subarray_gain_renorm[sub_value]
+            log.debug(f&quot;--&gt; {sub_id} gain = {sub_gain:.3f}&quot;)
+        return 1.0</div>
+
+
+<div class="viewcode-block" id="HawcPlusChannels.set_nominal_pixel_positions">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.set_nominal_pixel_positions">[docs]</a>
+    def set_nominal_pixel_positions(self, pixel_sizes):
+        &quot;&quot;&quot;
+        Set the nominal pixel positions for the given pixel sizes.
+
+        Parameters
+        ----------
+        pixel_sizes : Coordinate2D
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.detector.pixel_sizes = pixel_sizes
+        self.detector.set_boresight()
+        self.data.calculate_sibs_position()
+
+        center = self.detector.get_sibs_position(
+            sub=0,
+            row=39 - self.detector.boresight_index.y,
+            col=self.detector.boresight_index.x)
+        self.set_reference_position(center)  # subtracts the center position.</div>
+
+
+<div class="viewcode-block" id="HawcPlusChannels.max_pixels">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.max_pixels">[docs]</a>
+    def max_pixels(self):
+        &quot;&quot;&quot;
+        Return the maximum pixels in the detector array.
+
+        Returns
+        -------
+        count : int
+        &quot;&quot;&quot;
+        return self.n_store_channels</div>
+
+
+<div class="viewcode-block" id="HawcPlusChannels.read_data">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.read_data">[docs]</a>
+    def read_data(self, hdul):
+        &quot;&quot;&quot;
+        Read a FITS HDU list to populate channel data.
+
+        Parameters
+        ----------
+        hdul : fits.HDUList
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        for hdu in hdul:
+            if (hdu.header.get(&#39;EXTNAME&#39;, &#39;&#39;).strip().upper()
+                    == &#39;CONFIGURATION&#39;):
+                self.info.detector_array.parse_configuration_hdu(hdu)</div>
+
+
+<div class="viewcode-block" id="HawcPlusChannels.validate_scan">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.validate_scan">[docs]</a>
+    def validate_scan(self, scan):
+        &quot;&quot;&quot;
+        Validate the channels with a scan.
+
+        Parameters
+        ----------
+        scan : Scan
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        pol_mask = 0
+        for i in range(self.detector.subarrays):
+            pol_mask |= (i &amp; 2) + 1
+
+        self.detector.dark_squid_correction = self.configuration.get_bool(
+            &#39;darkcorrect&#39;)
+
+        if pol_mask != 3:  # pragma: no cover
+            # Hard to test since it depends on the detector class
+            self.configuration.blacklist(&#39;correlated.polarrays&#39;)
+
+        self.detector.initialize_channel_data(self.data)
+
+        if not self.configuration.has_option(&#39;filter&#39;):
+            wavelength = self.info.instrument.wavelength.to(&#39;um&#39;).value
+            if (wavelength % 1) == 0:
+                wavelength = int(wavelength)
+            self.configuration.set_option(&#39;filter&#39;, f&#39;{wavelength}um&#39;)
+        log.info(f&quot;HAWC+ Filter set to &quot;
+                 f&quot;{self.configuration.get_string(&#39;filter&#39;)}&quot;)
+
+        super().validate_scan(scan)
+        self.create_dark_squid_lookup()</div>
+
+
+<div class="viewcode-block" id="HawcPlusChannels.slim">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.slim">[docs]</a>
+    def slim(self, reindex=True):
+        &quot;&quot;&quot;
+        Remove all DEAD or DISCARD flagged channels.
+
+        Will also update channel groups, divisions, and modalities.
+
+        Parameters
+        ----------
+        reindex : bool, optional
+            If `True`, reindex channels if slimmed.
+
+        Returns
+        -------
+        slimmed : bool
+            `True` if channels were discarded, `False` otherwise.
+        &quot;&quot;&quot;
+        slimmed = super().slim(reindex=reindex)
+        if slimmed:
+            self.create_dark_squid_lookup()
+        return slimmed</div>
+
+
+<div class="viewcode-block" id="HawcPlusChannels.create_dark_squid_lookup">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.create_dark_squid_lookup">[docs]</a>
+    def create_dark_squid_lookup(self):
+        &quot;&quot;&quot;
+        Create the dark squid lookup array.
+
+        The dark squid lookup array is stored in the info.detector_array
+        object.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.info.detector_array.create_dark_squid_lookup(self)</div>
+
+
+<div class="viewcode-block" id="HawcPlusChannels.get_si_pixel_size">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.get_si_pixel_size">[docs]</a>
+    def get_si_pixel_size(self):
+        &quot;&quot;&quot;
+        Return the science instrument pixel size
+
+        Returns
+        -------
+        x, y : Coordinate2D
+            The (x, y) pixel sizes
+        &quot;&quot;&quot;
+        return self.detector.pixel_sizes</div>
+
+
+<div class="viewcode-block" id="HawcPlusChannels.write_flat_field">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.write_flat_field">[docs]</a>
+    def write_flat_field(self, filename, include_nonlinear=False):
+        &quot;&quot;&quot;
+        Write a flat field file used for chop-nod pipelines.
+
+        Parameters
+        ----------
+        filename : str
+            The filename to write to.
+        include_nonlinear : bool, optional
+            If `True`, include the nonlinear responses.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        shape = self.detector.rows, self.detector.pol_cols
+
+        # Set defaults
+        gain_r = np.ones(shape, dtype=float)
+        gain_t = np.ones(shape, dtype=float)
+        flag_r = np.full(shape, 1, dtype=int)
+        flag_t = np.full(shape, 2, dtype=int)
+        if include_nonlinear:
+            nonlinear_r = np.zeros(shape, dtype=float)
+            nonlinear_t = np.zeros(shape, dtype=float)
+        else:
+            nonlinear_r = nonlinear_t = None
+
+        data = self.data
+        detector = self.detector
+        flagged = self.data.is_flagged()
+
+        gains = self.subarray_gain_renorm[data.sub] * data.gain * data.coupling
+        inverse_gains = np.zeros_like(gains)
+        nzi = gains != 0
+        inverse_gains[nzi] = 1 / gains[nzi]
+        all_cols = ((data.sub &amp; 1) * detector.subarray_cols) + data.col
+
+        for array in [detector.R_ARRAY, detector.T_ARRAY]:
+            select = np.nonzero(data.pol == array)[0]
+            if select.size == 0:
+                continue
+
+            if array == detector.R_ARRAY:
+                gains, flags, nonlinear = gain_r, flag_r, nonlinear_r
+            else:
+                gains, flags, nonlinear = gain_t, flag_t, nonlinear_t
+
+            rows = data.subrow[select]
+            cols = all_cols[select]
+            gains[rows, cols] = inverse_gains[select]
+            if include_nonlinear:
+                nonlinear[rows, cols] = data.nonlinearity[select]
+
+            flags[rows, cols] *= flagged[select]
+
+        hdul = fits.HDUList()
+        hdul.append(fits.ImageHDU(gain_r, name=&#39;R array gain&#39;))
+        hdul.append(fits.ImageHDU(gain_t, name=&#39;T array gain&#39;))
+        hdul.append(fits.ImageHDU(flag_r, name=&#39;R bad pixel mask&#39;))
+        hdul.append(fits.ImageHDU(flag_t, name=&#39;T bad pixel mask&#39;))
+        if include_nonlinear:
+            hdul.append(fits.ImageHDU(nonlinear_r,
+                                      name=&#39;R array nonlinearity&#39;))
+            hdul.append(fits.ImageHDU(nonlinear_t,
+                                      name=&#39;T array nonlinearity&#39;))
+        hdul.writeto(filename, overwrite=True)
+        hdul.close()
+
+        log.info(f&quot;Written flat field to {filename}.&quot;)</div>
+
+
+<div class="viewcode-block" id="HawcPlusChannels.add_hdu">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.add_hdu">[docs]</a>
+    def add_hdu(self, hdul, hdu, extname):
+        &quot;&quot;&quot;
+        Add a FITS HDU to the HDUList.
+
+        Parameters
+        ----------
+        hdul : fits.HDUList
+            The HDUList to append to.
+        hdu : fits.ImageHDU or fits.PrimaryHDU or fits.BinTableHDU
+            The fits HDU to append.
+        extname : str
+            The name of the HDU extension.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        hdu.header[&#39;EXTNAME&#39;] = extname, &#39;image content ID&#39;
+        self.info.edit_header(hdu.header)
+        hdul.append(hdu)</div>
+
+
+<div class="viewcode-block" id="HawcPlusChannels.get_table_entry">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.html#sofia_redux.scan.custom.hawc_plus.channels.channels.HawcPlusChannels.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Return a channel parameter for the given name.
+
+        Parameters
+        ----------
+        name : str
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        if name == &#39;band&#39;:
+            return self.band_id
+        else:
+            return super().get_table_entry(name)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

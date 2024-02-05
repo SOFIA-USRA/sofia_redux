@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.source_models.maps.overlay &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.source_models.maps.overlay</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from sofia_redux.scan.source_models.maps.image import Image
+
+__all__ = [&#39;Overlay&#39;]
+
+
+<div class="viewcode-block" id="Overlay">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.overlay.Overlay.html#sofia_redux.scan.source_models.maps.overlay.Overlay">[docs]</a>
+class Overlay(Image):
+
+    def __init__(self, data=None, blanking_value=None, dtype=None,
+                 shape=None, unit=None):
+        &quot;&quot;&quot;
+        Create an overlay of an underlying image.
+
+        The overlay object is an interface to a basis image.  Multiple overlays
+        can be applied to a single image allowing the data to be accessed and
+        set as desired.
+
+        Parameters
+        ----------
+        data : numpy.ndarray or FlaggedArray or Image or Overlay, optional
+            The image to overlay.
+        blanking_value : int or float, optional
+            The value indicating that a data value is invalid.
+        dtype : type, optional
+            The data type.
+        shape : tuple of int, optional
+            The shape of the data.
+        unit : astropy.units.Quantity, optional
+            The data unit.
+        &quot;&quot;&quot;
+        if not isinstance(data, Image):
+            basis = Image(data=data, blanking_value=blanking_value,
+                          dtype=dtype, shape=shape, unit=unit)
+        else:
+            basis = data
+
+        self.basis = None
+        self.set_basis(basis)
+        if isinstance(self.basis, Image):
+            if unit is None:
+                unit = self.basis.unit
+            if dtype is None:
+                dtype = self.basis.dtype
+            if blanking_value is None:
+                blanking_value = self.basis.blanking_value
+
+        super().__init__(blanking_value=blanking_value, dtype=dtype,
+                         shape=shape, unit=unit)
+
+<div class="viewcode-block" id="Overlay.copy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.overlay.Overlay.html#sofia_redux.scan.source_models.maps.overlay.Overlay.copy">[docs]</a>
+    def copy(self, with_contents=True):
+        &quot;&quot;&quot;
+        Return a copy of the overlay.
+
+        Parameters
+        ----------
+        with_contents : bool, optional
+            If `True`, paste the contents of this image onto the new one.
+
+        Returns
+        -------
+        Overlay
+        &quot;&quot;&quot;
+        return super().copy(with_contents=with_contents)</div>
+
+
+    @property
+    def data(self):
+        &quot;&quot;&quot;
+        Return the basis image data array.
+
+        Returns
+        -------
+        data : np.ndarray or None
+        &quot;&quot;&quot;
+        return self.basis.data
+
+    @data.setter
+    def data(self, values):
+        &quot;&quot;&quot;
+        Set the basis image data array.
+
+        Parameters
+        ----------
+        values : np.ndarray
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.basis.data = values
+
+    @property
+    def flag(self):
+        &quot;&quot;&quot;
+        Return the associated data flags of the basis image.
+
+        Returns
+        -------
+        flags : numpy.ndarray (int)
+        &quot;&quot;&quot;
+        return self.basis.flag
+
+    @flag.setter
+    def flag(self, values):
+        &quot;&quot;&quot;
+        Set the data flags for the basis image.
+
+        Parameters
+        ----------
+        values : numpy.ndarray (int)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.basis.flag = values
+
+    @property
+    def valid(self):
+        &quot;&quot;&quot;
+        Return a boolean mask array of valid data elements in the basis image.
+
+        Valid elements are neither NaN, set to the blanking value, or
+        flagged as the validating_flags.
+
+        Returns
+        -------
+        numpy.ndarray (bool)
+           A boolean mask where `True` indicates a valid element.
+        &quot;&quot;&quot;
+        return self.basis.valid
+
+    @property
+    def blanking_value(self):
+        &quot;&quot;&quot;
+        Return the blanking value for the basis image.
+
+        The blanking value is that which defines an invalid value.
+
+        Returns
+        -------
+        blanking_value : int or float or None
+        &quot;&quot;&quot;
+        return self.basis.blanking_value
+
+    @blanking_value.setter
+    def blanking_value(self, value):
+        &quot;&quot;&quot;
+        Set the blanking value for the basis image.
+
+        Parameters
+        ----------
+        value : int or float or None
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.basis.blanking_value = value
+
+    @property
+    def fixed_index(self):
+        &quot;&quot;&quot;
+        Return the fixed indices of the basis image elements.
+
+        The fixed indices are designed to be constant irrespective of any
+        operations, deletions, etc and provide a reverse lookup onto the
+        original data set.
+
+        Returns
+        -------
+        fixed_index : numpy.ndarray (int)
+        &quot;&quot;&quot;
+        return self.basis.fixed_index
+
+    @fixed_index.setter
+    def fixed_index(self, values):
+        &quot;&quot;&quot;
+        Set the fixed index values of the basis image elements.
+
+        Parameters
+        ----------
+        values : numpy.ndarray (int)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.basis.fixed_index = values
+
+    @property
+    def dtype(self):
+        &quot;&quot;&quot;
+        Return the data type for the basis image data array.
+
+        Returns
+        -------
+        dtype : type
+        &quot;&quot;&quot;
+        return self.basis.dtype
+
+    @dtype.setter
+    def dtype(self, value):
+        &quot;&quot;&quot;
+        Set the data type for the basis image data array.
+
+        Parameters
+        ----------
+        value : type
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.basis.dtype = value
+
+    @property
+    def shape(self):
+        &quot;&quot;&quot;
+        Return the shape of the basis image data array.
+
+        Returns
+        -------
+        tuple (int)
+        &quot;&quot;&quot;
+        return self.basis.shape
+
+    @shape.setter
+    def shape(self, new_shape):
+        &quot;&quot;&quot;
+        Set the data shape for the basis image data array.
+
+        Parameters
+        ----------
+        new_shape : tuple (int)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_data_shape(new_shape)
+
+    @property
+    def size(self):
+        &quot;&quot;&quot;
+        Return the size of the basis image data array.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        return self.basis.size
+
+    @property
+    def ndim(self):
+        &quot;&quot;&quot;
+        Return the number of dimensions in the basis image.
+
+        Returns
+        -------
+        int
+        &quot;&quot;&quot;
+        return self.basis.ndim
+
+<div class="viewcode-block" id="Overlay.set_basis">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.overlay.Overlay.html#sofia_redux.scan.source_models.maps.overlay.Overlay.set_basis">[docs]</a>
+    def set_basis(self, basis):
+        &quot;&quot;&quot;
+        Set the basis image.
+
+        Parameters
+        ----------
+        basis : Image or FitsData or FlaggedArray
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.basis = basis</div>
+
+
+<div class="viewcode-block" id="Overlay.set_data">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.overlay.Overlay.html#sofia_redux.scan.source_models.maps.overlay.Overlay.set_data">[docs]</a>
+    def set_data(self, data, change_type=False):
+        &quot;&quot;&quot;
+        Set the data of the flagged array.
+
+        All flags are set to zero.
+
+        Parameters
+        ----------
+        data : numpy.ndarray or FlaggedArray
+        change_type : bool, optional
+            If `True`, change the data type to that of the data.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.basis.set_data(data, change_type=change_type)</div>
+
+
+<div class="viewcode-block" id="Overlay.set_data_shape">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.overlay.Overlay.html#sofia_redux.scan.source_models.maps.overlay.Overlay.set_data_shape">[docs]</a>
+    def set_data_shape(self, shape):
+        &quot;&quot;&quot;
+        Set the shape of the data array.
+
+        Parameters
+        ----------
+        shape : tuple (int)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.basis.set_data_shape(shape)</div>
+
+
+<div class="viewcode-block" id="Overlay.destroy">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.overlay.Overlay.html#sofia_redux.scan.source_models.maps.overlay.Overlay.destroy">[docs]</a>
+    def destroy(self):
+        &quot;&quot;&quot;
+        Destroy the basis image.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.basis is not None:
+            self.basis.destroy()</div>
+
+
+<div class="viewcode-block" id="Overlay.crop">
+<a class="viewcode-back" href="../../../../../api/sofia_redux.scan.source_models.maps.overlay.Overlay.html#sofia_redux.scan.source_models.maps.overlay.Overlay.crop">[docs]</a>
+    def crop(self, ranges):
+        &quot;&quot;&quot;
+        Crop the overlay to the required dimensions.
+
+        Parameters
+        ----------
+        ranges : numpy.ndarray (int,)
+            The ranges to set crop the data to.  Should be of shape
+            (n_dimensions, 2) where ranges[0, 0] would give the minimum crop
+            limit for the first dimension and ranges[0, 1] would give the
+            maximum crop limit for the first dimension.  In this case, the
+            &#39;first&#39; dimension is in numpy format.  i.e., (y, x) for a 2-D
+            array. Also note that the upper crop limit is not inclusive so
+            a range of (0, 3) includes indices [0, 1, 2] but not 3.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.basis is not None:
+            self.basis.crop(ranges)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

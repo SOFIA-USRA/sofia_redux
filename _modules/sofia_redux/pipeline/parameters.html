@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.parameters &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.parameters</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Base classes for Redux parameter sets.&quot;&quot;&quot;
+
+from collections import OrderedDict
+from copy import deepcopy
+import os
+import re
+
+import configobj
+from astropy import log
+
+__all__ = [&#39;ParameterSet&#39;, &#39;Parameters&#39;]
+
+# Falsy string values, used for type fixing and comparison
+FALSY = [&#39;false&#39;, &#39;0&#39;, &#39;0.0&#39;, &#39;&#39;, &#39;None&#39;]
+
+
+<div class="viewcode-block" id="ParameterSet">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.parameters.ParameterSet.html#sofia_redux.pipeline.parameters.ParameterSet">[docs]</a>
+class ParameterSet(OrderedDict):
+    &quot;&quot;&quot;
+    Ordered dictionary of parameter values for a reduction step.
+
+    Sensible defaults are defined for all parameter fields in the
+    `set_param` method.
+    &quot;&quot;&quot;
+<div class="viewcode-block" id="ParameterSet.set_param">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.parameters.ParameterSet.html#sofia_redux.pipeline.parameters.ParameterSet.set_param">[docs]</a>
+    def set_param(self, key=&#39;&#39;, value=None, dtype=&#39;str&#39;,
+                  wtype=None, name=None,
+                  options=None, option_index=0,
+                  description=None, hidden=False):
+        &quot;&quot;&quot;
+        Set a parameter key-value pair.
+
+        All input parameters are optional, although key values
+        are necessary if more than one parameter is to be defined.
+        The default values will create a string-valued parameter
+        with an associated text-box widget.  The default name
+        matches the key value.
+
+        Parameters
+        ----------
+        key : str, optional
+            The key for the parameter.
+        value : str, int, float, bool, or list; optional
+            The value of the parameter.  Should match dtype if provided.
+        dtype : {&#39;str&#39;, &#39;int&#39;, &#39;float&#39;, &#39;bool&#39;, &#39;strlist&#39;, \
+            &#39;intlist&#39;, &#39;floatlist&#39;, &#39;boollist&#39;}; optional
+            Data type of the parameter value.  Basic data types understood
+            by Redux are str, int, float, and bool, and lists of the same.
+            Any other data type will be treated as a string.
+        wtype : {&#39;text_box&#39;, &#39;check_box&#39;, &#39;combo_box&#39;, &#39;radio_button&#39;, \
+            &#39;pick_file&#39;, &#39;pick_directory&#39;, &#39;group&#39;}; optional
+            Widget type to be used for editing the parameter in a GUI
+            context.  Ignored in command-line context.
+        name : str, optional
+            Display name or text for the parameter.
+        options : `list`, optional
+            Enumerated list of possible values for the parameter.  These
+            values will be used as the displayed options in combo_box
+            or radio_button widget types.
+        option_index : int, optional
+            If `options` is provided, this parameter sets the default
+            selection.
+        description : str, optional
+            Description of the parameter.  In GUI context, the description
+            will be shown in a tooltip when the parameter widget is
+            hovered over.
+        hidden : bool, optional
+            If True, the parameter will be provided to the reduction
+            step, but will not be displayed or editable by the user.
+        &quot;&quot;&quot;
+        if name is None:
+            name = key
+        if (value is None
+                and options is not None
+                and option_index is not None):
+            try:
+                value = options[option_index]
+            except IndexError:
+                pass
+        # if not specified
+        if wtype is None:
+            if options is not None:
+                wtype = &#39;combo_box&#39;
+            elif dtype == &#39;bool&#39;:
+                wtype = &#39;check_box&#39;
+            else:
+                wtype = &#39;text_box&#39;
+        if wtype == &#39;check_box&#39;:
+            dtype = &#39;bool&#39;
+        if wtype == &#39;group&#39;:
+            hidden = True
+        pdict = {&#39;value&#39;: value,
+                 &#39;dtype&#39;: dtype,
+                 &#39;wtype&#39;: wtype,
+                 &#39;name&#39;: name,
+                 &#39;options&#39;: options,
+                 &#39;option_index&#39;: option_index,
+                 &#39;description&#39;: description,
+                 &#39;hidden&#39;: hidden}
+        OrderedDict.__setitem__(self, key, pdict)</div>
+
+
+<div class="viewcode-block" id="ParameterSet.get_value">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.parameters.ParameterSet.html#sofia_redux.pipeline.parameters.ParameterSet.get_value">[docs]</a>
+    def get_value(self, key):
+        &quot;&quot;&quot;
+        Get the current value of the parameter.
+
+        Parameters
+        ----------
+        key : str
+            Key name for the parameter.
+
+        Returns
+        -------
+        str, int, float, bool, or list
+            The current value of the parameter.
+        &quot;&quot;&quot;
+        return self[key][&#39;value&#39;]</div>
+
+
+<div class="viewcode-block" id="ParameterSet.set_value">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.parameters.ParameterSet.html#sofia_redux.pipeline.parameters.ParameterSet.set_value">[docs]</a>
+    def set_value(self, key, value=None,
+                  options=None, option_index=None, hidden=None):
+        &quot;&quot;&quot;
+        Set a new value for a parameter.
+
+        If the parameter does not yet exist, it will be created
+        with default values for any items not provided.
+
+        Parameters
+        ----------
+        key : str
+            Key name for the parameter.
+        value : str, int, float, bool, or list; optional
+            New value for the parameter.
+        options : `list`, optional
+            New enumerated value options for the parameter.
+        option_index : int, optional
+            New selected index for the value options.
+        &quot;&quot;&quot;
+        if key not in self:
+            self.set_param(key, value,
+                           options=options,
+                           option_index=option_index)
+        if options is not None:
+            self[key][&#39;options&#39;] = options
+            if value is None and option_index is None:
+                option_index = self[key][&#39;option_index&#39;]
+        if option_index is not None:
+            value = self[key][&#39;options&#39;][option_index]
+            self[key][&#39;option_index&#39;] = option_index
+        elif value is not None and self[key][&#39;options&#39;] is not None:
+            try:
+                option_index = self[key][&#39;options&#39;].index(value)
+                self[key][&#39;option_index&#39;] = option_index
+            except ValueError:
+                pass
+        elif self[key][&#39;dtype&#39;] == &#39;bool&#39;:
+            if str(value).lower().strip() in FALSY:
+                value = False
+            else:
+                value = True
+        self[key][&#39;value&#39;] = value
+        if hidden is not None:
+            self[key][&#39;hidden&#39;] = hidden</div>
+</div>
+
+
+
+<div class="viewcode-block" id="Parameters">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.parameters.Parameters.html#sofia_redux.pipeline.parameters.Parameters">[docs]</a>
+class Parameters(object):
+    &quot;&quot;&quot;
+    Container class for all parameters needed for a reduction.
+
+    Attributes
+    ----------
+    current : list of ParameterSet
+        A list of parameters corresponding to a reduction recipe:
+        one `ParameterSet` object per reduction step.
+    stepnames : list of str
+        Reduction step names corresponding to `current` parameters.
+    default : dict
+        Keys are reduction step names; values are default ParameterSet
+        objects for the step.
+
+    &quot;&quot;&quot;
+    def __init__(self, default=None):
+        &quot;&quot;&quot;
+        Initialize the parameters.
+
+        The ``default`` attribute is populated with `ParameterSet`
+        objects based on the values provided in the `default`
+        parameter.
+
+        Parameters
+        ----------
+        default : dict, optional
+            Default values for all known parameters for the
+            reduction steps.  The keys should be the reduction step
+            name, and the values a dictionary of parameter set values,
+            corresponding to any desired options for
+            `ParameterSet.set_param`.
+        &quot;&quot;&quot;
+        # this will hold the list of current parameters,
+        # corresponding to the reduction recipe
+        self.current = []
+        self.stepnames = []
+
+        # this holds initial set values for each step
+        self.default = {}
+        if default is not None:
+            for step in default:
+                pdict = ParameterSet()
+                for param in default[step]:
+                    pdict.set_param(**param)
+                self.default[step] = pdict
+
+<div class="viewcode-block" id="Parameters.add_current_parameters">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.parameters.Parameters.html#sofia_redux.pipeline.parameters.Parameters.add_current_parameters">[docs]</a>
+    def add_current_parameters(self, stepname):
+        &quot;&quot;&quot;
+        Add a parameter set to the current list.
+
+        If the step name is found in the ``self.default`` attribute,
+        then the associated default ParameterSet is appended to
+        the ``self.current`` list.  Otherwise, an empty ParameterSet
+        is appended.  The `stepname` is stored in ``self.stapnames``.
+
+        Parameters
+        ----------
+        stepname : str
+            Name of the reduction step
+        &quot;&quot;&quot;
+        self.stepnames.append(stepname)
+        if stepname in self.default:
+            self.current.append(deepcopy(self.default[stepname]))
+        else:
+            self.current.append(ParameterSet())</div>
+
+
+<div class="viewcode-block" id="Parameters.copy">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.parameters.Parameters.html#sofia_redux.pipeline.parameters.Parameters.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the parameters.
+
+        Returns
+        -------
+        Parameters
+        &quot;&quot;&quot;
+        cls = type(self)
+        new = cls()
+        new.default = deepcopy(self.default)
+        new.current = deepcopy(self.current)
+        new.stepnames = deepcopy(self.stepnames)
+        return new</div>
+
+
+<div class="viewcode-block" id="Parameters.from_config">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.parameters.Parameters.html#sofia_redux.pipeline.parameters.Parameters.from_config">[docs]</a>
+    def from_config(self, config):
+        &quot;&quot;&quot;
+        Set parameter values from a configuration object.
+
+        This function expects reduction step names as the keys of
+        the configuration dictionary (the section headers in INI format).
+        The step name may be recorded in either ``stepindex: stepname``
+        format, or as ``stepname`` alone, if no step names are
+        repeated in the reduction recipe.
+
+        Parameters
+        ----------
+        config : str, dict, or ConfigObj
+            Configuration file or object.  May be any type
+            accepted by the `configobj.ConfigObj` constructor.
+
+        Raises
+        ------
+        ValueError
+            If the step names in the configuration file/object
+            and the currently loaded ``stepnames`` do not match.
+        &quot;&quot;&quot;
+
+        co = configobj.ConfigObj(config)
+        try:
+            if hasattr(config, &#39;filename&#39;) and config.filename is not None:
+                if os.path.isfile(config.filename):
+                    log.info(&quot;Setting parameters from configuration &quot;
+                             &quot;file: {}&quot;.format(
+                                 os.path.abspath(config.filename)))
+                else:
+                    log.info(&quot;Setting parameters from configuration &quot;
+                             &quot;input: {}&quot;.format(config.filename))
+        except (AttributeError, TypeError):
+            pass
+        for key in co:
+            step = [s.strip() for s in key.split(&#39;:&#39;)]
+            try:
+                idx = int(step[0]) - 1
+                name = step[1]
+                if idx &lt; 0 or idx &gt;= len(self.stepnames) or \
+                        self.stepnames[idx] != name:
+                    step = [name]
+                    raise ValueError(&quot;Parameter set and recipe do not match&quot;)
+            except (ValueError, KeyError, IndexError):
+                name = step[0].strip()
+                try:
+                    idx = self.stepnames.index(name)
+                except ValueError:
+                    idx = None
+            if idx is not None and 0 &lt;= idx &lt; len(self.stepnames):
+                log.debug(&quot;Modifying parameters for &quot;
+                          &quot;step {} ({})&quot;.format(idx, name))
+                pset = self.current[idx]
+                for pkey, pval in co[key].items():
+                    if pkey in pset:
+                        pval = self.fix_param_type(pval, pset[pkey][&#39;dtype&#39;])
+                    pset.set_value(pkey, pval)</div>
+
+
+<div class="viewcode-block" id="Parameters.to_config">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.parameters.Parameters.html#sofia_redux.pipeline.parameters.Parameters.to_config">[docs]</a>
+    def to_config(self):
+        &quot;&quot;&quot;
+        Read parameter values into a configuration object.
+
+        Section names in the output object are written as
+        ``stepindex: stepname`` in order to record the order of
+        reduction steps, and to keep any repeated step names uniquely
+        identified.  Only the current parameter values are recorded.
+        Other information, such as data or widget type or default
+        values, is lost.
+
+        Returns
+        -------
+        ConfigObj
+            The parameter values in a `configobj.ConfigObj` object.
+        &quot;&quot;&quot;
+        steps = OrderedDict()
+        for i, pset in enumerate(self.current):
+            key_val = OrderedDict()
+            for key in pset:
+                if pset[key][&#39;hidden&#39;]:
+                    continue
+                key_val[key] = pset.get_value(key)
+            steps[&quot;{}: {}&quot;.format(i + 1, self.stepnames[i])] = key_val
+        return configobj.ConfigObj(steps)</div>
+
+
+<div class="viewcode-block" id="Parameters.to_text">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.parameters.Parameters.html#sofia_redux.pipeline.parameters.Parameters.to_text">[docs]</a>
+    def to_text(self):
+        &quot;&quot;&quot;
+        Print the current parameters to a text list.
+
+        Returns
+        -------
+        list of str
+            The parameters in INI-formatted strings.
+        &quot;&quot;&quot;
+        co = self.to_config()
+        return co.write()</div>
+
+
+<div class="viewcode-block" id="Parameters.get_param_type">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.parameters.Parameters.html#sofia_redux.pipeline.parameters.Parameters.get_param_type">[docs]</a>
+    @staticmethod
+    def get_param_type(value):
+        &quot;&quot;&quot;
+        Infer a parameter data type from an existing value.
+
+        This function helps format parameters into ParameterSet
+        objects when the data type of the parameters is not
+        separately recorded.  It attempts to determine if the
+        input data is a one of the supported simple types
+        (str, float, int, or bool), or if it is a list of any of
+        these simple types.  List element type is determined
+        from the first element in the array.  Any value for which
+        the type cannot be determined is treated as a string.
+
+        Parameters
+        ----------
+        value : str, float, int, bool, list, or object
+            The parameter value to be tested.
+
+        Returns
+        -------
+        {&#39;str&#39;, &#39;int&#39;, &#39;float&#39;, &#39;bool&#39;, &#39;strlist&#39;, \
+        &#39;intlist&#39;, &#39;floatlist&#39;, &#39;boollist&#39;}
+            The inferred data type of the input value.
+        &quot;&quot;&quot;
+        dtype = type(value).__name__
+        if dtype not in [&#39;str&#39;, &#39;float&#39;, &#39;int&#39;, &#39;bool&#39;, &#39;list&#39;]:
+            dtype = &#39;str&#39;
+        if dtype == &#39;list&#39;:
+            try:
+                eltype = type(value[0]).__name__
+            except IndexError:
+                eltype = &#39;str&#39;
+            if eltype not in [&#39;str&#39;, &#39;float&#39;, &#39;int&#39;, &#39;bool&#39;]:
+                eltype = &#39;str&#39;
+            dtype = eltype + dtype
+        return dtype</div>
+
+
+<div class="viewcode-block" id="Parameters.fix_param_type">
+<a class="viewcode-back" href="../../../api/sofia_redux.pipeline.parameters.Parameters.html#sofia_redux.pipeline.parameters.Parameters.fix_param_type">[docs]</a>
+    @staticmethod
+    def fix_param_type(value, dtype):
+        &quot;&quot;&quot;
+        Cast a value to its expected data type.
+
+        This function helps update parameters in ParameterSet
+        objects when the data type of the parameters is not known
+        to match its expected data type.  For example, if the value
+        is read from a text widget, but the data type is numerical,
+        it can cast the data to its expected form.  Any problems
+        with converting the value to its expected format cause
+        the value to be returned as a string.
+
+        Parameters
+        ----------
+        value : str, float, int, bool, or list
+            The input value to cast
+        dtype : {&#39;str&#39;, &#39;int&#39;, &#39;float&#39;, &#39;bool&#39;, &#39;strlist&#39;, \
+                 &#39;intlist&#39;, &#39;floatlist&#39;, &#39;boollist&#39;}
+            The data type, as expected by a `ParameterSet` object.
+
+        Returns
+        -------
+        str, float, int, bool, or list
+            The data type, converted to `dtype` if possible.
+        &quot;&quot;&quot;
+        if dtype == &#39;bool&#39;:
+            if type(value) is not bool:
+                sval = str(value).lower().strip()
+                if sval in FALSY:
+                    value = False
+                else:
+                    value = True
+        elif dtype == &#39;int&#39;:
+            if type(value) is not int:
+                try:
+                    value = int(value)
+                except (TypeError, ValueError):
+                    # allow it to be a non-number -- initial
+                    # dtype may be not be broad enough
+                    value = str(value)
+        elif dtype == &#39;float&#39;:
+            if type(value) is not float:
+                try:
+                    value = float(value)
+                except (TypeError, ValueError):
+                    value = str(value)
+        elif dtype == &#39;strlist&#39;:
+            if type(value) is not list:
+                value = [re.sub(r&#39;[\&#39;&quot;\[\]]&#39;, &#39;&#39;, v).strip()
+                         for v in str(value).split(&#39;,&#39;)]
+            else:
+                value = [str(v).strip() for v in value]
+        elif dtype == &#39;intlist&#39;:
+            if type(value) is not list:
+                try:
+                    value = [int(re.sub(r&#39;[\s\&#39;&quot;\[\]]&#39;, &#39;&#39;, v))
+                             for v in str(value).split(&#39;,&#39;)]
+                except (TypeError, ValueError):
+                    # warn for this one -- it will likely not be
+                    # interpreted correctly
+                    log.warning(&#39;Found data type {}; &#39;
+                                &#39;expected {}&#39;.format(type(value), dtype))
+                    value = str(value)
+            else:
+                try:
+                    value = [int(v) for v in value]
+                except (TypeError, ValueError):
+                    # allow this case -- where some elements
+                    # may be ints, some not -- since initial
+                    # dtype guess may not be broad enough
+                    pass
+        elif dtype == &#39;floatlist&#39;:
+            if type(value) is not list:
+                try:
+                    value = [float(re.sub(r&#39;[\s\&#39;&quot;\[\]]&#39;, &#39;&#39;, v))
+                             for v in str(value).split(&#39;,&#39;)]
+                except (TypeError, ValueError):
+                    log.warning(&#39;Found data type {}; &#39;
+                                &#39;expected {}&#39;.format(type(value), dtype))
+                    value = str(value)
+            else:
+                try:
+                    value = [float(v) for v in value]
+                except (TypeError, ValueError):
+                    # allow this case -- where some elements
+                    # may be floats, some not -- since initial
+                    # dtype guess may not be broad enough
+                    pass
+
+        elif dtype == &#39;boollist&#39;:
+            if type(value) is not list:
+                value = [re.sub(r&#39;[\s\&#39;&quot;\[\]]&#39;, &#39;&#39;, v)
+                         for v in str(value).split(&#39;,&#39;)]
+            for i, v in enumerate(value):
+                if type(v) is bool:
+                    continue
+                sval = str(v).lower().strip()
+                if sval in FALSY:
+                    v = False
+                else:
+                    v = True
+                value[i] = v
+        else:
+            value = str(value)
+
+        return value</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

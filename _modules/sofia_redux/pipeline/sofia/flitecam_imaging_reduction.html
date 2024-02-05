@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.sofia.flitecam_imaging_reduction &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.sofia.flitecam_imaging_reduction</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;FLITECAM Imaging Reduction pipeline steps&quot;&quot;&quot;
+
+import os
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.pipeline.sofia.sofia_exception import SOFIAImportError
+try:
+    import sofia_redux.instruments.flitecam
+    assert sofia_redux.instruments.flitecam
+except ImportError:
+    raise SOFIAImportError(&#39;FLITECAM modules not installed&#39;)
+try:
+    import sofia_redux.instruments.forcast.configuration as dripconfig
+except ImportError:
+    raise SOFIAImportError(&#39;FORCAST modules not installed&#39;)
+
+from sofia_redux.pipeline.sofia.flitecam_reduction \
+    import FLITECAMReduction
+from sofia_redux.pipeline.sofia.parameters.flitecam_imaging_parameters \
+    import FLITECAMImagingParameters
+from sofia_redux.pipeline.sofia.forcast_imaging_reduction \
+    import FORCASTImagingReduction
+from sofia_redux.toolkit.utilities.fits import hdinsert, gethdul
+
+__all__ = [&#39;FLITECAMImagingReduction&#39;]
+
+
+<div class="viewcode-block" id="FLITECAMImagingReduction">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.flitecam_imaging_reduction.FLITECAMImagingReduction.html#sofia_redux.pipeline.sofia.flitecam_imaging_reduction.FLITECAMImagingReduction">[docs]</a>
+class FLITECAMImagingReduction(FLITECAMReduction, FORCASTImagingReduction):
+    &quot;&quot;&quot;
+    FLITECAM imaging reduction steps.
+
+    Primary image reduction algorithms are defined in the flitecam
+    package (`sofia_redux.instruments.flitecam`).  Calibration-related
+    algorithms are pulled from the `sofia_redux.calibration` package, and
+    some utilities come from the `sofia_redux.toolkit` package.  This
+    reduction object requires that all three packages be installed.
+
+    This reduction object defines a method for each pipeline
+    step, that calls the appropriate algorithm from its source
+    packages.
+    &quot;&quot;&quot;
+    def __init__(self):
+        &quot;&quot;&quot;Initialize the reduction object.&quot;&quot;&quot;
+        FLITECAMReduction.__init__(self)
+
+        # descriptive attributes
+        self.mode = &#39;imaging&#39;
+
+        # product type definitions for FLITECAM steps
+        self.prodtype_map.update({
+            &#39;clip_image&#39;: &#39;clipped&#39;,
+            &#39;make_flat&#39;: &#39;flat&#39;,
+            &#39;correct_gain&#39;: &#39;gain_corrected&#39;,
+            &#39;subtract_sky&#39;: &#39;background_subtracted&#39;,
+            &#39;register&#39;: &#39;registered&#39;,
+            &#39;tellcor&#39;: &#39;telluric_corrected&#39;,
+            &#39;coadd&#39;: &#39;coadded&#39;,
+            &#39;fluxcal&#39;: &#39;calibrated&#39;,
+            &#39;imgmap&#39;: &#39;imgmap&#39;
+        })
+        self.prodnames.update({
+            &#39;clipped&#39;: &#39;CLP&#39;,
+            &#39;flat&#39;: &#39;FLT&#39;,
+            &#39;gain_corrected&#39;: &#39;GCR&#39;,
+            &#39;background_subtracted&#39;: &#39;BGS&#39;,
+            &#39;registered&#39;: &#39;REG&#39;,
+            &#39;telluric_corrected&#39;: &#39;TEL&#39;,
+            &#39;coadded&#39;: &#39;COA&#39;,
+            &#39;calibrated&#39;: &#39;CAL&#39;,
+            &#39;imgmap&#39;: &#39;IMP&#39;,
+        })
+
+        # invert the map for quick lookup of step from type
+        self.step_map = {v: k for k, v in self.prodtype_map.items()}
+
+        # default recipe and step names
+        self.recipe = [&#39;check_header&#39;, &#39;correct_linearity&#39;,
+                       &#39;clip_image&#39;, &#39;make_flat&#39;, &#39;correct_gain&#39;,
+                       &#39;subtract_sky&#39;, &#39;register&#39;, &#39;tellcor&#39;,
+                       &#39;coadd&#39;, &#39;fluxcal&#39;, &#39;imgmap&#39;]
+        self.processing_steps.update({
+            &#39;clip_image&#39;: &#39;Clip Image&#39;,
+            &#39;make_flat&#39;: &#39;Make Flat&#39;,
+            &#39;correct_gain&#39;: &#39;Correct Gain&#39;,
+            &#39;subtract_sky&#39;: &#39;Subtract Sky&#39;,
+            &#39;register&#39;: &#39;Register Images&#39;,
+            &#39;tellcor&#39;: &#39;Telluric Correct&#39;,
+            &#39;coadd&#39;: &#39;Combine Images&#39;,
+            &#39;fluxcal&#39;: &#39;Flux Calibrate&#39;,
+            &#39;imgmap&#39;: &#39;Make Image Map&#39;,
+        })
+
+        # load some default FORCAST configurations, for registration step
+        # Actual values will be provided in parameters.
+        dripconfig.load()
+
+<div class="viewcode-block" id="FLITECAMImagingReduction.load">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.flitecam_imaging_reduction.FLITECAMImagingReduction.html#sofia_redux.pipeline.sofia.flitecam_imaging_reduction.FLITECAMImagingReduction.load">[docs]</a>
+    def load(self, data, param_class=None):
+        &quot;&quot;&quot;Call parent load, with imaging parameters.&quot;&quot;&quot;
+        FLITECAMReduction.load(self, data,
+                               param_class=FLITECAMImagingParameters)</div>
+
+
+<div class="viewcode-block" id="FLITECAMImagingReduction.clip_image">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.flitecam_imaging_reduction.FLITECAMImagingReduction.html#sofia_redux.pipeline.sofia.flitecam_imaging_reduction.FLITECAMImagingReduction.clip_image">[docs]</a>
+    def clip_image(self):
+        &quot;&quot;&quot;Clip image to useful portion of detector.&quot;&quot;&quot;
+        from sofia_redux.instruments.flitecam.clipimg import clipimg
+        from sofia_redux.instruments.flitecam.expmap import expmap
+        from sofia_redux.instruments.flitecam.maskbp import maskbp
+
+        # get parameters
+        param = self.get_parameter_set()
+        datasec = param.get_value(&#39;datasec&#39;)
+        skip_clean = param.get_value(&#39;skip_clean&#39;)
+
+        outdata = []
+        for i, hdul in enumerate(self.input):
+            log.info(&#39;&#39;)
+            log.info(f&quot;Input: {hdul[0].header[&#39;FILENAME&#39;]}&quot;)
+
+            # clip data
+            result = clipimg(hdul, datasec)
+
+            # mask bad pixels
+            if skip_clean:
+                log.info(&#39;Skipping bad pixel identification&#39;)
+            else:
+                result = maskbp(result, cval=np.nan)
+
+            # append exposure map
+            result = expmap(result)
+
+            outname = self.update_output(
+                result, self.filenum[i], self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(result, outname)
+
+            outdata.append(result)
+
+        self.input = outdata
+
+        # set display data to input
+        self.set_display_data()</div>
+
+
+<div class="viewcode-block" id="FLITECAMImagingReduction.make_flat">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.flitecam_imaging_reduction.FLITECAMImagingReduction.html#sofia_redux.pipeline.sofia.flitecam_imaging_reduction.FLITECAMImagingReduction.make_flat">[docs]</a>
+    def make_flat(self):
+        &quot;&quot;&quot;
+        Make a flat field from input data.
+
+        The procedure is:
+
+        - Check for a previously made flat. If present, use it.
+        - If sky files are loaded, use those to make the flat.
+          Correct the sky files with others to verify flat.
+        - Otherwise, make a flat out of all input except the current
+          file. If less than 3 files are loaded, no flat will be
+          generated.
+
+        &quot;&quot;&quot;
+        from sofia_redux.instruments.flitecam.mkflat import mkflat
+        from sofia_redux.instruments.flitecam.split_input import split_input
+
+        # get parameters
+        param = self.get_parameter_set()
+        flatfile = param.get_value(&#39;flatfile&#39;)
+        skip_flat = param.get_value(&#39;skip_flat&#39;)
+
+        # check input options
+        if skip_flat:
+            log.info(&#39;Skipping flat generation. Data will not be &#39;
+                     &#39;gain-corrected.&#39;)
+            return
+
+        # sort data, looking for sky files and data to correct
+        manifest = split_input(self.input)
+
+        flat = None
+        if os.path.isfile(flatfile):
+            flat = gethdul(flatfile)
+            if flat is None or &#39;FLAT&#39; not in flat:
+                raise ValueError(f&#39;Bad flat file: {flatfile}&#39;)
+            log.info(f&#39;Using previously generated flat file {flatfile}.&#39;)
+        else:
+            if len(manifest[&#39;sky&#39;]) &gt; 0:
+                # sky files present, make the flat from them
+                flat_input = manifest[&#39;sky&#39;]
+                log.info(&#39;Using sky files to make flat:&#39;)
+                for f in flat_input:
+                    log.info(f&quot;  {f[0].header.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;)}&quot;)
+
+                flat = mkflat(flat_input)
+                log.info(&#39;&#39;)
+
+        # warn if insufficient data to generate a flat
+        if flat is None and len(self.input) &lt; 3:
+            log.warning(&#39;Too few files to generate flat. &#39;
+                        &#39;Data will not be gain corrected.&#39;)
+
+        outdata = []
+        for i, hdul in enumerate(self.input):
+            # if not already generated, make the flat from all input
+            # except the current file
+            if flat is None:
+                # this procedure requires at least 2 files other
+                # than the current one
+                if len(self.input) &lt; 3:
+                    this_flat = None
+                else:
+                    flat_input = self.input[:i] + self.input[i + 1:]
+                    log.info(&#39;&#39;)
+                    log.info(f&quot;Using remaining source files to make flat for &quot;
+                             f&quot;{hdul[0].header.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;)}:&quot;)
+                    for f in flat_input:
+                        log.info(f&quot;  {f[0].header.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;)}&quot;)
+                    this_flat = mkflat(flat_input)
+            else:
+                this_flat = flat
+
+            # attach flat to hdul
+            if this_flat is not None:
+                for extname in [&#39;FLAT&#39;, &#39;FLAT_ERROR&#39;, &#39;FLAT_BADMASK&#39;]:
+                    # allow flat error and badmask not to exist,
+                    # in externally provided flats
+                    if extname in this_flat:
+                        hdul.append(this_flat[extname])
+
+            outdata.append(hdul)
+
+        # loop through output again to update names and headers
+        # and save to disk
+        log.info(&#39;&#39;)
+        for i, hdul in enumerate(outdata):
+            outname = self.update_output(
+                hdul, self.filenum[i], self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(hdul, outname)
+        self.input = outdata
+
+        # set display data to input
+        self.set_display_data()</div>
+
+
+<div class="viewcode-block" id="FLITECAMImagingReduction.correct_gain">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.flitecam_imaging_reduction.FLITECAMImagingReduction.html#sofia_redux.pipeline.sofia.flitecam_imaging_reduction.FLITECAMImagingReduction.correct_gain">[docs]</a>
+    def correct_gain(self):
+        &quot;&quot;&quot;Correct gain variations.&quot;&quot;&quot;
+        from sofia_redux.instruments.flitecam.gaincor import gaincor
+        param = self.get_parameter_set()
+        outdata = []
+        for i, hdul in enumerate(self.input):
+            if &#39;FLAT&#39; in hdul:
+                # correct data and propagate errors
+                hdul = gaincor(hdul)
+            else:
+                log.warning(&#39;No FLAT extension present; not correcting data.&#39;)
+
+            outname = self.update_output(
+                hdul, self.filenum[i], self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(hdul, outname)
+
+            outdata.append(hdul)
+
+        self.input = outdata
+
+        # set display data to input
+        self.set_display_data()</div>
+
+
+<div class="viewcode-block" id="FLITECAMImagingReduction.subtract_sky">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.flitecam_imaging_reduction.FLITECAMImagingReduction.html#sofia_redux.pipeline.sofia.flitecam_imaging_reduction.FLITECAMImagingReduction.subtract_sky">[docs]</a>
+    def subtract_sky(self):
+        &quot;&quot;&quot;Subtract sky background level.&quot;&quot;&quot;
+        from sofia_redux.instruments.flitecam.backsub import backsub
+        from sofia_redux.instruments.flitecam.split_input import split_input
+        from sofia_redux.instruments.forcast.peakfind import peakfind
+
+        param = self.get_parameter_set()
+
+        skyfile = param.get_value(&#39;skyfile&#39;)
+        skip_sky = param.get_value(&#39;skip_sky&#39;)
+        method = param.get_value(&#39;sky_method&#39;)
+
+        if &#39;median&#39; in str(method).lower():
+            method = &#39;median&#39;
+        else:
+            method = &#39;flatnorm&#39;
+
+        # check input options
+        if skip_sky:
+            log.info(&#39;Skipping sky subtraction. Data will not be &#39;
+                     &#39;background corrected.&#39;)
+            log.info(&#39;Sky files will be propagated to the following steps.&#39;)
+            return
+
+        sky = None
+        if os.path.isfile(skyfile):
+            sky = gethdul(skyfile)
+            if sky is None or &#39;FLUX&#39; not in sky:
+                raise ValueError(f&#39;Bad sky file: {skyfile}&#39;)
+            log.info(f&#39;Using previously generated sky file {skyfile}.&#39;)
+
+        # get sky files to drop from input, if present
+        manifest = split_input(self.input)
+        propagate = manifest[&#39;object&#39;] + manifest[&#39;standard&#39;]
+
+        # special case: only sky files were loaded. In that
+        # case go ahead and correct them, for a check of the flat.
+        if len(propagate) == 0 and len(manifest[&#39;sky&#39;]) &gt; 0:
+            log.warning(&#39;Only sky files are present; propagating them &#39;
+                        &#39;to following steps.&#39;)
+            propagate = manifest[&#39;sky&#39;]
+        elif len(manifest[&#39;sky&#39;]) &gt; 0:
+            log.info(&#39;Dropping sky files from further propagation.&#39;)
+
+        outdata = []
+        outfilenum = []
+        for i, hdul in enumerate(self.input):
+            # skip the file if it&#39;s not a science file
+            if hdul not in propagate:
+                continue
+
+            # keep the file number for future steps
+            outfilenum.append(self.filenum[i])
+
+            # now correct the data and propagate errors
+            hdul = backsub(hdul, bgfile=sky, method=method)
+
+            # for standards, mark the likely source position
+            # near CRPIX1/2
+            if hdul in manifest[&#39;standard&#39;]:
+                sx = hdul[0].header[&#39;CRPIX1&#39;] - 1
+                sy = hdul[0].header[&#39;CRPIX2&#39;] - 1
+                try:
+                    shape = hdul[&#39;FLUX&#39;].data.shape
+                    wdw = int(np.min([100, sx, sy,
+                                      shape[1] - sx,
+                                      shape[0] - sy]))
+                    xmin, xmax = int(sx - wdw), int(sx + wdw)
+                    ymin, ymax = int(sy - wdw), int(sy + wdw)
+                    stamp = hdul[&#39;FLUX&#39;].data[ymin:ymax, xmin:xmax]
+
+                    peak = peakfind(stamp, npeaks=1, silent=True,
+                                    positive=True, coordinates=True,
+                                    fwhm=6.0, smooth=False)
+                    if peak is not None and len(peak) == 1:
+                        px = peak[0][0] + xmin
+                        py = peak[0][1] + ymin
+                        if (0 &lt; px &lt; shape[1]
+                                and 0 &lt; py &lt; shape[0]):
+                            sx, sy = px, py
+
+                except (IndexError, ValueError,
+                        TypeError, RuntimeError) as err:  # pragma: no cover
+                    log.debug(f&#39;Peakfind error: {str(err)}&#39;)
+                hdinsert(hdul[0].header, &#39;SRCPOSX&#39;, sx,
+                         &#39;Source x-position&#39;)
+                hdinsert(hdul[0].header, &#39;SRCPOSY&#39;, sy,
+                         &#39;Source y-position&#39;)
+
+            outname = self.update_output(
+                hdul, self.filenum[i], self.prodtypes[self.step_index])
+
+            # save if desired
+            if param.get_value(&#39;save&#39;):
+                self.write_output(hdul, outname)
+
+            outdata.append(hdul)
+
+        self.input = outdata
+        self.filenum = outfilenum
+
+        # set display data to input
+        self.set_display_data()</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

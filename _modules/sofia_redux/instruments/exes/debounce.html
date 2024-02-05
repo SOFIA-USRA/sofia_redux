@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.exes.debounce &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.exes.debounce</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import numpy as np
+
+from sofia_redux.instruments.exes import tort as et
+
+__all__ = [&#39;debounce&#39;]
+
+
+<div class="viewcode-block" id="debounce">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.exes.debounce.debounce.html#sofia_redux.instruments.exes.debounce.debounce">[docs]</a>
+def debounce(data, header, abeams, bbeams, flat,
+             good_data=None, illum=None,
+             variance=None, spectral=False):
+    &quot;&quot;&quot;
+    Correct for optics shifts between nods (bounces).
+
+    Each nod pair is undistorted, then the B nod is shifted slightly
+    in the spatial direction and differenced with the A nod.  The
+    shift direction that results in a minimum squared difference
+    (summed over the spectral direction) is used as the bounce
+    direction.
+
+    The amplitude of the shift is controlled by the
+    bounce parameter (hdr[&#39;BOUNCE&#39;]), which should be set to a
+    number whose absolute value is between 0 and 1 (typically 0.1).
+    If the bounce parameter is set to a positive number, only the
+    above shift (the first-derivative bounce) will be corrected.
+
+    If the bounce parameter is set to a negative value (e.g. -0.1), the
+    debouncing algorithm will also attempt to fix the
+    second-derivative bounce by smoothing the A or B nod slightly;
+    the amount of smoothing is also controlled by the absolute value
+    of the bounce parameter.
+
+    Note that if the observed source is too near the edge of the order,
+    it may confuse the debouncing algorithm; in this case, it is usually
+    best to turn debouncing off (i.e. set the bounce parameter to 0).
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        3D data cube [nframe, nspec, nspat].
+    header : fits.Header
+        Header of FITS file. May be updated in place.
+    abeams : array-like of int
+        Index numbers of A frames in data cube.
+    bbeams : array-like of int
+        Index numbers of B frames in data cube.
+    flat : numpy.ndarray
+        2D processed flat, as produced by makeflat [nspec, nspat].
+    good_data : numpy.ndarray, optional
+        Bad pixel array matching data shape indicating valid data
+        (True=good, False=bad).
+    illum : numpy.ndarray, optional
+        2D array of size [nspec, nspat] indicating illuminated regions of
+        the frame. 1 = illuminated, 0 = unilluminated, -1 = pixel that
+        does not correspond to any region in the raw frame (after
+        undistortion).
+    variance : numpy.ndarray, optional
+        3D array of size [nframe, nspec, nspat] of variance planes
+        corresponding to data.
+    spectral : bool, optional
+        If True, debounce is applied in the spectral direction instead
+        of the spatial.
+
+    Returns
+    -------
+    corrected : numpy.ndarray
+        Corrected 3D data cube
+    &quot;&quot;&quot;
+    try:
+        params = _check_inputs(data, header, abeams, bbeams, flat, good_data,
+                               illum, variance, spectral)
+    except ValueError as msg:
+        log.error(msg)
+        return data
+
+    if _bounce_confusion(params):
+        log.warning(&#39;Nodded source may confuse debounce&#39;)
+
+    _check_nonzero_data(params)
+    _check_neighbors(params)
+    _check_nonzero_data(params)
+
+    success = _derive_bounce_for_pairs(params)
+    if not success:
+        return data
+
+    log.info(f&quot;First derivative bounce parameters: &quot;
+             f&quot;{params[&#39;first_deriv_shift&#39;]}&quot;)
+    if params[&#39;bounce&#39;] &lt; 0:
+        log.info(f&quot;Second derivative bounce parameters: &quot;
+                 f&quot;{params[&#39;second_deriv_shift&#39;]}&quot;)
+
+    if params[&#39;nzero&#39;] &gt; 0:
+        if params[&#39;modes&#39;][&#39;scan&#39;]:
+            log.info(f&quot;{params[&#39;nzero&#39;]} pairs exceeded bounce limit&quot;)
+        else:
+            log.info(f&quot;Setting weight = 0 for {params[&#39;nzero&#39;]} pairs&quot;)
+
+    return params[&#39;bounce_data&#39;]</div>
+
+
+
+def _check_inputs(data, header, a_beams, b_beams, flat, data_mask,
+                  illum, variance, spectral):
+    &quot;&quot;&quot;
+    Check input shape and values.
+
+    Later functions in this step take the output params dictionary as
+    input and add to it or update it as output.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+    header : fits.Header
+    a_beams: array-like of int
+    b_beams: array-like of int
+    flat : numpy.ndarray
+    data_mask : numpy.ndarray
+    illum : numpy.ndarray
+    variance : numpy.ndarray
+    spectral : bool
+
+    Returns
+    -------
+    params : dict
+        Contains all input data, reformatted as needed.
+        Keys are:
+
+            - &#39;data&#39;: data array
+            - &#39;variance&#39;: variance array
+            - &#39;header&#39;: header object
+            - &#39;a_beams&#39;: list of A beam indices
+            - &#39;b_beams&#39;: list of B beam indices
+            - &#39;flat&#39;: flat array
+            - &#39;data_mask&#39;: mask array, ny x nx
+            - &#39;frame_mask&#39;: mask array, nz
+            - &#39;illum&#39;: illumination array
+            - &#39;spectral&#39;: spectral direction flag
+            - &#39;modes&#39;: dict with &#39;scan&#39;, &#39;nod&#39;, &#39;crossdisp&#39; keys
+            - &#39;do_var&#39;: flag to indicate variance processing
+            - &#39;nz&#39;: number of frames
+            - &#39;ny&#39;: data shape, y-direction
+            - &#39;nx&#39;: data shape, x-direction
+            - &#39;bounce&#39;: bounce amplitude parameter
+            - &#39;skip_small&#39;: flag to indicate small bounces should be skipped
+
+    &quot;&quot;&quot;
+    if header[&#39;BOUNCE&#39;] == 0:
+        raise ValueError(&#39;Bounce factor = 0. Cannot apply debounce.&#39;)
+
+    try:
+        nz = _check_data_dimensions(data, header)
+    except RuntimeError:
+        message = (f&#39;Data has wrong dimensions &#39;
+                   f&#39;{data.shape}.&#39;)
+        raise ValueError(message)
+
+    try:
+        do_var = _check_variance_dimensions(variance, header, nz)
+    except RuntimeError:
+        message = (f&#39;Variance has wrong dimensions &#39;
+                   f&#39;{variance.shape}.&#39;)
+        raise ValueError(message)
+
+    try:
+        _check_beams(a_beams, b_beams, nz)
+    except RuntimeError:
+        message = (&#39;A and B beams must be specified and numbers &#39;
+                   &#39;must match.&#39;)
+        raise ValueError(message)
+
+    try:
+        data_mask, frame_mask = _check_masks(data_mask, data)
+    except RuntimeError:
+        message = f&#39;Provided mask has wrong dimensions {data_mask.shape}.&#39;
+        raise ValueError(message)
+
+    if illum is None:
+        illum = np.ones_like(data[0])
+
+    modes = _check_obsmode(header)
+
+    params = {&#39;data&#39;: data, &#39;variance&#39;: variance, &#39;header&#39;: header,
+              &#39;a_beams&#39;: a_beams, &#39;b_beams&#39;: b_beams, &#39;flat&#39;: flat,
+              &#39;data_mask&#39;: data_mask, &#39;frame_mask&#39;: frame_mask, &#39;illum&#39;: illum,
+              &#39;spectral&#39;: spectral, &#39;modes&#39;: modes, &#39;do_var&#39;: do_var,
+              &#39;nz&#39;: nz, &#39;ny&#39;: header[&#39;NSPEC&#39;], &#39;nx&#39;: header[&#39;NSPAT&#39;],
+              &#39;bounce&#39;: header[&#39;BOUNCE&#39;], &#39;skip_small&#39;: True}
+    return params
+
+
+def _check_data_dimensions(value, header):
+    &quot;&quot;&quot;Check input data dimensions.&quot;&quot;&quot;
+    if value.ndim &lt;= 2:
+        nz = 1
+    else:
+        nz = value.shape[0]
+
+    if (value.ndim not in [2, 3]
+            or value.shape[-1] != header[&#39;NSPAT&#39;]
+            or value.shape[1] != header[&#39;NSPEC&#39;]):
+        raise RuntimeError
+
+    return nz
+
+
+def _check_variance_dimensions(variance, header, nz):
+    &quot;&quot;&quot;Check input variance dimensions.&quot;&quot;&quot;
+    if variance is None:
+        return False
+    if variance.ndim &lt;= 2:
+        vnz = 1
+    else:
+        vnz = variance.shape[0]
+
+    if (nz != vnz
+            or variance.shape[-1] != header[&#39;NSPAT&#39;]
+            or variance.shape[1] != header[&#39;NSPEC&#39;]):
+        raise RuntimeError
+
+    return True
+
+
+def _check_beams(abeams, bbeams, nz):
+    &quot;&quot;&quot;Check input beam definitions.&quot;&quot;&quot;
+    if (len(abeams) == 0
+            or len(bbeams) == 0
+            or len(abeams) != len(bbeams)
+            or len(abeams) != nz // 2):
+        raise RuntimeError
+
+
+def _check_masks(mask, data):
+    &quot;&quot;&quot;Check and reformat good data masks.&quot;&quot;&quot;
+    if mask is None:
+        mask = np.full((data.shape), True)
+    elif mask.shape != data.shape:
+        raise RuntimeError
+    frame_mask = np.any(mask, axis=(1, 2))
+    data_mask = np.all(mask[frame_mask], axis=0)
+
+    return data_mask, frame_mask
+
+
+def _check_obsmode(header):
+    &quot;&quot;&quot;Check and flag instrument configuration and mode.&quot;&quot;&quot;
+    obsmode = str(header[&#39;INSTMODE&#39;]).upper()
+    instcfg = str(header[&#39;INSTCFG&#39;]).upper()
+
+    modes = dict()
+    modes[&#39;scan&#39;] = obsmode in [&#39;MAP&#39;, &#39;FILEMAP&#39;]
+    modes[&#39;nod&#39;] = obsmode in [&#39;NOD_ON_SLIT&#39;, &#39;NOD_OFF_SLIT&#39;]
+    modes[&#39;crossdisp&#39;] = instcfg in [&#39;HIGH_MED&#39;, &#39;HIGH_LOW&#39;]
+    return modes
+
+
+def _bounce_confusion(params):
+    &quot;&quot;&quot;Check if debounce is likely to be confused by nodded sources.&quot;&quot;&quot;
+    modes = params[&#39;modes&#39;]
+    header = params[&#39;header&#39;]
+    if modes[&#39;nod&#39;]:
+        nodamp = float(header[&#39;NODAMP&#39;])
+        pltscl = float(header[&#39;PLTSCALE&#39;])
+        spacing = float(header[&#39;SPACING&#39;])
+        nbelow = float(header[&#39;NBELOW&#39;])
+
+        checks = [int(header[key]) != -9999
+                  for key in [&#39;NODAMP&#39;, &#39;PLTSCALE&#39;, &#39;SPACING&#39;, &#39;NBELOW&#39;]]
+        if all(checks):
+            distance = nodamp / pltscl
+            slit_length = spacing - nbelow
+            if 0.6 * slit_length &lt; distance &lt; slit_length:
+                return True
+    return False
+
+
+def _check_nonzero_data(params):
+    &quot;&quot;&quot;Check for valid, nonzero data.&quot;&quot;&quot;
+    data = params[&#39;data&#39;]
+    frame_mask = params[&#39;frame_mask&#39;]
+    good = (data != 0) &amp; np.isfinite(data)
+    data_nonzero = good[frame_mask].all(axis=0)
+    params[&#39;data_nonzero&#39;] = data_nonzero.astype(bool)
+
+
+def _check_neighbors(params):
+    &quot;&quot;&quot;Check for valid neighbors.&quot;&quot;&quot;
+    nx = params[&#39;nx&#39;]
+    ny = params[&#39;ny&#39;]
+    data_mask = params[&#39;data_mask&#39;]
+    flat = params[&#39;flat&#39;]
+    data_nonzero = params[&#39;data_nonzero&#39;]
+    crossdisp = params[&#39;modes&#39;][&#39;crossdisp&#39;]
+    spectral = params[&#39;spectral&#39;]
+
+    y, x = np.indices((ny, nx))
+
+    if (crossdisp and not spectral) or (spectral and not crossdisp):
+        params[&#39;direction&#39;] = &#39;x&#39;
+        axis = 1
+        bounds = (y - 1 &gt;= 0) &amp; (y + 1 &lt; ny)
+    else:
+        params[&#39;direction&#39;] = &#39;y&#39;
+        axis = 0
+        bounds = (x - 1 &gt;= 0) &amp; (x + 1 &lt; nx)
+
+    data_check = ((_shift_2d_array(data_mask, -1, axis))
+                  &amp; (_shift_2d_array(data_mask, 1, axis))
+                  &amp; data_mask)
+    flat_check = ((_shift_2d_array(flat, -1, axis) != 0)
+                  &amp; (_shift_2d_array(flat, 1, axis) != 0)
+                  &amp; (flat != 0))
+    ok = data_nonzero &amp; bounds &amp; data_check &amp; flat_check
+    if ok.sum() == 0:
+        raise ValueError(&#39;No good pixels in data array. &#39;
+                         &#39;Not applying debounce&#39;)
+    params[&#39;ok_idx&#39;] = ok
+
+
+def _calc_bounce(params, subselect, a_coefficients, b_coeffients,
+                 second_deriv=False, bounce=None):
+    &quot;&quot;&quot;Calculate the bounce variance for given coefficients.&quot;&quot;&quot;
+    nx = params[&#39;nx&#39;]
+    ny = params[&#39;ny&#39;]
+    if bounce is None:
+        abs_bounce = np.abs(params[&#39;bounce&#39;])
+    else:
+        abs_bounce = bounce
+    direction = params[&#39;direction&#39;]
+    ok_idx = params[&#39;ok_idx&#39;]
+    a_data = params[&#39;a_data&#39;]
+    b_data = params[&#39;b_data&#39;]
+    header = params[&#39;header&#39;]
+    illum = params[&#39;illum&#39;]
+
+    var = list()
+
+    for a_coeff, b_coeff in zip(a_coefficients, b_coeffients):
+        shift_a = np.zeros((ny, nx), dtype=float)
+        shift_b = np.zeros_like(shift_a, dtype=float)
+        if second_deriv:
+            a_sub_diff = (subselect[&#39;am1&#39;][ok_idx]
+                          - 2 * a_data[ok_idx]
+                          + subselect[&#39;ap1&#39;][ok_idx])
+
+            b_sub_diff = (subselect[&#39;bm1&#39;][ok_idx]
+                          - 2 * b_data[ok_idx]
+                          + subselect[&#39;bp1&#39;][ok_idx])
+        else:
+            a_sub_diff = (subselect[&#39;ap1&#39;][ok_idx]
+                          - subselect[&#39;am1&#39;][ok_idx])
+            b_sub_diff = (subselect[&#39;bp1&#39;][ok_idx]
+                          - subselect[&#39;bm1&#39;][ok_idx])
+
+        a_factor = a_coeff * abs_bounce * a_sub_diff
+        shift_a[ok_idx] = a_data[ok_idx] + a_factor
+
+        b_factor = b_coeff * abs_bounce * b_sub_diff
+        shift_b[ok_idx] = b_data[ok_idx] + b_factor
+
+        diff = shift_a - shift_b
+        diff = et.tort(diff, header, order=1, skew=True)
+        diff[illum != 1] = 0.
+
+        # Sum over order (wavelength direction) to calculate a variance
+        if direction == &#39;x&#39;:
+            # Sum over y (XD)
+            total = np.nansum(diff, axis=0)
+        else:
+            # Sum over x (LS)
+            total = np.nansum(diff, axis=1)
+        var.append(np.nansum(total ** 2))
+
+    return np.array(var)
+
+
+def _derive_bounce_for_pairs(params):
+    &quot;&quot;&quot;Derive and apply the bounce correction for each nod pair.&quot;&quot;&quot;
+    abs_bounce = np.abs(params[&#39;bounce&#39;])
+    data = params[&#39;data&#39;]
+    bounce_data = data.copy()
+    scan = params[&#39;modes&#39;][&#39;scan&#39;]
+    variance = params[&#39;variance&#39;]
+    ok_idx = params[&#39;ok_idx&#39;]
+    first_deriv_shift = np.zeros_like(params[&#39;a_beams&#39;], dtype=float)
+    second_deriv_shift = np.zeros_like(params[&#39;a_beams&#39;], dtype=float)
+    frame_mask = params[&#39;frame_mask&#39;]
+    nzero = 0
+    skip_small = params[&#39;skip_small&#39;]
+
+    for i in range(len(params[&#39;a_beams&#39;])):
+
+        a_frame = params[&#39;a_beams&#39;][i]
+        b_frame = params[&#39;b_beams&#39;][i]
+        # Check both A and B are good frames
+        if not (frame_mask[a_frame]
+                and frame_mask[b_frame]):  # pragma: no cover
+            continue
+
+        subselect = _subselect_data(params, a_frame, b_frame)
+
+        # Fix first derivative bounce by shifting B beams
+        # calculate variances of A-B for three bounce parameters
+        a_par = [0.0, 0.25, 0.0]  # u, v, w
+        b_par = [-0.5, 0.25, 0.5]
+        var = _calc_bounce(params, subselect, a_par, b_par, second_deriv=False)
+        a, b = _var_application(var)
+
+        if a &gt; 0:
+            bounce_amp = 0.5 * abs_bounce * b / a
+        else:
+            log.warning(f&quot;Can&#39;t find best 1st derivative &quot;
+                        f&quot;bounce for pair {i + 1}&quot;)
+            if not scan:
+                # Marks these frames as bad
+                frame_mask[a_frame] = False
+                frame_mask[b_frame] = False
+                if frame_mask.sum() == 0:
+                    log.error(&#39;No good frames remaining. &#39;
+                              &#39;Not applying debounce&#39;)
+                    return False
+                else:
+                    first_deriv_shift[i] = 0
+                    nzero += 1
+            else:
+                first_deriv_shift[i] = 0
+                nzero += 1
+            continue
+
+        if np.abs(bounce_amp) &gt; 2 * abs_bounce:
+            if not scan:
+                # Mark frames as bad
+                frame_mask[a_frame] = False
+                frame_mask[b_frame] = False
+                if frame_mask.sum() == 0:
+                    log.error(&#39;No good frames remaining. &#39;
+                              &#39;Not applying debounce&#39;)
+                    return False
+                else:
+                    first_deriv_shift[0] = 0
+                    nzero += 1
+                continue
+            else:
+                first_deriv_shift[i] = 0
+                nzero += 1
+                continue
+
+        # Skip recalculation/shifting for small bounce_amp
+        if not skip_small or np.abs(bounce_amp) &gt;= abs_bounce / 100.:
+            # Skip recalculation for scans
+            if scan:  # pragma: no cover
+                b = 0
+            else:
+                # Calculate bounce for minimum variance
+                a_par = [0.25, 0.0, 0.0]
+                b_par = [0.25, 0.5, 1.0]
+                var = _calc_bounce(params, subselect, a_par, b_par,
+                                   bounce=bounce_amp)
+                a, b = _var_application(var)
+
+            if a &gt; 0 and np.abs(b / a) &lt; 2:
+                bounce_amp = bounce_amp * (1 + b / (2 * a))
+            elif np.abs(bounce_amp) &gt;= 0.1 * abs_bounce:
+                log.warning(f&quot;Can&#39;t recalculate 1st derivative &quot;
+                            f&quot;bounce for pair {i + 1}&quot;)
+                if not scan:
+                    # Mark frame as bad
+                    frame_mask[a_frame] = False
+                    frame_mask[b_frame] = False
+                    if frame_mask.sum() == 0:
+                        log.error(&#39;No good frames remaining. &#39;
+                                  &#39;Not applying debounce&#39;)
+                        return False
+                    else:
+                        first_deriv_shift[i] = 0
+                        nzero += 1
+                else:  # pragma: no cover
+                    # shouldn&#39;t be reachable
+                    first_deriv_shift[i] = 0
+                    nzero += 1
+
+                continue  # pragma: no cover
+
+            # Shift b_data
+            first_deriv_shift[i] = bounce_amp
+            shift_b = data[b_frame].copy()
+            shift = 0.5 * bounce_amp * (subselect[&#39;bp1&#39;][ok_idx]
+                                        - subselect[&#39;bm1&#39;][ok_idx])
+            shift_b[ok_idx] = shift_b[ok_idx] + shift
+            bounce_data[b_frame] = shift_b
+
+            # Do the same for variance plane
+            if params[&#39;do_var&#39;]:
+                shift = ((0.5 * bounce_amp) ** 2
+                         * (subselect[&#39;bp1&#39;][ok_idx]
+                            - subselect[&#39;bm1&#39;][ok_idx]))
+                variance[b_frame][ok_idx] = variance[b_frame][ok_idx] + shift
+
+        # Fix 2nd derivative bounce by smoothing arr or brr
+        if params[&#39;bounce&#39;] &gt; 0:
+            continue
+
+        a_par = [1.0, 0.5, 0.0]
+        b_par = [0.0, 0.5, 1.0]
+        var = _calc_bounce(params, subselect, a_par, b_par,
+                           second_deriv=True, bounce=abs_bounce)
+        a, b = _var_application(var)
+
+        # Calculate bounce for minimum variance
+        if a &gt; 0:
+            bounce_amp = 0.5 * abs_bounce * b / a
+        else:
+            log.warning(f&quot;Can&#39;t find best 2nd derivative bounce &quot;
+                        f&quot;for pair {i + 1}&quot;)
+            if not scan:
+                # Mark frames as bad
+                frame_mask[a_frame] = False
+                frame_mask[b_frame] = False
+                if frame_mask.sum() == 0:
+                    log.error(&#39;No good frames remaining. Not applying &#39;
+                              &#39;debounce&#39;)
+                    return False
+                else:
+                    second_deriv_shift[i] = 0
+                    nzero += 1
+            else:
+                second_deriv_shift[i] = 0
+                nzero += 1
+            continue
+
+        if np.abs(bounce_amp) &lt; abs_bounce / 100 and skip_small:
+            # correction is small, don&#39;t bother
+            second_deriv_shift[i] = 0
+            continue
+        elif np.abs(bounce_amp) &gt; 4 * abs_bounce:
+            if not scan:
+                # Mark frames as bad
+                frame_mask[a_frame] = False
+                frame_mask[b_frame] = False
+                if frame_mask.sum() == 0:
+                    log.error(&#39;No good frames remaining. Not applying &#39;
+                              &#39;debounce&#39;)
+                    return False
+                else:
+                    second_deriv_shift[i] = 0
+                    nzero += 1
+            else:
+                second_deriv_shift[i] = 0
+                nzero += 1
+            continue
+
+        # Skip recalculation for scans
+        recalc = False
+        if not scan:
+            recalc = True
+            # Calculate bounce for minimum variance
+            if bounce_amp &lt; 0:
+                a_par = [1.0, 1.5, 2.0]
+                b_par = [1.0, 0.5, 0.0]
+            else:
+                a_par = [1.0, 0.5, 0.0]
+                b_par = [1.0, 1.5, 2.0]
+            var = _calc_bounce(params, subselect, a_par, b_par,
+                               second_deriv=True, bounce=np.abs(bounce_amp))
+            a, b = _var_application(var)
+
+        if recalc and a &gt; 0 and np.abs(b / a) &lt; 2:
+            bounce_amp = bounce_amp * (1 + 0.5 * b / a)
+            second_deriv_shift[i] = bounce_amp
+        elif np.abs(bounce_amp) &lt; 0.1 * abs_bounce:
+            second_deriv_shift[i] = bounce_amp
+        else:
+            log.warning(f&quot;Can&#39;t recalculate 2nd derivative bounce &quot;
+                        f&quot;for pair {i + 1}&quot;)
+            if not scan:
+                # Mark frames as bad
+                frame_mask[a_frame] = False
+                frame_mask[b_frame] = False
+                if frame_mask.sum() == 0:
+                    log.error(&#39;No good frames remaining. Not applying &#39;
+                              &#39;debounce&#39;)
+                    return False
+                else:
+                    second_deriv_shift[i] = 0
+                    nzero += 1
+            else:
+                second_deriv_shift[i] = 0
+                nzero += 1
+            continue
+
+        # Smooth a or b data
+        if bounce_amp &lt; 0:
+            smooth = data[a_frame].copy()
+            factor = (subselect[&#39;am1&#39;][ok_idx]
+                      - 2 * smooth[ok_idx]
+                      + subselect[&#39;ap1&#39;][ok_idx])
+            smooth[ok_idx] = smooth[ok_idx] + np.abs(bounce_amp) * factor
+            bounce_data[a_frame] = smooth
+
+            # Do the same for variance
+            if params[&#39;do_var&#39;]:
+                smooth_v = variance[a_frame]
+                factor = (subselect[&#39;vam1&#39;][ok_idx]
+                          + 4 * variance[a_frame][ok_idx]
+                          + subselect[&#39;vap1&#39;][ok_idx])
+                smooth_v[ok_idx] = smooth_v[ok_idx] + bounce_amp ** 2 * factor
+                variance[a_frame] = smooth_v
+        else:
+            smooth = data[b_frame].copy()
+            factor = (subselect[&#39;bm1&#39;][ok_idx]
+                      - 2 * smooth[ok_idx]
+                      + subselect[&#39;bp1&#39;][ok_idx])
+            smooth[ok_idx] = smooth[ok_idx] + np.abs(bounce_amp) * factor
+            bounce_data[b_frame] = smooth
+
+            # Do the same for variance
+            if params[&#39;do_var&#39;]:
+                smooth_v = variance[b_frame]
+                factor = (subselect[&#39;vbm1&#39;][ok_idx]
+                          + 4 * variance[b_frame][ok_idx]
+                          + subselect[&#39;vbp1&#39;][ok_idx])
+                smooth_v[ok_idx] = smooth_v[ok_idx] + bounce_amp ** 2 * factor
+                variance[b_frame] = smooth_v
+
+    params[&#39;first_deriv_shift&#39;] = first_deriv_shift
+    params[&#39;second_deriv_shift&#39;] = second_deriv_shift
+    params[&#39;nzero&#39;] = nzero
+    params[&#39;bounce_data&#39;] = bounce_data
+    return True
+
+
+def _var_application(var):
+    &quot;&quot;&quot;Calculate paramters from variance.&quot;&quot;&quot;
+    a = var[0] - 2 * var[1] + var[2]
+    b = var[0] - var[2]
+    return a, b
+
+
+def _subselect_data(params, a_frame, b_frame):
+    &quot;&quot;&quot;Shift data plus and minus 1.&quot;&quot;&quot;
+    data = params[&#39;data&#39;].copy()
+    variance = params[&#39;variance&#39;]
+    params[&#39;a_data&#39;] = params[&#39;data&#39;][a_frame].copy()
+    params[&#39;b_data&#39;] = params[&#39;data&#39;][b_frame].copy()
+    results = dict()
+
+    if params[&#39;direction&#39;] == &#39;x&#39;:
+        axis = 1
+    else:
+        axis = 0
+
+    frames = {&#39;a&#39;: a_frame, &#39;b&#39;: b_frame}
+    shifts = {&#39;p&#39;: -1, &#39;m&#39;: 1}
+    for f, frame in frames.items():
+        for s, shift in shifts.items():
+            arr = _shift_2d_array(data[frame], shift, axis)
+            results[f&#39;{f}{s}1&#39;] = arr
+            if params[&#39;do_var&#39;]:
+                arr = _shift_2d_array(variance[frame], shift, axis)
+                results[f&#39;v{f}{s}1&#39;] = arr
+
+    return results
+
+
+def _shift_2d_array(data, n, axis):
+    &quot;&quot;&quot;Apply a shift to 2D data along a specified axis.&quot;&quot;&quot;
+    if n == 0:
+        return data
+    shifted = np.roll(data, n, axis=axis)
+    if axis == 0:
+        # Shift up/down
+        if n &gt;= 0:
+            # Shift down
+            fill = data[0, :]
+            shifted[:n, :] = np.expand_dims(fill, axis=axis)
+        else:
+            # Shift up
+            fill = data[-1, :]
+            shifted[n:, :] = np.expand_dims(fill, axis=axis)
+    else:
+        # Shift left/right
+        if n &gt;= 0:
+            # Shift right
+            fill = data[:, 0]
+            shifted[:, :n] = np.expand_dims(fill, axis=axis)
+        else:
+            # Shift left
+            fill = data[:, -1]
+            shifted[:, n:] = np.expand_dims(fill, axis=axis)
+    return shifted
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

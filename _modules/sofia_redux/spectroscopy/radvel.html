@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.spectroscopy.radvel &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
+    
+    <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.spectroscopy.radvel</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+import astropy.constants as const
+from astropy.io import fits
+from astropy.time import Time
+import astropy.units as u
+from astropy.units import imperial
+
+from sofia_redux.spectroscopy.earthvelocity import earthvelocity
+
+__all__ = [&#39;radvel&#39;]
+
+
+<div class="viewcode-block" id="radvel">
+<a class="viewcode-back" href="../../../api/sofia_redux.spectroscopy.radvel.radvel.html#sofia_redux.spectroscopy.radvel.radvel">[docs]</a>
+def radvel(header, equinox=&#39;J2000&#39;):
+    &quot;&quot;&quot;
+    Calculate the expected extrinsic radial velocity wavelength shift.
+
+    The procedure is:
+        1. Read date and RA/Dec from header.
+        2. Compute barycentric and LSR velocity along line of sight.
+        3. Return velocities / speed of light
+
+    Parameters
+    ----------
+    header : fits.Header
+        FITS header of the observation, including DATE-OBS, TELRA, and
+        TELDEC
+    equinox : str, optional
+        Equinox of TELRA, TELDEC coordinates
+
+    Returns
+    -------
+    float, float
+        delta lambda / lamdba (positive = shift toward blue).  First
+        value is barycentric shift, second value is an additional
+        shift to correct to the local standard of rest (LSR)
+    &quot;&quot;&quot;
+    if not isinstance(header, fits.Header):
+        log.error(&quot;Invalid header&quot;)
+        return
+    for required_key in [&#39;DATE-OBS&#39;, &#39;TELRA&#39;, &#39;TELDEC&#39;, &#39;LAT_STA&#39;,
+                         &#39;LON_STA&#39;, &#39;ALTI_STA&#39;]:
+        if required_key not in header:
+            log.error(&quot;%s not found in header&quot; % required_key)
+            return
+    try:
+        time = Time(header[&#39;DATE-OBS&#39;])
+    except (ValueError, AttributeError, TypeError):
+        log.error(&quot;Unable to convert %s to Julian Date&quot; % header[&#39;DATE-OBS&#39;])
+        return
+
+    ra = header[&#39;TELRA&#39;] * u.hourangle
+    dec = header[&#39;TELDEC&#39;] * u.deg
+    height = header[&#39;ALTI_STA&#39;] * imperial.ft
+    lat = header[&#39;LAT_STA&#39;] * u.deg
+    lon = header[&#39;LON_STA&#39;] * u.deg
+
+    vel = earthvelocity(ra, dec, time, lat=lat, lon=lon, height=height,
+                        center=&#39;barycentric&#39;, equinox=equinox)
+    vhelio = vel[&#39;vhelio&#39;]
+    vsun = vel[&#39;vsun&#39;]
+
+    speed_of_light = const.c.to(vhelio.unit)
+    dw_bary = vhelio / speed_of_light
+    dw_lsr = vsun / speed_of_light
+
+    log.debug(&quot;Julian Date %s&quot; % time.jd)
+    log.debug(&quot;Velocity of Earth wrt the Sun is %s&quot; % vhelio)
+    log.debug(&quot;Velocity of solar motion wrt LSR is %s&quot; % vsun)
+    log.debug(&quot;Net radial velocity of Earth wrt LSR is %s&quot; % vel[&#39;vlsr&#39;])
+    log.debug(&quot;Barycentric delta lambda over lambda is &quot;
+              &quot;%s toward blue&quot; % dw_bary)
+    log.debug(&quot;Additional shift to LSR is %s toward blue&quot; % dw_lsr)
+    log.debug(&quot;Net shift is %s toward blue&quot; % (vel[&#39;vlsr&#39;] / speed_of_light))
+    return dw_bary.value, dw_lsr.value</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

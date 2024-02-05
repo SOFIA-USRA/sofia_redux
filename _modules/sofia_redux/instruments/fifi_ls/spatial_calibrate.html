@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.fifi_ls.spatial_calibrate &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.fifi_ls.spatial_calibrate</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import os
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+import pandas
+
+from sofia_redux.instruments import fifi_ls
+from sofia_redux.toolkit.utilities \
+    import (gethdul, goodfile, hdinsert, write_hdul, multitask)
+
+
+__all__ = [&#39;clear_spatial_cache&#39;, &#39;get_spatial_from_cache&#39;,
+           &#39;store_spatial_in_cache&#39;, &#39;offset_xy&#39;,
+           &#39;get_deltavec_coeffs&#39;, &#39;calculate_offsets&#39;,
+           &#39;spatial_calibrate&#39;, &#39;wrap_spatial_calibrate&#39;]
+
+__spatial_cache = {}
+
+
+<div class="viewcode-block" id="clear_spatial_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.spatial_calibrate.clear_spatial_cache.html#sofia_redux.instruments.fifi_ls.spatial_calibrate.clear_spatial_cache">[docs]</a>
+def clear_spatial_cache():
+    &quot;&quot;&quot;
+    Clear all data from the spatial cache.
+    &quot;&quot;&quot;
+    global __spatial_cache
+    __spatial_cache = {}</div>
+
+
+
+<div class="viewcode-block" id="get_spatial_from_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.spatial_calibrate.get_spatial_from_cache.html#sofia_redux.instruments.fifi_ls.spatial_calibrate.get_spatial_from_cache">[docs]</a>
+def get_spatial_from_cache(spatialfile, obsdate):
+    &quot;&quot;&quot;
+    Retrieves spatial data from the spatial cache.
+
+    Checks to see if the file still exists, can be read, and has not
+    been altered since last time.  If the file has changed, it will be
+    deleted from the cache so that it can be re-read.
+
+    Parameters
+    ----------
+    spatialfile : str
+        File path to the spatial file
+    obsdate : int
+        Observation date
+
+    Returns
+    -------
+    arg1, arg2
+        arg1 : str or dict
+            If reading an offsets file, `arg1` will be the filename.
+            If reading a coefficients file, `arg1` will be a dictionary
+            of coefficients.
+        arg2 : numpy.ndarray or dict
+            If reading an offsets file, `arg2` will be an array of offsets.
+            If reading a coefficients file, `arg2` will be a dictionary of
+            secondary coefficients.
+    &quot;&quot;&quot;
+    global __spatial_cache
+
+    key = spatialfile, int(obsdate)
+
+    if key not in __spatial_cache:
+        return
+
+    if not goodfile(spatialfile, verbose=True):
+        try:
+            del __spatial_cache[key]
+        except KeyError:   # pragma: no cover
+            pass
+        return
+
+    modtime = str(os.path.getmtime(spatialfile))
+    if modtime not in __spatial_cache.get(key, {}):
+        return
+
+    log.debug(&quot;Retrieving spatial data from cache (%s, date %s)&quot; % key)
+    return __spatial_cache.get(key, {}).get(modtime)</div>
+
+
+
+<div class="viewcode-block" id="store_spatial_in_cache">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.spatial_calibrate.store_spatial_in_cache.html#sofia_redux.instruments.fifi_ls.spatial_calibrate.store_spatial_in_cache">[docs]</a>
+def store_spatial_in_cache(spatialfile, obsdate, arg1, arg2):
+    &quot;&quot;&quot;
+    Store spatial data in the spatial cache.
+
+    Parameters
+    ----------
+    spatialfile : str
+        File path to the spatial file
+    obsdate : int
+        Observation date
+    arg1 : str or dict
+        If reading an offsets file, `arg1` will be the filename.
+        If reading a coefficients file, `arg1` will be a dictionary
+        of coefficients.
+    arg2 : numpy.ndarray or dict
+        If reading an offsets file, `arg2` will be an array of offsets.
+        If reading a coefficients file, `arg2` will be a dictionary of
+        secondary coefficients.
+    &quot;&quot;&quot;
+    global __spatial_cache
+    key = spatialfile, int(obsdate)
+    log.debug(&quot;Storing spatial data in cache (%s, date %s)&quot; % key)
+    __spatial_cache[key] = {}
+    modtime = str(os.path.getmtime(spatialfile))
+    __spatial_cache[key][modtime] = arg1, arg2</div>
+
+
+
+<div class="viewcode-block" id="offset_xy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.spatial_calibrate.offset_xy.html#sofia_redux.instruments.fifi_ls.spatial_calibrate.offset_xy">[docs]</a>
+def offset_xy(date, blue=False):
+    &quot;&quot;&quot;
+    Calculate X and Y offsets for each spaxel.
+
+    The procedure is:
+
+        1. Identify calibration file by date and channel
+        2. Read offsets from file and reform into array
+        3. Return array
+
+    Parameters
+    ----------
+    date : array_like of int
+        Date of observation as a [YYYY, M, D] vector (e.g. [2009,3,23]
+    blue : bool, optional
+        If True, BLUE channel is assumed, otherwise, RED
+
+    Returns
+    -------
+    str, numpy.ndarray
+        calibration file used, (25, 2) X and Y offsets of each spaxel
+        (in mm)
+    &quot;&quot;&quot;
+    fifi_datapath = os.path.join(os.path.dirname(fifi_ls.__file__), &#39;data&#39;)
+    calfile_default = os.path.join(
+        fifi_datapath, &#39;spatial_cal&#39;, &#39;poscal_default.txt&#39;)
+    if not goodfile(calfile_default, verbose=True):
+        return
+
+    if not hasattr(date, &#39;__len__&#39;) or len(date) != 3 or date[0] &lt; 1e3:
+        log.error(&quot;DATE must be a 3-element array [yyyy, m, d]&quot;)
+        return
+
+    obsdate = int(&#39;&#39;.join([str(x).zfill(2) for x in date]))
+    df = pandas.read_csv(
+        calfile_default, comment=&#39;#&#39;, names=[&#39;date&#39;, &#39;chan&#39;, &#39;file&#39;],
+        delim_whitespace=True, dtype={&#39;date&#39;: int})
+    df = df.sort_values(&#39;date&#39;)
+    df[&#39;chan&#39;].apply(str.lower)
+    channel = &#39;b&#39; if blue else &#39;r&#39;
+    df = df[(df[&#39;chan&#39;] == channel) &amp; (df[&#39;date&#39;] &gt;= obsdate)]
+
+    if len(df) == 0:
+        log.error(&quot;No spatial calibration file found for &quot;
+                  &quot;channel %s&quot; % channel)
+        return
+
+    calfile = os.path.join(fifi_datapath, df[&#39;file&#39;].values[0])
+
+    offset_data = get_spatial_from_cache(calfile, obsdate)
+    if offset_data is not None:
+        return offset_data
+
+    if not goodfile(calfile, verbose=True):
+        return
+    offsets = pandas.read_csv(
+        calfile, names=[&#39;x&#39;, &#39;y&#39;], dtype=float, delim_whitespace=True)
+    offsets = np.array([offsets[&#39;x&#39;], offsets[&#39;y&#39;]]).T
+
+    store_spatial_in_cache(calfile, obsdate, calfile, offsets)
+
+    return calfile, offsets</div>
+
+
+
+<div class="viewcode-block" id="get_deltavec_coeffs">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.spatial_calibrate.get_deltavec_coeffs.html#sofia_redux.instruments.fifi_ls.spatial_calibrate.get_deltavec_coeffs">[docs]</a>
+def get_deltavec_coeffs(header, obsdate, telsim2det=0.842):
+    &quot;&quot;&quot;
+    Read the correct delta vector spatial coefficients.
+
+    Parameters
+    ----------
+    header : fits.Header
+    obsdate : array_like of int
+        Date of observation as a [YYYY, M, D] vector (e.g. [2009,3,23]
+    telsim2det : float, optional
+        Conversion factor from telsim to detector units
+
+    Returns
+    -------
+    dict, dict
+    &quot;&quot;&quot;
+    prime_array = header.get(&#39;PRIMARAY&#39;)
+    channel = header.get(&#39;CHANNEL&#39;)
+    dichroic = header.get(&#39;DICHROIC&#39;)
+    coeff_file = os.path.join(
+        os.path.dirname(fifi_ls.__file__), &#39;data&#39;, &#39;spatial_cal&#39;,
+        &#39;FIFI_LS_DeltaVector_Coeffs.txt&#39;)
+
+    longdate = int(&#39;&#39;.join([str(x).zfill(2) for x in obsdate]))
+    coefficients = get_spatial_from_cache(coeff_file, longdate)
+    if coefficients is not None:
+        return coefficients
+
+    if not goodfile(coeff_file, verbose=True):
+        return
+    df = pandas.read_csv(
+        coeff_file, comment=&#39;#&#39;, delim_whitespace=True,
+        names=[&#39;dt&#39;, &#39;ch&#39;, &#39;dch&#39;, &#39;bx&#39;, &#39;ax&#39;, &#39;rx&#39;, &#39;by&#39;, &#39;ay&#39;, &#39;ry&#39;])
+
+    # The offsets from instrument boresight to telescope boresight
+    try:
+        rows = df[(df[&#39;dt&#39;] &gt;= longdate)
+                  &amp; (df[&#39;ch&#39;] == prime_array[0].lower())
+                  &amp; (df[&#39;dch&#39;] == dichroic)].sort_values(&#39;dt&#39;)
+    except TypeError:
+        rows = []
+    c1 = {&#39;ax&#39;: 0.0, &#39;bx&#39;: 0.0, &#39;rx&#39;: 0.0,
+          &#39;ay&#39;: 0.0, &#39;by&#39;: 0.0, &#39;ry&#39;: 0.0}
+    c2 = c1.copy()
+    c2[&#39;required&#39;] = False
+
+    if len(rows) == 0:
+        log.error(&quot;No boresight offsets found for %s&quot; % longdate)
+        return None
+    else:
+        c1 = rows.iloc[0].to_dict()
+        if (channel == &#39;RED&#39; and prime_array == &#39;BLUE&#39;) or \
+                (channel == &#39;BLUE&#39; and prime_array == &#39;RED&#39;):
+
+            # The offsets between primary and secondary arrays
+            rows2 = df[(df[&#39;dt&#39;] &gt;= longdate)
+                       &amp; (df[&#39;ch&#39;] == channel[0].lower())
+                       &amp; (df[&#39;dch&#39;]
+                          == dichroic)].sort_values(&#39;dt&#39;).reset_index()
+            c2 = rows2.loc[0].to_dict()
+            c2[&#39;required&#39;] = True
+        for k in c1.keys():
+            if k[0] in [&#39;a&#39;, &#39;b&#39;]:
+                c1[k] *= telsim2det
+                c2[k] *= telsim2det
+
+    store_spatial_in_cache(coeff_file, longdate, c1, c2)
+
+    return c1, c2</div>
+
+
+
+<div class="viewcode-block" id="calculate_offsets">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.spatial_calibrate.calculate_offsets.html#sofia_redux.instruments.fifi_ls.spatial_calibrate.calculate_offsets">[docs]</a>
+def calculate_offsets(hdul, obsdate=None, flipsign=None, rotate=False):
+    &quot;&quot;&quot;
+    Calculate X and Y spatial offsets.
+
+    Parameters
+    ----------
+    hdul : fits.HDUList
+    obsdate : array_like of int, optional
+    flipsign : bool, optional
+    rotate : bool, optional
+        If True, rotate by detector angle to set N up
+
+    Returns
+    -------
+    fits.HDUList
+        HDUList updated with &#39;XS&#39;, &#39;YS&#39; spatial offsets, and &#39;RA&#39;, &#39;DEC&#39;
+        equatorial coordinates.
+    &quot;&quot;&quot;
+
+    result = fits.HDUList(fits.PrimaryHDU(header=hdul[0].header))
+
+    header = result[0].header
+    outname = os.path.basename(header.get(&#39;FILENAME&#39;, &#39;UNKNOWN&#39;))
+    outname = outname.replace(&#39;WAV&#39;, &#39;XYC&#39;)
+    header[&#39;HISTORY&#39;] = &#39;XY offsets added&#39;
+    hdinsert(header, &#39;PRODTYPE&#39;, &#39;spatial_calibrated&#39;)
+    hdinsert(header, &#39;FILENAME&#39;, outname)
+    channel = header.get(&#39;CHANNEL&#39;)
+    angle = np.radians(header.get(&#39;DET_ANGL&#39;, 0))
+
+    if obsdate is None:
+        obsdate = header.get(&#39;DATE-OBS&#39;)
+        if not isinstance(obsdate, str) or &#39;-&#39; not in obsdate:
+            log.error(&quot;DATE-OBS not found in file header&quot;)
+            return
+        try:
+            obsdate = [int(x) for x in obsdate[:10].split(&#39;-&#39;)]
+        except (ValueError, IndexError, TypeError):
+            log.error(&quot;Bad DATE-OBS found in file header&quot;)
+            return
+
+    caloffsets = offset_xy(obsdate, blue=channel == &#39;BLUE&#39;)
+    if caloffsets is None:
+        return
+    calfile, xy = caloffsets
+    if len(xy) != 25:
+        log.error(&quot;Invalid number of XY offsets&quot;)
+        return
+
+    hdinsert(header, &#39;SPATFILE&#39;, os.path.basename(calfile),
+             comment=&#39;Spatial calibration file&#39;)
+
+    telsim = &#39;TELSIM&#39; in [header.get(&#39;OBJ_NAME&#39;).strip().upper(),
+                          header.get(&#39;OBJECT&#39;).strip().upper()]
+    rotation = 0.0 if (telsim or rotate) else angle
+    hdinsert(header, &#39;SKY_ANGL&#39;, np.rad2deg(rotation),
+             comment=&#39;Sky angle after calibration (deg)&#39;)
+
+    # plate scale in arcsec/mm
+    plate_scale = header.get(&#39;PLATSCAL&#39;, 0)
+    # Map offset in arcsec
+    dlam_map = header.get(&#39;DLAM_MAP&#39;, 0)
+    dbet_map = header.get(&#39;DBET_MAP&#39;, 0)
+    if telsim:
+        # x-y stage, mm
+        dx = header.get(&#39;DLAM_MAP&#39;)
+        dy = header.get(&#39;DBET_MAP&#39;)
+        if None in [dx, dy]:
+            dx = header.get(&#39;OBSDEC&#39;, 0) / 10  # OBSRA
+            dy = header.get(&#39;OBSRA&#39;, 0) / 10  # OBSDEC
+        xs = dx - xy[:, 1]
+        ys = dy - xy[:, 0]
+        delta_coeffs = None, None
+    else:
+        # Real target, not TELSIM
+        # flip sign on DBET and DLAM if needed (mostly just older data)
+        if flipsign is None:
+            longdate = int(&#39;&#39;.join([str(x).zfill(2) for x in obsdate]))
+            flipsign = longdate &lt; 20150501  # May, 2015
+        log.debug(&quot;DLam/DBet sign convention: %s&quot; % (&#39;-&#39; if flipsign else &#39;+&#39;))
+        if flipsign:
+            dbet_map *= -1
+            dlam_map *= -1
+        delta_coeffs = get_deltavec_coeffs(header, obsdate)
+        if delta_coeffs is None:
+            log.error(&#39;Problem in deltavec coefficients&#39;)
+            return
+        xs, ys = None, None
+
+    ngrating = hdul[0].header.get(&#39;NGRATING&#39;, 1)
+    for idx in range(ngrating):
+        name = f&#39;FLUX_G{idx}&#39;
+
+        # if scanpos present, then use array of dlam/dbet instead
+        # of header keyword
+        pname = name.replace(&#39;FLUX&#39;, &#39;SCANPOS&#39;)
+        if pname in hdul:
+            posdata = hdul[pname].data
+            # broadcast to nramp x nspaxel
+            nramp = len(posdata)
+            dlam_map = np.broadcast_to(posdata[&#39;DLAM_MAP&#39;], (25, nramp)).T
+            dbet_map = np.broadcast_to(posdata[&#39;DBET_MAP&#39;], (25, nramp)).T
+            if flipsign:
+                dlam_map = dlam_map * -1.0
+                dbet_map = dbet_map * -1.0
+        else:
+            nramp = 1
+
+        exthdr = hdul[name].header
+        if not telsim:
+            c1, c2 = delta_coeffs
+            indpos_p = exthdr[&#39;INDPOS_P&#39;]
+            # Calculate offset from instrument boresight to telescope boresight
+            dx = c1[&#39;bx&#39;] + c1[&#39;ax&#39;] * indpos_p - c1[&#39;rx&#39;]
+            dy = -c1[&#39;by&#39;] - c1[&#39;ay&#39;] * indpos_p - c1[&#39;ry&#39;]
+            if c2[&#39;required&#39;]:
+                # Calculate spatial offset between primary and secondary array
+                indpos = exthdr[&#39;INDPOS&#39;]
+                dx += (c2[&#39;bx&#39;] - c1[&#39;bx&#39;]) \
+                    + (c2[&#39;ax&#39;] * indpos - c1[&#39;ax&#39;] * indpos_p)
+                dy -= (c2[&#39;by&#39;] - c1[&#39;by&#39;]) \
+                    + (c2[&#39;ay&#39;] * indpos - c1[&#39;ay&#39;] * indpos_p)
+
+            # Calculate offsets with detangl
+            xs = (plate_scale * (dx + xy[:, 0])
+                  + np.cos(angle) * dlam_map - np.sin(angle) * dbet_map)
+            ys = -(plate_scale * (dy - xy[:, 1])
+                   + np.sin(angle) * dlam_map + np.cos(angle) * dbet_map)
+
+            # Rotate by 180 for changed convention in KOSMA translator
+            if not flipsign:
+                xsr = xs * np.cos(-np.pi) - ys * np.sin(-np.pi)
+                ysr = xs * np.sin(-np.pi) + ys * np.cos(-np.pi)
+                xs = xsr
+                ys = ysr
+
+            # Rotate coords by detangl to set N up if desired
+            if rotate:
+                xsr = xs * np.cos(angle) - ys * np.sin(angle)
+                ysr = xs * np.sin(angle) + ys * np.cos(angle)
+                xs = xsr
+                ys = ysr
+
+        ra, dec = detector_coordinates_to_ra_dec(xs, ys, header)
+
+        result.append(hdul[name].copy())
+        result.append(hdul[name.replace(&#39;FLUX&#39;, &#39;STDDEV&#39;)].copy())
+        result.append(hdul[name.replace(&#39;FLUX&#39;, &#39;LAMBDA&#39;)].copy())
+
+        # reshape xs and ys data if necessary
+        exthdr[&#39;BUNIT&#39;] = &#39;arcsec&#39;
+        if xs.ndim &gt; 1:
+            result.append(fits.ImageHDU(xs.reshape((nramp, 1, 25)),
+                                        header=exthdr,
+                                        name=name.replace(&#39;FLUX&#39;, &#39;XS&#39;)))
+            result.append(fits.ImageHDU(ys.reshape((nramp, 1, 25)),
+                                        header=exthdr,
+                                        name=name.replace(&#39;FLUX&#39;, &#39;YS&#39;)))
+            exthdr[&#39;BUNIT&#39;] = &#39;hourangle&#39;
+            result.append(fits.ImageHDU(ra.reshape((nramp, 1, 25)),
+                                        header=exthdr,
+                                        name=name.replace(&#39;FLUX&#39;, &#39;RA&#39;)))
+            exthdr[&#39;BUNIT&#39;] = &#39;degree&#39;
+            result.append(fits.ImageHDU(dec.reshape((nramp, 1, 25)),
+                                        header=exthdr,
+                                        name=name.replace(&#39;FLUX&#39;, &#39;DEC&#39;)))
+        else:
+            result.append(fits.ImageHDU(xs, header=exthdr,
+                                        name=name.replace(&#39;FLUX&#39;, &#39;XS&#39;)))
+            result.append(fits.ImageHDU(ys, header=exthdr,
+                                        name=name.replace(&#39;FLUX&#39;, &#39;YS&#39;)))
+            exthdr[&#39;BUNIT&#39;] = &#39;hourangle&#39;
+            result.append(fits.ImageHDU(ra, header=exthdr,
+                                        name=name.replace(&#39;FLUX&#39;, &#39;RA&#39;)))
+            exthdr[&#39;BUNIT&#39;] = &#39;degree&#39;
+            result.append(fits.ImageHDU(dec, header=exthdr,
+                                        name=name.replace(&#39;FLUX&#39;, &#39;DEC&#39;)))
+
+    return result</div>
+
+
+
+def detector_coordinates_to_ra_dec(xs, ys, header):
+    &quot;&quot;&quot;
+    Convert native XS/YS detector coordinates to RA/DEC
+
+    Parameters
+    ----------
+    xs : numpy.ndarray
+        The equatorial X offsets (not reverse longitude).
+    ys : numpy.ndarray
+        The equatorial Y offsets.
+    header : fits.Header
+        The FITS header associated with the coordinates.
+
+    Returns
+    -------
+    ra, dec : numpy.ndarray, numpy.ndarray
+        The output detector position equatorial coordinates.
+    &quot;&quot;&quot;
+    obsra = header.get(&#39;OBSRA&#39;, 0) * 15  # hourangle to degree
+    obsdec = header.get(&#39;OBSDEC&#39;, 0)
+    sky_angle = header.get(&#39;SKY_ANGL&#39;, 0)
+    dbet_map = header.get(&#39;DBET_MAP&#39;, 0) / 3600  # arcsec to degree
+    dlam_map = header.get(&#39;DLAM_MAP&#39;, 0) / 3600  # arcsec to degree
+
+    if sky_angle != 0:
+        radians = np.radians(sky_angle)
+        cos_a, sin_a = np.cos(radians), np.sin(radians)
+        x = (xs * cos_a) - (ys * sin_a)
+        y = (xs * sin_a) + (ys * cos_a)
+    else:
+        x, y = xs, ys
+
+    center_ra, center_dec = obsra, obsdec
+    center_ra -= dlam_map / np.cos(np.radians(center_dec))
+    center_dec -= dbet_map
+
+    # xs is in native RA offsets i.e., should normally subtract but add
+    # in this case.
+
+    # Herez - change to positive
+    ra = center_ra - (x / (3600 * np.cos(np.radians(center_dec))))
+    dec = center_dec + (y / 3600)
+    return ra / 15, dec  # convert RA back to hourangle
+
+
+<div class="viewcode-block" id="spatial_calibrate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.spatial_calibrate.spatial_calibrate.html#sofia_redux.instruments.fifi_ls.spatial_calibrate.spatial_calibrate">[docs]</a>
+def spatial_calibrate(filename, obsdate=None, flipsign=None,
+                      rotate=False, outdir=None, write=False):
+    &quot;&quot;&quot;
+    Apply spatial calibration (x and y offsets).
+
+    Each data extension will be updated with xs and ys fields, containing
+    spatial coordinates for each pixel in the data array.  The input
+    file should have been created by fifi_ls.lambda_calibrate.
+    This procedure handles only ERF coordinates;  SIRF mapping is neither
+    detected nor handled properly.
+
+    The FIFI-LS optics are not perfectly aligned so the pixels do not
+    fall on an even grid.  This routine calculates the x, y locations
+    for each pixel and shifts them according to dither positions.  The
+    procedure is, for each grating scan extension:
+
+        1. Calculate spatial positions in mm (from fifi_ls.offset_xy)
+        2. Convert positions to arcseconds, using PLATSCAL, dither
+           offsets (DLAM_MAP and DBET_MAP, possibly with a sign-flip
+           on each), and offsets of the secondary array from the
+           primary (from data/secondary_offset.txt).
+        3. Convert arcsecond offsets to RA and Dec coordinates.
+        4. Create FITS file and (optionally) write results to disk.
+
+    For OTF mode data, each input ramp sample has a separate
+    DLAM_MAP and DBET_MAP value, as recorded in the SCANPOS table in the
+    input FITS file.  These values are used to calculate the X and Y
+    offsets for each sample.  The output XS and YS image extensions
+    have dimension 25 x 1 x n_ramp.  The SCANPOS table is not propagated
+    to the output.
+
+    For all other data, the X and Y offsets are calculated from the
+    DLAM_MAP and DBET_MAP keywords in the header, and are
+    attached to the output as a 25-element array in the XS and YS
+    image extensions.
+
+    For all data, RA and DEC image extensions are additionally attached,
+    containing the sky coordinates for each spaxel in hours and degrees,
+    respectively.  Array dimensions for these extensions match the XS and
+    YS arrays.
+
+    Parameters
+    ----------
+    filename : str
+        File to be spatial-calibrated
+    obsdate : array_like of int, optional
+        Date of observation.  Intended for files that do not have
+        the DATE-OBS keyword (and value) in the FITS primary header
+        (early files do not).  Format is [YYYY,MM,DD].
+    flipsign : bool, optional
+        If True, DLAM_MAP and DBET_MAP will be multiplied by -1.  If
+        False, DLAM_MAP and DBET_MAP will be used as is.  If None
+        (default), the observation date will be used to determine
+        what the sign convention should be.
+    rotate : bool, optional
+        If True, rotate by the detector angle to set N up.
+    outdir : str, optional
+        Directory path to write output.  If None, output files
+        will be written to the same directory as the input files.
+    write : bool, optional
+        If True, write to disk and return the path to the output
+        file.  If False, return the HDUList. The output filename is
+        created from the input filename, with the suffix &#39;WAV&#39; replaced
+        with &#39;XYC&#39;.
+
+    Returns
+    -------
+    fits.HDUList or str
+        Either the HDUList (if write is False) or the filename of
+        the output file (if write is True).
+    &quot;&quot;&quot;
+    if isinstance(outdir, str):
+        if not os.path.isdir(outdir):
+            log.error(&quot;Output directory %s does not exist&quot; % outdir)
+            return
+
+    hdul = gethdul(filename, verbose=True)
+    if hdul is None:
+        return
+    if not isinstance(filename, str):
+        filename = hdul[0].header[&#39;FILENAME&#39;]
+    if not isinstance(outdir, str):
+        outdir = os.path.dirname(filename)
+
+    result = calculate_offsets(hdul, obsdate=obsdate, flipsign=flipsign,
+                               rotate=rotate)
+    if result is None:
+        log.error(&#39;Offset calculation failed&#39;)
+        return
+
+    if not write:
+        return result
+    else:
+        return write_hdul(result, outdir=outdir, overwrite=True)</div>
+
+
+
+def spatial_calibrate_wrap_helper(_, kwargs, filename):
+    return spatial_calibrate(filename, **kwargs)
+
+
+<div class="viewcode-block" id="wrap_spatial_calibrate">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.fifi_ls.spatial_calibrate.wrap_spatial_calibrate.html#sofia_redux.instruments.fifi_ls.spatial_calibrate.wrap_spatial_calibrate">[docs]</a>
+def wrap_spatial_calibrate(files, outdir=None, obsdate=None, flipsign=None,
+                           rotate=True, allow_errors=False, write=False,
+                           jobs=None):
+    &quot;&quot;&quot;
+    Wrapper for spatial_calibrate over multiple files.
+
+    See `spatial_calibrate` for full description of reduction
+    on a single file.
+
+    Parameters
+    ----------
+    files : array_like of str
+        paths to files to be spatially calibrated
+    outdir : str, optional
+        Directory path to write output.  If None, output files
+        will be written to the same directory as the input files.
+    obsdate : array_like of int, optional
+        Date of observation.  Intended for files that do not have
+        the DATE-OBS keyword (and value) in the FITS primary header
+        (early files do not).  Format is [YYYY,MM,DD].
+    flipsign : bool, optional
+        If True, DLAM_MAP and DBET_MAP will be multiplied by -1.  If
+        False, DLAM_MAP and DBET_MAP will be used as is.  If None
+        (default), the observation date will be used to determine
+        what the sign convention should be.
+    rotate : bool, optional
+        If True, rotate by the detector angle to set N up.
+    allow_errors : bool, optional
+        If True, return all created files on error.  Otherwise, return None
+    write : bool, optional
+        If True, write the output to disk and return the filename instead
+        of the HDU.
+    jobs : int, optional
+        Specifies the maximum number of concurrently running jobs.
+        Values of 0 or 1 will result in serial processing.  A negative
+        value sets jobs to `n_cpus + 1 + jobs` such that -1 would use
+        all cpus, and -2 would use all but one cpu.
+
+    Returns
+    -------
+    tuple of str
+        output filenames written to disk
+    &quot;&quot;&quot;
+    if isinstance(files, str):
+        files = [files]
+    if not hasattr(files, &#39;__len__&#39;):
+        log.error(&quot;Invalid input files type (%s)&quot; % repr(files))
+        return
+
+    clear_spatial_cache()
+
+    kwargs = {&#39;outdir&#39;: outdir, &#39;obsdate&#39;: obsdate, &#39;write&#39;: write,
+              &#39;flipsign&#39;: flipsign, &#39;rotate&#39;: rotate}
+
+    output = multitask(spatial_calibrate_wrap_helper, files, None, kwargs,
+                       jobs=jobs)
+
+    failure = False
+    result = []
+    for x in output:
+        if x is None:
+            failure = True
+        else:
+            result.append(x)
+    if failure:
+        if len(result) &gt; 0:
+            if not allow_errors:
+                log.error(&quot;Errors were encountered but the following &quot;
+                          &quot;files were created:\n%s&quot; % &#39;\n&#39;.join(result))
+                return
+
+    clear_spatial_cache()
+
+    return tuple(result)</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,1829 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.hawc.datafits &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.hawc.datafits</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;Data storage class for FITS images and tables.&quot;&quot;&quot;
+
+from datetime import datetime
+import os
+import time
+import gc
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.instruments.hawc.dataparent import DataParent
+from sofia_redux.toolkit.utilities.fits import hdinsert
+
+__all__ = [&#39;DataFits&#39;]
+
+
+<div class="viewcode-block" id="DataFits">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits">[docs]</a>
+class DataFits(DataParent):
+    &quot;&quot;&quot;
+    Pipeline data FITS object.
+
+    The data is stored as a list of (multi-dimensional) images and a
+    similar list of tables. FITS file name and all headers are
+    stored as well.
+    &quot;&quot;&quot;
+
+    # File Name Fit: Regexp expression that fits valid filenames
+    # will fit .fits or .fts at end of name
+    filenamefit = r&#39;\.(fits|fts)\Z&#39;
+    &quot;&quot;&quot;str : Regular expression that matches valid FITS file names.&quot;&quot;&quot;
+
+    def __init__(self, filename=&#39;&#39;, config=None):
+        &quot;&quot;&quot;
+        Initialize data object and variables.
+
+        The parent constructor is not called by this function, since
+        this class requires different attribute handling than its parent.
+
+        Parameters
+        ----------
+        filename : str, optional
+            Path to a text file. If specified, data will be loaded
+            immediately from the file.
+        config : `configobj.ConfigObj`, dict, str, or list of str, optional
+            If specified, the configuration will be loaded.
+        &quot;&quot;&quot;
+        # set up internal variables
+        self.filename = &#39;&#39;
+        self.rawname = &#39;&#39;
+        self.loaded = False
+
+        # retrieve config directory location from current file path
+        # assumes config is in sofia_redux/instruments/hawc/data/config
+        # and this file is in sofia_redux/instruments/hawc
+        pipe_path = os.path.dirname(os.path.abspath(__file__))
+        self.data_path = os.path.join(pipe_path, &#39;data&#39;, &#39;&#39;)
+        self.config_path = os.path.join(pipe_path, &#39;data&#39;, &#39;config&#39;, &#39;&#39;)
+
+        # set the configuration
+        self.mode = None
+        self.config = None
+        self.config_files = []
+        self.setconfig(config)
+
+        # Image Variables:
+        #   At all times len(imgdata) == len(imgnames) == len(imgheads)
+        #   - If only loadhead() was called or first HDU has no data:
+        #     imghead[0]=header, imgdata[0]=None, imgnames[0]=&#39;Primary Header&#39;
+
+        # List with image data - data is in array of int/float
+        self.imgdata = []
+        # List with image names (all uppercase)
+        self.imgnames = []
+        # List with image headers
+        self.imgheads = []
+
+        # Table Variables:
+        #   At all times len(tabdata) == len(tabnames) == len(tabheads)
+
+        # List with tables each item is a record array
+        self.tabdata = []
+        # List with table names (all uppercase)
+        self.tabnames = []
+        # List with table headers
+        self.tabheads = []
+
+        # if file exists, load it
+        if os.path.exists(filename):
+            self.load(filename)
+        elif filename != &#39;&#39;:
+            # user specified a non-existent filename
+            msg = &#39;No such file %s&#39; % filename
+            log.error(msg)
+            raise IOError(msg)
+
+    def __getattr__(self, name):
+        &quot;&quot;&quot;
+        Get attribute.
+
+        Allows access to these attributes:
+
+            - header: header of primary HDU
+            - image: the first image
+            - table: the first table
+
+        From DataParent.__getattr__:
+
+            - filenamebegin: filename start
+            - filenameend: filename end
+
+        Parameters
+        ----------
+        name : str
+            The attribute to retrieve.
+        &quot;&quot;&quot;
+        # return data
+        if name == &#39;data&#39;:
+            if self.imgdata and self.imgdata[0] is not None:
+                # return image if available
+                return self.imgdata[0]
+            elif self.tabdata:
+                # else return a table
+                return self.tabdata[0]
+            else:
+                msg = &quot;&#39;%s&#39; object has no data&quot; % type(self).__name__
+                log.warning(msg)
+                return None
+
+        # return image if it&#39;s requested - raise error if no images present
+        if name == &#39;image&#39;:
+            if len(self.imgdata) == 0:
+                msg = &quot;&#39;%s&#39; object has no image data&quot; % type(self).__name__
+                log.warning(msg)
+                return None
+            elif self.imgdata[0] is None:
+                msg = &quot;&#39;%s&#39; object has no image data&quot; % type(self).__name__
+                log.warning(msg)
+            return self.imgdata[0]
+        # return table if it&#39;s requested - raise error if no tables present
+        if name == &#39;table&#39;:
+            if len(self.tabdata) == 0:
+                msg = &quot;&#39;%s&#39; object has no table data&quot; % type(self).__name__
+                log.warning(msg)
+                return None
+            return self.tabdata[0]
+        # return header if it&#39;s requested - raise error if no images present
+        if name == &#39;header&#39;:
+            if len(self.imgheads) == 0:
+                msg = &quot;&#39;%s&#39; object has no header data&quot; % type(self).__name__
+                log.warning(msg)
+                return None
+            return self.imgheads[0]
+
+        # run parent function (filenamebegin and filenameend)
+        return super().__getattr__(name)
+
+    def __setattr__(self, name, value):
+        &quot;&quot;&quot;
+        Set attribute.
+
+        Allows setting of these attributes:
+
+            - header: header of primary HDU
+            - image: the first image
+            - table: the first table
+
+        Parameters
+        ----------
+        name : str
+            The attribute to set.
+        value : object
+            The value to set.
+        &quot;&quot;&quot;
+        # set the data to image
+        if name == &#39;data&#39;:
+            # if it&#39;s a table put it in table
+            if issubclass(value.__class__, np.recarray):
+                self.table = value
+            # else assume it&#39;s an image
+            else:
+                self.image = value
+        elif name == &#39;image&#39;:
+            # set the image if it&#39;s requested
+            if len(self.imgdata) &gt; 0:
+                self.imgdata[0] = value
+            else:
+                self.imgdata = [value]
+                self.imgnames = [&#39;PRIMARY IMAGE&#39;]
+                self.imgheads = [fits.Header()]
+            self.loaded = True
+        elif name == &#39;table&#39;:
+            # set the table if it&#39;s requested
+            if len(self.tabdata) &gt; 0:
+                self.tabdata[0] = value
+            else:
+                self.tabdata = [value]
+                self.tabnames = [&#39;PRIMARY TABLE&#39;]
+                self.tabheads = [fits.Header()]
+            self.loaded = True
+        elif name == &#39;header&#39;:
+            # set the header if it&#39;s requested
+            if len(self.imgdata) &gt; 0:
+                self.imgheads[0] = value
+            else:
+                self.imgdata = [None]
+                self.imgnames = [&#39;PRIMARY HEADER&#39;]
+                self.imgheads = [value]
+        else:
+            # else pass the command to the parent function
+            super().__setattr__(name, value)
+
+<div class="viewcode-block" id="DataFits.loadhead">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.loadhead">[docs]</a>
+    def loadhead(self, filename=&#39;&#39;, dataname=&#39;&#39;, hdul=None):
+        &quot;&quot;&quot;
+        Load and return the primary header of the FITS file given.
+
+        This also checks for file existence and type. Only the header
+        is loaded into the DataFits object; the data is not loaded.
+
+        Parameters
+        ----------
+        filename : str, optional
+            The name of the file to load. If omitted,
+            self.filename is used.
+        dataname : str or int, optional
+            The EXTNAME value or extension number of the header to be loaded
+            If such a header is not found, or dataname==&#39;&#39;, the first header
+            is loaded. This option should be used if the main file
+            information is not in the primary header.
+        hdul : fits.HDUList, optional
+            An in-memory HDUList to load, in place of an on-disk file.
+        &quot;&quot;&quot;
+        # check for file existence, type and get primary header
+
+        # set self.filename and filename
+        if len(filename) &gt; 0:
+            self.filename = filename
+            self.rawname = filename
+        else:
+            filename = self.filename
+
+        # read fits header, checks for existing valid fits file
+        if hdul is None:
+            try:
+                hdus = fits.open(filename)
+            except (IOError, OSError, IndexError,
+                    TypeError, ValueError) as error:
+                log.error(&#39;LoadHead: FITS read error &#39; + filename)
+                raise error
+        else:
+            hdus = hdul
+
+        # No dataname -&gt; return primary header
+        if dataname == &#39;&#39;:
+            header = [hdus[0].header]
+        elif dataname == &#39;all&#39;:
+            # Retrieve headers from all extensions
+            header = []
+            for ext in hdus:
+                header.append(ext.header)
+        else:
+            # Look for correct dataname
+            try:
+                header = [hdus[dataname].header]
+            except (KeyError, ValueError, IndexError):
+                msg = &quot;loadhead: HDU with EXTNAME=%s not found&quot; % dataname
+                log.error(msg)
+                raise ValueError(msg)
+
+        # Fill in the header, if necessary fill in data
+        self.imgheads = header
+        self.imgdata = [None] * len(header)
+        try:
+            self.imgnames = [h[&#39;EXTNAME&#39;].upper() for h in header]
+        except KeyError:
+            self.imgnames = [&#39;PRIMARY HEADER&#39;] * len(header)
+
+        # Update the config for the current file if possible
+        try:
+            date = self.getheadval(&#39;DATE-OBS&#39;, errmsg=False)
+            date = datetime.strptime(
+                date.split(&#39;.&#39;)[0], &quot;%Y-%m-%dT%H:%M:%S&quot;)
+            self.mergeconfig(date=date)
+        except (KeyError, ValueError, AttributeError):
+            log.debug(&#39;No date found for %s&#39; % filename)
+
+        # Set the default pipeline mode from the config
+        self.mode = self.get_pipe_mode()
+        if self.mode is not None:
+            self.mergeconfig(mode=self.mode)
+
+        # Fill in the filename
+        self.filename = filename
+        if hdul is None:
+            hdus.close()</div>
+
+
+<div class="viewcode-block" id="DataFits.load">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.load">[docs]</a>
+    def load(self, filename=&#39;&#39;, hdul=None):
+        &quot;&quot;&quot;
+        Load a FITS file into the data object.
+
+        Loads headers, images, and tables from the file on disk.
+        After loading, self.loaded is set to True.
+
+        Parameters
+        ----------
+        filename : str, optional
+            The name of the file to load. If omitted, self.filename is used.
+        hdul : fits.HDUList, optional
+            An in-memory HDUList to load, in place of an on-disk file.
+        &quot;&quot;&quot;
+        # Clear file data
+        self.imgdata, self.imgheads, self.imgnames = [], [], []
+        self.tabdata, self.tabheads, self.tabnames = [], [], []
+
+        # Get filename and file checks
+        # set self.filename and filename
+        if len(filename) &gt; 0:
+            self.filename = filename
+            self.rawname = filename
+        else:
+            filename = self.filename
+
+        if hdul is not None:
+            # directly load provided HDUL
+            self.loadhead(hdul=hdul)
+            hdus = hdul
+        else:
+            # check for file existence, type and get primary header
+            #   fills first entry into imgdata, imgnames
+            self.loadhead(filename)
+
+            # Read File
+            hdus = fits.open(filename, memmap=False)
+
+        # Collect images / Load them
+        # Search for ImageHDUs (does not include PrimaryHDU)
+        imgind = [i for i in range(len(hdus))
+                  if isinstance(hdus[i], fits.ImageHDU)]
+        # store number of images
+        imgn = len(imgind)
+
+        # get naxis and naxis1 from primary header, check if keywords exist
+        naxis = 0
+        naxis1 = 0
+        try:
+            naxis = int(self.getheadval(&#39;NAXIS&#39;))
+            if naxis &gt; 0:
+                naxis1 = self.getheadval(&#39;NAXIS1&#39;, errmsg=False)
+        except (KeyError, ValueError, AttributeError):
+            # KeyError: keyword not found (no keywords available)
+            log.warning(&#39;Load: missing naxis keywords in fits file &#39;
+                        + filename)
+
+        # Check if file has no image (i.e. if naxis==1 and naxis1==0)
+        # -&gt; No change, primary image stays as it was from loadhead()
+        if naxis * naxis1 == 0:
+            log.debug(&#39;Load: No image data in first HDU&#39;)
+        else:
+            # Load first HDU data if there is image data in it
+            imgn += 1
+            self.imgdata[0] = hdus[0].data
+
+            # Set image name
+            if &#39;EXTNAME&#39; in self.imgheads[0]:
+                self.imgnames[0] = self.imgheads[0][&#39;EXTNAME&#39;].upper()
+            else:
+                self.imgnames[0] = &#39;PRIMARY IMAGE&#39;
+
+        # Message with number of images
+        log.debug(&#39;Load: %d image(s) in file %s&#39; % (imgn, filename))
+
+        # Load subsequent images
+        for ind in imgind:
+            # get name
+            if &#39;EXTNAME&#39; in hdus[ind].header.keys():
+                self.imgnames.append(hdus[ind].header[&#39;EXTNAME&#39;].upper())
+            else:
+                self.imgnames.append(&#39;SECONDARY IMAGE %d&#39; % ind)
+
+            # get data and header
+            self.imgdata.append(hdus[ind].data)
+            self.imgheads.append(hdus[ind].header)
+
+        # Search for BinTableHDUs
+        tabind = [i for i in range(len(hdus))
+                  if isinstance(hdus[i], fits.BinTableHDU)]
+        tabn = len(tabind)
+
+        # Messages on number of tables
+        log.debug(&#39;Load: %d table(s) in file %s&#39; % (tabn, filename))
+
+        # Load all tables
+        for ind in tabind:
+            # if table is empty -&gt; warning and skip it
+            try:
+                if hdus[ind].data is None or len(hdus[ind].data) == 0:
+                    msg = &#39;Load: Table in HDU number %d has no data&#39; % ind
+                    msg += &#39; -&gt; Ignoring this HDU&#39;
+                    log.warning(msg)
+                    continue
+            except (IndexError, AttributeError, TypeError):
+                msg = &#39;Load: Problem loading table in HDU number %d&#39; % ind
+                msg += &#39; -&gt; Ignoring this HDU&#39;
+                log.warning(msg)
+                continue
+
+            # get name
+            if &#39;EXTNAME&#39; in hdus[ind].header:
+                self.tabnames.append(hdus[ind].header[&#39;EXTNAME&#39;].upper())
+            else:
+                # tables can&#39;t be in primary extension, so start secondary
+                # after index 1
+                if ind &gt; 1:
+                    self.tabnames.append(&#39;SECONDARY TABLE %d&#39; % (ind - 1))
+                else:
+                    self.tabnames.append(&#39;PRIMARY TABLE&#39;)
+
+            # get data, header
+            self.tabdata.append(np.rec.array(hdus[ind].data))
+            self.tabheads.append(hdus[ind].header)
+
+        # Update the config for the current file if possible
+        try:
+            date = self.getheadval(&#39;DATE-OBS&#39;, errmsg=False)
+            date = datetime.strptime(
+                date.split(&#39;.&#39;)[0], &quot;%Y-%m-%dT%H:%M:%S&quot;)
+            self.mergeconfig(date=date)
+        except (KeyError, ValueError, AttributeError):
+            log.debug(&#39;No date found for %s&#39; % filename)
+
+        # Set the default pipeline mode from the config
+        self.mode = self.get_pipe_mode()
+        if self.mode is not None:
+            self.mergeconfig(mode=self.mode)
+
+        # Close the file
+        if hdul is None:
+            hdus.close()
+            gc.collect()
+
+        self.loaded = True
+        log.debug(&#39;Load: loaded fits file&#39;)</div>
+
+
+<div class="viewcode-block" id="DataFits.to_hdulist">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.to_hdulist">[docs]</a>
+    def to_hdulist(self, filename=None, save_tables=True):
+        &quot;&quot;&quot;
+        Return an astropy HDUList equivalent to the current data object.
+
+        Also sets pipeline keywords in headers: PIPEVERS, FILENAME, DATE.
+        The pipeline version for PIPEVERS is read from self.pipever,
+        usually set in the DataParent class.
+
+        Parameters
+        ----------
+        filename : str, optional
+            The file name to store in the FILENAME keyword. If not
+            provided, self.filename will be used.
+        save_tables : bool, optional
+            If not set, binary tables stored in the current object
+            will not be passed to the output HDUList.
+
+        Returns
+        -------
+        fits.HDUList
+            The HDUList containing all requested data.
+        &quot;&quot;&quot;
+        if filename is None:
+            filename = self.filename
+
+        # update pipeline keywords
+        self.setheadval(&#39;PIPEVERS&#39;, DataParent.pipever.replace(&#39;.&#39;, &#39;_&#39;),
+                        &#39;Pipeline Version&#39;)
+        self.setheadval(&#39;FILENAME&#39;, os.path.split(filename)[-1])
+        self.setheadval(&#39;DATE&#39;, time.strftime(&#39;%Y-%m-%dT%H:%M:%S&#39;))
+
+        # make the data primary HDU -&gt; List
+        hdul = []
+        for i in range(len(self.imgnames)):
+            if i == 0:
+                hdui = fits.PrimaryHDU(self.imgdata[i], self.imgheads[i])
+            else:
+                hdui = fits.ImageHDU(self.imgdata[i], self.imgheads[i])
+            hdui.header[&#39;EXTNAME&#39;] = (self.imgnames[i].upper(),
+                                      &#39;ID of the HDU&#39;)
+            hdul.append(hdui)
+
+        # make hdus for tables
+        if save_tables:
+            for i in range(len(self.tabnames)):
+                hdut = fits.BinTableHDU(self.tabdata[i], self.tabheads[i])
+                hdut.header[&#39;EXTNAME&#39;] = (self.tabnames[i].upper(),
+                                          &#39;ID of the HDU&#39;)
+                hdul.append(hdut)
+
+        # make an HDU list
+        hdulist = fits.HDUList(hdul)
+        return hdulist</div>
+
+
+<div class="viewcode-block" id="DataFits.to_header_list">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.to_header_list">[docs]</a>
+    def to_header_list(self, filename=None):
+        &quot;&quot;&quot;
+        Return a list of all headers in the current data object.
+
+        Headers are updated with pipeline keywords before returning
+        (PIPEVERS, FILENAME, DATE).
+
+        Parameters
+        ----------
+        filename : str, optional
+            The file name to store in the FILENAME keyword. If not
+            provided, self.filename will be used.
+
+        Returns
+        -------
+        list of fits.Header
+        &quot;&quot;&quot;
+        if filename is None:
+            filename = self.filename
+
+        # update pipeline keywords
+        self.setheadval(&#39;PIPEVERS&#39;, DataParent.pipever.replace(&#39;.&#39;, &#39;_&#39;),
+                        &#39;Pipeline Version&#39;)
+        self.setheadval(&#39;FILENAME&#39;, os.path.split(filename)[-1])
+        self.setheadval(&#39;DATE&#39;, time.strftime(&#39;%Y-%m-%dT%H:%M:%S&#39;))
+
+        # make the data primary HDU -&gt; List
+        hlist = []
+        for name in self.imgnames:
+            hlist.append(self.getheader(name))
+        for name in self.tabnames:
+            hlist.append(self.getheader(name))
+        return hlist</div>
+
+
+<div class="viewcode-block" id="DataFits.save">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.save">[docs]</a>
+    def save(self, filename=None):
+        &quot;&quot;&quot;
+        Save the data in the object to the specified file.
+
+        Existing files are overwritten.
+
+        Parameters
+        ----------
+        filename : str, optional
+            The file name to store in the FILENAME keyword. If not
+            provided, self.filename will be used.
+        &quot;&quot;&quot;
+        # get file name
+        if filename is None:
+            filename = self.filename
+
+        # make an HDU list
+        hdulist = self.to_hdulist(filename=filename)
+
+        # save the file (produce errors if not successful)
+        try:
+            hdulist.writeto(filename, output_verify=&#39;fix&#39;, overwrite=True)
+        except (IOError, TypeError) as error:
+            log.error(&#39;Save: Failed to write fits file to &#39; + filename)
+            raise error
+        log.debug(&#39;Save: wrote FITS file %s&#39; % filename)</div>
+
+
+<div class="viewcode-block" id="DataFits.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the current object.
+
+        Returns
+        -------
+        DataFits
+        &quot;&quot;&quot;
+
+        # create new object
+        out = DataFits(config=self.config)
+
+        # copy all images
+        out.imgnames = self.imgnames[:]
+        out.imgdata = []
+        out.imgheads = []
+        for imgi in range(len(self.imgdata)):
+            if self.imgdata[imgi] is not None:
+                out.imgdata.append(self.imgdata[imgi].copy())
+            else:
+                out.imgdata.append(None)
+            out.imgheads.append(self.imgheads[imgi].copy())
+
+        # copy tables
+        out.tabnames = self.tabnames[:]
+        out.tabdata = []
+        out.tabheads = []
+        for tabi in range(len(self.tabdata)):
+            if self.tabdata[tabi] is not None:
+                out.tabdata.append(self.tabdata[tabi].copy())
+            else:
+                out.tabdata.append(None)
+            out.tabheads.append(self.tabheads[tabi].copy())
+
+        # copy filename
+        out.filename = self.filename
+        out.rawname = self.rawname
+        out.loaded = self.loaded
+
+        # return new object
+        return out</div>
+
+
+<div class="viewcode-block" id="DataFits.mergehead">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.mergehead">[docs]</a>
+    def mergehead(self, other):
+        &quot;&quot;&quot;
+        Merge the header of another data object to the existing header.
+
+        The merge is between primary headers only.
+
+        Header keywords are merged according to the configuration
+        values specified for the &#39;headmerge&#39; section. Options are:
+        FIRST, LAST, MIN, MAX, SUM, OR, AND, CONCATENATE, DEFAULT.
+
+        Parameters
+        ----------
+        other : DataFits
+            The DataFits to merge from.
+        &quot;&quot;&quot;
+        # get cards
+        otherheader = other.header
+        othercards = otherheader.cards
+        selfcards = self.header.cards
+
+        # add history keywords (no duplicates)
+        otherhist = [card.value for card in othercards
+                     if card.keyword == &#39;HISTORY&#39;]
+        selfhist = [card.value for card in selfcards
+                    if card.keyword == &#39;HISTORY&#39;]
+        for hist in otherhist:
+            if hist not in selfhist:
+                hdinsert(self.header, &#39;HISTORY&#39;, hist, after=True)
+
+        # Go through keywords listed in headmerge: assume self is first
+        headmerge = self.config[&#39;headmerge&#39;]
+        for key in headmerge.keys():
+            if key in self.header and key in otherheader:
+                selfval = self.header[key]
+                otherval = otherheader[key]
+                operation = headmerge[key].upper()
+                if operation == &#39;LAST&#39;:
+                    selfval = otherval
+                elif operation == &#39;MIN&#39;:
+                    selfval = min(selfval, otherval)
+                elif operation == &#39;MAX&#39;:
+                    selfval = max(selfval, otherval)
+                elif operation == &#39;SUM&#39;:
+                    selfval += otherval
+                elif operation == &#39;OR&#39;:
+                    selfval = selfval | otherval
+                elif operation == &#39;AND&#39;:
+                    selfval = selfval &amp; otherval
+                elif operation == &#39;CONCATENATE&#39;:
+                    if &#39;,&#39; in str(selfval):
+                        vlist = str(selfval).split(&#39;,&#39;)
+                    else:
+                        vlist = [str(selfval)]
+                    if &#39;,&#39; in str(otherval):
+                        olist = str(otherval).split(&#39;,&#39;)
+                    else:
+                        olist = [str(otherval)]
+                    for oval in olist:
+                        if oval not in vlist:
+                            vlist.append(oval)
+                    selfval = &#39;,&#39;.join(sorted(vlist))
+                elif operation == &#39;DEFAULT&#39;:
+                    if type(selfval) is str:
+                        selfval = &#39;UNKNOWN&#39;
+                    elif type(selfval) is int:
+                        selfval = -9999
+                    elif type(selfval) is float:
+                        selfval = -9999.0
+                self.header[key] = selfval</div>
+
+
+<div class="viewcode-block" id="DataFits.copyhead">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.copyhead">[docs]</a>
+    def copyhead(self, other, name=None, overwrite=True):
+        &quot;&quot;&quot;
+        Copy a header into the current object.
+
+        This function copies all header keywords, comments,
+        and history from other. Will overwrite existing cards, unless
+        overwrite flag is set to False. Exceptions: HISTORY and COMMENT
+        cards are always appended to the end of the list of such keywords
+        present in self.
+
+        If name is None, the header from the first HDU (self.header,
+        other.header) will be used.
+
+        Parameters
+        ----------
+        other : DataFits
+            The object to copy from.
+        name : str, optional
+            The name of the extension header to copy.
+        overwrite : bool, optional
+            If not set, keywords already present in the current header
+            will not be overwritten.
+        &quot;&quot;&quot;
+
+        if name is None:
+            head1 = other.header
+            head2 = self.header
+        else:
+            head1 = other.getheader(name)
+            head2 = self.getheader(name)
+        try:
+            nhist = len(head1[&#39;history&#39;])
+        except KeyError:
+            nhist = 0
+        try:
+            ncomm = len(head1[&#39;comment&#39;])
+        except KeyError:
+            ncomm = 0
+
+        for k in head1.keys():
+            if k in (&#39;COMMENT&#39;, &#39;HISTORY&#39;):
+                # handle later
+                pass
+            elif k in head2.keys():
+                if overwrite:
+                    head2[k] = (head1[k], head1.comments[k])
+            else:
+                head2[k] = (head1[k], head1.comments[k])
+        for i in range(nhist):
+            head2.add_history(head1[&#39;history&#39;][i])
+        for i in range(ncomm):
+            head2.add_comment(head1[&#39;comment&#39;][i])</div>
+
+
+<div class="viewcode-block" id="DataFits.copydata">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.copydata">[docs]</a>
+    def copydata(self, other, dataname):
+        &quot;&quot;&quot;
+        Copy data into the current object.
+
+        Copies data (image or table) from another DataFits object to the
+        current object. If an object of that name already exists it is
+        overwritten. Both the data and the header are copied.
+
+        Parameters
+        ----------
+        other : DataFits
+            The object to copy from
+        dataname : str
+            The name of the extension header to copy.
+        &quot;&quot;&quot;
+        # Check type and presence of data in other object
+        isimg = False
+        if dataname.upper() in other.imgnames:
+            isimg = True
+            othind = other.imageindex(dataname)
+        elif dataname.upper() in other.tabnames:
+            othind = other.tableindex(dataname)
+        else:
+            log.error(&#39;CopyData: dataname not found&#39;)
+            raise ValueError(&#39;dataname not found&#39;)
+
+        # Check if name exists in local data, delete if it&#39;s different type
+        if dataname.upper() in self.imgnames:
+            if not isimg:
+                self.imagedel(dataname)
+        elif dataname.upper() in self.tabnames:
+            if isimg:
+                self.tabledel(dataname)
+
+        # Copy / Overwrite object
+        if isimg:
+            self.imageset(other.imgdata[othind].copy(), dataname,
+                          other.imgheads[othind].copy())
+        else:
+            self.tableset(other.tabdata[othind].copy(), dataname,
+                          other.tabheads[othind].copy())</div>
+
+
+<div class="viewcode-block" id="DataFits.imageindex">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.imageindex">[docs]</a>
+    def imageindex(self, imagename=None):
+        &quot;&quot;&quot;
+        Return the index of an image in the current object.
+
+        Given this index, the associated image can be accessed
+        via self.imgdata[index].
+
+        Parameters
+        ----------
+        imagename: str, optional
+            The name of the requested image. If not provided,
+            the first image will be returned.
+
+        Returns
+        -------
+        int
+            The image index.
+
+        Raises
+        ------
+        ValueError
+            If the image is not found.
+        &quot;&quot;&quot;
+        # empty name -&gt; return first image
+        if imagename is None:
+            return 0
+
+        # check for valid name
+        try:
+            ind = self.imgnames.index(imagename.upper())
+        except ValueError as error:
+            msg = &#39;invalid image name (%s)&#39; % imagename
+            log.error(&#39;Imageindex: &#39; + msg)
+            raise error
+
+        # return index
+        return ind</div>
+
+
+<div class="viewcode-block" id="DataFits.imageget">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.imageget">[docs]</a>
+    def imageget(self, imagename=None):
+        &quot;&quot;&quot;
+        Return an image.
+
+        Parameters
+        ----------
+        imagename : str, optional
+            The name of the requested image. The first image is returned
+            if not provided.
+
+        Returns
+        -------
+        array-like
+            The requested image.
+        &quot;&quot;&quot;
+        # get index
+        ind = self.imageindex(imagename)
+        # return image
+        return self.imgdata[ind]</div>
+
+
+<div class="viewcode-block" id="DataFits.imageset">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.imageset">[docs]</a>
+    def imageset(self, imagedata, imagename=None, imageheader=None, index=-1):
+        &quot;&quot;&quot;
+        Set an image.
+
+        This should be used to add or replace an image in the current
+        object. The index flag determines the position of the image
+        in the image list.
+
+        Parameters
+        ----------
+        imagedata : array-like or None
+            A multi dimensional array containing the image data
+        imagename : str or None, optional
+            The name of the image to set (None for first image)
+        imageheader : fits.Header
+            FITS header for the image
+        index : int, optional
+            Indicates the position of the image in the image list
+            Ignored if == -1.
+        &quot;&quot;&quot;
+        totalindex = len(self.imgdata)
+        # If index is not set, get a valid index
+        if index &lt; 0:
+            if imagename is None:
+                index = 0
+                if totalindex &gt; 0:
+                    imagename = self.imgnames[0]
+                else:
+                    imagename = &#39;PRIMARY&#39;
+            elif imagename.upper() in self.imgnames:
+                index = self.imgnames.index(imagename.upper())
+            else:
+                # name given, but not an existing name
+                if totalindex &gt; 0 and self.imgdata[0] is None:
+                    # add to primary HDU, if primary HDU empty
+                    index = 0
+                else:
+                    # add to end otherwise
+                    index = totalindex
+
+        # re-use header, if none specified
+        if imageheader is None:
+            if index &lt; totalindex:
+                imageheader = self.imgheads[index]
+
+        # Set image
+        if index == 0:
+            hdu = fits.PrimaryHDU(imagedata, header=imageheader)
+        else:
+            hdu = fits.ImageHDU(imagedata, header=imageheader)
+        if index &lt; totalindex:
+            # overwriting an existing image
+            self.imgnames[index] = imagename.upper()
+            self.imgdata[index] = imagedata
+            self.imgheads[index] = hdu.header
+        else:
+            self.imgnames.append(imagename.upper())
+            self.imgdata.append(imagedata)
+            self.imgheads.append(hdu.header)
+        self.loaded = True</div>
+
+
+<div class="viewcode-block" id="DataFits.imagedel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.imagedel">[docs]</a>
+    def imagedel(self, imagename=None):
+        &quot;&quot;&quot;
+        Remove an image.
+
+        Parameters
+        ----------
+        imagename : str, optional
+            The name of the image to delete. The first image will be
+            deleted if not specified.
+        &quot;&quot;&quot;
+        # get index
+        ind = self.imageindex(imagename)
+
+        # delete image
+        del self.imgnames[ind]
+        del self.imgdata[ind]
+        del self.imgheads[ind]</div>
+
+
+<div class="viewcode-block" id="DataFits.tableindex">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.tableindex">[docs]</a>
+    def tableindex(self, tablename=None):
+        &quot;&quot;&quot;
+        Return the index of an table in the current object.
+
+        Given this index, the associated table can be accessed
+        via self.tabdata[index].
+
+        Parameters
+        ----------
+        tablename: str, optional
+            The name of the requested table. If not provided,
+            the first table will be returned.
+
+        Returns
+        -------
+        int
+            The table index.
+
+        Raises
+        ------
+        RuntimeError
+            If there are no tables present.
+        ValueError
+            If the specified table is not found.
+        &quot;&quot;&quot;
+        # Check if tables are present
+        if len(self.tabnames) == 0:
+            msg = &#39;no tables in data&#39;
+            log.error(&#39;Tableindex: &#39; + msg)
+            raise RuntimeError(msg)
+
+        # empty name -&gt; return first table
+        if tablename is None:
+            return 0
+
+        # check for valid name
+        try:
+            ind = self.tabnames.index(tablename.upper())
+        except ValueError as error:
+            msg = &#39;invalid table name (%s)&#39; % tablename
+            log.error(&#39;Tableindex: &#39; + msg)
+            raise error
+
+        # return index
+        return ind</div>
+
+
+<div class="viewcode-block" id="DataFits.tableget">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.tableget">[docs]</a>
+    def tableget(self, tablename=None):
+        &quot;&quot;&quot;
+        Return a table.
+
+        Parameters
+        ----------
+        tablename : str, optional
+            The name of the requested table. The first table is returned
+            if not provided.
+
+        Returns
+        -------
+        array-like
+            The requested table.
+        &quot;&quot;&quot;
+        # get index
+        ind = self.tableindex(tablename)
+
+        # return table
+        return self.tabdata[ind]</div>
+
+
+<div class="viewcode-block" id="DataFits.tableset">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.tableset">[docs]</a>
+    def tableset(self, tabledata, tablename=None, tableheader=None, index=-1):
+        &quot;&quot;&quot;
+        Set a table.
+
+        This should be used to add or replace a table in the current
+        object. The index flag determines the position of the table
+        in the table list.
+
+        Parameters
+        ----------
+        tabledata : array-like or None
+            A multi dimensional array containing the table data
+        tablename : str or None, optional
+            The name of the table to set (None for first table)
+        tableheader : fits.Header
+            FITS header for the table
+        index : int, optional
+            Indicates the position of the table in the table list
+            Ignored if == -1.
+        &quot;&quot;&quot;
+
+        # If index is not set, get valid index
+        totalindex = len(self.tabdata)
+        if index &lt; 0:
+            if tablename is None:
+                index = 0
+                if totalindex &gt; 0:
+                    tablename = self.tabnames[0]
+                else:
+                    tablename = &#39;PRIMARY TABLE&#39;
+            # if table exists - replace
+            elif tablename.upper() in self.tabnames:
+                index = self.tabnames.index(tablename.upper())
+            else:
+                # add to end otherwise
+                index = totalindex
+
+        # Set table
+        if index &lt; totalindex:
+            # overwrite
+            self.tabnames[index] = tablename.upper()
+            self.tabdata[index] = tabledata
+            if tableheader is not None:
+                self.tabheads[index] = tableheader
+        else:
+            self.tabnames.append(tablename.upper())
+            self.tabdata.append(tabledata)
+
+            # make sure tableheader is valid
+            if tableheader is None:
+                tableheader = fits.Header()
+            self.tabheads.append(tableheader)
+
+        self.loaded = True</div>
+
+
+<div class="viewcode-block" id="DataFits.tabledel">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.tabledel">[docs]</a>
+    def tabledel(self, tablename=None):
+        &quot;&quot;&quot;
+        Remove a table.
+
+        Parameters
+        ----------
+        tablename : str, optional
+            The name of the table to delete. The first table will be
+            deleted if not specified.
+        &quot;&quot;&quot;
+        # get index
+        ind = self.tableindex(tablename)
+
+        # delete table
+        del self.tabnames[ind]
+        del self.tabdata[ind]
+        del self.tabheads[ind]</div>
+
+
+<div class="viewcode-block" id="DataFits.tableaddcol">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.tableaddcol">[docs]</a>
+    def tableaddcol(self, colname, array, tablename=None, dtype=None):
+        &quot;&quot;&quot;
+        Add a column to the table.
+
+        If the table under tablename doesn&#39;t exist, it is created.
+        This is intended to be used with single-dimension columns only.
+
+        Parameters
+        ----------
+        colname : str
+            The new column name.
+        array : array-like
+            Values for the new column
+        tablename : str
+            The name of the table to add to (None for first table)
+        dtype : type, optional
+            Data type for the new column
+        &quot;&quot;&quot;
+        # make a basic array
+        array = np.asarray(array)
+
+        # set correct data type
+        if dtype is None:
+            dtype = array.dtype
+
+        # get additional dimension
+        if len(array.shape) &gt; 1:
+            newtype = (colname, dtype, array.shape[1])
+        else:
+            newtype = (colname, dtype)
+
+        # Get table index (-1 if table needs to be created)
+        tabind = -1
+        if tablename is None:
+            if len(self.tabnames) &gt; 0:
+                tabind = 0
+            else:
+                tablename = &quot;Table&quot;
+        else:
+            if tablename.upper() in self.tabnames:
+                tabind = self.tableindex(tablename)
+
+        # Make new table if necessary
+        if tabind &lt; 0:
+            # If there is no existing table:
+
+            # get new table data type
+            newdtype = np.dtype([newtype])
+
+            # Make new table
+            newtable = np.empty(array.shape[0], dtype=newdtype)
+
+            # Add to list of tables
+            tabind = len(self.tabnames)
+            self.tabdata.append(newtable)
+            self.tabnames.append(tablename.upper())
+            self.tabheads.append(fits.Header())
+        else:
+            # table exists: base new table on old table
+            table = self.tabdata[tabind]
+
+            # check if dimension of new value array is correct
+            if len(table) != len(array):
+                msg = &#39;column array len (%d) != table len (%d)&#39; % \
+                      (len(array), len(table))
+                log.error(&#39;TableAddCol: &#39; + msg)
+                raise ValueError(msg)
+
+            # get new data type for table
+            newdtype = np.dtype(table.dtype.descr + [newtype])
+
+            # make new table
+            newtable = np.empty(table.shape, dtype=newdtype)
+
+            # fill old table values
+            for field in table.dtype.fields:
+                newtable[field] = table[field]
+
+        # fill new table values
+        newtable[colname] = array
+
+        # copy new table to self.table
+        self.tabdata[tabind] = newtable</div>
+
+
+<div class="viewcode-block" id="DataFits.tableaddrow">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.tableaddrow">[docs]</a>
+    def tableaddrow(self, tablerow, tablename=None):
+        &quot;&quot;&quot;
+        Add a row to a data table.
+
+        Parameters
+        ----------
+        tablerow : array-like
+            The elements of the row to be added
+        tablename : str
+            The name of the table to add to (None for first table)
+        &quot;&quot;&quot;
+        # Get table
+        tabind = self.tableindex(tablename)
+        table = self.tabdata[tabind]
+
+        # check if tablerow format is correct (by converting it)
+        if len(tablerow) != len(table[0]):
+            log.error(&#39;TableAddRow: table row has invalid length&#39;)
+            raise ValueError(&#39;table row has invalid length&#39;)
+        try:
+            tablerow = np.rec.array(tablerow, dtype=table.dtype)
+        except (ValueError, TypeError):
+            log.error(&#39;TableAddRow: table row has invalid element type&#39;)
+            raise ValueError(&#39;table row has invalid element type&#39;)
+
+        # Add to table
+        self.tabdata[tabind] = np.insert(table, len(table), tablerow)</div>
+
+
+<div class="viewcode-block" id="DataFits.tabledelcol">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.tabledelcol">[docs]</a>
+    def tabledelcol(self, colname, tablename=None):
+        &quot;&quot;&quot;
+        Delete a column of the data table.
+
+        Parameters
+        ----------
+        colname: str or list of str
+           The name(s) of the column(s) to delete
+        tablename: str, optional
+           The name of the table to delete from (None for first table)
+        &quot;&quot;&quot;
+        # Get table
+        tabind = self.tableindex(tablename)
+        table = self.tabdata[tabind]
+
+        # Check if colname is valid, make sure it&#39;s a list
+        olddt = table.dtype
+        if isinstance(colname, str):
+            colname = [colname]
+        if isinstance(colname, (list, tuple)):
+            for c in colname:
+                if c not in olddt.names:
+                    msg = &#39;Invalid column name %s&#39; % c
+                    log.error(&#39;TableDelCol: &#39; + msg)
+                    raise ValueError(msg)
+        else:
+            msg = &quot;Invalid colname &#39;%s&#39;. Must be string &quot; \
+                  &quot;or list/tuple&quot; % colname
+            log.error(&#39;TableDelCol: &#39; + msg)
+            raise ValueError(msg)
+
+        # if all columns deleted, clear table
+        if len(olddt) - len(colname) &lt;= 0:
+            del self.tabdata[tabind]
+            del self.tabnames[tabind]
+            del self.tabheads[tabind]
+        else:
+            # remove column(s) from table
+
+            # if it&#39;s a pyfits.FITS_rec -&gt; Treat specially
+            # (this was pyfits.fitsrec.FITS_rec)
+            # test for FITS_rec. ndarray and recarray don&#39;t
+            # support names method
+            try:
+                names = table.names
+                formats = table.columns.formats
+                dims = table.columns.dims
+                units = table.columns.units
+
+                cols = []
+                for n, f, d, u in zip(names, formats, dims, units):
+                    if n not in colname:
+                        cols.append(fits.Column(name=n, format=f, dim=d,
+                                                unit=u, array=table.field(n)))
+                tbhdu = fits.BinTableHDU.from_columns(fits.ColDefs(cols))
+                self.tabdata[tabind] = tbhdu.data
+                self.tabheads[tabind] = tbhdu.header
+            except AttributeError:
+                # assume table is a regular record array
+                newnames = [n for n in olddt.names if n not in colname]
+                newtable = table[newnames]
+                self.tabdata[tabind] = newtable</div>
+
+
+<div class="viewcode-block" id="DataFits.tabledelrow">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.tabledelrow">[docs]</a>
+    def tabledelrow(self, index, tablename=None):
+        &quot;&quot;&quot;
+        Delete a row of the data table.
+
+        Parameters
+        ----------
+        index: int
+            The index of the row to delete.
+        tablename: str, optional
+            The name of the table to delete from (None for first table)
+        &quot;&quot;&quot;
+        # Get table
+        tabind = self.tableindex(tablename)
+        table = self.tabdata[tabind]
+
+        # Check if index is valid
+        if index &gt;= len(table):
+            log.error(&#39;TableDelRow: Invalid row index %d&#39; % index)
+            raise ValueError(&#39;Invalid row index %d&#39; % index)
+
+        # if table has one row -&gt; clear table
+        if len(table) &lt; 2:
+            del self.tabdata[tabind]
+            del self.tabnames[tabind]
+            del self.tabheads[tabind]
+        else:
+            # remove row from table
+            self.tabdata[tabind] = np.delete(table, index).copy()</div>
+
+
+<div class="viewcode-block" id="DataFits.tablemergerows">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.tablemergerows">[docs]</a>
+    def tablemergerows(self, rows):
+        &quot;&quot;&quot;
+        Merge several table rows into a single row.
+
+        Each column is merged according to the rules defined in the
+        [table] section of the configuration file. Options are:
+        FIRST, LAST, MIN, MAX, MED, AVG, SUM, WTAVG.
+
+        Parameters
+        ----------
+        rows : record
+            NumPy record or FITS table rows to merge.
+
+        Returns
+        -------
+        record
+            The merged row.
+
+        Raises
+        ------
+        AttributeError
+            If input rows have incorrect data type.
+        &quot;&quot;&quot;
+        # check if rows has same format as table
+        try:
+            rows.dtype
+        except AttributeError as error:
+            msg = &#39;input rows are incorrect data type&#39;
+            log.error(&#39;TableMergeRows: %s&#39; % msg)
+            raise error
+
+        # if _newdtype != table.dtype :
+        #    msg = &#39;input rows have different format than table&#39;
+        #    log.error(&#39;TableMergeRows: %s&#39; % msg)
+        #    raise TypeError(msg)
+
+        # make output table row (copy from first row)
+        outrow = (rows[0:1].copy())[0]
+
+        # run through columns and merge values
+        for colname in rows.dtype.names:
+            # get merge function
+            try:
+                funct = self.config[&#39;table&#39;][colname.lower()].lower()
+            except (IndexError, ValueError, KeyError):
+                # if keyword is not available
+                log.warning(&#39;TableMergeRows: Missing table &#39;
+                            &#39;merge entry for &#39;
+                            &#39;column -%s- returning first &#39;
+                            &#39;row value&#39; % colname)
+                funct = &#39;first&#39;
+
+            # Try to run the function
+            # Comment: float() is necessary, otherwise values get messed up
+            try:
+                if funct == &#39;first&#39;:
+                    pass
+                elif funct == &#39;last&#39;:
+                    outrow[colname] = rows[-1][colname]
+                elif funct == &#39;min&#39;:
+                    outrow[colname] = float(np.nanmin(rows[colname]))
+                elif funct == &#39;max&#39;:
+                    outrow[colname] = float(np.nanmax(rows[colname]))
+                elif funct == &#39;med&#39;:
+                    outrow[colname] = float(np.nanmedian(rows[colname]))
+                elif funct == &#39;avg&#39;:
+                    outrow[colname] = float(np.nanmean(rows[colname]))
+                elif funct == &#39;sum&#39;:
+                    outrow[colname] = float(np.nansum(rows[colname]))
+                elif funct == &#39;wtavg&#39;:
+                    tmp = float(np.nansum(rows[colname] * rows[&#39;Samples&#39;]))
+                    tmpsum = float(np.nansum(rows[&#39;Samples&#39;]))
+                    if tmpsum &gt; 0:
+                        outrow[colname] = tmp / tmpsum
+                    else:
+                        outrow[colname] = tmp * 0.0
+                else:
+                    log.warning(&#39;TableMergeRows: Unknown operation -&#39;
+                                + funct + &#39;- for column -&#39; + colname
+                                + &#39;- returning first row value&#39;)
+            except (NameError, TypeError, ValueError, KeyError):
+                # if unsuccessful return error
+                log.warning(&#39;TableMergeRows: Error in %s( %s ) - &#39;
+                            &#39;returning first row value&#39; %
+                            (funct, colname))
+        return outrow</div>
+
+
+<div class="viewcode-block" id="DataFits.tablemergetables">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.tablemergetables">[docs]</a>
+    def tablemergetables(self, tables):
+        &quot;&quot;&quot;
+        Return a new table containing data merged from the input table(s).
+
+        Columns are merged according to the rules defined in the [table]
+        section of the configuration file. Options are:
+        FIRST, LAST, MIN, MAX, MED, AVG, SUM, WTAVG.
+
+        Note that each table is assumed to have a single
+        row of data. If you need to merge rows of data, use
+        tablemergerows().
+
+        Parameters
+        ----------
+        tables : list of BinTableHDU data
+            Tables should be NumPy records or FITS tables.
+
+        Returns
+        -------
+        BinTableHDU
+            The merged table.
+        &quot;&quot;&quot;
+        ntable = len(tables)
+        try:
+            # FITS tables
+            names = tables[0].names
+            formats = tables[0].columns.formats
+            dims = tables[0].columns.dims
+            units = tables[0].columns.units
+        except AttributeError:
+            msg = &#39;TableMergeTables is only available for FITS tables&#39;
+            log.error(msg)
+            raise ValueError(msg)
+
+        if ntable == 1:
+            msg = &#39;TableMergeTables: Only 1 table passed&#39;
+            log.debug(msg)
+            tbhdu = fits.BinTableHDU(tables[0])
+            return tbhdu
+
+        # loop through all tables, make sure names, formats, dims, and units
+        # are the same among them.
+        for i in range(1, ntable):
+            if (names != tables[i].names
+                    or formats != tables[i].columns.formats
+                    or dims != tables[i].columns.dims
+                    or units != tables[i].columns.units):
+                log.error(&#39;TableMergeTables: columns differ for merging&#39;)
+                raise ValueError
+
+        cols = []
+        for n, f, d, u in zip(names, formats, dims, units):
+            # get merge function
+            try:
+                funct = self.config[&#39;table&#39;][n.lower()].lower()
+            except (KeyError, ValueError):
+                # if keyword is not available
+                log.warning(&#39;TableMergeTables: Missing table &#39;
+                            &#39;merge entry for column -%s- &#39;
+                            &#39;returning first row value&#39; % n)
+                funct = &#39;first&#39;
+
+            try:
+                if funct == &#39;first&#39;:
+                    tmp = tables[0][n]
+                elif funct == &#39;last&#39;:
+                    tmp = tables[-1][n]
+                elif funct == &#39;min&#39;:
+                    tmp = np.nanmin([a[n] for a in tables], axis=0)
+                elif funct == &#39;max&#39;:
+                    tmp = np.nanmax([a[n] for a in tables], axis=0)
+                elif funct == &#39;med&#39;:
+                    tmp = np.nanmedian([a[n] for a in tables], axis=0)
+                elif funct == &#39;avg&#39;:
+                    tmp = np.nanmean([a[n] for a in tables], axis=0)
+                elif funct == &#39;sum&#39;:
+                    tmp = np.nansum([a[n] for a in tables], axis=0)
+                elif funct == &#39;wtavg&#39;:
+                    tmp = np.nansum([a[n] * a[&#39;Samples&#39;]
+                                     for a in tables], axis=0)
+                    tmpsum = np.nansum([a[&#39;Samples&#39;]
+                                        for a in tables], axis=0)
+                    tmp = tmp / tmpsum
+                else:
+                    log.warning(&#39;TableMergeTables: Unknown &#39;
+                                &#39;operation -&#39; + funct + &#39;- for column -&#39;
+                                + n + &#39;- returning first row value&#39;)
+                    tmp = tables[0][n]
+            except (NameError, TypeError, ValueError, KeyError):
+                # if unsuccessful return error
+                log.warning(&#39;TableMergeRows: Error in %s( %s ) - &#39;
+                            &#39;returning first row value&#39; %
+                            (funct, n))
+
+                tmp = tables[0][n]
+            cols.append(fits.Column(name=n, format=f, dim=d,
+                                    unit=u, array=tmp))
+
+        tbhdu = fits.BinTableHDU.from_columns(fits.ColDefs(cols))
+        return tbhdu</div>
+
+
+<div class="viewcode-block" id="DataFits.getheader">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.getheader">[docs]</a>
+    def getheader(self, dataname=&#39;&#39;):
+        &quot;&quot;&quot;
+        Return a stored header.
+
+        Parameters
+        ----------
+        dataname : str, optional
+            The name of image/table to return a header from; otherwise the
+            primary header.
+
+        Returns
+        -------
+        fits.Header
+            The requested header.
+
+        Raises
+        ------
+        ValueError
+            If the requested header could not be found.
+        &quot;&quot;&quot;
+        # Return primary header
+        if dataname == &#39;&#39;:
+            header = self.header
+        elif dataname.upper() in self.imgnames:
+            # Return image header
+            index = self.imageindex(dataname)
+            header = self.imgheads[index]
+        elif dataname.upper() in self.tabnames:
+            # Return table header
+            index = self.tableindex(dataname)
+            header = self.tabheads[index]
+        else:
+            # Dataname not found -&gt; return error message
+            msg = &#39;Invalid data name (%s)&#39; % dataname
+            log.error(&#39;GetHeader: &#39; + msg)
+            raise ValueError(msg)
+        return header</div>
+
+
+<div class="viewcode-block" id="DataFits.setheader">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.setheader">[docs]</a>
+    def setheader(self, header, dataname=&#39;&#39;):
+        &quot;&quot;&quot;
+        Overwrite a stored header.
+
+        Parameters
+        ----------
+        header : fits.Header
+            The FITS header to set.
+        dataname : str, optional
+            The name of image/table to return a header from; otherwise the
+            primary header.
+        &quot;&quot;&quot;
+        # Set primary header
+        if dataname == &#39;&#39;:
+            self.header = header
+        elif dataname.upper() in self.imgnames:
+            # Set image header
+            index = self.imageindex(dataname)
+            self.imgheads[index] = header
+        elif dataname.upper() in self.tabnames:
+            # Set table header
+            index = self.tableindex(dataname)
+            self.tabheads[index] = header
+        else:
+            # Dataname not found -&gt; return error message
+            msg = &#39;Invalid data name (%s)&#39; % dataname
+            log.error(&#39;SetHeader: &#39; + msg)
+            raise ValueError(msg)</div>
+
+
+<div class="viewcode-block" id="DataFits.getheadval">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.getheadval">[docs]</a>
+    def getheadval(self, key, dataname=&#39;&#39;, errmsg=True):
+        &quot;&quot;&quot;
+        Get a header value.
+
+        Returns the value of the requested key from
+        the header. If the keyword is present in the [Header] section
+        of the configuration that value is returned instead. In case that
+        value from the configuration file is itself a header key, the value
+        stored under that key is returned. If the key can not be found an
+        KeyError is produced and a warning is issued.
+
+        Parameters
+        ----------
+        key : str
+            The header key to retrieve.
+        dataname : str, optional
+            The header extension to retrieve from. First, if not specified.
+        errmsg : bool, optional
+            If set, an error message will be raised if the keyword could
+            not be found.
+
+        Returns
+        -------
+        str, int, float, or bool
+            The header value.
+
+        Raises
+        ------
+        KeyError
+            If the key is not found, and errmsg = True.
+        &quot;&quot;&quot;
+        val = None
+        # Look in the config
+        try:
+            # get the value
+            val = self.config[&#39;header&#39;][key.upper()]
+
+            # Check if it&#39;s optional header replacement i.e. starts with &#39;?_&#39;
+            if val[:2] in [&#39;?_&#39;, &#39;? &#39;, &#39;?-&#39;]:
+                # if key is not in the header -&gt; use key name
+                # under value instead
+                if key not in self.header:
+                    log.info(&#39;Getheadval: Using %s keyword for %s&#39; %
+                             (val[2:].upper(), key))
+                    key = val[2:].upper()
+                val = None
+            elif val[0].isupper() and val[:2] not in [&#39;T &#39;, &#39;F &#39;]:
+                # it&#39;s a Header replacement (but not T/F)
+                log.info(&#39;Getheadval: Using %s value for %s&#39; %
+                         (val.upper(), key))
+                key = val.upper()
+                val = None
+            else:
+                # make it a pyfits.Card then get value and comment
+                card = fits.Card()
+                card = card.fromstring(key.upper() + &#39; = &#39; + val)
+                log.info(&#39;Getheadval: Setting %s to %s&#39; % (key, val))
+                val = card.value
+
+                # update value in header
+                self.setheadval(key, val, card.comment,
+                                dataname=dataname)
+
+        except KeyError:
+            # if key is not in config - continue
+            pass
+
+        except TypeError:
+            # if config is not yet loaded - return error
+            log.warning(&#39;GetHeadVal: Missing Configuration&#39;)
+
+        # Look in the header
+        if val is None:
+            # get the header from dataname
+            header = self.getheader(dataname)
+            # get value from header
+            try:
+                val = header[key]
+            except KeyError:
+                # if keyword is not found
+                msg = &#39;Missing %s keyword in header %s&#39; % (key, dataname)
+                if errmsg:
+                    log.error(&#39;GetHeadVal: %s&#39; % msg)
+                raise KeyError(msg)
+
+        # if Value is a pyfits.core.Undefined i.e. no keyword
+        if isinstance(val, fits.Undefined):
+            msg = &#39;Missing value for key = %s - returning empty string&#39; % key
+            log.warning(&#39;GetHeadVal: %s&#39; % msg)
+            val = &#39;&#39;
+
+        return val</div>
+
+
+<div class="viewcode-block" id="DataFits.setheadval">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.setheadval">[docs]</a>
+    def setheadval(self, key, value, comment=None, dataname=&#39;&#39;):
+        &quot;&quot;&quot;
+        Set a FITS header keyword.
+
+        If no header exists, it will be created and added as the
+        primary header.
+
+        Parameters
+        ----------
+        key : str
+            The header key to set.
+        value : str, int, float, or bool
+            The keyword value to set.
+        comment : str, optional
+            The comment to set for the keyword.
+        dataname : str, optional
+            The header extension to retrieve from. First, if not specified.
+        &quot;&quot;&quot;
+        # If no header exists, make a first empty image
+        if len(self.imgheads) == 0:
+            self.imgheads = [fits.PrimaryHDU().header]
+            self.imgdata = [None]
+            self.imgnames = [&#39;PRIMARY&#39;]
+
+        # Set value into hdr
+        hdr = self.getheader(dataname=dataname)
+        if key == &#39;HISTORY&#39;:
+            hdinsert(hdr, key, value, after=True)
+        else:
+            hdinsert(hdr, key, value, comment=comment)</div>
+
+
+<div class="viewcode-block" id="DataFits.delheadval">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.hawc.datafits.DataFits.html#sofia_redux.instruments.hawc.datafits.DataFits.delheadval">[docs]</a>
+    def delheadval(self, key, dataname=&#39;&#39;):
+        &quot;&quot;&quot;
+        Delete one or more FITS keywords.
+
+        Parameters
+        ----------
+        key : str or list of str
+            The header key to delete.
+        dataname : str, optional
+            The header extension to retrieve from. First, if not specified.
+
+        Raises
+        ------
+        ValueError
+            If the key is badly specified.
+        &quot;&quot;&quot;
+        if isinstance(key, (list, tuple)):
+            for k in key:
+                self.delheadval(k, dataname)
+        elif isinstance(key, str):
+            header = self.getheader(dataname=dataname)
+            if key in header:
+                del header[key]
+        else:
+            msg = &#39;Invalid key (%s). Must be a str, &#39; \
+                  &#39;list, or tuple&#39; % repr(key)
+            log.error(&#39;DelHeadVal: &#39; + msg)
+            raise ValueError(msg)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

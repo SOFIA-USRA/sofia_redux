@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.toolkit.image.utilities &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.toolkit.image.utilities</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+from numpy.lib import NumpyVersion
+import scipy
+from scipy import ndimage
+
+
+__all__ = [&#39;to_ndimage_mode&#39;, &#39;fix_ndimage_mode&#39;, &#39;clip_output&#39;,
+           &#39;map_coordinates&#39;]
+
+
+<div class="viewcode-block" id="to_ndimage_mode">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.image.utilities.to_ndimage_mode.html#sofia_redux.toolkit.image.utilities.to_ndimage_mode">[docs]</a>
+def to_ndimage_mode(mode):
+    &quot;&quot;&quot;
+    Convert from `numpy.pad` mode name to the corresponding ndimage mode.
+
+    Parameters
+    ----------
+    mode : str
+
+    Returns
+    -------
+    ndimage_mode : str
+    &quot;&quot;&quot;
+    mode_translation_dict = dict(constant=&#39;constant&#39;, edge=&#39;nearest&#39;,
+                                 symmetric=&#39;reflect&#39;, reflect=&#39;mirror&#39;,
+                                 wrap=&#39;wrap&#39;)
+    if mode not in mode_translation_dict:
+        raise ValueError(
+            (f&quot;Unknown mode: &#39;{mode}&#39;, or cannot translate mode. The &quot;
+             f&quot;mode should be one of &#39;constant&#39;, &#39;edge&#39;, &#39;symmetric&#39;, &quot;
+             f&quot;&#39;reflect&#39;, or &#39;wrap&#39;. See the documentation of numpy.pad for &quot;
+             f&quot;more info.&quot;))
+    return fix_ndimage_mode(mode_translation_dict[mode])</div>
+
+
+
+<div class="viewcode-block" id="fix_ndimage_mode">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.image.utilities.fix_ndimage_mode.html#sofia_redux.toolkit.image.utilities.fix_ndimage_mode">[docs]</a>
+def fix_ndimage_mode(mode):  # pragma: no cover
+    &quot;&quot;&quot;
+    Allow translation of modes for scipy versions &gt;= 1.6.0
+
+    SciPy 1.6.0 introduced grid variants of constant and wrap which
+    have less surprising behavior for images. Use these when available
+
+    Parameters
+    ----------
+    mode : str
+        The ndimage mode that may need to be fixed depending on the SciPy
+        version.
+
+    Returns
+    -------
+    ndimage_mode : str
+    &quot;&quot;&quot;
+    grid_modes = {&#39;constant&#39;: &#39;grid-constant&#39;, &#39;wrap&#39;: &#39;grid-wrap&#39;}
+    if NumpyVersion(scipy.__version__) &gt;= &#39;1.6.0&#39;:
+        mode = grid_modes.get(mode, mode)
+    return mode</div>
+
+
+
+<div class="viewcode-block" id="clip_output">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.image.utilities.clip_output.html#sofia_redux.toolkit.image.utilities.clip_output">[docs]</a>
+def clip_output(original, warped, mode, cval, clip):
+    &quot;&quot;&quot;
+    Clip the array to the range of original values.
+
+    This operation is performed in-place, and only if `clip` is `True`.
+
+    Parameters
+    ----------
+    original : numpy.ndarray
+        The original data array values.
+    warped : numpy.ndarray
+        The warped data array values.
+    mode : str
+        Can take values of {&#39;constant&#39;, &#39;edge&#39;, &#39;symmetric&#39;, &#39;reflect&#39;, &#39;wrap&#39;}
+        for which points outside the boundaries of the input are filled
+        according to the given mode.  Modes match the behaviour of
+        :func:`np.pad`.
+    cval : float
+        Used in conjunction with mode &#39;constant&#39;, the value outside
+        the image boundaries.
+    clip : bool
+        Whether to clip the output to the range of values of the input image.
+        This is enabled by default, since higher order interpolation may
+        produce values outside the given input range.
+
+    Returns
+    -------
+    None
+    &quot;&quot;&quot;
+    if not clip:
+        return
+
+    min_val = np.nanmin(original)
+    max_val = np.nanmax(original)
+    nan_cval = np.isnan(cval)
+    if mode == &#39;constant&#39;:
+        if nan_cval:
+            preserve_cval = True
+        else:
+            preserve_cval = min_val &lt;= cval &lt;= max_val
+    else:
+        preserve_cval = False
+
+    if preserve_cval:
+        if nan_cval:
+            cval_mask = np.isnan(warped)
+        else:
+            cval_mask = warped == cval
+    else:
+        cval_mask = None
+
+    np.clip(warped, min_val, max_val, out=warped)
+    if cval_mask is not None:
+        warped[cval_mask] = cval</div>
+
+
+
+<div class="viewcode-block" id="map_coordinates">
+<a class="viewcode-back" href="../../../../api/sofia_redux.toolkit.image.utilities.map_coordinates.html#sofia_redux.toolkit.image.utilities.map_coordinates">[docs]</a>
+def map_coordinates(data, coordinates, order=3, mode=&#39;constant&#39;, cval=np.nan,
+                    output=None, clip=True, threshold=0.5):
+    &quot;&quot;&quot;
+    A drop in replacement for :func:`ndimage.map_coordinates`.
+
+    This function has been modified to handle NaN `cval` values with the
+    &#39;constant&#39; `mode`.  The original method results in inconsistent results
+    and occasionally fills the output with all NaN values.
+
+    The array of coordinates is used to find, for each point in the output,
+    the corresponding coordinates in the input. The value of the input at
+    those coordinates is determined by spline interpolation of the
+    requested order.
+
+    The shape of the output is derived from that of the coordinate
+    array by dropping the first axis. The values of the array along
+    the first axis are the coordinates in the input array at which the
+    output value is found.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        The data array to map with n_dimensions dimensions with a size of N.
+    coordinates : numpy.ndarray
+        The coordinates at which `data` is evaluated.  Must be of shape
+        (n_dimensions, N) or (n_dimensions, shape,) where product(shape) = N.
+        Dimensions are ordered using the Numpy (y, x) convention.
+    order : int, optional
+        The order of the spline interpolation.  Must be in the range 0-5.
+    mode : str, optional
+        Can take values of {&#39;constant&#39;, &#39;edge&#39;, &#39;symmetric&#39;, &#39;reflect&#39;, &#39;wrap&#39;}
+        for which points outside the boundaries of the input are filled
+        according to the given mode.  Modes match the behaviour of
+        :func:`np.pad`.
+    cval : float, optional
+        Used in conjunction with mode &#39;constant&#39;, the value outside
+        the image boundaries.
+    output : numpy.ndarray, optional
+        The output array to fill with the results.  Should generally be the
+        same shape as `data`.
+    clip : bool, optional
+        Whether to clip the output to the range of values of the input image.
+        This is enabled by default, since higher order interpolation may
+        produce values outside the given input range.
+    threshold : float, optional
+        Used in conjunction with `cval`=NaN and `mode`=&#39;constant&#39;.  Should
+        generally take values in the range -1 to 1 with a default of 0.5.
+        This is used to better apply NaN `cval` boundaries as expected.  Points
+        inside the boundaries are mapped to 1, and values outside are mapped to
+        -1.  Points which map to values &gt;= `threshold` are considered valid,
+        while others will be set to NaN in the output.
+
+    Returns
+    -------
+    mapped_coordinates : numpy.ndarray
+        The result of transforming the data. The shape of the output is
+        derived from that of `coordinates` by dropping the first axis, or
+        via `output`.
+    &quot;&quot;&quot;
+    # Pre-filtering not necessary for order 0 or 1 interpolation
+    prefilter = order &gt; 1
+    ndi_mode = to_ndimage_mode(mode)
+
+    # handle any input NaNs
+    nan_data = ~np.isfinite(data)
+    if nan_data.sum() &gt; 0:
+        masked_data = data.copy()
+        masked_data[nan_data] = 0
+    else:
+        masked_data = data
+
+    if nan_data.sum() &gt; 0 or (np.isnan(cval) and ndi_mode == &#39;grid-constant&#39;):
+        # Need to do the masking manually
+        if output is not None:
+            mask_output = output.copy()
+        else:
+            mask_output = None
+        warped = ndimage.map_coordinates(
+            masked_data, coordinates, prefilter=prefilter, output=output,
+            mode=&#39;nearest&#39;, order=order, cval=0.0)
+        mask = np.ones_like(masked_data, dtype=float)
+        mask[nan_data] = 0
+        warped_mask = ndimage.map_coordinates(
+            mask, coordinates, prefilter=prefilter, output=mask_output,
+            mode=&#39;grid-constant&#39;, order=order, cval=-1.0)
+        replace = warped_mask &lt; threshold
+        warped[replace] = cval
+    else:
+        warped = ndimage.map_coordinates(
+            data, coordinates, prefilter=prefilter, output=output,
+            mode=ndi_mode, order=order, cval=cval)
+
+    clip_output(data, warped, mode, cval, clip)
+    return warped</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

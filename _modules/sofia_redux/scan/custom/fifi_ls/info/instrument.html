@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.fifi_ls.info.instrument &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.fifi_ls.info.instrument</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units, log
+import numpy as np
+import pandas as pd
+
+from sofia_redux.scan.coordinate_systems.coordinate_2d1 import Coordinate2D1
+from sofia_redux.scan.custom.sofia.info.instrument import SofiaInstrumentInfo
+from sofia_redux.scan.utilities.utils import to_header_float
+
+__all__ = [&#39;FifiLsInstrumentInfo&#39;]
+
+
+um = units.Unit(&#39;um&#39;)
+arcsec = units.Unit(&#39;arcsec&#39;)
+second = units.Unit(&#39;s&#39;)
+hz = units.Unit(&#39;Hz&#39;)
+
+
+<div class="viewcode-block" id="FifiLsInstrumentInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.html#sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo">[docs]</a>
+class FifiLsInstrumentInfo(SofiaInstrumentInfo):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize the FIFI-LS instrument information.
+
+        Contains information on the FIFI-LS instrument parameters.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.name = &#39;fifi_ls&#39;
+        self.channel = None
+        self.alpha = np.nan
+        self.ramps = -1
+        self.resolution = Coordinate2D1(xy=[5, 5] * arcsec, z=0 * um)
+        self.spectral_resolution = 1000.0  # Default
+
+    @property
+    def xy_resolution(self):
+        &quot;&quot;&quot;
+        Return the average spatial resolution.
+
+        Returns
+        -------
+        units.Quantity
+        &quot;&quot;&quot;
+        return np.sqrt(self.resolution.x * self.resolution.y)
+
+    @xy_resolution.setter
+    def xy_resolution(self, resolution):
+        &quot;&quot;&quot;
+        Set the average spatial resolution.
+
+        Parameters
+        ----------
+        resolution : units.Quantity
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.resolution.xy_coordinates.set([resolution, resolution])
+
+    @property
+    def z_resolution(self):
+        &quot;&quot;&quot;
+        Return the average spectral resolution.
+
+        Returns
+        -------
+        units.Quantity
+        &quot;&quot;&quot;
+        return self.resolution.z
+
+    @z_resolution.setter
+    def z_resolution(self, resolution):
+        &quot;&quot;&quot;
+        Set the average spectral resolution.
+
+        Parameters
+        ----------
+        resolution : units.Quantity
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.resolution.z_coordinates.set(resolution)
+
+<div class="viewcode-block" id="FifiLsInstrumentInfo.get_spectral_unit">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.html#sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.get_spectral_unit">[docs]</a>
+    @staticmethod
+    def get_spectral_unit():
+        &quot;&quot;&quot;
+        Return the size unit of the instrument.
+
+        Returns
+        -------
+        units.Unit
+        &quot;&quot;&quot;
+        return units.Unit(&#39;um&#39;)</div>
+
+
+<div class="viewcode-block" id="FifiLsInstrumentInfo.get_spectral_size">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.html#sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.get_spectral_size">[docs]</a>
+    def get_spectral_size(self):
+        &quot;&quot;&quot;
+        Return the instrument spectral point size.
+
+        Returns
+        -------
+        units.Quantity
+        &quot;&quot;&quot;
+        return self.z_resolution</div>
+
+
+<div class="viewcode-block" id="FifiLsInstrumentInfo.apply_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.html#sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Update HAWC+ instrument information with FITS header information.
+
+        Updates the chopping information by taking the following keywords from
+        the FITS header::
+
+          SMPLFREQ - The detector readout rate (Hz)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().apply_configuration()
+        if self.options is None:  # pragma: no cover
+            return
+
+        self.channel = self.options.get_string(&#39;CHANNEL&#39;)
+        if self.channel is None:
+            raise ValueError(&quot;Unable to determine the primary array: &quot;
+                             &quot;No CHANNEL key in header.&quot;)
+        self.channel = self.channel.upper().strip()
+        ch = self.channel[0]
+
+        self.ramps = self.options.get_float(f&#39;RAMPLN_{ch}&#39;,
+                                            default=np.nan)
+        if np.isnan(self.ramps):
+            raise ValueError(f&quot;Unable to determine the number of ramps: &quot;
+                             f&quot;No RAMPLN_{ch} key in header.&quot;)
+
+        self.alpha = self.options.get_float(&#39;ALPHA&#39;, default=np.nan) * second
+        if np.isnan(self.alpha):
+            raise ValueError(&quot;Unable to determine ramp sampling interval: &quot;
+                             &quot;No ALPHA key in header.&quot;)
+
+        self.sampling_interval = self.alpha * self.ramps
+        self.integration_time = self.sampling_interval
+        self.read_resolution()</div>
+
+
+<div class="viewcode-block" id="FifiLsInstrumentInfo.read_resolution">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.html#sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.read_resolution">[docs]</a>
+    def read_resolution(self):
+        &quot;&quot;&quot;
+        Determine the spatial and spectral resolution.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.resolution = Coordinate2D1(xy_unit=self.get_size_unit(),
+                                        z_unit=self.get_spectral_unit())
+        self.xy_resolution = 5 * arcsec
+        self.spectral_resolution = 1000.0
+        filename = self.configuration.priority_file(&#39;spectral_resolution.txt&#39;)
+        if filename is None:
+            log.warning(&#39;Could not locate spectral_resolution.txt &#39;
+                        &#39;configuration file: Will set default resolutions.&#39;)
+            return
+
+        names = [&#39;ch&#39;, &#39;wavelength&#39;, &#39;res&#39;, &#39;fwhm&#39;]
+        df = pd.read_csv(filename, comment=&#39;#&#39;, names=names,
+                         delim_whitespace=True)
+
+        if self.channel == &#39;BLUE&#39;:
+            order = self.options.get_string(&#39;G_ORD_B&#39;, default=&#39;unknown&#39;)
+            if order == &#39;unknown&#39;:
+                ch = &#39;unknown&#39;
+            else:
+                ch = f&#39;{self.channel[0].lower()}{order.strip()}&#39;
+        elif self.channel == &#39;RED&#39;:
+            ch = &#39;r&#39;
+        else:
+            ch = &#39;unknown&#39;
+
+        rows = df.loc[df[&#39;ch&#39;] == ch]
+        if len(rows) == 0:
+            log.warning(f&#39;Could not locate channel {ch} in resolution file: &#39;
+                        f&#39;Will set default resolutions.&#39;)
+            return
+
+        wavelength = self.options.get_float(
+            f&#39;G_WAVE_{self.channel[0].upper()}&#39;, default=np.nan)
+        if np.isnan(wavelength):
+            log.warning(&#39;Could not determine wavelength mean: &#39;
+                        &#39;Will set default resolution&#39;)
+            return
+
+        offset = (rows.wavelength - wavelength).abs()
+        row = rows[offset == offset.min()].iloc[0]
+        self.xy_resolution = float(row.fwhm) * arcsec
+        self.spectral_resolution = float(row.res)
+        self.z_resolution = self.wavelength / self.spectral_resolution</div>
+
+
+<div class="viewcode-block" id="FifiLsInstrumentInfo.edit_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.html#sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().edit_header(header)
+        header[&#39;SMPLFREQ&#39;] = (
+            to_header_float(1.0 / self.sampling_interval, &#39;Hz&#39;),
+            &#39;(Hz) Detector readout rate.&#39;)
+        header[&#39;CHANNEL&#39;] = self.channel, &#39;Detector channel&#39;
+        header[&#39;ALPHA&#39;] = (to_header_float(self.alpha, &#39;second&#39;),
+                           &#39;Alpha value in fifiTime correlation&#39;)
+        header[&#39;RAMPLN&#39;] = (int(to_header_float(self.ramps)),
+                            &#39;Number of readouts per ramp&#39;)</div>
+
+
+<div class="viewcode-block" id="FifiLsInstrumentInfo.get_point_size">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.html#sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.get_point_size">[docs]</a>
+    def get_point_size(self):
+        &quot;&quot;&quot;
+        Return the instrument point size (instrument resolution).
+
+        Returns
+        -------
+        point_size : Coordinate2D1
+            The point size in (x,y) spatial coordinates and (z) spectral
+            coordinates.
+        &quot;&quot;&quot;
+        return self.resolution.copy()</div>
+
+
+<div class="viewcode-block" id="FifiLsInstrumentInfo.get_source_size">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.html#sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.get_source_size">[docs]</a>
+    def get_source_size(self):
+        &quot;&quot;&quot;
+        Return the size of the source for the instrument.
+
+        Returns
+        -------
+        units.Quantity
+        &quot;&quot;&quot;
+        if self.configuration is None:
+            xy_source_size = 0.0
+            z_source_size = 0.0
+        else:
+            source_size = self.configuration.get_float_list(&#39;sourcesize&#39;,
+                                                            default=None)
+            if source_size is None or len(source_size) == 0:
+                xy_source_size = 0.0
+                z_source_size = 0.0
+            elif len(source_size) == 1:
+                xy_source_size = source_size[0]
+                z_source_size = 0.0
+            else:
+                xy_source_size, z_source_size = source_size[:2]
+
+        xy_source_size *= self.get_size_unit()
+        z_source_size *= self.get_spectral_unit()
+
+        xy_beam_size = self.xy_resolution
+        z_beam_size = self.z_resolution
+        xy_size = np.hypot(xy_source_size, xy_beam_size)
+        z_size = np.hypot(z_source_size, z_beam_size)
+        return Coordinate2D1([xy_size, xy_size, z_size])</div>
+
+
+<div class="viewcode-block" id="FifiLsInstrumentInfo.edit_image_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.html#sofia_redux.scan.custom.fifi_ls.info.instrument.FifiLsInstrumentInfo.edit_image_header">[docs]</a>
+    def edit_image_header(self, header, scans=None):
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+        scans : list (Scan), optional
+            A list of scans to use during editing.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().edit_image_header(header, scans=scans)
+        header[&#39;BEAM&#39;] = (to_header_float(self.resolution.x, &#39;arcsec&#39;),
+                          &#39;The instrument FWHM (arcsec) of the beam.&#39;)
+        header[&#39;BEAMZ&#39;] = (to_header_float(self.resolution.z, &#39;um&#39;),
+                           &#39;The instrument spectral FWHM (um).&#39;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

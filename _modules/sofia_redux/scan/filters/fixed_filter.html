@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.filters.fixed_filter &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.filters.fixed_filter</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from abc import abstractmethod
+import numpy as np
+
+from sofia_redux.scan.filters.filter import Filter
+from sofia_redux.scan.filters import filters_numba_functions as fnf
+
+__all__ = [&#39;FixedFilter&#39;]
+
+
+<div class="viewcode-block" id="FixedFilter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.fixed_filter.FixedFilter.html#sofia_redux.scan.filters.fixed_filter.FixedFilter">[docs]</a>
+class FixedFilter(Filter):
+
+    def __init__(self, integration=None, data=None):
+        &quot;&quot;&quot;
+        Initializes a fixed filter.
+
+        The fixed filter has a fixed point response for each channel in an
+        integration.
+
+        Parameters
+        ----------
+        integration : Integration, optional
+        data : numpy.ndarray (float), optional
+            An array of shape (nt, n_channels) where nt is the nearest power of
+            2 integer above the number of integration frames. i.e., if
+            n_frames=5, nt=8, or if n_frames=13, nt=16.  If not provided will
+            be set to frame_data * frame_relative_weight.
+        &quot;&quot;&quot;
+        self.point_response = None
+        self.rejected = None
+        super().__init__(integration=integration, data=data)
+
+    @property
+    def channel_dependent_attributes(self):
+        &quot;&quot;&quot;
+        Return attributes that are dependent on the parent channels.
+
+        This is required during a slim operation (reducing number of channels).
+
+        Returns
+        -------
+        set (str)
+        &quot;&quot;&quot;
+        attributes = super().channel_dependent_attributes
+        attributes.add(&#39;point_response&#39;)
+        attributes.add(&#39;rejected&#39;)
+        return attributes
+
+<div class="viewcode-block" id="FixedFilter.set_integration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.fixed_filter.FixedFilter.html#sofia_redux.scan.filters.fixed_filter.FixedFilter.set_integration">[docs]</a>
+    def set_integration(self, integration):
+        &quot;&quot;&quot;
+        Set the filter integration.
+
+        Sets the padding of the FFT filter, the number of frequencies, the
+        frequency spacing, and retrieves the channels from the integration if
+        necessary.
+
+        Parameters
+        ----------
+        integration : Integration
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_integration(integration)
+        self.point_response = np.ones(self.channel_size, dtype=np.float64)
+        self.rejected = np.zeros(self.channel_size, dtype=np.float64)</div>
+
+
+<div class="viewcode-block" id="FixedFilter.get_point_response">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.fixed_filter.FixedFilter.html#sofia_redux.scan.filters.fixed_filter.FixedFilter.get_point_response">[docs]</a>
+    def get_point_response(self, channels=None):
+        &quot;&quot;&quot;
+        Return the channel point responses for the filter.
+
+        Parameters
+        ----------
+        channels : Channels or ChannelData, optional
+            Return the point response for a given set of channels.  If not
+            supplied, defaults to the filter channels.
+
+        Returns
+        -------
+        response : numpy.ndarray (float)
+            An array of shape (channels.size,)
+        &quot;&quot;&quot;
+        if channels is None or channels is self.channels:
+            return self.point_response
+
+        channel_indices = self.channels.find_fixed_indices(
+            channels.fixed_index)
+        return self.point_response[channel_indices]</div>
+
+
+<div class="viewcode-block" id="FixedFilter.get_mean_point_response">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.fixed_filter.FixedFilter.html#sofia_redux.scan.filters.fixed_filter.FixedFilter.get_mean_point_response">[docs]</a>
+    def get_mean_point_response(self, channels=None):
+        &quot;&quot;&quot;
+        Return the channel mean point response of the filter.
+
+        Parameters
+        ----------
+        channels : Channels or ChannelData
+            The set of channels for which to calculate the mean point response.
+            Defaults to the filter channels.
+
+        Returns
+        -------
+        response : float
+        &quot;&quot;&quot;
+        return self.get_point_response(channels=channels)</div>
+
+
+<div class="viewcode-block" id="FixedFilter.pre_filter">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.fixed_filter.FixedFilter.html#sofia_redux.scan.filters.fixed_filter.FixedFilter.pre_filter">[docs]</a>
+    def pre_filter(self):
+        &quot;&quot;&quot;
+        Perform the pre-filtering steps.
+
+        During the pre-filtering steps, dependents are retrieved from the
+        filter integration and cleared (subtracted from integration dependents,
+        integration channels, and zeroed).
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().pre_filter()
+        self.rejected[...] = self.count_parms()</div>
+
+
+<div class="viewcode-block" id="FixedFilter.reset_point_response">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.fixed_filter.FixedFilter.html#sofia_redux.scan.filters.fixed_filter.FixedFilter.reset_point_response">[docs]</a>
+    def reset_point_response(self, channels=None):
+        &quot;&quot;&quot;
+        Calculate and store the correct point response for the given channels.
+
+        Parameters
+        ----------
+        channels : ChannelGroup
+            The set of channels for which to store the point response of the
+            filter.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if channels is None:
+            channels = self.get_channels()
+
+        if channels is self.channels:
+            channel_indices = np.arange(channels.size)
+        else:
+            channel_indices = self.channels.find_fixed_indices(
+                channels.fixed_index)
+
+        point_response = self.calc_point_response()
+        if isinstance(point_response, np.ndarray):
+            self.point_response[channel_indices] = point_response[
+                channel_indices]
+        else:
+            self.point_response[channel_indices] = point_response</div>
+
+
+<div class="viewcode-block" id="FixedFilter.pre_filter_channels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.fixed_filter.FixedFilter.html#sofia_redux.scan.filters.fixed_filter.FixedFilter.pre_filter_channels">[docs]</a>
+    def pre_filter_channels(self, channels=None):
+        &quot;&quot;&quot;
+        Performs the pre-filtering channels steps.
+
+        The fixed filter recalculates each channel point response to update the
+        channel direct and source filtering by::
+
+            filtering /= point_response
+
+        Parameters
+        ----------
+        channels : ChannelGroup
+            The set of channels to filter.  Defaults to the filter channels.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().pre_filter_channels(channels=channels)
+
+        if channels is None:
+            channels = self.get_channels()
+
+        self.reset_point_response(channels=channels)
+
+        if self.is_sub_filter:
+            return
+
+        if channels is self.channels:
+            channel_indices = np.arange(channels.size)
+        else:
+            channel_indices = self.channels.find_fixed_indices(
+                channels.fixed_index)
+
+        point_response = self.point_response[channel_indices]
+
+        if np.allclose(point_response, 0):
+            return
+
+        if channels is self.channels:
+            channel_indices = np.arange(channels.size)
+        else:
+            channel_indices = self.channels.find_fixed_indices(
+                channels.fixed_index)
+
+        direct_filtering = channels.direct_filtering
+        source_filtering = channels.source_filtering
+        direct_filtering[channel_indices] /= point_response
+        source_filtering[channel_indices] /= point_response
+        channels.direct_filtering = direct_filtering
+        channels.source_filtering = source_filtering</div>
+
+
+<div class="viewcode-block" id="FixedFilter.post_filter_channels">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.fixed_filter.FixedFilter.html#sofia_redux.scan.filters.fixed_filter.FixedFilter.post_filter_channels">[docs]</a>
+    def post_filter_channels(self, channels=None):
+        &quot;&quot;&quot;
+        Performs the post-filtering channels steps.
+
+        Parameters
+        ----------
+        channels : ChannelGroup
+            The set of channels to filter.  Defaults to the filter channels.
+
+        The fixed filter adds the rejected sum to the channel and frame
+        dependents, sets the point response and multiplies the direct and
+        source filtering by the new calculated value.  This reverses what
+        occurred in the pre-filtering step.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().post_filter_channels(channels=channels)
+
+        if channels is None:
+            channels = self.get_channels()
+
+        if channels is self.channels:
+            channel_indices = np.arange(channels.size)
+        else:
+            channel_indices = self.channels.find_fixed_indices(
+                channels.fixed_index)
+
+        do_bugs = self.integration.configuration.get_bool(&#39;crushbugs&#39;)
+        if not do_bugs:
+            self.parms.add_async(channels, self.rejected)
+
+        # This adds to self.frame_parms, which are then applied to
+        # self.parms.for_frame during the apply method (Filter).
+        self.add_frame_parms(channels=channels)
+
+        self.reset_point_response(channels=channels)
+
+        # Sub filters should not directly change the channel filtering.
+        # That is the job of the parent filter based on it&#39;s accumulated
+        # response.
+        point_response = self.get_point_response(channels=channels)
+        direct_filtering = self.channels.direct_filtering
+        source_filtering = self.channels.source_filtering
+        direct_filtering[channel_indices] *= point_response[channel_indices]
+        source_filtering[channel_indices] *= point_response[channel_indices]
+        self.channels.direct_filtering = direct_filtering
+        self.channels.source_filtering = source_filtering</div>
+
+
+<div class="viewcode-block" id="FixedFilter.add_frame_parms">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.fixed_filter.FixedFilter.html#sofia_redux.scan.filters.fixed_filter.FixedFilter.add_frame_parms">[docs]</a>
+    def add_frame_parms(self, channels=None):
+        &quot;&quot;&quot;
+        Add rejection parms to the frame parms.
+
+        Parameters
+        ----------
+        channels : ChannelGroup
+            The set of channels to filter.  Defaults to the filter channels.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if (self.frame_parms is None
+                or self.frame_parms.size != self.integration.size):
+            self.frame_parms = np.zeros(self.integration.size, dtype=float)
+
+        if channels is None:
+            channels = self.get_channels()
+
+        frames = self.integration.frames
+
+        fnf.add_frame_parms(
+            rejected=self.rejected,
+            points=self.points,
+            weights=frames.relative_weight,
+            frame_valid=frames.valid,
+            modeling_frame=frames.is_flagged(&#39;MODELING_FLAGS&#39;),
+            frame_parms=self.frame_parms,
+            sample_flags=frames.sample_flag,
+            channel_indices=channels.indices)</div>
+
+
+<div class="viewcode-block" id="FixedFilter.get_id">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.fixed_filter.FixedFilter.html#sofia_redux.scan.filters.fixed_filter.FixedFilter.get_id">[docs]</a>
+    @abstractmethod
+    def get_id(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the filter ID.
+
+        Returns
+        -------
+        filter_id : str
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="FixedFilter.get_config_name">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.fixed_filter.FixedFilter.html#sofia_redux.scan.filters.fixed_filter.FixedFilter.get_config_name">[docs]</a>
+    @abstractmethod
+    def get_config_name(self):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the configuration name.
+
+        Returns
+        -------
+        config_name : str
+        &quot;&quot;&quot;
+        pass</div>
+
+
+<div class="viewcode-block" id="FixedFilter.response_at">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.filters.fixed_filter.FixedFilter.html#sofia_redux.scan.filters.fixed_filter.FixedFilter.response_at">[docs]</a>
+    @abstractmethod
+    def response_at(self, fch):  # pragma: no cover
+        &quot;&quot;&quot;
+        Return the response at a given frequency channel(s).
+
+        Parameters
+        ----------
+        fch : int or numpy.ndarray (int or bool) or slice
+            The frequency channel or channels in question.
+
+        Returns
+        -------
+        response : numpy.ndarray (float)
+        &quot;&quot;&quot;
+        pass</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

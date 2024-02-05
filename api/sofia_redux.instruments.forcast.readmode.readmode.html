@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>readmode &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../_static/plot_directive.css" />
+    
+    <script src="../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../_static/doctools.js?v=888ff710"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../_static/copybutton.js"></script>
+    <link rel="icon" href="../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="rotate" href="sofia_redux.instruments.forcast.rotate.rotate.html" />
+    <link rel="prev" title="readfits" href="sofia_redux.instruments.forcast.readfits.readfits.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li class="right">
+	<a href="sofia_redux.instruments.forcast.rotate.rotate.html" title="rotate">
+	  next &raquo;
+	</a>
+      </li>
+      <li class="right">
+	<a href="sofia_redux.instruments.forcast.readfits.readfits.html" title="readfits">
+	  &laquo; previous
+	</a>
+	 |
+      </li>
+      <li>
+	<a href="../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../sofia_redux/index.html" >SOFIA Redux</a> &#187;</li>
+      <li><a href="../manuals/forcast/developers/developers.html" accesskey="U">FORCAST Redux Developer’s Manual</a> &#187;</li>
+      
+      <li>readmode</li> 
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="readmode">
+<h1>readmode<a class="headerlink" href="#readmode" title="Link to this heading">¶</a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="sofia_redux.instruments.forcast.readmode.readmode">
+<span class="sig-prename descclassname"><span class="pre">sofia_redux.instruments.forcast.readmode.</span></span><span class="sig-name descname"><span class="pre">readmode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">header</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sofia_redux/instruments/forcast/readmode.html#readmode"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sofia_redux.instruments.forcast.readmode.readmode" title="Link to this definition">¶</a></dt>
+<dd><p>Read the chop/nod and instrument mode from the header</p>
+<p>Reads various parameters from the input header to determine the
+chop/nod and instrument mode of the observation.  Returns a
+single string indicating the mode used.  This function is
+required because the instrument mode definition became
+complicated with all these combinations of header keywords,
+depending on the origin and date of the data.  In order to be
+sure that the instrument mode is read the same way along the
+code, the mode should always be defined using this function.</p>
+<p>Procedure:</p>
+<ol class="arabic simple">
+<li><p>We need to read instmode first because if the observation was C2
+the skymode is not updated to C2 but may be NMC or NPC. Thus, we
+don’t consider skymode unless it is a C2N observation.</p></li>
+<li><p>Read skymode. All data after Basic Science should contain this
+keyword with the right C2NC2 value if this mode is used.</p></li>
+<li><p>If skymode is not found, then this means that the data is from
+Basic Science (or there is an error in the header) In that case,
+the INSTMODE keyword contains the instrument mode except for C2NC2
+that is defined by the presence of the C2NC2 keyword.</p></li>
+<li><p>It could happen for Basic Science data that there is no skymode,
+so the instmode is automatically set.  Thus, for C2N the value is
+not updated to NMC or NPC. Below, we check the nod and chop
+amplitudes and update mode accordingly.</p></li>
+<li><p>After basic science there was a change in the C2NC2 data. Instead
+of storing them in 2 plane data cubes that are either on or off
+source (A or B), the data is stored in 4 plane data cubes. These
+files contain both on and off positions.  The only way for now to
+know what sort of data is (for now) is to see the number of planes
+which is given by the NAXIS3 keyword.  We defined a virtual mode
+called C2NC4 to indicate a 4 plane C2NC2.  SKYMODE is updated
+in the header accordingly.</p></li>
+<li><p>Read the size of the 3rd axis. If the dimension is 2 then the it
+is an old C2NC2 which stored on-off-positions in two different
+files (C2 like).  If the dimension is 4 then the on-off-positions
+are in the same file as 4 planes</p></li>
+</ol>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>header</strong><span class="classifier">astropy.io.fits.header.Header</span></dt><dd></dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>str or None</dt><dd><p>The instrument mode (None if not found)</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+<ul>
+<li><a class="reference internal" href="#">readmode</a><ul>
+<li><a class="reference internal" href="#sofia_redux.instruments.forcast.readmode.readmode"><code class="docutils literal notranslate"><span class="pre">readmode()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right">
+    <a href="../_sources/api/sofia_redux.instruments.forcast.readmode.readmode.rst.txt"
+       rel="nofollow">Page Source</a> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.read_section &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.read_section</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+
+import sofia_redux.instruments.forcast.configuration as dripconfig
+
+__all__ = [&#39;read_section&#39;]
+
+
+<div class="viewcode-block" id="read_section">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.read_section.read_section.html#sofia_redux.instruments.forcast.read_section.read_section">[docs]</a>
+def read_section(xdim, ydim):
+    &quot;&quot;&quot;
+    Read the section in the configuration file and check if it&#39;s correct
+
+    Read the section to use in the configuration file.  If it is not
+    correct it returns the default value [128, 128, 200, 200].
+
+    Note that at some point in the past, the value used to be appended
+    to a header.  This is no longer the case.  For reference, the comment
+    for the NLINSECTION keyword is &quot;section used to calculate bacground for
+    linearity correction&quot;.  Also note that this comment is too long and has
+    a typo.
+
+    Parameters
+    ----------
+    xdim : int
+        x-dimension size
+    ydim : int
+        y-dimension size
+
+    Returns
+    -------
+    4-tuple
+        (x0, y0, xdim, ydim)
+        x0, y0: Center of section
+        xdim, ydim: Dimension of section
+    &quot;&quot;&quot;
+    key = &#39;NLINSECTION&#39;
+    default_section = 128, 128, 200, 200
+    default_message = &#39;%s default value is %s&#39; % (key, repr(default_section))
+    if dripconfig.configuration is None:
+        dripconfig.load()
+    configuration = dripconfig.configuration
+
+    if key.lower() not in configuration:
+        log.warning(&#39;The section has not been specified in configuration&#39;)
+        log.warning(default_message)
+        return default_section
+
+    if not isinstance(xdim, int):
+        log.error(&quot;xdim must be %s&quot; % int)
+        log.warning(default_message)
+        return default_section
+    elif not isinstance(ydim, int):
+        log.error(&quot;ydim must be %s&quot; % int)
+        log.warning(default_message)
+        return default_section
+
+    section = None
+    try:
+        section = [int(val) for val in configuration[key.lower()]]
+    except ValueError:
+        log.error(&quot;The section %s has wrong format&quot; % repr(section))
+        log.warning(default_message)
+        return default_section
+
+    if not isinstance(section, list) or len(section) != 4:
+        log.error(&quot;The section %s has wrong format&quot; % repr(section))
+        log.warning(default_message)
+        return default_section
+
+    # Check if the section makes sense (xsize, ysize &gt; 10)
+    if section[2] &lt; 10 or section[3] &lt; 10:
+        log.error(&quot;The section %s has wrong size values&quot; % repr(section))
+        log.warning(default_message)
+        return default_section
+
+    # Check if the section we chose is not outside detector
+    if ((section[0] - section[2] // 2) &lt; 0
+            or (section[0] + section[2] // 2) &gt; xdim):
+        log.error(&quot;wrong section size along x-dimension&quot;)
+        return default_section
+    if ((section[1] - section[3] // 2) &lt; 0
+            or (section[1] + section[3] // 2) &gt; ydim):
+        log.error(&quot;wrong section size along y-dimension&quot;)
+        return default_section
+    return section</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

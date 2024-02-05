@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.pipeline.sofia.sofia_configuration &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.pipeline.sofia.sofia_configuration</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+&quot;&quot;&quot;SOFIA Redux configuration.&quot;&quot;&quot;
+
+import configobj
+from sofia_redux.pipeline.configuration import Configuration
+from sofia_redux.pipeline.sofia.sofia_chooser import SOFIAChooser
+
+__all__ = [&#39;SOFIAConfiguration&#39;]
+
+
+<div class="viewcode-block" id="SOFIAConfiguration">
+<a class="viewcode-back" href="../../../../api/sofia_redux.pipeline.sofia.sofia_configuration.SOFIAConfiguration.html#sofia_redux.pipeline.sofia.sofia_configuration.SOFIAConfiguration">[docs]</a>
+class SOFIAConfiguration(Configuration):
+    &quot;&quot;&quot;
+    Set Redux configuration for SOFIA pipelines.
+
+    This class sets the reduction object chooser to `SOFIAChooser`
+    and sets some default configuration values for output files.
+
+    If desired, all configuration values may be overridden with an
+    input configuration file in INI format.  The following
+    example would be equivalent to the current default settings::
+
+        output_directory = .
+        input_manifest = redux_infiles.txt
+        output_manifest = outfiles.txt
+        parameter_file = redux_param.cfg
+        log_file = &quot;redux_%Y%m%d_%H%M%S.log&quot;
+        log_level = DEBUG
+        log_format = &quot;%(asctime)s - %(origin)s - %(levelname)s - %(message)s&quot;
+        update_display = True
+        display_intermediate = False
+
+    &quot;&quot;&quot;
+
+    def __init__(self, config_file=None):
+        &quot;&quot;&quot;
+        Initialize with an optional configuration file.
+
+        Parameters
+        ----------
+        config_file : str or ConfigObj, optional
+            File path to an INI-format configuration file.
+        &quot;&quot;&quot;
+        super().__init__(config_file)
+
+        # set the SOFIA chooser to decide reduction
+        # objects based on input data
+        self.chooser = SOFIAChooser()
+
+        # set some default values in case they were not passed
+        default = configobj.ConfigObj(
+            {&#39;output_directory&#39;: &#39;.&#39;,
+             &#39;input_manifest&#39;: &#39;redux_infiles.txt&#39;,
+             &#39;output_manifest&#39;: &#39;outfiles.txt&#39;,
+             &#39;parameter_file&#39;: &#39;redux_param.cfg&#39;,
+             &#39;log_file&#39;: &#39;redux_%Y%m%d_%H%M%S.log&#39;,
+             &#39;log_level&#39;: &#39;DEBUG&#39;,
+             &#39;log_format&#39;: &#39;%(asctime)s - %(origin)s - &#39;
+                           &#39;%(levelname)s - %(message)s&#39;,
+             &#39;absolute_paths&#39;: False,
+             &#39;update_display&#39;: True,
+             &#39;display_intermediate&#39;: False,
+             &#39;config_file_name&#39;: &#39;redux_config.cfg&#39;},
+            interpolation=False)
+
+        # merge loaded config into default dictionary
+        if self.config is not None:
+            default.merge(self.config)
+
+        if self.config_file is not None:
+            default.filename = self.config_file
+        self.config = default</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

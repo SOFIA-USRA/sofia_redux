@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.example.channels.channel_data.channel_data &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.example.channels.channel_data.channel_data</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+import pandas as pd
+
+from sofia_redux.scan.custom.example.flags.channel_flags import (
+    ExampleChannelFlags)
+from sofia_redux.scan.channels.channel_data.single_color_channel_data import (
+    SingleColorChannelData)
+
+__all__ = [&#39;ExampleChannelData&#39;]
+
+
+<div class="viewcode-block" id="ExampleChannelData">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.html#sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData">[docs]</a>
+class ExampleChannelData(SingleColorChannelData):
+
+    flagspace = ExampleChannelFlags
+
+    def __init__(self, channels=None):
+        &quot;&quot;&quot;
+        Initialize the channel data for the example instrument.
+
+        Parameters
+        ----------
+        channels : sofia_redux.scan.channels.channels.Channels, optional
+            The parent channels for the channel data.
+        &quot;&quot;&quot;
+        super().__init__(channels=channels)
+        self.bias_line = None
+        self.mux_gain = None
+        self.bias_gain = None
+        self.default_info = None
+
+    @property
+    def default_field_types(self):
+        &quot;&quot;&quot;
+        Return the default values for the data attributes.
+
+        Returns
+        -------
+        field_defaults : dict
+            Keys contain the name of the attribute and values contain the
+            value.
+        &quot;&quot;&quot;
+        result = super().default_field_types
+        result.update({&#39;mux_gain&#39;: 1.0,
+                       &#39;bias_gain&#39;: 1.0})
+        return result
+
+    @property
+    def info(self):
+        &quot;&quot;&quot;
+        Return the example instrument information object.
+
+        Returns
+        -------
+        info : sofia_redux.scan.custom.example.info.info.ExampleInfo
+        &quot;&quot;&quot;
+        info = super().info
+        if info is not None:
+            return info
+        return self.default_info
+
+<div class="viewcode-block" id="ExampleChannelData.calculate_sibs_position">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.html#sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.calculate_sibs_position">[docs]</a>
+    def calculate_sibs_position(self):
+        &quot;&quot;&quot;
+        Calculate the SIBS position for each pixel.
+
+        Pixels that are flagged as BLIND will have their positions set to NaN.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_sibs_positions(self.info.detector_array)</div>
+
+
+<div class="viewcode-block" id="ExampleChannelData.set_sibs_positions">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.html#sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.set_sibs_positions">[docs]</a>
+    def set_sibs_positions(self, detector_array):
+        &quot;&quot;&quot;
+        Set the pixel positions based on detector array information.
+
+        BLIND channels will have NaN pixel positions.  The spatial units will
+        be those defined by the detector array for `pixel_xy_size`.  The
+        result will be to populate the `position` attribute with an (N, 2)
+        array of (x, y) positions.
+
+        Parameters
+        ----------
+        detector_array : ExampleDetectorArrayInfo
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.position = detector_array.get_sibs_position(self.row, self.col)
+        self.position.nan(self.is_flagged(&#39;BLIND&#39;))</div>
+
+
+<div class="viewcode-block" id="ExampleChannelData.set_uniform_gains">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.html#sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.set_uniform_gains">[docs]</a>
+    def set_uniform_gains(self, field=None):
+        &quot;&quot;&quot;
+        Sets the gain and coupling to 1.0 for all channels.
+
+        Parameters
+        ----------
+        field : str, optional
+            If supplied, sets all values of the requested field to unity.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_uniform_gains(field=field)
+        if field is None:
+            self.mux_gain = np.full(self.size, 1.0)
+            self.bias_gain = np.full(self.size, 1.0)</div>
+
+
+<div class="viewcode-block" id="ExampleChannelData.to_string">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.html#sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.to_string">[docs]</a>
+    def to_string(self, indices=None, frame=False):
+        &quot;&quot;&quot;
+        Return a string representation of channels.
+
+        Parameters
+        ----------
+        indices : numpy.ndarray or slice, optional
+            The channel indices (not fixed) to return.  The default is all
+            channels.
+        frame : bool, optional
+            If `True`, returns a :class:`pd.DataFrame` instead of a string
+            representation.
+
+        Returns
+        -------
+        str or pd.DataFrame
+        &quot;&quot;&quot;
+        df = super().to_string(indices=indices, frame=True)
+        if indices is None:
+            indices = slice(None)
+
+        df[&#39;eff&#39;] = list(map(lambda x: &quot;%.3f&quot; % x, self.coupling[indices]))
+        df[&#39;Gmux&#39;] = list(map(lambda x: &quot;%.3f&quot; % x, self.mux_gain[indices]))
+        df[&#39;Gbias&#39;] = list(map(lambda x: &quot;%.3f&quot; % x, self.bias_gain[indices]))
+        df[&#39;idx&#39;] = list(map(lambda x: str(x), self.fixed_index[indices]))
+        df[&#39;row&#39;] = list(map(lambda x: str(x), self.row[indices]))
+        df[&#39;col&#39;] = list(map(lambda x: str(x), self.col[indices]))
+        if frame:
+            return df
+        else:
+            return df.to_csv(sep=&#39;\t&#39;, index=False)</div>
+
+
+<div class="viewcode-block" id="ExampleChannelData.initialize_from_detector">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.html#sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.initialize_from_detector">[docs]</a>
+    def initialize_from_detector(self, detector):
+        &quot;&quot;&quot;
+        Apply this information to create and populate the channel data.
+
+        Parameters
+        ----------
+        detector : ExampleDetectorArrayInfo
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        detector.initialize_channel_data(self)</div>
+
+
+<div class="viewcode-block" id="ExampleChannelData.apply_info">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.html#sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.apply_info">[docs]</a>
+    def apply_info(self, info):
+        &quot;&quot;&quot;
+        Apply information to the channel data.
+
+        Parameters
+        ----------
+        info : Info
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        detector_array = info.detector_array
+        self.initialize_from_detector(detector_array)
+        self.set_sibs_positions(detector_array)
+        super().apply_info(info)</div>
+
+
+<div class="viewcode-block" id="ExampleChannelData.read_channel_data_file">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.html#sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.read_channel_data_file">[docs]</a>
+    @classmethod
+    def read_channel_data_file(cls, filename):
+        &quot;&quot;&quot;
+        Read a channel data file and return the information within.
+
+        Parameters
+        ----------
+        filename : str
+            The path to a channel data file.
+
+        Returns
+        -------
+        channel_info : dict
+            A nested dictionary of the form {row,col: {key: value}}.
+        &quot;&quot;&quot;
+        column_names = [&#39;gain&#39;, &#39;weight&#39;, &#39;flag&#39;, &#39;coupling&#39;, &#39;mux_gain&#39;,
+                        &#39;bias_gain&#39;, &#39;fixed_id&#39;, &#39;row&#39;, &#39;col&#39;]
+        data_types = {&#39;gain&#39;: float, &#39;weight&#39;: np.float64,
+                      &#39;coupling&#39;: np.float64, &#39;mux_gain&#39;: np.float64,
+                      &#39;bias_gain&#39;: np.float64}
+        converters = {&#39;flag&#39;: lambda x: cls.flagspace.parse_string(x).value}
+        pixel_info = pd.read_csv(filename, delim_whitespace=True, comment=&#39;#&#39;,
+                                 names=column_names, dtype=data_types,
+                                 converters=converters).to_dict(&#39;index&#39;)
+
+        info = {}
+        for entry in pixel_info.values():
+            pixel_id = f&quot;{entry[&#39;row&#39;]},{entry[&#39;col&#39;]}&quot;
+            info[pixel_id] = entry
+
+        return info</div>
+
+
+<div class="viewcode-block" id="ExampleChannelData.set_channel_data">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.html#sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.set_channel_data">[docs]</a>
+    def set_channel_data(self, index, channel_info):
+        &quot;&quot;&quot;
+        Set the channel info for a selected index.
+
+        Parameters
+        ----------
+        index : int
+            The channel index for which to set new data.
+        channel_info : dict
+            A dictionary of the form {field: value} where.  The attribute
+            field at &#39;index&#39; will be set to value.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_channel_data(index, channel_info)
+        if channel_info is None:
+            return
+        self.coupling[index] = channel_info[&#39;coupling&#39;]
+        self.mux_gain[index] = channel_info[&#39;mux_gain&#39;]
+        self.bias_gain[index] = channel_info[&#39;bias_gain&#39;]</div>
+
+
+<div class="viewcode-block" id="ExampleChannelData.geometric_rows">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.html#sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.geometric_rows">[docs]</a>
+    def geometric_rows(self):
+        &quot;&quot;&quot;
+        Return the number of geometric rows in the detector array.
+
+        Returns
+        -------
+        rows : int
+        &quot;&quot;&quot;
+        return self.info.detector_array.ROWS</div>
+
+
+<div class="viewcode-block" id="ExampleChannelData.geometric_cols">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.html#sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.geometric_cols">[docs]</a>
+    def geometric_cols(self):
+        &quot;&quot;&quot;
+        Return the number of geometric columns in the detector array.
+
+        Returns
+        -------
+        cols : int
+        &quot;&quot;&quot;
+        return self.info.detector_array.COLS</div>
+
+
+<div class="viewcode-block" id="ExampleChannelData.get_geometric_overlap_indices">
+<a class="viewcode-back" href="../../../../../../../api/sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.html#sofia_redux.scan.custom.example.channels.channel_data.channel_data.ExampleChannelData.get_geometric_overlap_indices">[docs]</a>
+    def get_geometric_overlap_indices(self, radius):
+        &quot;&quot;&quot;
+        Return a cross-array indicating overlapping indices from data.
+
+        Overlaps are calculated based on the geometric properties of channels
+        (rows and columns).  A maximum radius must be supplied as well as the
+        pixel size indicating the separation between pixels in the x and y
+        directions.
+
+        For HAWC_PLUS, the subrow attribute is used instead of row for the
+        y-coordinate.
+
+        Parameters
+        ----------
+        radius : astropy.units.Quantity
+            The maximum radius about which to include overlaps.
+
+        Returns
+        -------
+        overlap_indices : scipy.sparse.csr.csr_matrix (bool)
+            A Compressed Sparse Row (CSR) matrix of shape (channels, channels)
+            where a `True` value for overlap_indices[i, j] signals that
+            channel `i` overlaps with the channel `j`.
+        &quot;&quot;&quot;
+        return self.find_row_col_overlap_indices(radius, self.row, self.col)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

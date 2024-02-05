@@ -1,0 +1,1814 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.coordinate_systems.spherical_coordinates &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.coordinate_systems.spherical_coordinates</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units
+from astropy.coordinates import Angle
+import numpy as np
+import warnings
+
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.coordinate_system import \
+    CoordinateSystem
+from sofia_redux.scan.coordinate_systems.coordinate_axis import CoordinateAxis
+from sofia_redux.scan.coordinate_systems import \
+    coordinate_systems_numba_functions as csnf
+from sofia_redux.scan.utilities.utils import get_comment_unit
+
+__all__ = [&#39;SphericalCoordinates&#39;]
+
+
+<div class="viewcode-block" id="SphericalCoordinates">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates">[docs]</a>
+class SphericalCoordinates(Coordinate2D):
+
+    angular_accuracy = 1e-12 * units.Unit(&#39;degree&#39;)
+    right_angle = 90 * units.Unit(&#39;degree&#39;)
+    pi = 180 * units.Unit(&#39;degree&#39;)
+    two_pi = 360 * units.Unit(&#39;degree&#39;)
+    id_lookup = None
+    ids = None
+    fits_types = None
+
+    def __init__(self, coordinates=None, unit=&#39;degree&#39;, copy=True):
+        &quot;&quot;&quot;
+        Initialize a SphericalCoordinates object.
+
+        Spherical coordinates are designed to represent longitude/latitude
+        coordinates in a given frame.
+
+        Parameters
+        ----------
+        coordinates : list or tuple or array-like or units.Quantity, optional
+            The coordinates used to populate the object during initialization.
+            The first (0) value or index should represent longitudinal
+            coordinates, and the second should represent latitude.
+        unit : units.Unit or str, optional
+            The angular unit for the spherical coordinates.  The default is
+            &#39;degree&#39;.
+        copy : bool, optional
+            Whether to explicitly perform a copy operation on the input
+            coordinates when storing them into these coordinates.  Note that it
+            is extremely unlikely for the original coordinates to be passed in
+            as a reference due to the significant checks performed on them.
+        &quot;&quot;&quot;
+        self.default_coordinate_system = None
+        self.default_local_coordinate_system = None
+        self.setup_coordinate_system()
+        self.cos_lat = None
+        self.sin_lat = None
+        super().__init__(coordinates=coordinates, unit=unit, copy=copy)
+
+<div class="viewcode-block" id="SphericalCoordinates.copy">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.copy">[docs]</a>
+    def copy(self):
+        &quot;&quot;&quot;
+        Return a copy of the spherical coordinates.
+
+        Returns
+        -------
+        SphericalCoordinates
+        &quot;&quot;&quot;
+        return super().copy()</div>
+
+
+    @property
+    def empty_copy_skip_attributes(self):
+        &quot;&quot;&quot;
+        Return attributes that are set to None on an empty copy.
+
+        Returns
+        -------
+        attributes : set (str)
+        &quot;&quot;&quot;
+        skip = super().empty_copy_skip_attributes
+        skip.add(&#39;cos_lat&#39;)
+        skip.add(&#39;sin_lat&#39;)
+        return skip
+
+    @property
+    def coordinate_system(self):
+        &quot;&quot;&quot;
+        Return the coordinate system.
+
+        Returns
+        -------
+        CoordinateSystem
+        &quot;&quot;&quot;
+        return self.default_coordinate_system
+
+    @property
+    def local_coordinate_system(self):
+        &quot;&quot;&quot;
+        Return the local coordinate system.
+
+        Returns
+        -------
+        CoordinateSystem
+        &quot;&quot;&quot;
+        return self.default_local_coordinate_system
+
+    @property
+    def longitude_axis(self):
+        &quot;&quot;&quot;
+        Return the longitude axis.
+
+        Returns
+        -------
+        CoordinateAxis
+        &quot;&quot;&quot;
+        return self.coordinate_system.axes[0]
+
+    @property
+    def latitude_axis(self):
+        &quot;&quot;&quot;
+        Return the latitude axis.
+
+        Returns
+        -------
+        CoordinateAxis
+        &quot;&quot;&quot;
+        return self.coordinate_system.axes[1]
+
+    @property
+    def x_offset_axis(self):
+        &quot;&quot;&quot;
+        Return the offset x-axis.
+
+        Returns
+        -------
+        CoordinateAxis
+        &quot;&quot;&quot;
+        return self.local_coordinate_system.axes[0]
+
+    @property
+    def y_offset_axis(self):
+        &quot;&quot;&quot;
+        Return the offset y-axis.
+
+        Returns
+        -------
+        CoordinateAxis
+        &quot;&quot;&quot;
+        return self.local_coordinate_system.axes[1]
+
+    @property
+    def two_letter_code(self):
+        &quot;&quot;&quot;
+        Return the two-letter code for the coordinate system.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;SP&#39;
+
+    @property
+    def fits_latitude_stem(self):
+        &quot;&quot;&quot;
+        Return the string prefix for latitude.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;LAT-&#39;
+
+    @property
+    def fits_longitude_stem(self):
+        &quot;&quot;&quot;
+        Return the string prefix for longitude.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;LON-&#39;
+
+    @property
+    def reverse_longitude(self):
+        &quot;&quot;&quot;
+        Return `True` if the longitude axis is reversed.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self.longitude_axis.reverse
+
+    @property
+    def reverse_latitude(self):
+        &quot;&quot;&quot;
+        Return `True` if the latitude axis is reversed.
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        return self.latitude_axis.reverse
+
+    @property
+    def native_longitude(self):
+        &quot;&quot;&quot;
+        Return the native longitude.
+
+        Returns
+        -------
+        astropy.units.Quantity (float or numpy.ndarray)
+        &quot;&quot;&quot;
+        if self.coordinates is None:
+            return None
+        return self.x
+
+    @native_longitude.setter
+    def native_longitude(self, longitude):
+        &quot;&quot;&quot;
+        Set the native longitude.
+
+        Parameters
+        ----------
+        longitude : astropy.units.Quantity (float or numpy.ndarray)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_native_longitude(longitude, copy=True)
+
+    @property
+    def native_latitude(self):
+        &quot;&quot;&quot;
+        Return the native latitude.
+
+        Returns
+        -------
+        astropy.units.Quantity (float or numpy.ndarray)
+        &quot;&quot;&quot;
+        if self.coordinates is None:
+            return None
+        return self.y
+
+    @native_latitude.setter
+    def native_latitude(self, latitude):
+        &quot;&quot;&quot;
+        Set the native longitude.
+
+        Parameters
+        ----------
+        latitude : astropy.units.Quantity (float or numpy.ndarray)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_native_latitude(latitude, copy=True)
+
+    @property
+    def longitude(self):
+        &quot;&quot;&quot;
+        Return the longitude.
+
+        Returns
+        -------
+        longitude : astropy.units.Quantity (float or numpy.ndarray)
+        &quot;&quot;&quot;
+        if self.coordinates is None:
+            return None
+        if self.reverse_longitude:
+            with warnings.catch_warnings():
+                warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+                return self.longitude_axis.reverse_from - self.native_longitude
+        else:
+            return self.native_longitude
+
+    @longitude.setter
+    def longitude(self, values):
+        &quot;&quot;&quot;
+        Set the longitude.
+
+        Parameters
+        ----------
+        values : astropy.units.Quantity (float or numpy.ndarray)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_longitude(values, copy=True)
+
+    @property
+    def latitude(self):
+        &quot;&quot;&quot;
+        Return the latitude.
+
+        Returns
+        -------
+        latitude : astropy.units.Quantity (float or numpy.ndarray)
+        &quot;&quot;&quot;
+        if self.coordinates is None:
+            return None
+        if self.reverse_latitude:
+            with warnings.catch_warnings():
+                warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+                return self.latitude_axis.reverse_from - self.native_latitude
+        else:
+            return self.native_latitude
+
+    @latitude.setter
+    def latitude(self, values):
+        &quot;&quot;&quot;
+        Set the latitude.
+
+        Parameters
+        ----------
+        values : astropy.units.Quantity (float or numpy.ndarray)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_latitude(values, copy=True)
+
+    @property
+    def lon(self):
+        &quot;&quot;&quot;
+        Return the longitude.
+
+        Returns
+        -------
+        longitude : astropy.units.Quantity (float or numpy.ndarray)
+        &quot;&quot;&quot;
+        return self.longitude
+
+    @lon.setter
+    def lon(self, values):
+        &quot;&quot;&quot;
+        Set the longitude.
+
+        Parameters
+        ----------
+        values : astropy.units.Quantity (float or numpy.ndarray)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.longitude = values
+
+    @property
+    def lat(self):
+        &quot;&quot;&quot;
+        Return the latitude.
+
+        Returns
+        -------
+        latitude : astropy.units.Quantity (float or numpy.ndarray)
+        &quot;&quot;&quot;
+        return self.latitude
+
+    @lat.setter
+    def lat(self, values):
+        &quot;&quot;&quot;
+        Set the latitude.
+
+        Parameters
+        ----------
+        values : astropy.units.Quantity (float or numpy.ndarray)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.latitude = values
+
+    @property
+    def offset_unit(self):
+        &quot;&quot;&quot;
+        Return the units used for the offset frame.
+
+        Returns
+        -------
+        astropy.units.Unit
+        &quot;&quot;&quot;
+        return self.x_offset_axis.unit
+
+    def __eq__(self, other):
+        &quot;&quot;&quot;
+        Test if these spherical coordinates are equal to another.
+
+        Spherical coordinates are considered equal if the longitude
+        coordinates match when wrapped in the range 0-&gt;360 degrees, and
+        latitude coordinates match in the range -180-&gt;180 degrees.
+
+        Parameters
+        ----------
+        other : SphericalCoordinates
+
+        Returns
+        -------
+        bool
+        &quot;&quot;&quot;
+        circle = 360 * units.Unit(&#39;degree&#39;)
+        semi_circle = 180 * units.Unit(&#39;degree&#39;)
+
+        if other is self:
+            return True
+        if self.__class__ != other.__class__:
+            return False
+
+        if self.coordinates is None:
+            return other.coordinates is None
+        elif other.coordinates is None:
+            return self.coordinates is None
+
+        if self.shape != other.shape:
+            return False
+
+        try:
+            x1 = Angle(self.longitude).wrap_at(circle)
+            x2 = Angle(other.longitude).wrap_at(circle)
+            if not np.allclose(x1, x2, equal_nan=True):
+                return False
+        except units.UnitConversionError:  # pragma: no cover
+            return False
+
+        try:
+            x1 = Angle(self.latitude).wrap_at(semi_circle)
+            x2 = Angle(other.latitude).wrap_at(semi_circle)
+            return np.allclose(x1, x2, equal_nan=True)
+        except units.UnitConversionError:  # pragma: no cover
+            return False
+
+    def __getitem__(self, indices):
+        &quot;&quot;&quot;
+        Return a section of the coordinates
+
+        Parameters
+        ----------
+        indices : int or numpy.ndarray or slice
+
+        Returns
+        -------
+        SphericalCoordinates
+        &quot;&quot;&quot;
+        return super().__getitem__(indices)
+
+    def __str__(self):
+        &quot;&quot;&quot;
+        Create a string representation of the spherical coordinates.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        if self.coordinates is None:
+            if self.unit is None:  # pragma: no cover
+                return &#39;Empty coordinates&#39;
+            else:
+                return f&#39;Empty coordinates ({self.unit})&#39;
+
+        if self.singular:
+            lon_string = Angle(self.longitude).to_string(unit=&#39;degree&#39;)
+            lat_string = Angle(self.latitude).to_string(unit=&#39;degree&#39;)
+            return f&#39;LON={lon_string} LAT={lat_string}&#39;
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+                min_lon = Angle(np.nanmin(self.longitude)).to_string(
+                    unit=&#39;degree&#39;)
+                max_lon = Angle(np.nanmax(self.longitude)).to_string(
+                    unit=&#39;degree&#39;)
+                min_lat = Angle(np.nanmin(self.latitude)).to_string(
+                    unit=&#39;degree&#39;)
+                max_lat = Angle(np.nanmax(self.latitude)).to_string(
+                    unit=&#39;degree&#39;)
+            return f&#39;LON={min_lon}-&gt;{max_lon} LAT={min_lat}-&gt;{max_lat}&#39;
+
+<div class="viewcode-block" id="SphericalCoordinates.register_types">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.register_types">[docs]</a>
+    @classmethod
+    def register_types(cls):
+        &quot;&quot;&quot;
+        Register a number of coordinate classes for later extraction.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        cls.id_lookup = {}
+        cls.ids = {}
+        cls.fits_types = {}
+        for coordinate_type in [&#39;spherical&#39;, &#39;horizontal&#39;, &#39;telescope&#39;,
+                                &#39;focal_plane&#39;, &#39;equatorial&#39;, &#39;ecliptic&#39;,
+                                &#39;galactic&#39;, &#39;super_galactic&#39;]:
+            cls.register(cls.get_class(coordinate_type))</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.register">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.register">[docs]</a>
+    @classmethod
+    def register(cls, coordinate_class):
+        &quot;&quot;&quot;
+        Register a given coordinate class as an available spherical system.
+
+        Parameters
+        ----------
+        coordinate_class : class
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        instance = coordinate_class()
+        cls.ids[instance.two_letter_code.upper()] = coordinate_class
+        cls.id_lookup[coordinate_class] = instance.two_letter_code
+        cls.fits_types[instance.fits_longitude_stem] = coordinate_class
+        cls.fits_types[instance.fits_latitude_stem] = coordinate_class</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.get_fits_class">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.get_fits_class">[docs]</a>
+    @classmethod
+    def get_fits_class(cls, ctype):
+        &quot;&quot;&quot;
+        Return a Coordinate class for the given ctype.
+
+        Parameters
+        ----------
+        ctype : str
+            The Coordinate system.
+
+        Returns
+        -------
+        class (SphericalCoordinates)
+        &quot;&quot;&quot;
+        if cls.fits_types is None:
+            cls.register_types()
+
+        ctype = ctype.ljust(4, &#39;-&#39;).upper()[:4]
+        coordinate_class = cls.fits_types.get(ctype)
+        if coordinate_class is None:
+            raise ValueError(f&quot;Unknown coordinate definition: {ctype}&quot;)
+        return coordinate_class</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.get_two_letter_class">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.get_two_letter_class">[docs]</a>
+    @classmethod
+    def get_two_letter_class(cls, class_id):
+        &quot;&quot;&quot;
+        Return a Coordinate class for the given class ID.
+
+        Parameters
+        ----------
+        class_id : str
+            The two-letter code for the class.
+
+        Returns
+        -------
+        class (SphericalCoordinates)
+        &quot;&quot;&quot;
+        if cls.ids is None:
+            cls.register_types()
+        coordinate_class = cls.ids.get(class_id.upper())
+        if coordinate_class is None:
+            raise ValueError(f&quot;Unknown coordinate definition {class_id}.&quot;)
+        return coordinate_class</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.get_class_for">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.get_class_for">[docs]</a>
+    @classmethod
+    def get_class_for(cls, spec):
+        &quot;&quot;&quot;
+        Return a spherical coordinate class for the given specification.
+
+        Parameters
+        ----------
+        spec : str
+            The name of, the two-letter code, or an axis ctype name for which
+            to return the correct coordinate class.
+
+        Returns
+        -------
+        class (SphericalCoordinates)
+        &quot;&quot;&quot;
+        try:
+            return cls.get_class(spec)
+        except (ImportError, ModuleNotFoundError, ValueError):
+            pass
+
+        try:
+            return cls.get_fits_class(spec)
+        except ValueError:
+            pass
+
+        try:
+            return cls.get_two_letter_class(spec)
+        except ValueError:
+            raise ValueError(f&quot;Unknown coordinate definition {spec}.&quot;)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.get_two_letter_code_for">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.get_two_letter_code_for">[docs]</a>
+    @classmethod
+    def get_two_letter_code_for(cls, class_type):
+        &quot;&quot;&quot;
+        Return the two-letter code for a given coordinate class.
+
+        Parameters
+        ----------
+        class_type : class (SphericalCoordinates)
+
+        Returns
+        -------
+        two_letter_code : str
+        &quot;&quot;&quot;
+        if cls.id_lookup is None:
+            cls.register_types()
+        return cls.id_lookup.get(class_type)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.get_default_system">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.get_default_system">[docs]</a>
+    @classmethod
+    def get_default_system(cls):
+        &quot;&quot;&quot;
+        Return the default and local default coordinate system.
+
+        Returns
+        -------
+        system, local_system : (CoordinateSystem, CoordinateSystem)
+        &quot;&quot;&quot;
+        default_coordinate_system = CoordinateSystem(
+            name=&#39;Spherical Coordinates&#39;)
+        default_local_coordinate_system = CoordinateSystem(
+            name=&#39;Spherical Offsets&#39;)
+        longitude_axis = cls.create_axis(&#39;Longitude&#39;, &#39;LON&#39;)
+        latitude_axis = cls.create_axis(&#39;Latitude&#39;, &#39;LAT&#39;)
+        longitude_offset_axis = cls.create_offset_axis(
+            &#39;Longitude Offset&#39;, &#39;dLON&#39;)
+        latitude_offset_axis = cls.create_offset_axis(
+            &#39;Latitude Offset&#39;, &#39;dLAT&#39;)
+        default_coordinate_system.add_axis(longitude_axis)
+        default_coordinate_system.add_axis(latitude_axis)
+        default_local_coordinate_system.add_axis(longitude_offset_axis)
+        default_local_coordinate_system.add_axis(latitude_offset_axis)
+        return default_coordinate_system, default_local_coordinate_system</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.create_axis">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.create_axis">[docs]</a>
+    @staticmethod
+    def create_axis(label, short_label, unit=&#39;degree&#39;):
+        &quot;&quot;&quot;
+        Create an axis.
+
+        Parameters
+        ----------
+        label : str
+            The name of the axis.
+        short_label : str
+            A shorthand name for the axis.
+        unit : astropy.units.Unit or str, optional
+            The axis unit.
+
+        Returns
+        -------
+        CoordinateAxis
+        &quot;&quot;&quot;
+        return CoordinateAxis(label=label, short_label=short_label, unit=unit)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.create_offset_axis">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.create_offset_axis">[docs]</a>
+    @staticmethod
+    def create_offset_axis(label, short_label, unit=&#39;arcsec&#39;):
+        &quot;&quot;&quot;
+        Create an offset axis.
+
+        Parameters
+        ----------
+        label : str
+            The name of the offset axis.
+        short_label : str
+            The shorthand name for the axis.
+        unit : astropy.units.Unit or str, optional
+            The offset axis unit.
+
+        Returns
+        -------
+        CoordinateAxis
+        &quot;&quot;&quot;
+        return CoordinateAxis(label=label, short_label=short_label, unit=unit)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.setup_coordinate_system">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.setup_coordinate_system">[docs]</a>
+    def setup_coordinate_system(self):
+        &quot;&quot;&quot;
+        Setup the system for the coordinates.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        (self.default_coordinate_system,
+         self.default_local_coordinate_system) = self.get_default_system()</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.set_shape">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.set_shape">[docs]</a>
+    def set_shape(self, shape, empty=False):
+        &quot;&quot;&quot;
+        Set the shape of the coordinates.
+
+        Parameters
+        ----------
+        shape : int or tuple (int)
+        empty : bool, optional
+            If `True`, create an empty array.  Otherwise, create a zeroed
+            array.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_shape(shape, empty=empty)
+        if empty:
+            self.sin_lat = np.empty(self.shape, dtype=float)
+            self.cos_lat = np.empty(self.shape, dtype=float)
+        else:
+            self.sin_lat = np.zeros(self.shape, dtype=float)
+            self.cos_lat = np.ones(self.shape, dtype=float)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.set_singular">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.set_singular">[docs]</a>
+    def set_singular(self, empty=False):
+        &quot;&quot;&quot;
+        Create a single coordinate.
+
+        Parameters
+        ----------
+        empty : bool, optional
+            If `True`, create an empty coordinate array.  Otherwise, create a
+            zeroed array.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().set_singular(empty=empty)
+        self.sin_lat = np.asarray(0.0)
+        self.cos_lat = np.asarray(1.0)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.set_y">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.set_y">[docs]</a>
+    def set_y(self, coordinates, copy=True):
+        &quot;&quot;&quot;
+        Set the y coordinates.
+
+        Parameters
+        ----------
+        coordinates : astropy.units.Quantity (float or numpy.ndarray)
+        copy : bool, optional
+            If `True`, copy the coordinates.  Otherwise do a reference.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            if not isinstance(coordinates, units.Quantity):
+                coordinates = coordinates * self.unit
+            super().set_y(np.fmod(coordinates, self.pi), copy=copy)
+        self.sin_lat = np.sin(self.coordinates[1]).value
+        self.cos_lat = np.cos(self.coordinates[1]).value</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.add_y">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.add_y">[docs]</a>
+    def add_y(self, y):
+        &quot;&quot;&quot;
+        Add y to coordinates.
+
+        Parameters
+        ----------
+        y : astropy.units.Quantity (float or numpy.ndarray)
+            The value(s) to add.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            if not isinstance(y, units.Quantity):
+                y = y * self.unit
+            super().add_y(np.fmod(y, self.pi))
+        self.sin_lat = np.sin(self.coordinates[1]).value
+        self.cos_lat = np.cos(self.coordinates[1]).value</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.subtract_y">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.subtract_y">[docs]</a>
+    def subtract_y(self, y):
+        &quot;&quot;&quot;
+        Subtract y from coordinates.
+
+        Parameters
+        ----------
+        y : astropy.units.Quantity (float or numpy.ndarray)
+            The value(s) to subtract.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            if not isinstance(y, units.Quantity):
+                y = y * self.unit
+            super().subtract_y(np.fmod(y, self.pi))
+        self.sin_lat = np.sin(self.coordinates[1]).value
+        self.cos_lat = np.cos(self.coordinates[1]).value</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.zero">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.zero">[docs]</a>
+    def zero(self, indices=None):
+        &quot;&quot;&quot;
+        Set all coordinates to zero.
+
+        Parameters
+        ----------
+        indices : slice or numpy.ndarray (int or bool), optional
+            The indices to set to zero.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().zero(indices=indices)
+        if self.sin_lat is None:
+            return
+        if indices is None:
+            self.sin_lat.fill(0.0)
+            self.cos_lat.fill(1.0)
+        else:
+            self.sin_lat[indices] = 0.0
+            self.cos_lat[indices] = 1.0</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.nan">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.nan">[docs]</a>
+    def nan(self, indices=None):
+        &quot;&quot;&quot;
+        Set all coordinates to NaN.
+
+        Parameters
+        ----------
+        indices : slice or numpy.ndarray (int or bool), optional
+            The indices to set to NaN.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().nan(indices=indices)
+        if self.sin_lat is None:
+            return
+        if indices is None:
+            self.sin_lat.fill(np.nan)
+            self.cos_lat.fill(np.nan)
+        else:
+            self.sin_lat[indices] = np.nan
+            self.cos_lat[indices] = np.nan</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.set">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.set">[docs]</a>
+    def set(self, coordinates, copy=True):
+        &quot;&quot;&quot;
+        Set the (LON, LAT) coordinates.
+
+        Parameters
+        ----------
+        coordinates : astropy.units.Quantity (float or numpy.ndarray)
+        copy : bool, optional
+            If `True`, copy the coordinates.  Otherwise do a reference.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_longitude(coordinates[0], copy=copy)
+        self.set_latitude(coordinates[1], copy=copy)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.set_native">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.set_native">[docs]</a>
+    def set_native(self, coordinates, copy=True):
+        &quot;&quot;&quot;
+        Set the native (x, y) coordinates.
+
+        Parameters
+        ----------
+        coordinates : Coordinates2D or astropy.units.Quantity (numpy.ndarray)
+            The native (x, y) coordinates to set.  If an array is provided,
+            should be of shape (2,) or (2, n).
+        copy : bool, optional
+            If `True`, copy the coordinates.  Otherwise, reference the
+            coordinates if possible.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if isinstance(coordinates, Coordinate2D):
+            self.set_native_longitude(coordinates.x, copy=copy)
+            self.set_native_latitude(coordinates.y, copy=copy)
+        else:
+            self.set_native_longitude(coordinates[0], copy=copy)
+            self.set_native_latitude(coordinates[1], copy=copy)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.set_native_longitude">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.set_native_longitude">[docs]</a>
+    def set_native_longitude(self, longitude, copy=True):
+        &quot;&quot;&quot;
+        Set the native longitude coordinates.
+
+        Parameters
+        ----------
+        longitude : astropy.units.Quantity (numpy.ndarray or float)
+            The native longitude coordinates to update.
+        copy : bool, optional
+            If `True`, copy the coordinates.  Otherwise do a reference.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_x(longitude, copy=copy)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.set_native_latitude">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.set_native_latitude">[docs]</a>
+    def set_native_latitude(self, latitude, copy=True):
+        &quot;&quot;&quot;
+        Set the native latitude coordinates.
+
+        Parameters
+        ----------
+        latitude : astropy.units.Quantity (numpy.ndarray or float)
+            The native latitude coordinates to update.
+        copy : bool, optional
+            If `True`, copy the coordinates.  Otherwise do a reference.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.set_y(latitude, copy=copy)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.set_longitude">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.set_longitude">[docs]</a>
+    def set_longitude(self, longitude, copy=True):
+        &quot;&quot;&quot;
+        Set the longitude coordinates.
+
+        Parameters
+        ----------
+        longitude : astropy.units.Quantity (numpy.ndarray or float)
+            The longitude coordinates to update.
+        copy : bool, optional
+            If `True`, copy the coordinates.  Otherwise do a reference.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.reverse_longitude:
+            with warnings.catch_warnings():
+                warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+                if not isinstance(longitude, units.Quantity):
+                    longitude = longitude * self.unit
+                native_longitude = self.longitude_axis.reverse_from - longitude
+            copy = False  # no need to copy
+        else:
+            native_longitude = longitude
+        self.set_native_longitude(native_longitude, copy=copy)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.set_latitude">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.set_latitude">[docs]</a>
+    def set_latitude(self, latitude, copy=True):
+        &quot;&quot;&quot;
+        Set the latitude coordinates.
+
+        Parameters
+        ----------
+        latitude : astropy.units.Quantity (numpy.ndarray or float)
+            The latitude coordinates to update.
+        copy : bool, optional
+            If `True`, copy the coordinates.  Otherwise do a reference.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.reverse_latitude:
+            native_latitude = latitude
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+                if not isinstance(latitude, units.Quantity):
+                    latitude = latitude * self.unit
+                native_latitude = self.latitude_axis.reverse_from - latitude
+            copy = False  # no need to copy
+
+        self.set_native_latitude(native_latitude, copy=copy)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.project">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.project">[docs]</a>
+    def project(self, projection, output_system):
+        &quot;&quot;&quot;
+        Project the coordinates onto a new frame.
+
+        Parameters
+        ----------
+        projection : Projection
+        output_system : Coordinate2D
+            A 2-dimensional output coordinates system.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        projection.project(self, output_system)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.set_projected">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.set_projected">[docs]</a>
+    def set_projected(self, projection, offset_system):
+        &quot;&quot;&quot;
+        Project offsets onto this system.
+
+        Parameters
+        ----------
+        projection : Projection
+        offset_system : Coordinate2D
+            A 2-dimensional system of offsets.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        projection.deproject(offset_system, self)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.get_projected">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.get_projected">[docs]</a>
+    def get_projected(self, projection):
+        &quot;&quot;&quot;
+        Get the projection of this system.
+
+        Parameters
+        ----------
+        projection : Projection
+
+        Returns
+        -------
+        Coordinate2D
+        &quot;&quot;&quot;
+        return projection.get_projected(self)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.add_native_offset">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.add_native_offset">[docs]</a>
+    def add_native_offset(self, offset):
+        &quot;&quot;&quot;
+        Add a native offset to the native coordinates.
+
+        Parameters
+        ----------
+        offset : Coordinate2D
+            The (x, y) offsets to add.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.add_x(offset.x / self.cos_lat)
+        self.add_y(offset.y)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.add_offset">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.add_offset">[docs]</a>
+    def add_offset(self, offset):
+        &quot;&quot;&quot;
+        Add spherical offsets to native coordinates.
+
+        Parameters
+        ----------
+        offset : Coordinate2D
+            The spherical (x, y) offsets to add.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        dx = offset.x / self.cos_lat
+        dy = offset.y
+        self.subtract_x(dx) if self.reverse_longitude else self.add_x(dx)
+        self.subtract_y(dy) if self.reverse_latitude else self.add_y(dy)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.subtract_native_offset">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.subtract_native_offset">[docs]</a>
+    def subtract_native_offset(self, offset):
+        &quot;&quot;&quot;
+        Subtract native offsets from the native coordinates.
+
+        Parameters
+        ----------
+        offset : Coordinate2D
+            The native (x, y) offsets to subtract.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        self.subtract_x(offset.x / self.cos_lat)
+        self.subtract_y(offset.y)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.subtract_offset">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.subtract_offset">[docs]</a>
+    def subtract_offset(self, offset):
+        &quot;&quot;&quot;
+        Subtract spherical offsets from the native coordinates.
+
+        Parameters
+        ----------
+        offset : Coordinate2D
+            The spherical (x, y) offsets to subtract.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        dx = offset.x / self.cos_lat
+        dy = offset.y
+        if self.reverse_longitude:
+            self.add_x(dx)
+        else:
+            self.subtract_x(dx)
+
+        # TODO: In case things fails, I reversed this.
+        if self.reverse_latitude:
+            self.add_y(dy)
+        else:
+            self.subtract_y(dy)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.get_native_offset_from">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.get_native_offset_from">[docs]</a>
+    def get_native_offset_from(self, reference, offset=None):
+        &quot;&quot;&quot;
+        Get the native offset from a reference system.
+
+        Parameters
+        ----------
+        reference : SphericalCoordinates
+            The native reference position(s).
+        offset : astropy.units.Quantity, optional
+            A work array to fill and return as the result.  If not supplied,
+            will be an array the same shape as coordinates or reference
+            (whichever is larger).
+
+        Returns
+        -------
+        Coordinate2D
+        &quot;&quot;&quot;
+        if offset is None:
+            offset = Coordinate2D(unit=self.offset_unit)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            dx = np.fmod(self.x - reference.x, self.two_pi) * reference.cos_lat
+            dy = self.y - reference.y
+
+        offset.x = dx
+        offset.y = dy
+        return offset</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.get_offset_from">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.get_offset_from">[docs]</a>
+    def get_offset_from(self, reference, offset=None):
+        &quot;&quot;&quot;
+        Get the spherical offset from a native reference position.
+
+        Parameters
+        ----------
+        reference : SphericalCoordinates
+            The reference position(s).
+        offset : astropy.units.Quantity, optional
+            A work array to fill and return as the result.  If not supplied,
+            will be an array the same shape as coordinates or reference
+            (whichever is larger).
+
+        Returns
+        -------
+        spherical_offset : Coordinate2D
+        &quot;&quot;&quot;
+        offset = self.get_native_offset_from(reference, offset=offset)
+        if self.reverse_longitude:
+            offset.coordinates[0] *= -1  # Note base coordinate scaling.
+        if self.reverse_latitude:
+            offset.coordinates[1] *= -1
+        return offset</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.standardize">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.standardize">[docs]</a>
+    def standardize(self):
+        &quot;&quot;&quot;
+        Get all the coordinates within the correct angular range.
+
+        Sets the range of x-coordinates to be in the range
+        -360 &lt; x &lt; 360 degrees, and y-coordinates to the range
+        -180 &lt; y &lt; 180 degrees.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            self.set_x(np.fmod(self.x, self.two_pi), copy=False)
+            self.set_y(np.fmod(self.y, self.pi), copy=False)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.distance_to">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.distance_to">[docs]</a>
+    def distance_to(self, reference):
+        r&quot;&quot;&quot;
+        Return the distance from these coordinates to a given reference.
+
+        Calculates the distance between two spherical sets of coordinates using
+        either the law of cosines or Vincenty&#39;s formulae.  First we calculate c
+        as::
+
+          c = sin(y) * sin(ry) + cos(y) * phi
+
+        where::
+
+          phi = cos(ry) * cos(rx - x)
+
+        and x, rx are the longitudinal coordinates or the coordinates and
+        reference coordinates respectively, and (y, ry) are the latitudinal
+        coordinates.
+
+        if \|c\| &gt; 0.9 (indicating intermediate distances), the law of
+        cosines is used to return an angle (a) of::
+
+          a = acos(c)
+
+        Otherwise, Vincenty&#39;s formula is used to return a value of::
+
+          a = atan2(B, c)
+
+        where::
+
+          B = sqrt((cos(ry) * sin(rx - x))^2 +
+                   (cos(y) * sin(ry) - sin(y) * phi)^2)
+
+        Parameters
+        ----------
+        reference : SphericalCoordinates
+
+        Returns
+        -------
+        astropy.units.Quantity
+            The angular separation from `coordinates` to `point` as an array of
+            shape (n,) in units of `coordinates`.
+        &quot;&quot;&quot;
+        d = csnf.spherical_distance_to(
+            x=np.atleast_1d(self.x.to(&#39;radian&#39;).value),
+            rx=np.atleast_1d(reference.x.to(&#39;radian&#39;).value),
+            cos_lat=np.atleast_1d(self.cos_lat),
+            sin_lat=np.atleast_1d(self.sin_lat),
+            r_cos_lat=np.atleast_1d(reference.cos_lat),
+            r_sin_lat=np.atleast_1d(reference.sin_lat))
+
+        if self.singular and reference.singular:
+            d = d.flat[0]
+
+        return (d * units.Unit(&#39;radian&#39;)).to(self.unit)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.edit_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.edit_header">[docs]</a>
+    def edit_header(self, header, key_stem, alt=&#39;&#39;):
+        &quot;&quot;&quot;
+        Edit the header with spherical coordinate information.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The header to modify.
+        key_stem : str
+            The name of the header key to update.
+        alt : str, optional
+            The alternative coordinate system.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if not self.singular:
+            return  # Can&#39;t do this for multiple coordinates
+
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            lon = np.fmod(self.longitude, self.two_pi)
+        lat = self.latitude
+        if lon &lt; 0:
+            lon += self.two_pi
+
+        header[f&#39;{key_stem}1{alt}&#39;] = (
+            lon.to(&#39;degree&#39;).value,
+            &quot;The reference longitude coordinate (deg).&quot;)
+
+        header[f&#39;{key_stem}2{alt}&#39;] = (
+            lat.to(&#39;degree&#39;).value,
+            &quot;The reference latitude coordinate (deg).&quot;)
+
+        if alt != &#39;&#39;:
+            header[&#39;WCSAXES&#39;] = 2, &#39;Number of celestial coordinate axes.&#39;</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.parse_header">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.parse_header">[docs]</a>
+    def parse_header(self, header, key_stem, alt=&#39;&#39;, default=None):
+        &quot;&quot;&quot;
+        Set the coordinate from the header.
+
+        Parameters
+        ----------
+        header : astropy.io.fits.header.Header
+            The FITS header to read.
+        key_stem : str
+        alt : str, optional
+            The alternate coordinate system.
+        default : Coordinate2D or units.Quantity or SphericalCoordinates
+            The (x, y) default coordinate.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if default is None:
+            default_lon = 0 * self.unit
+            default_lat = 0 * self.unit
+        elif isinstance(default, SphericalCoordinates):
+            default_lon = default.lon
+            default_lat = default.lat
+        elif isinstance(default, Coordinate2D):
+            default_lon = default.x
+            default_lat = default.y
+        else:
+            default_lon, default_lat = default
+
+        deg = units.Unit(&#39;degree&#39;)
+
+        longitude_key = f&#39;{key_stem}1{alt}&#39;
+        if longitude_key in header:
+            lon = header[longitude_key]
+            unit = get_comment_unit(header.comments[longitude_key],
+                                    default=deg)
+            lon = lon * unit
+        else:
+            lon = default_lon
+
+        latitude_key = f&#39;{key_stem}2{alt}&#39;
+        if latitude_key in header:
+            lat = header[latitude_key]
+            unit = get_comment_unit(header.comments[latitude_key],
+                                    default=deg)
+            lat = lat * unit
+        else:
+            lat = default_lat
+
+        self.set_longitude(lon, copy=False)
+        self.set_latitude(lat, copy=False)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.invert_y">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.invert_y">[docs]</a>
+    def invert_y(self):
+        &quot;&quot;&quot;
+        Scale the y-coordinates by -1.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().invert_y()
+        self.sin_lat *= -1</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.equal_angles">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.equal_angles">[docs]</a>
+    @classmethod
+    def equal_angles(cls, angle1, angle2):
+        &quot;&quot;&quot;
+        Check whether angles are equal.
+
+        Parameters
+        ----------
+        angle1 : astropy.units.Quantity
+        angle2 : astropy.units.Quantity
+
+        Returns
+        -------
+        bool or numpy.ndarray (bool)
+        &quot;&quot;&quot;
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            return np.abs(np.fmod(angle1 - angle2, cls.two_pi)
+                          ) &lt; cls.angular_accuracy</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.transform">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.transform">[docs]</a>
+    def transform(self, pole, phi0, from_coordinates=None, to_coordinates=None,
+                  reverse=False):
+        &quot;&quot;&quot;
+        Transform spherical coordinates to a new pole.
+
+        Parameters
+        ----------
+        pole : SphericalCoordinates
+            The pole to transform to (or from if `reverse`=`True`).
+        phi0 : astropy.units.Quantity
+            The angle phi0.
+        from_coordinates : SphericalCoordinates, optional
+            The coordinates to transform from.  If not supplied, will be
+            *these* coordinates.
+        to_coordinates : SphericalCoordinates, optional
+            The output coordinate system to transform to.  The default is
+            *this* system.
+        reverse : bool, optional
+            If `True`, perform the inverse transform (from the pole rather than
+            to the pole).
+
+        Returns
+        -------
+        output : SphericalCoordinates
+        &quot;&quot;&quot;
+        if from_coordinates is None:
+            from_coordinates = self
+
+        if to_coordinates is None:
+            to_coordinates = self.__class__()
+
+        transformed = csnf.spherical_pole_transform(
+            x=np.atleast_1d(from_coordinates.x.to(&#39;radian&#39;).value),
+            px=np.atleast_1d(pole.x.to(&#39;radian&#39;).value),
+            cos_lat=np.atleast_1d(from_coordinates.cos_lat),
+            sin_lat=np.atleast_1d(from_coordinates.sin_lat),
+            p_cos_lat=np.atleast_1d(pole.cos_lat),
+            p_sin_lat=np.atleast_1d(pole.sin_lat),
+            phi0=phi0.to(&#39;radian&#39;).value,
+            reverse=reverse) * units.Unit(&#39;radian&#39;)
+
+        # Reconstruct shape
+        singular = False
+        if from_coordinates.singular and not pole.singular:
+            new_shape = pole.shape
+        elif not from_coordinates.singular and pole.singular:
+            new_shape = from_coordinates.shape
+        elif from_coordinates.singular and pole.singular:
+            singular = True
+            new_shape = ()
+        else:
+            new_shape = transformed.shape[1:]  # Too complex - leave flat
+
+        if not singular and transformed.shape[1:] != new_shape:
+            real_shape = (from_coordinates.ndim,) + new_shape
+            new = np.empty(real_shape, dtype=float) * units.Unit(&#39;radian&#39;)
+            for dimension in range(from_coordinates.ndim):
+                new[dimension].flat = transformed[dimension]
+            transformed = new
+        elif singular:
+            transformed = transformed[:, 0]
+
+        to_coordinates.set_native(transformed)
+        return to_coordinates</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.inverse_transform">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.inverse_transform">[docs]</a>
+    def inverse_transform(self, pole, phi0, from_coordinates=None,
+                          to_coordinates=None):
+        &quot;&quot;&quot;
+        Inversely transform spherical coordinates from a pole.
+
+        Parameters
+        ----------
+        pole : SphericalCoordinates
+            The pole from which to transform.
+        phi0 : astropy.units.Quantity
+            The angle phi0.
+        from_coordinates : SphericalCoordinates, optional
+            The coordinates to transform from.  If not supplied, will be
+            *these* coordinates.
+        to_coordinates : SphericalCoordinates, optional
+            The output coordinate system to transform to on output.
+            The default is *this* system.
+
+        Returns
+        -------
+        output : astropy.units.Quantity (numpy.ndarray)
+            The transformed `coordinates` of shape (2, n) or (2,).
+        &quot;&quot;&quot;
+        if from_coordinates is None:
+            from_coordinates = self
+
+        return self.transform(pole, phi0, from_coordinates=from_coordinates,
+                              to_coordinates=to_coordinates, reverse=True)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.zero_to_two_pi">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.zero_to_two_pi">[docs]</a>
+    @classmethod
+    def zero_to_two_pi(cls, values):
+        &quot;&quot;&quot;
+        Return angles in the range 0 -&gt; 2pi.
+
+        Parameters
+        ----------
+        values : astropy.units.Quantity
+
+        Returns
+        -------
+        astropy.units.Quantity
+        &quot;&quot;&quot;
+        with warnings.catch_warnings():
+            warnings.simplefilter(&#39;ignore&#39;, RuntimeWarning)
+            return values % cls.two_pi</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.get_indices">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.get_indices">[docs]</a>
+    def get_indices(self, indices):
+        &quot;&quot;&quot;
+        Return selected data for given indices.
+
+        Parameters
+        ----------
+        indices : slice or list or int or numpy.ndarray (int)
+            The indices to extract.
+
+        Returns
+        -------
+        FlaggedData
+        &quot;&quot;&quot;
+        new = super().get_indices(indices)
+        if new.coordinates is None:
+            return new
+
+        if isinstance(indices, np.ndarray) and indices.shape == ():
+            indices = int(indices)
+
+        new.cos_lat = self.cos_lat[indices]
+        new.sin_lat = self.sin_lat[indices]
+        return new</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.insert_blanks">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.insert_blanks">[docs]</a>
+    def insert_blanks(self, insert_indices):
+        &quot;&quot;&quot;
+        Insert blank (NaN) values at the requested indices.
+
+        Follows the logic of :func:`numpy.insert`.
+
+        Parameters
+        ----------
+        insert_indices : numpy.ndarray (int)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().insert_blanks(insert_indices)
+        self.cos_lat = np.insert(self.cos_lat, insert_indices, np.nan)
+        self.sin_lat = np.insert(self.sin_lat, insert_indices, np.nan)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.merge">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.merge">[docs]</a>
+    def merge(self, other):
+        &quot;&quot;&quot;
+        Append other coordinates to the end of these.
+
+        Parameters
+        ----------
+        other : Coordinate2D
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        singular = self.singular
+        super().merge(other)
+        if singular:
+            self.cos_lat = np.atleast_1d(self.cos_lat)
+            self.sin_lat = np.atleast_1d(self.sin_lat)
+
+        if not isinstance(other, SphericalCoordinates):
+            other = SphericalCoordinates(other)
+            other_cos_lat = np.atleast_1d(other.cos_lat)
+            other_sin_lat = np.atleast_1d(other.sin_lat)
+        else:
+            other_cos_lat = np.atleast_1d(other.cos_lat)
+            other_sin_lat = np.atleast_1d(other.sin_lat)
+
+        self.cos_lat = np.concatenate((self.cos_lat, other_cos_lat))
+        self.sin_lat = np.concatenate((self.sin_lat, other_sin_lat))</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.paste">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.paste">[docs]</a>
+    def paste(self, coordinates, indices):
+        &quot;&quot;&quot;
+        Paste new coordinate values at the given indices.
+
+        Parameters
+        ----------
+        coordinates : Coordinate2D
+        indices : numpy.ndarray (int)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().paste(coordinates, indices)
+        if isinstance(coordinates, SphericalCoordinates):
+            self.cos_lat[indices] = coordinates.cos_lat
+            self.sin_lat[indices] = coordinates.sin_lat
+        else:
+            lat = coordinates.coordinates[1]
+            self.cos_lat[indices] = np.cos(lat)
+            self.sin_lat[indices] = np.sin(lat)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.shift">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.shift">[docs]</a>
+    def shift(self, n, fill_value=np.nan):
+        &quot;&quot;&quot;
+        Shift the coordinates by a given number of elements.
+
+        Parameters
+        ----------
+        n : int
+        fill_value : float or int or units.Quantity, optional
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        if self.singular:
+            return  # Can&#39;t roll for singular coordinates
+
+        super().shift(n, fill_value=fill_value)
+        # Reset the cos_lat, sin_lat attributes
+        self.set_x(self.coordinates[0], copy=False)
+        self.set_y(self.coordinates[1], copy=False)</div>
+
+
+<div class="viewcode-block" id="SphericalCoordinates.plot">
+<a class="viewcode-back" href="../../../../api/sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.html#sofia_redux.scan.coordinate_systems.spherical_coordinates.SphericalCoordinates.plot">[docs]</a>
+    def plot(self, *args, **kwargs):  # pragma: no cover
+        &quot;&quot;&quot;
+        Plot the coordinates.
+
+        Parameters
+        ----------
+        args : values
+            Optional positional parameters to pass into pyplot.plot.
+        kwargs : dict, optional
+            Optional keyword arguments.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        import matplotlib.pyplot as plt
+        plt.ion()
+        c_args = self.coordinates[0].ravel(), self.coordinates[1].ravel()
+        if args is not None:
+            c_args += args
+
+        plt.plot(*c_args, **kwargs)
+        plt.xlabel(f&#39;{self.longitude_axis.label} ({self.unit})&#39;)
+        plt.ylabel(f&#39;{self.latitude_axis.label} ({self.unit})&#39;)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

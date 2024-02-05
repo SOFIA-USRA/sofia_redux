@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.info.extended_scanning &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.info.extended_scanning</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+import numpy as np
+from astropy import units
+
+from sofia_redux.scan.custom.sofia.info.scanning import SofiaScanningInfo
+from sofia_redux.scan.utilities.bracketed_values import BracketedValues
+from sofia_redux.scan.utilities.utils import (
+    to_header_float, UNKNOWN_INT_VALUE, UNKNOWN_STRING_VALUE)
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.utilities.utils import insert_info_in_header
+
+degree = units.Unit(&#39;degree&#39;)
+arcsec = units.Unit(&#39;arcsec&#39;)
+second = units.Unit(&#39;second&#39;)
+
+__all__ = [&#39;SofiaExtendedScanningInfo&#39;]
+
+
+<div class="viewcode-block" id="SofiaExtendedScanningInfo">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.extended_scanning.SofiaExtendedScanningInfo.html#sofia_redux.scan.custom.sofia.info.extended_scanning.SofiaExtendedScanningInfo">[docs]</a>
+class SofiaExtendedScanningInfo(SofiaScanningInfo):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize the SOFIA extended scanning information.
+
+        Contains information on additional scanning information that may be
+        required to describe SOFIA specific observations.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.pattern = &#39;&#39;
+        self.coordinate_system = &#39;&#39;
+        self.amplitude = None  # Coordinate2D (arcsec)
+        self.current_position_angle = np.nan * degree
+        self.duration = np.nan * second
+        self.rel_frequency = np.nan
+        self.rel_phase = np.nan * degree
+        self.t0 = np.nan * second
+        self.gyro_time_window = np.nan * second
+        self.iterations = UNKNOWN_INT_VALUE
+        self.subscans = UNKNOWN_INT_VALUE
+        self.raster_length = np.nan * arcsec
+        self.raster_step = np.nan * arcsec
+        self.is_cross_scanning = False
+        self.n_steps = UNKNOWN_INT_VALUE
+        self.tracking_enabled = UNKNOWN_INT_VALUE
+        self.position_angle = BracketedValues(np.nan, np.nan, unit=&#39;degree&#39;)
+
+    @property
+    def log_id(self):
+        &quot;&quot;&quot;
+        Return the string log ID for the info.
+
+        The log ID is used to extract certain information from table data.
+
+        Returns
+        -------
+        str
+        &quot;&quot;&quot;
+        return &#39;scan&#39;
+
+<div class="viewcode-block" id="SofiaExtendedScanningInfo.apply_configuration">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.extended_scanning.SofiaExtendedScanningInfo.html#sofia_redux.scan.custom.sofia.info.extended_scanning.SofiaExtendedScanningInfo.apply_configuration">[docs]</a>
+    def apply_configuration(self):
+        &quot;&quot;&quot;
+        Update scanning information with FITS header information.
+
+        Updates the scanning information by taking the following keywords from
+        the FITS header::
+
+          SCNPATT - The scanning pattern (str)
+          SCNCRSYS - The scanning coordinate system (str)
+          SCNAMPXL - The scanning x-elevation scanning amplitude (arcsec)
+          SCNAMPEL - The scanning elevation scanning amplitude (arcsec)
+          SCNANGLC - The current scanning angle (degree)
+          SCNANGLS - The initial scanning angle (degree)
+          SCNANGLF - The final scanning angle (degree)
+          SCNDUR - The scan duration (seconds)
+          SCNITERS - The number of scanning iterations (int)
+          SCNNSUBS - The number of sub-scans (int)
+          SCNLEN - The raster scan length (arcsec)
+          SCNSTEP - The raster scan step size (arcsec)
+          SCNSTEPS - The number of raster scan steps (int)
+          SCNCROSS - Whether the scan is cross-scanning (bool)
+          SCNFQRAT - The Lissajous y/x frequency ratio (float)
+          SCNPHASE - The Lissajous y/x relative phase (degree)
+          SCNTOFF - The Lissajous time offset (seconds)
+          SCNTWAIT - The track relock time window (seconds)
+          SCNTRKON - Whether tracking is on/off (0/1) (int)
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().apply_configuration()
+        options = self.options
+        if options is None:
+            return
+
+        self.pattern = options.get_string(
+            &#39;SCNPATT&#39;, default=UNKNOWN_STRING_VALUE)
+        self.coordinate_system = options.get_string(
+            &#39;SCNCRSYS&#39;, default=UNKNOWN_STRING_VALUE)
+        self.amplitude = Coordinate2D([options.get_float(&#39;SCNAMPXL&#39;),
+                                       options.get_float(&#39;SCNAMPEL&#39;)],
+                                      unit=&#39;arcsec&#39;)
+        self.current_position_angle = options.get_float(&#39;SCNANGLC&#39;) * degree
+        self.position_angle = BracketedValues(options.get_float(&#39;SCNANGLS&#39;),
+                                              options.get_float(&#39;SCNANGLF&#39;),
+                                              unit=&#39;degree&#39;)
+        self.duration = options.get_float(&#39;SCNDUR&#39;) * second
+        self.iterations = options.get_int(&#39;SCNITERS&#39;,
+                                          default=UNKNOWN_INT_VALUE)
+        self.subscans = options.get_int(&#39;SCNNSUBS&#39;, default=UNKNOWN_INT_VALUE)
+        self.raster_length = options.get_float(&#39;SCNLEN&#39;) * arcsec
+        self.raster_step = options.get_float(&#39;SCNSTEP&#39;) * arcsec
+        self.n_steps = options.get_int(&#39;SCNSTEPS&#39;, default=UNKNOWN_INT_VALUE)
+        self.is_cross_scanning = options.get_bool(&#39;SCNCROSS&#39;)
+        self.rel_frequency = options.get_float(&#39;SCNFQRAT&#39;)
+        self.rel_phase = options.get_float(&#39;SCNPHASE&#39;) * degree
+        self.t0 = options.get_float(&#39;SCNTOFF&#39;) * second
+        self.gyro_time_window = options.get_float(&#39;SCNTWAIT&#39;) * second
+        self.tracking_enabled = options.get_int(&#39;SCNTRKON&#39;,
+                                                default=UNKNOWN_INT_VALUE)</div>
+
+
+<div class="viewcode-block" id="SofiaExtendedScanningInfo.edit_header">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.extended_scanning.SofiaExtendedScanningInfo.html#sofia_redux.scan.custom.sofia.info.extended_scanning.SofiaExtendedScanningInfo.edit_header">[docs]</a>
+    def edit_header(self, header):
+        &quot;&quot;&quot;
+        Edit an image header with available information.
+
+        Parameters
+        ----------
+        header : astropy.fits.Header
+            The FITS header to apply.
+
+        Returns
+        -------
+        None
+        &quot;&quot;&quot;
+        super().edit_header(header)
+
+        if self.amplitude is None:
+            self.amplitude = Coordinate2D([np.nan, np.nan], unit=&#39;arcsec&#39;)
+
+        info = [
+            (&#39;COMMENT&#39;, &quot;&lt;------ SOFIA Extra Scanning Data ------&gt;&quot;),
+            (&#39;SCNPATT&#39;, self.pattern, &quot;Scan pattern.&quot;),
+            (&#39;SCNCRSYS&#39;, self.coordinate_system, &quot;Scan coordinate system.&quot;),
+            (&#39;SCNANGLC&#39;,
+             to_header_float(self.current_position_angle, &#39;degree&#39;),
+             &quot;(deg) current scan angle.&quot;),
+            (&#39;SCNANGLS&#39;, to_header_float(self.position_angle.start, &#39;degree&#39;),
+             &quot;(deg) initial scan angle.&quot;),
+            (&#39;SCNANGLF&#39;, to_header_float(self.position_angle.end, &#39;degree&#39;),
+             &quot;(deg) final scan angle.&quot;),
+            (&#39;SCNDUR&#39;, to_header_float(self.duration, &#39;second&#39;),
+             &quot;(s) scan duration.&quot;),
+            (&#39;SCNITERS&#39;, self.iterations, &quot;scan iterations.&quot;),
+            (&#39;SCNNSUBS&#39;, self.subscans, &quot;number of subscans.&quot;),
+            (&#39;SCNTRKON&#39;, self.tracking_enabled, &quot;[0,1] Is tracking enabled?&quot;),
+            (&#39;SCNTWAIT&#39;, to_header_float(self.gyro_time_window, &#39;second&#39;),
+             &quot;(s) Track relock time window.&quot;),
+            (&#39;SCNLEN&#39;, to_header_float(self.raster_length, &#39;arcsec&#39;),
+             &quot;(arcsec) Raster scan length.&quot;),
+            (&#39;SCNSTEP&#39;, to_header_float(self.raster_step, &#39;arcsec&#39;),
+             &quot;(arcsec) Raster scan step size.&quot;),
+            (&#39;SCNSTEPS&#39;, self.n_steps, &quot;Raster scan steps.&quot;),
+            (&#39;SCNCROSS&#39;, self.is_cross_scanning, &quot;cross scanning?&quot;),
+            (&#39;SCNAMPXL&#39;, to_header_float(self.amplitude.x, &#39;arcsec&#39;),
+             &quot;(arcsec) cross-elevation amplitude.&quot;),
+            (&#39;SCNAMPEL&#39;, to_header_float(self.amplitude.y, &#39;arcsec&#39;),
+             &quot;(arcsec) elevation amplitude.&quot;),
+            (&#39;SCNFQRAT&#39;, to_header_float(self.rel_frequency),
+             &quot;Lissajous y/x frequency ratio.&quot;),
+            (&#39;SCNPHASE&#39;, to_header_float(self.rel_phase, &#39;degree&#39;),
+             &quot;(deg) Lissajous y/x relative phase.&quot;),
+            (&#39;SCNTOFF&#39;, to_header_float(self.t0, &#39;second&#39;),
+             &quot;(s) Lissajous time offset.&quot;)
+        ]
+        insert_info_in_header(header, info, delete_special=True)</div>
+
+
+<div class="viewcode-block" id="SofiaExtendedScanningInfo.get_table_entry">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.info.extended_scanning.SofiaExtendedScanningInfo.html#sofia_redux.scan.custom.sofia.info.extended_scanning.SofiaExtendedScanningInfo.get_table_entry">[docs]</a>
+    def get_table_entry(self, name):
+        &quot;&quot;&quot;
+        Return a parameter value for the given name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the parameter to retrieve.
+
+        Returns
+        -------
+        value
+        &quot;&quot;&quot;
+        if name == &#39;pattern&#39;:
+            return self.pattern
+        elif name == &#39;sys&#39;:
+            return self.coordinate_system
+        elif name == &#39;PA&#39;:
+            return self.current_position_angle.to(&#39;degree&#39;)
+        elif name == &#39;T&#39;:
+            return self.duration.to(&#39;second&#39;)
+        elif name == &#39;iters&#39;:
+            return self.iterations
+        elif name == &#39;nsub&#39;:
+            return self.subscans
+        elif name == &#39;trk&#39;:
+            if self.tracking_enabled == UNKNOWN_INT_VALUE:
+                return &#39;?&#39;
+            return self.tracking_enabled != 0
+        elif name == &#39;X&#39;:
+            return self.raster_length.to(&#39;arcsec&#39;)
+        elif name == &#39;dY&#39;:
+            return self.raster_step.to(&#39;arcsec&#39;)
+        elif name == &#39;strips&#39;:
+            return self.n_steps
+        elif name == &#39;cross?&#39;:
+            return self.is_cross_scanning
+        elif name == &#39;Ax&#39;:
+            return self.amplitude.x.to(&#39;arcsec&#39;)
+        elif name == &#39;Ay&#39;:
+            return self.amplitude.y.to(&#39;arcsec&#39;)
+        elif name == &#39;frel&#39;:
+            return self.rel_frequency
+        elif name == &#39;phi0&#39;:
+            return self.rel_phase.to(&#39;degree&#39;)
+        elif name == &#39;t0&#39;:
+            return self.t0.to(&#39;second&#39;)
+        else:
+            return super().get_table_entry(name)</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

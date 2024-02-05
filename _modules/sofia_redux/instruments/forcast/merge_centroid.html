@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.instruments.forcast.merge_centroid &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.instruments.forcast.merge_centroid</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import log
+from astropy.io import fits
+import numpy as np
+
+from sofia_redux.toolkit.utilities.fits import add_history_wrap, hdinsert, kref
+
+from sofia_redux.instruments.forcast.getpar import getpar
+from sofia_redux.instruments.forcast.imgshift_header import imgshift_header
+from sofia_redux.instruments.forcast.peakfind import peakfind
+from sofia_redux.instruments.forcast.readmode import readmode
+from sofia_redux.instruments.forcast.shift import shift
+
+addhist = add_history_wrap(&#39;Merge&#39;)
+
+__all__ = [&#39;merge_centroid&#39;]
+
+
+<div class="viewcode-block" id="merge_centroid">
+<a class="viewcode-back" href="../../../../api/sofia_redux.instruments.forcast.merge_centroid.merge_centroid.html#sofia_redux.instruments.forcast.merge_centroid.merge_centroid">[docs]</a>
+def merge_centroid(data, header, variance=None, normmap=None, resize=True):
+    &quot;&quot;&quot;
+    Merge an image using a centroid algorithm
+
+    Add each frame of the data to a 2-d summation frame in a manner
+    appropriate to the current reduction scheme.  Averaged by the
+    number of frames.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        data to be merged (nrow, ncol). i.e. frame with target images
+    header : astropy.fits.header.Header
+        FITS header of input data
+    variance : numpy.ndarray, optional
+        propagate provided variance (nrow, ncol)
+    normmap : numpy.ndarray, optional
+        The normalization map.  Each pixel contains an integer of the
+        number of peaks used to create an average for the output array
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        - The merged image i.e. frame with images of object at chop and
+          nod positions merged. (nrow, ncol)
+        - The propagated variance array (nrow, ncol)
+    &quot;&quot;&quot;
+    log.info(&#39;Using centroid to merge chop/nod frames&#39;)
+    if not isinstance(header, fits.header.Header):
+        log.error(&quot;invalid header&quot;)
+        return
+
+    var = variance.copy() if isinstance(variance, np.ndarray) else None
+    if not isinstance(data, np.ndarray) or len(data.shape) != 2:
+        addhist(header, &quot;chop positions not applied (invalid data)&quot;)
+        log.error(&quot;invalid data&quot;)
+        return
+    elif np.isnan(data).all():
+        addhist(header, &quot;merge not applied (invalid data)&quot;)
+        log.error(&quot;data are all NaN&quot;)
+        return
+
+    dovar = isinstance(var, np.ndarray) and var.shape == data.shape
+    var = None if not dovar else var
+    if variance is not None and not dovar:
+        addhist(header, &#39;Not propagating variance (Invalid variance)&#39;)
+        log.warning(&quot;invalid variance&quot;)
+
+    # Set initial normalization map
+    if isinstance(normmap, np.ndarray):
+        # normmap is not critical, so we can resize
+        if normmap.shape != data.shape:
+            normmap.resize(data.shape, refcheck=False)
+        normmap.fill(0)
+    else:
+        normmap = np.zeros_like(data)
+    normmap[~np.isnan(data)] = 1
+
+    # Check the mode and return data if merge is not required for the
+    # specific mode
+    mode = readmode(header)
+    if mode == &#39;NMC&#39;:
+        npeaks = 3
+    elif mode == &#39;NPC&#39;:
+        npeaks = 4
+    else:
+        log.warning(&quot;%s mode is not recognized. No merging performed&quot; % mode)
+        return
+
+    _ = getpar(header, &#39;MTHRESH&#39;, dtype=float, default=15.0,
+               comment=&#39;threshold for peakfind at merge&#39;)
+    shift_order = getpar(header, &#39;SHIFTORD&#39;, dtype=int, default=0,
+                         comment=&#39;interpolate order for coadd/merge&#39;)
+    border = getpar(
+        header, &#39;BORDER&#39;, dtype=int, default=128,
+        comment=&#39;additional border pixels&#39;)
+    addhist(header, &#39;Shift interpolation order is %i&#39; % shift_order)
+
+    # Calculate chop and nod distances
+    imgshift = imgshift_header(header, dither=False)
+    distchop = np.sqrt(imgshift[&#39;chopx&#39;] ** 2 + imgshift[&#39;chopy&#39;] ** 2)
+    distnod = np.sqrt(imgshift[&#39;nodx&#39;] ** 2 + imgshift[&#39;nody&#39;] ** 2)
+
+    # Find peak positions of the instances of the stars in the array
+    find_img = np.zeros_like(data)
+    clip = border + 10
+    find_img[clip: -clip, clip: -clip] = data[clip: -clip, clip: -clip]
+
+    fwhm = getpar(header, &#39;MFWHM&#39;, dtype=float, default=-1,
+                  comment=&quot;fwhm used for peakfind at merge&quot;)
+    if fwhm &lt; 0:
+        log.info(&quot;using default FWHM in peakfind&quot;)
+        fwhm = None
+    else:
+        log.info(&quot;FWHM is %s in peakfind&quot; % fwhm)
+
+    kwargs = {&#39;npeaks&#39;: npeaks,
+              &#39;chopnoddist&#39;: [distchop, distnod],
+              &#39;coordinates&#39;: True}
+    if fwhm is not None:
+        kwargs[&#39;fwhm&#39;] = fwhm
+    found = peakfind(find_img, **kwargs)
+
+    nfound = len(found)
+    if nfound != npeaks:
+        log.warning(&quot;wrong number of peaks found&quot;)
+        return
+
+    fluxes = []
+    for x, y in found:
+        try:
+            fluxes.append(find_img[int(y), int(x)])
+        except IndexError:
+            pass
+    fluxes = np.array(fluxes)
+    npos = (fluxes &gt; 0).sum()
+    nneg = (fluxes &lt; 0).sum()
+
+    ok = True
+    if mode == &#39;NMC&#39; and (npos != 1 or nneg != 2):
+        ok = False
+    elif mode == &#39;NPC&#39; and (npos != 2 or nneg != 2):
+        ok = False
+    if not ok:
+        log.warning(&quot;wrong peaks found for %s mode&quot; % mode)
+        return
+
+    # Find the peak position closer to the CRPIX
+    # (or the brightest source, if recorded) and store it in
+    # base_coords
+    crx = getpar(header, &#39;CRPIX1&#39;, dtype=int, default=data.shape[1] / 2)
+    cry = getpar(header, &#39;CRPIX2&#39;, dtype=int, default=data.shape[0] / 2)
+    cx = getpar(header, &#39;SRCPOSX&#39;, dtype=int, default=crx)
+    cy = getpar(header, &#39;SRCPOSY&#39;, dtype=int, default=cry)
+    dr = [(v[0] - cx) ** 2 + (v[1] - cy) ** 2 for v in found]
+    base_idx = np.array(dr).argmin()
+    base_coords = np.array(found[base_idx])
+    xyoffsets = base_coords - np.array(found)
+
+    # Arrays for accumulated and original data that may or may not be resized
+    daccum = np.zeros_like(data)
+    naccum = np.zeros(data.shape)
+    vaccum = np.zeros_like(var) if dovar else None
+    nans = np.isnan(data)
+    data0 = data.copy()
+    data0[nans] = 0
+    norm0 = (~nans).astype(float)
+    if dovar:
+        var0 = var.copy()
+        var0[nans] = 0
+    else:
+        var0 = None
+
+    # The idea here is that for each found peak, we check if the
+    # instance of the star is positive or negative.  Then, we shift
+    # the image to match the reference star (the one closer to the
+    # center) and we add them so the two instances are positive
+    for idx, (xyoff, xypeak) in enumerate(zip(xyoffsets, found)):
+        sign = 1 if data[int(xypeak[1]), int(xypeak[0])] &gt;= 0 else -1
+        addhist(header, &#39;X, Y shifts are %.3f,%.3f for peak %.3f,%.3f&#39; %
+                (xyoff[0], xyoff[1], xypeak[0], xypeak[1]))
+        hdinsert(header, &#39;MRGX%i&#39; % idx, xypeak[0], refkey=kref,
+                 comment=&#39;X coordinates during merge&#39;)
+        hdinsert(header, &#39;MRGY%i&#39; % idx, xypeak[1], refkey=kref,
+                 comment=&#39;Y coordinates during merge&#39;)
+        hdinsert(header, &#39;MRGDX%i&#39; % idx, xyoff[0], refkey=kref,
+                 comment=&#39;X shift during merge&#39;)
+        hdinsert(header, &#39;MRGDY%i&#39; % idx, xyoff[1], refkey=kref,
+                 comment=&#39;Y shift during merge&#39;)
+
+        # Create an instance of the input image shifted so the
+        # current star position matches the base_coord values
+        # replace NaNs with zero for adding
+        shiftd, _ = shift(data0, xyoff, order=shift_order, missing=0,
+                          resize=resize)
+        shiftn, shiftv = shift(norm0, xyoff, order=0, variance=var0,
+                               resize=resize, missing=0)
+
+        if resize:  # we need to update the size for addition later
+            # - Resize original data; note header is updated here
+            data0, _ = shift(data0, xyoff, order=shift_order, missing=0,
+                             resize=True, header=header, no_shift=True)
+            norm0, var0 = shift(norm0, xyoff, order=0, variance=var0,
+                                resize=True, missing=0, no_shift=True)
+
+            # - Resize accumulated data
+            daccum, _ = shift(daccum, xyoff, order=shift_order, missing=0,
+                              resize=True, no_shift=True)
+            naccum, vaccum = shift(naccum, xyoff, order=0, variance=vaccum,
+                                   resize=True, missing=0, no_shift=True)
+
+        daccum += sign * shiftd
+        naccum += shiftn
+        if dovar:
+            vaccum += shiftv
+
+    # Put NaNs back in
+    daccum[naccum == 0] = np.nan
+    if vaccum is not None:
+        vaccum[naccum == 0] = np.nan
+
+    # Normalize the merged image and variance by the merge mask
+    # Add one for NMC mode for the doubled source
+    idx = naccum != 0
+    if mode == &#39;NMC&#39;:
+        naccum[idx] += 1
+    daccum[idx] /= naccum[idx]
+    if vaccum is not None:
+        vaccum[idx] /= naccum[idx] ** 2
+
+    # if we resized there is a possibility of a NaN data based on
+    # the distribution of sources in the image - cut it off.
+    if resize:
+        nanrows = np.all(np.isnan(daccum), axis=1)
+        nancols = np.all(np.isnan(daccum), axis=0)
+        xl, xu = np.argmax(~nancols), np.argmax(np.flip(~nancols))
+        yl, yu = np.argmax(~nanrows), np.argmax(np.flip(~nanrows))
+        xu, yu = len(nancols) - xu, len(nanrows) - yu
+        daccum = daccum[yl: yu, xl: xu]
+        naccum = naccum[yl: yu, xl: xu]
+        vaccum = vaccum[yl: yu, xl: xu] if dovar else None
+        shape = daccum.shape
+        # update the header
+        header[&#39;NAXIS1&#39;] = shape[1]
+        header[&#39;NAXIS2&#39;] = shape[0]
+        if &#39;CRPIX1&#39; in header:
+            header[&#39;CRPIX1&#39;] -= xl
+        if &#39;CRPIX2&#39; in header:
+            header[&#39;CRPIX2&#39;] -= yl
+        if &#39;SRCPOSX&#39; in header:
+            header[&#39;SRCPOSX&#39;] -= xl
+        if &#39;SRCPOSY&#39; in header:
+            header[&#39;SRCPOSY&#39;] -= yl
+
+    # To pass back out of function
+    normmap.resize(naccum.shape, refcheck=False)
+    normmap[:, :] = naccum.copy()
+
+    return daccum, vaccum</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

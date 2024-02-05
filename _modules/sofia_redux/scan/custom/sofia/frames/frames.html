@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sofia_redux.scan.custom.sofia.frames.frames &#8212; sofia_redux v1.3.4.dev38+g92ea2f4</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/bootstrap-sofia.css?v=3fe2c07e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/plot_directive.css" />
+    
+    <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+    <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+    <script src="../../../../../../_static/documentation_options.js?v=6aa39468"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script type="text/javascript" src="../../../../../../_static/sidebar.js"></script>
+    <script type="text/javascript" src="../../../../../../_static/copybutton.js"></script>
+    <link rel="icon" href="../../../../../../_static/redux.ico"/>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+
+  </head><body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../../../index.html"><span id="logotext1">SOFIA</span><span id="logotext2">Redux</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="SOFIA Homepage" href="https://irsa.ipac.caltech.edu/Missions/sofia.html"></a></li>
+    <li><a title="General Index" href="../../../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../../../index.html">sofia_redux v1.3.4.dev38+g92ea2f4</a>
+	 &#187;
+      </li>
+      <li><a href="../../../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sofia_redux.scan.custom.sofia.frames.frames</h1><div class="highlight"><pre>
+<span></span># Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+from astropy import units
+import numpy as np
+
+from sofia_redux.scan.frames.horizontal_frames import HorizontalFrames
+from sofia_redux.scan.coordinate_systems.equatorial_coordinates import \
+    EquatorialCoordinates
+from sofia_redux.scan.coordinate_systems.coordinate_2d import Coordinate2D
+from sofia_redux.scan.coordinate_systems.geodetic_coordinates import \
+    GeodeticCoordinates
+from sofia_redux.scan.coordinate_systems.telescope_coordinates import \
+    TelescopeCoordinates
+
+__all__ = [&#39;SofiaFrames&#39;]
+
+
+<div class="viewcode-block" id="SofiaFrames">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.frames.frames.SofiaFrames.html#sofia_redux.scan.custom.sofia.frames.frames.SofiaFrames">[docs]</a>
+class SofiaFrames(HorizontalFrames):
+
+    def __init__(self):
+        &quot;&quot;&quot;
+        Initialize frames for SOFIA instruments.
+
+        The SOFIA frames expand on the :class:`HorizontalFrames` class to
+        include the global location of SOFIA, the precipitable water vapour,
+        the equatorial coordinates of the observed object, UTC times, and
+        vertical position angles for the instrument, telescope, and chopper.
+        &quot;&quot;&quot;
+        super().__init__()
+        self.utc = None
+        self.object_equatorial = None
+        self.sofia_location = None
+        self.instrument_vpa = None
+        self.telescope_vpa = None
+        self.chop_vpa = None
+        self.pwv = None
+
+    @property
+    def default_field_types(self):
+        &quot;&quot;&quot;
+        Used to define the default values for data arrays.
+
+        Returns a dictionary of structure {field: default_value}.  The default
+        values have the following effects:
+
+        type - empty numpy array of the given type.
+        value - full numpy array of the given value.
+        astropy.units.Unit - empty numpy array (float) in the given unit.
+        astropy.units.Quantity - full numpy array of the given quantity.
+
+        If a tuple is provided, the array will have additional axes appended
+        such that the first element gives the type as above, and any additional
+        integers give additional axes dimensions,  e.g. (0.0, 2, 3) would
+        result in a numpy array filled with zeros of shape (self.size, 2, 3).
+
+        Returns
+        -------
+        fields : dict
+        &quot;&quot;&quot;
+        fields = super().default_field_types
+        fields.update({
+            &#39;utc&#39;: np.nan,
+            &#39;instrument_vpa&#39;: np.nan * units.Unit(&#39;deg&#39;),
+            &#39;telescope_vpa&#39;: np.nan * units.Unit(&#39;deg&#39;),
+            &#39;chop_vpa&#39;: np.nan * units.Unit(&#39;deg&#39;),
+            &#39;pwv&#39;: np.nan * units.Unit(&#39;um&#39;),
+            &#39;object_equatorial&#39;: (EquatorialCoordinates, &#39;degree&#39;),
+            &#39;sofia_location&#39;: (GeodeticCoordinates, &#39;degree&#39;)
+        })
+        return fields
+
+<div class="viewcode-block" id="SofiaFrames.project">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.frames.frames.SofiaFrames.html#sofia_redux.scan.custom.sofia.frames.frames.SofiaFrames.project">[docs]</a>
+    def project(self, position, projector, indices=None):
+        &quot;&quot;&quot;
+        Project positions to offsets.
+
+        Parameters
+        ----------
+        position : Coordinate2D
+            The (x, y) focal plane offsets.
+        projector : Projector2D
+            The projector to store and determine the projected offsets.
+        indices : int or slice or numpy.ndarray (int or bool)
+            The frame indices to project.
+
+        Returns
+        -------
+        offset : Coordinate2D
+            The projected (x, y) offsets.
+        &quot;&quot;&quot;
+        if isinstance(projector.coordinates, TelescopeCoordinates):
+            projector.set_reference_coordinates()
+            offset = self.get_native_offset(position, indices=indices)
+            projector.coordinates.add_native_offset(offset)
+            return projector.project()
+        else:
+            return super().project(position, projector, indices=indices)</div>
+
+
+<div class="viewcode-block" id="SofiaFrames.telescope_to_native_equatorial_offset">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.frames.frames.SofiaFrames.html#sofia_redux.scan.custom.sofia.frames.frames.SofiaFrames.telescope_to_native_equatorial_offset">[docs]</a>
+    def telescope_to_native_equatorial_offset(
+            self, offset, indices=None, in_place=True):
+        &quot;&quot;&quot;
+        Convert telescope offsets to native equatorial offsets.
+
+        Parameters
+        ----------
+        offset : Coordinate2D
+            The telescope (x, y) offsets.
+        indices : int or slice or numpy.ndarray (int or bool)
+            The frame indices to update.  The default is all frames.
+        in_place : bool, optional
+            If `True`, modify the coordinates in place.  Otherwise, return
+            a copy of the offsets.
+
+        Returns
+        -------
+        native_equatorial_offsets : Coordinate2D
+        &quot;&quot;&quot;
+        if indices is None:
+            telescope_vpa = self.telescope_vpa
+        else:
+            telescope_vpa = self.telescope_vpa[indices]
+
+        angle = (np.pi * units.Unit(&#39;radian&#39;)) - telescope_vpa
+        if not in_place:
+            offset = offset.copy()
+        Coordinate2D.rotate_offsets(offset, angle)
+        return offset</div>
+
+
+<div class="viewcode-block" id="SofiaFrames.native_equatorial_to_telescope_offset">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.frames.frames.SofiaFrames.html#sofia_redux.scan.custom.sofia.frames.frames.SofiaFrames.native_equatorial_to_telescope_offset">[docs]</a>
+    def native_equatorial_to_telescope_offset(
+            self, offset, indices=None, in_place=True):
+        &quot;&quot;&quot;
+        Convert native equatorial offsets to telescope offsets.
+
+        Parameters
+        ----------
+        offset : Coordinate2D
+            The native equatorial (x, y) offsets.
+        indices : int or slice or numpy.ndarray (int or bool)
+            The frame indices to update.  The default is all frames.
+        in_place : bool, optional
+            If `True`, modify the coordinates in place.  Otherwise, return
+            a copy of the offsets.
+
+        Returns
+        -------
+        telescope_offsets : Coordinate2D
+        &quot;&quot;&quot;
+        if indices is None:
+            telescope_vpa = self.telescope_vpa
+        else:
+            telescope_vpa = self.telescope_vpa[indices]
+
+        angle = (np.pi * units.Unit(&#39;radian&#39;)) + telescope_vpa
+        if not in_place:
+            offset = offset.copy()
+        Coordinate2D.rotate_offsets(offset, angle)
+        return offset</div>
+
+
+<div class="viewcode-block" id="SofiaFrames.telescope_to_equatorial_offset">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.frames.frames.SofiaFrames.html#sofia_redux.scan.custom.sofia.frames.frames.SofiaFrames.telescope_to_equatorial_offset">[docs]</a>
+    def telescope_to_equatorial_offset(
+            self, offset, indices=None, in_place=True):
+        &quot;&quot;&quot;
+        Convert telescope offsets to equatorial offsets.
+
+        Parameters
+        ----------
+        offset : Coordinate2D
+            The telescope (x, y) offsets.
+        indices : int or slice or numpy.ndarray (int or bool)
+            The frame indices to update.  The default is all frames.
+        in_place : bool, optional
+            If `True`, modify the coordinates in place.  Otherwise, return
+            a copy of the offsets.
+
+        Returns
+        -------
+        equatorial_offsets : Coordinate2D
+        &quot;&quot;&quot;
+        offset = self.telescope_to_native_equatorial_offset(
+            offset, indices=indices, in_place=in_place)
+        offset.scale_x(-1.0)
+        return offset</div>
+
+
+<div class="viewcode-block" id="SofiaFrames.equatorial_to_telescope_offset">
+<a class="viewcode-back" href="../../../../../../api/sofia_redux.scan.custom.sofia.frames.frames.SofiaFrames.html#sofia_redux.scan.custom.sofia.frames.frames.SofiaFrames.equatorial_to_telescope_offset">[docs]</a>
+    def equatorial_to_telescope_offset(
+            self, offset, indices=None, in_place=True):
+        &quot;&quot;&quot;
+        Convert equatorial offsets to telescope offsets.
+
+        Parameters
+        ----------
+        offset : Coordinate2D
+            The equatorial (x, y) offsets.
+        indices : int or slice or numpy.ndarray (int or bool)
+            The frame indices to update.  The default is all frames.
+        in_place : bool, optional
+            If `True`, modify the coordinates in place.  Otherwise, return
+            a copy of the offsets.
+
+        Returns
+        -------
+        telescope_offsets : Coordinate2D
+        &quot;&quot;&quot;
+        if not in_place:
+            offset = offset.copy()
+        offset.scale_x(-1.0)
+        self.native_equatorial_to_telescope_offset(
+            offset, indices=indices, in_place=True)
+        return offset</div>
+</div>
+
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2024, SOFIA-USRA.<br/>
+    Created using <a href="http://www.sphinx-doc.org/en/stable/">Sphinx</a> 7.2.6. &nbsp;
+    Last built 05 Feb 2024. <br/>
+  </p>
+</footer>
+  </body>
+</html>

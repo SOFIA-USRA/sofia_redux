@@ -28,7 +28,7 @@ offers several filters with limited support:
 *nbM*, and *L+M*. Detailed information about filter
 characteristics, saturation limits, sensitivities and observation
 planning can be found in the FLITECAM chapter of the `SOFIA Observer's
-Handbook <- https://irsa.ipac.caltech.edu/data/SOFIA/docs/sites/default/files/Other/Documents/OH-Cycle6.pdf#https%3A//www.sofia.usra.edu/node/1420/flatbook%23FLITECAM>`__.
+Handbook <- https://irsa.ipac.caltech.edu/data/SOFIA/docs/sites/default/files/Other/Documents/OH-Cycle6.pdf#__WKANCHOR_3s>`__.
 
 
 .. figure:: images/flitecam_fov.png
